@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     BONE_MODEL_PATH: str = os.path.join(MODEL_DIR, "bone.pt")
     BRAIN_MODEL_PATH: str = os.path.join(MODEL_DIR, "brain.pt")
     KIDNEY_MODEL_PATH: str = os.path.join(MODEL_DIR, "kidney.pt")
-    SKIN_MODEL_PATH: str = os.path.join(MODEL_DIR, "skin.pth")
+    SKIN_MODEL_PATH: str = os.path.join(MODEL_DIR, "skin_model.pt")
     
     # Security
     AI_SERVICE_TOKEN: str = ""

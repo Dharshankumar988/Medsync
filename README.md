@@ -1,85 +1,75 @@
-<div align="center">
-  <img src="./assets/medsync-logo.png" alt="MedSync Logo" width="200" />
-  
-  # MedSync
-  **The Decentralized, AI-Powered Healthcare Ecosystem**
+# MedSync AI Microservice
 
-  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-  [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
-  [![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-009688)](https://fastapi.tiangolo.com/)
-  [![React Native](https://img.shields.io/badge/React_Native-Expo-02569B)](https://expo.dev/)
-  [![Polygon](https://img.shields.io/badge/Polygon-Amoy-8247E5)](https://polygon.technology/)
-</div>
+A production-ready, highly scalable FastAPI microservice built to process medical imaging inferences (YOLO for object detection, EfficientNet for classification). This microservice operates completely independently from the main MedSync Web backend.
 
-<br />
+## 📁 Architecture
+- **Framework**: FastAPI (Async)
+- **ML Engine**: PyTorch, Ultralytics, Timm
+- **Image Processing**: OpenCV (Headless), Pillow
+- **Global Memory**: Models are loaded exactly once during the `lifespan` hook to prevent memory leaks and ensure blazing fast request latency.
 
-## 📖 Project Overview
+## 🚀 Adding Your Models
+By default, the `models/` directory contains empty placeholder files. The application will boot, but the `/health` endpoint will report that models are not loaded, and the `/predict` endpoint will return a 503 HTTP status code if requested.
 
-MedSync is a comprehensive, production-ready healthcare management monorepo designed as a final-year Computer Science engineering project. It solves the fragmentation of modern healthcare by bridging Patients, Doctors, and Pharmacies through a single unified platform.
+To enable inference, copy your real trained weights into the `models/` folder:
+1. `bone.pt` (YOLO)
+2. `brain.pt` (YOLO)
+3. `kidney.pt` (YOLO)
+4. `skin.pth` (PyTorch EfficientNet state_dict)
 
-### Problem Statement
-Existing healthcare systems are highly siloed. Patients struggle to transport medical records between hospitals, pharmacies rely on easily forged paper prescriptions, and doctors lack intelligent tools for rapid diagnostic assistance.
+## 🐳 Deployment (Docker / Hugging Face Spaces)
 
-### Proposed System (Key Features)
-- **Immutable Medical Records**: File hashes are stored on the Polygon blockchain via IPFS, ensuring zero-knowledge privacy and preventing tampering.
-- **AI Diagnostics**: Doctors have access to a Computer Vision pipeline (EfficientNet/YOLO) for scanning X-rays/MRIs, while patients can chat with a RAG-powered LLM (via Groq).
-- **Secure E-Prescriptions**: Doctors push prescriptions directly to verified Pharmacies on-chain.
-- **Cross-Platform Access**: A Next.js web portal and an Expo React Native mobile app.
-- **Production DevOps**: Fully containerized with Docker, Nginx, and GitHub Actions CI/CD.
+This repository is uniquely optimized for **Hugging Face Spaces**. 
 
-## 🏗️ High-Level Architecture
+1. Create a new **Docker Space** on Hugging Face.
+2. Clone this repository directly into the Space.
+3. Upload your `.pt` and `.pth` files into the `models/` directory via the Hugging Face UI or Git LFS.
+4. Hugging Face will automatically detect the `Dockerfile`, install `libgl1` (for OpenCV), download dependencies, and spin up the server on port 8080.
 
-```mermaid
-graph TD
-    A[Next.js Web Client] <-->|REST API| C[FastAPI Backend]
-    B[React Native Mobile] <-->|REST API| C
-    C <-->|SQLAlchemy| D[(PostgreSQL)]
-    C <-->|IPFS Gateway| E[IPFS Storage]
-    C <-->|web3.py| F[Polygon Amoy Blockchain]
-    C <-->|Groq API| G[AI Models / RAG]
+## 💻 Local Testing
+
+1. Create a virtual environment: `python -m venv venv`
+2. Activate it: `source venv/bin/activate` (Mac/Linux) or `venv\Scripts\activate` (Windows)
+3. Install dependencies: `pip install -r requirements.txt`
+4. Run the server: `python app.py`
+
+## 🔌 API Endpoints
+
+### 1. `GET /health`
+Returns memory usage and model loading status.
+```json
+{
+  "status": "operational",
+  "uptime_seconds": 12.5,
+  "memory_usage_mb": 420.5,
+  "loaded_models": {
+    "bone": true,
+    "brain": true,
+    "kidney": false,
+    "skin": true
+  }
+}
 ```
 
-## 📂 Monorepo Structure
+### 2. `POST /predict`
+**Body**: `multipart/form-data`
+- `scan_type` (text): "bone", "brain", "kidney", or "skin"
+- `file` (file): The medical scan image.
 
-| Directory | Description |
-|-----------|-------------|
-| `apps/backend/` | FastAPI Python server (Auth, AI, Blockchain Relayer) |
-| `apps/web/` | Next.js 15 Web Application (React, Tailwind, Shadcn) |
-| `apps/mobile/` | Expo React Native Mobile App |
-| `apps/blockchain/` | Solidity Smart Contracts & Hardhat deployment |
-| `docs/` | Deep-dive architectural and API documentation |
-| `infrastructure/` | Docker, Nginx, CI/CD, and deployment scripts |
-
-## 🚀 Quick Start
-
-Ensure you have **Docker** and **Node.js 18+** installed.
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/your-username/medsync.git
-   cd medsync
-   ```
-
-2. **Environment Setup**:
-   ```bash
-   cp .env.example .env
-   # Update the .env file with your specific API keys
-   ```
-
-3. **Run the Infrastructure**:
-   ```bash
-   ./infrastructure/scripts/start.sh
-   ```
-   * The Web App will be available at `http://localhost:3000`
-   * The API Docs will be available at `http://localhost:8000/docs`
-
-## 📚 Documentation Directory
-
-Please explore the `docs/` folder for comprehensive manuals:
-- [Architecture Guide](./docs/ARCHITECTURE.md)
-- [API Reference](./docs/API.md)
-- [Database Schema](./docs/DATABASE.md)
-- [AI Pipelines](./docs/AI.md)
-
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Returns the standardized JSON:
+```json
+{
+    "success": true,
+    "scan_type": "brain",
+    "processing_time": 0.61,
+    "diagnosis": "Glioma",
+    "confidence": 0.97,
+    "boxes": [
+        {
+            "class": "Glioma",
+            "confidence": 0.97,
+            "coordinates": [12.5, 34.2, 100.5, 150.3]
+        }
+    ]
+}
+```

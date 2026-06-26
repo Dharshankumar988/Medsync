@@ -1,25 +1,33 @@
 import os
 import torch
 import torch.nn as nn
+import torchvision
 from torchvision import transforms
 from typing import Dict, Any, Optional
 from utils.logger import get_logger
 
 logger = get_logger("skin_service")
 
-# Note: In a real scenario, this would load the exact class names used during training.
-SKIN_CLASSES = ["Melanoma", "Nevus", "Seborrheic Keratosis", "Basal Cell Carcinoma", "Healthy"]
+SKIN_CLASSES = [
+    "acne",
+    "eczema",
+    "fungal",
+    "infection",
+    "normal",
+    "psoriasis",
+    "tumor"
+]
 
 class SkinClassificationService:
     def __init__(self, model_path: str):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model: Optional[nn.Module] = None
         
-        # Standard ImageNet transforms for timm models
+        # Exact preprocessing requested by user
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.Normalize([0.5], [0.5])
         ])
         
         self.load_model(model_path)
@@ -29,13 +37,15 @@ class SkinClassificationService:
             logger.error(f"Skin model not found at {path}")
             return
         try:
-            # We attempt to load the state dict.
-            # Using timm (assuming the user trained an efficientnet_b0)
-            import timm
-            self.model = timm.create_model('efficientnet_b0', pretrained=False, num_classes=len(SKIN_CLASSES))
+            # Exact model architecture requested by user
+            self.model = torchvision.models.efficientnet_b0(weights=None)
+            self.model.classifier[1] = nn.Linear(self.model.classifier[1].in_features, 7)
+            
+            # Load state dict
             self.model.load_state_dict(torch.load(path, map_location=self.device))
             self.model.to(self.device)
             self.model.eval()
+            
             logger.info("Skin model loaded successfully.")
         except Exception as e:
             logger.error(f"Failed to load skin model: {str(e)}")
@@ -53,7 +63,7 @@ class SkinClassificationService:
             
         top_prob, top_idx = torch.max(probabilities, dim=0)
         
-        # Get top 3 predictions
+        # Get top predictions
         top3_prob, top3_idx = torch.topk(probabilities, k=min(3, len(SKIN_CLASSES)))
         
         top_predictions = []
