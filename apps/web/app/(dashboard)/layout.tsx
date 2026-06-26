@@ -15,6 +15,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setRole(user.role);
       if (pathname.includes('/patient') && user.role !== 'patient') router.push('/unauthorized');
       if (pathname.includes('/doctor') && user.role !== 'doctor') router.push('/unauthorized');
+      if (pathname.includes('/admin') && user.role !== 'admin') router.push('/unauthorized');
     }).catch(() => {
       router.push('/login');
     });

@@ -15,7 +15,7 @@ class Web3Client:
         return self.w3.eth.contract(address=Web3.to_checksum_address(address), abi=[])
 
     def sign_and_send(self, contract_function):
-        if not self.account:
+        if contract_function is None or not self.account:
             print("BLOCKCHAIN: Running in mock mode. No real tx sent.")
             return "mock_tx_hash_12345"
             
