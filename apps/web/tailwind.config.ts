@@ -7,6 +7,7 @@ const config: Config = {
     "./components/**/*.{ts,tsx}",
     "./app/**/*.{ts,tsx}",
     "./features/**/*.{ts,tsx}",
+    "../../packages/ui/**/*.{ts,tsx}",
   ],
   theme: {
     container: {
@@ -17,12 +18,17 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-inter)", "sans-serif"],
+        heading: ["var(--font-inter)", "sans-serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        panel: "hsl(var(--panel))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -51,11 +57,60 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        brand: {
+          blue: {
+            50: "#eff6ff",
+            100: "#dbeafe",
+            200: "#bfdbfe",
+            300: "#93c5fd",
+            400: "#60a5fa",
+            500: "#3b82f6",
+            600: "#2563eb",
+            700: "#1d4ed8",
+            800: "#1e40af",
+            900: "#1e3a8a",
+            950: "#172554",
+          },
+          emerald: {
+            50: "#ecfdf5",
+            100: "#d1fae5",
+            200: "#a7f3d0",
+            300: "#6ee7b7",
+            400: "#34d399",
+            500: "#10b981",
+            600: "#059669",
+            700: "#047857",
+            800: "#065f46",
+            900: "#064e3b",
+            950: "#022c22",
+          },
+          cyan: {
+            50: "#ecfeff",
+            100: "#cffafe",
+            200: "#a5f3fc",
+            300: "#67e8f9",
+            400: "#22d3ee",
+            500: "#06b6d4",
+            600: "#0891b2",
+            700: "#0e7490",
+            800: "#155e75",
+            900: "#164e63",
+            950: "#083344",
+          },
+        }
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        'sm': '0 2px 8px -2px rgba(0, 0, 0, 0.04)',
+        'md': '0 8px 24px -4px rgba(0, 0, 0, 0.06)',
+        'lg': '0 12px 32px -4px rgba(0, 0, 0, 0.08)',
+        'xl': '0 20px 48px -8px rgba(0, 0, 0, 0.1)',
+        '2xl': '0 24px 64px -12px rgba(0, 0, 0, 0.12)',
+        'neon': '0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring))',
       },
       keyframes: {
         "accordion-down": {
@@ -66,10 +121,20 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "slide-up": {
+          from: { transform: "translateY(10px)", opacity: "0" },
+          to: { transform: "translateY(0)", opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fade-in 0.3s ease-out",
+        "slide-up": "slide-up 0.3s ease-out",
       },
     },
   },

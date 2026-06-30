@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "super_secret_key_change_in_production"
     JWT_ALGORITHM: str = "HS256"
     TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://medsync:medsync@localhost:5432/medsync_dev"

@@ -18,13 +18,6 @@ DEMO_USERS = [
 ]
 
 async def seed_database():
-    # Ensure tables exist first
-    from app.database.session import engine
-    from app.database.base_class import Base
-    
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
     async with AsyncSessionLocal() as db:
         for u in DEMO_USERS:
             from sqlalchemy import select

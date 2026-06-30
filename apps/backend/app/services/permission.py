@@ -26,3 +26,12 @@ class PermissionService:
             await permission_repo.update(db, db_obj=perm, obj_in={"is_revoked": True})
             await ConsentService.log_consent_change(db, patient_id, doctor_id, "REVOKED")
         return {"status": "Permission revoked"}
+        
+    @staticmethod
+    async def check_permission(db: AsyncSession, record_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        perm = await permission_repo.get_by_record_and_user(db, record_id, user_id)
+        if not perm or perm.is_revoked:
+            return False
+        if perm.expires_at and perm.expires_at.replace(tzinfo=None) < datetime.utcnow():
+            return False
+        return True

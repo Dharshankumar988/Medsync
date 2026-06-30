@@ -58,6 +58,11 @@ async def add_doctor_note(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_doctor)
 ):
-    # In a full implementation, check if the doctor has permission for this record
+    # Check if the doctor has permission for this record
+    has_permission = await PermissionService.check_permission(db, version_id, current_user.id)
+    if not has_permission:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("You do not have permission to add notes to this record")
+        
     note = await DoctorNoteService.add_note(db, version_id, current_user.id, req)
     return APIResponse(message="Note added", data=note)
