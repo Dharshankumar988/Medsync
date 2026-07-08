@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, Activity, LogOut, ChevronLeft, ChevronRight, Settings, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import { supabase } from "@/lib/supabase";
 
 export function Sidebar({ role }: { role: string }) {
   const pathname = usePathname();
@@ -139,9 +140,9 @@ export function Sidebar({ role }: { role: string }) {
         </button>
 
         <button
-          onClick={() => {
+          onClick={async () => {
+            await supabase.auth.signOut();
             if (typeof window !== "undefined") {
-              localStorage.removeItem('token');
               window.location.href = '/login';
             }
           }}

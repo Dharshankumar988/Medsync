@@ -5,14 +5,16 @@
 ## 1. Environment Preparation
 Before deploying, ensure you have production values for:
 - `DATABASE_URL` (e.g., Supabase PostgreSQL connection string)
-- `JWT_SECRET_KEY` (Generate via `openssl rand -hex 32`)
+- `SUPABASE_JWT_SECRET` (from the Supabase project settings)
+- `SUPABASE_SERVICE_ROLE_KEY`
 - `GROQ_API_KEY` (From Groq Console)
-- `POLYGON_RPC_URL` & `PRIVATE_KEY` (Wallet funded with Amoy MATIC)
+- `POLYGON_AMOY_RPC_URL` and `BACKEND_PRIVATE_KEY`
+- `DOCTOR_REGISTRY_ADDRESS`, `PHARMACY_REGISTRY_ADDRESS`, `RECORD_REGISTRY_ADDRESS`, `PRESCRIPTION_REGISTRY_ADDRESS`, `CONSENT_MANAGER_ADDRESS`, `AUDIT_LOGGER_ADDRESS`
 
 ## 2. Supabase (Database & Storage)
 1. Create a new project in Supabase.
-2. Run the SQL migrations found in `apps/backend/alembic/versions`.
-3. Create a public Storage Bucket named `medical-records` if bypassing IPFS for backups.
+2. Run the Alembic migrations found in `apps/backend/alembic/versions`, including the Supabase RLS migration.
+3. Create a Storage Bucket named `medical-records` and keep it private; signed URLs are issued from the backend.
 
 ## 3. Polygon Amoy (Blockchain)
 1. Navigate to `apps/blockchain`.

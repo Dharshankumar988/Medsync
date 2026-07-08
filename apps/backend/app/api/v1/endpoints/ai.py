@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.db import get_db
 from app.dependencies.auth import RoleChecker
-from app.models.user import User, UserRole
+from app.models.user import UserRole
 from app.schemas.response import APIResponse
+from app.schemas.session import AuthenticatedPrincipal
 from app.schemas.ai import ChatRequest, ChatResponse
 from app.services.doctor_ai import DoctorAIService
 from app.services.patient_ai import PatientAIService
@@ -18,7 +19,7 @@ require_patient = RoleChecker([UserRole.PATIENT])
 async def doctor_chat(
     req: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_doctor)
+    current_user: AuthenticatedPrincipal = Depends(require_doctor)
 ):
     result = await DoctorAIService.handle_chat(db, current_user.id, req)
     return APIResponse(message="Success", data=result)
@@ -27,7 +28,7 @@ async def doctor_chat(
 async def patient_chat(
     req: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_patient)
+    current_user: AuthenticatedPrincipal = Depends(require_patient)
 ):
     result = await PatientAIService.handle_chat(db, current_user.id, req)
     return APIResponse(message="Success", data=result)
@@ -35,7 +36,7 @@ async def patient_chat(
 @router.post("/analyze-image")
 async def analyze_image(
     file: UploadFile = File(...),
-    current_user: User = Depends(require_doctor)
+    current_user: AuthenticatedPrincipal = Depends(require_doctor)
 ):
     image_bytes = await file.read()
     yolo_res = await YOLOService.analyze_image(image_bytes)

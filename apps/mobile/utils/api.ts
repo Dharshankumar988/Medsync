@@ -1,8 +1,8 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { supabase } from '../lib/supabase';
 
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
@@ -21,7 +21,8 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('token');
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token ?? null;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -32,7 +33,7 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      await SecureStore.deleteItemAsync('token');
+      await supabase.auth.signOut();
       router.replace('/(auth)/login');
     }
     return Promise.reject(error);

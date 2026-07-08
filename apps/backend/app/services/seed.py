@@ -5,7 +5,6 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.models.pharmacy import Pharmacy
-from app.core.security import get_password_hash
 import uuid
 
 DEMO_USERS = [
@@ -27,7 +26,7 @@ async def seed_database():
             user = User(
                 id=str(uuid.uuid4()),
                 email=u["email"],
-                password_hash=get_password_hash(u["password"]),
+                password_hash="supabase-managed-account",
                 role=u["role"],
                 status=u["status"],
             )

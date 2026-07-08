@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from web3 import Web3
 from eth_account import Account
 from app.blockchain.config import blockchain_settings
@@ -9,16 +10,28 @@ logger = logging.getLogger("blockchain_client")
 
 class Web3Client:
     def __init__(self):
-        self.w3 = Web3(Web3.HTTPProvider(blockchain_settings.POLYGON_RPC_URL))
+        self.w3 = Web3(Web3.HTTPProvider(blockchain_settings.POLYGON_RPC_URL)) if blockchain_settings.POLYGON_RPC_URL else Web3()
         self.account = None
         
-        # Avoid loading dummy key from default
-        if blockchain_settings.BACKEND_PRIVATE_KEY and blockchain_settings.BACKEND_PRIVATE_KEY != "0x0000000000000000000000000000000000000000000000000000000000000000":
+        if blockchain_settings.BACKEND_PRIVATE_KEY:
             try:
                 self.account = Account.from_key(blockchain_settings.BACKEND_PRIVATE_KEY)
                 logger.info(f"Loaded blockchain account: {self.account.address}")
             except Exception as e:
                 logger.error(f"Failed to load private key: {e}")
+
+    @staticmethod
+    def _ensure_address(address: str, contract_name: str):
+        if not address or not re.fullmatch(r"0x[a-fA-F0-9]{40}", address):
+            raise ValueError(f"{contract_name} address is not configured")
+
+        return Web3.to_checksum_address(address)
+
+    def _ensure_ready(self):
+        if not blockchain_settings.POLYGON_RPC_URL:
+            raise ValueError("Polygon RPC URL is not configured")
+        if not self.account:
+            raise ValueError("Backend private key is not configured")
 
     def get_abi(self, contract_name: str):
         # Load ABI from exported Hardhat artifacts
@@ -35,7 +48,8 @@ class Web3Client:
         abi = self.get_abi(contract_name)
         if not abi:
             raise ValueError(f"ABI for {contract_name} could not be loaded.")
-        return self.w3.eth.contract(address=Web3.to_checksum_address(address), abi=abi)
+        checksum_address = self._ensure_address(address, contract_name)
+        return self.w3.eth.contract(address=checksum_address, abi=abi)
 
     def estimate_gas_with_buffer(self, tx):
         try:
@@ -46,8 +60,7 @@ class Web3Client:
             return 300000
 
     def send_and_wait_transaction(self, contract_function):
-        if not self.account:
-            raise ValueError("Backend private key not configured. Cannot sign transaction.")
+        self._ensure_ready()
             
         nonce = self.w3.eth.get_transaction_count(self.account.address)
         
@@ -91,7 +104,8 @@ class Web3Client:
             "transactionHash": hex_hash,
             "blockNumber": receipt.blockNumber,
             "gasUsed": receipt.gasUsed,
-            "status": receipt.status
+            "status": receipt.status,
+            "from": self.account.address,
         }
 
 w3_client = Web3Client()

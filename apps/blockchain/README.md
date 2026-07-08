@@ -21,7 +21,7 @@ This directory contains the Smart Contracts that form the immutable backbone of 
 1. Create an `.env` file in `apps/blockchain`:
    ```env
    POLYGON_AMOY_RPC_URL=https://rpc-amoy.polygon.technology/
-   PRIVATE_KEY=your_metamask_private_key
+   BACKEND_PRIVATE_KEY=your_metamask_private_key
    ```
 2. Install and deploy:
    ```bash
@@ -31,3 +31,4 @@ This directory contains the Smart Contracts that form the immutable backbone of 
    npm run deploy:amoy
    ```
 3. Copy the resulting contract addresses into your Backend `.env` file.
+4. Run the backend Alembic migration that enables Supabase RLS and storage policies before exposing direct Supabase access.

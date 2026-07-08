@@ -54,8 +54,8 @@ async def process_blockchain_tasks():
                         # Submit to blockchain
                         receipt = MedicalRecordRegistryService.register_record(
                             record_id=prescription.id,
-                            storage_type="PostgreSQL",
-                            storage_reference=f"table=prescriptions,id={prescription.id}",
+                            storage_type="supabase-storage",
+                            storage_reference=f"prescriptions/{prescription.id}",
                             sha256_hash=sha256_hash,
                             owner_id=prescription.patient_id,
                             version=prescription.version

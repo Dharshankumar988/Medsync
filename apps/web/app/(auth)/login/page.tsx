@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Activity, Shield, Loader2 } from "lucide-react";
+import { Activity, Shield, Loader2, ArrowRight, LockKeyhole } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,14 +24,12 @@ export default function LoginPage() {
 
     try {
       const response = await authService.login({ email, password });
-      
-      // Persist the token
-      if (response.data?.access_token) {
-        localStorage.setItem("token", response.data.access_token);
-      }
-      
-      // Extract role from the response structure defined in auth endpoint (APIResponse[Token])
       const userRole = response.data?.role;
+
+      if (!response.data?.session) {
+        setError("Check your email to verify your Supabase account before signing in.");
+        return;
+      }
       
       if (userRole === "patient") router.push("/patient/dashboard");
       else if (userRole === "doctor") router.push("/doctor/dashboard");
@@ -51,96 +50,88 @@ export default function LoginPage() {
     }
   };
 
-  const handleDemoLogin = (role: string) => {
-    setEmail(`${role}@demo.com`);
-    
-    const rolePasswords: Record<string, string> = {
-      admin: "Admin@1234",
-      doctor: "Demo@1234",
-      patient: "Demo@1234",
-      pharmacy: "Demo@1234"
-    };
-    
-    setPassword(rolePasswords[role]);
-  };
-
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-background">
       {/* Left side - Login Form */}
-      <div className="flex w-full flex-col justify-center px-8 sm:px-12 md:w-1/2 lg:px-24 xl:px-32">
-        <div className="mx-auto w-full max-w-sm">
-          <Link href="/" className="flex items-center gap-2 mb-12">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Activity className="h-6 w-6 text-primary" />
+      <div className="flex w-full flex-col justify-center px-8 sm:px-12 md:w-1/2 lg:px-24 xl:px-32 relative z-10 animate-in fade-in duration-700 slide-in-from-left-8">
+        
+        <div className="mx-auto w-full max-w-[420px]">
+          <Link href="/" className="flex items-center gap-3 mb-16 group w-fit">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/20">
+              <Activity className="h-7 w-7" />
             </div>
-            <span className="text-2xl font-bold tracking-tight">MedSync</span>
+            <span className="text-3xl font-bold tracking-tight text-foreground/90">MedSync</span>
           </Link>
 
-          <div className="mb-8">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Sign In</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Enter your credentials to access the clinical portal.
+          <div className="mb-10 space-y-3">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Welcome back</h1>
+            <p className="text-base text-muted-foreground/80 leading-relaxed">
+              Securely authenticate to access your decentralized clinical dashboard and health records.
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-5">
             {error && (
-              <Alert variant="destructive" className="py-2.5">
-                <AlertDescription>{error}</AlertDescription>
+              <Alert variant="destructive" className="py-3 bg-destructive/10 text-destructive border-destructive/20 animate-in zoom-in-95">
+                <AlertDescription className="font-medium">{error}</AlertDescription>
               </Alert>
             )}
             
-            <div className="space-y-2">
-              <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                Email
+            <div className="space-y-2.5 group">
+              <label className="text-sm font-semibold text-foreground/80 tracking-wide">
+                Email Address
               </label>
-              <Input
-                type="email"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-              />
+              <div className="relative">
+                <Input
+                  type="email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-12 px-4 transition-all duration-300 focus:ring-2 focus:ring-primary/20 border-input bg-background hover:bg-muted/50"
+                />
+              </div>
             </div>
             
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                <label className="text-sm font-semibold text-foreground/80 tracking-wide">
                   Password
                 </label>
-                <Link href="#" className="text-xs font-medium text-primary hover:underline">
+                <Link href="/reset-password" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
                   Forgot password?
                 </Link>
               </div>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isLoading}
-              />
+              <div className="relative">
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-12 px-4 pr-10 transition-all duration-300 focus:ring-2 focus:ring-primary/20 border-input bg-background hover:bg-muted/50"
+                />
+                <LockKeyhole className="absolute right-3.5 top-3.5 h-5 w-5 text-muted-foreground/50" />
+              </div>
             </div>
 
-            <Button type="submit" className="w-full mt-4" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Sign In
+            <Button type="submit" size="lg" className="w-full h-12 mt-2 text-base font-semibold group transition-all duration-300 hover:shadow-lg hover:shadow-primary/25" disabled={isLoading}>
+              {isLoading ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  Sign In to Dashboard
+                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </>
+              )}
             </Button>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-border">
-            <p className="text-sm text-muted-foreground mb-4 font-medium">Demo Access</p>
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin('patient')} disabled={isLoading}>Patient</Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin('doctor')} disabled={isLoading}>Doctor</Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin('admin')} disabled={isLoading}>Admin</Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin('pharmacy')} disabled={isLoading}>Pharmacy</Button>
-            </div>
-          </div>
-
-          <p className="mt-6 text-center text-sm text-muted-foreground">
+          <p className="mt-10 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="font-medium text-primary hover:underline">
+            <Link href="/register" className="font-semibold text-primary transition-colors hover:text-primary/80 hover:underline underline-offset-4">
               Create an account
             </Link>
           </p>
@@ -148,19 +139,37 @@ export default function LoginPage() {
       </div>
 
       {/* Right side - Image/Info */}
-      <div className="hidden w-1/2 flex-col justify-between bg-muted p-12 md:flex border-l border-border relative overflow-hidden">
-        <div className="absolute inset-0 bg-primary/5" />
-        <div className="relative z-10 flex items-center gap-2 font-medium text-primary">
-          <Shield className="h-5 w-5" />
-          Enterprise Grade Security
-        </div>
-        <div className="relative z-10">
-          <h2 className="text-4xl font-semibold tracking-tight mb-4">
-            Secure Healthcare Infrastructure
-          </h2>
-          <p className="text-lg text-muted-foreground max-w-md leading-relaxed">
-            MedSync utilizes cryptographic verification and immutable ledger technology to ensure all patient data is handled with the highest standards of privacy and security.
-          </p>
+      <div className="hidden w-1/2 md:flex relative overflow-hidden bg-black">
+        {/* The beautiful generated AI image */}
+        <Image 
+          src="/auth-bg.png" 
+          alt="Abstract medical blockchain" 
+          fill
+          priority
+          className="object-cover object-center opacity-80 mix-blend-screen"
+        />
+        
+        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
+        
+        <div className="absolute bottom-0 left-0 right-0 p-16 z-20 animate-in fade-in duration-1000 slide-in-from-bottom-12 delay-300 fill-mode-both">
+          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-8 backdrop-blur-xl shadow-2xl">
+            <div className="absolute -left-10 -top-10 h-40 w-40 rounded-full bg-primary/30 blur-3xl mix-blend-screen" />
+            <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-blue-500/30 blur-3xl mix-blend-screen" />
+            
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 font-semibold text-primary mb-4 text-sm tracking-widest uppercase">
+                <Shield className="h-5 w-5" />
+                Enterprise Grade Security
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight text-white mb-4 leading-tight">
+                Secure Healthcare<br />Infrastructure
+              </h2>
+              <p className="text-base text-gray-300 max-w-md leading-relaxed font-light">
+                MedSync utilizes cryptographic verification and immutable ledger technology to ensure all patient data is handled with the highest standards of privacy, transparency, and clinical security.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

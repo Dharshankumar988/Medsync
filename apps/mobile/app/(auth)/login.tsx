@@ -23,7 +23,7 @@ export default function LoginScreen() {
 
     try {
       const response = await authService.login({ email, password });
-      const role = response.user.role;
+      const role = String(response.data?.role ?? '').toLowerCase();
       
       if (role === 'patient') {
         router.replace('/(tabs)/patient/dashboard');

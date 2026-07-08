@@ -23,6 +23,6 @@
 
 ## 4. Blockchain (Polygon Amoy)
 1. `cd apps/blockchain`
-2. Configure `.env` with `POLYGON_AMOY_RPC_URL` and `PRIVATE_KEY`.
+2. Configure `.env` with `POLYGON_AMOY_RPC_URL` and `BACKEND_PRIVATE_KEY`.
 3. Run `npm run deploy:amoy`.
 4. Update the Backend `.env` with the deployed contract addresses.

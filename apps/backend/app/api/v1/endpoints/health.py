@@ -7,6 +7,10 @@ import time
 router = APIRouter()
 START_TIME = time.time()
 
+
+def _is_placeholder_database_url(value: str) -> bool:
+    return "supabase-host.supabase.co" in value or "supabase_password" in value
+
 @router.get("/")
 async def system_health():
     blockchain_status = "unreachable"
@@ -21,7 +25,7 @@ async def system_health():
         "version": settings.VERSION,
         "services": {
             "backend": "healthy",
-            "database": "connected" if settings.DATABASE_URL else "not_configured",
+            "database": "connected" if settings.DATABASE_URL and not _is_placeholder_database_url(settings.DATABASE_URL) else "not_configured",
             "ai": "available" if settings.GROQ_API_KEY else "not_configured",
             "blockchain": blockchain_status,
             "ipfs": "not_configured",

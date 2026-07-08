@@ -1,21 +1,5 @@
 
 services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: medsync_user
-      POSTGRES_PASSWORD: medsync_password
-      POSTGRES_DB: medsync_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U medsync_user -d medsync_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./apps/backend
@@ -23,12 +7,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://medsync_user:medsync_password@db:5432/medsync_db
-      - JWT_SECRET_KEY=dev_secret_key_change_in_prod
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://supabase_user:supabase_password@supabase-host.supabase.co:5432/postgres?ssl=require}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
       - ENVIRONMENT=development
-    depends_on:
-      db:
-        condition: service_healthy
     volumes:
       - ./apps/backend:/app
 
@@ -52,6 +35,3 @@ services:
     depends_on:
       - frontend
       - backend
-
-volumes:
-  postgres_data:

@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
-from app.models.user import User, UserRole
+from app.models.user import UserRole
 from app.schemas.response import APIResponse
+from app.schemas.session import AuthenticatedPrincipal
 from app.schemas.prescription import PrescriptionCreate, PrescriptionResponse
 from app.services.prescription import PrescriptionService
 
@@ -14,7 +15,7 @@ require_doctor = RoleChecker([UserRole.DOCTOR])
 async def create_prescription(
     req: PrescriptionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_doctor)
+    current_user: AuthenticatedPrincipal = Depends(require_doctor)
 ):
     rx = await PrescriptionService.create_prescription(db, current_user.id, req)
     return APIResponse(message="Prescription finalized", data=rx)

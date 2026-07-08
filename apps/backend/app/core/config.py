@@ -6,13 +6,17 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Security
-    JWT_SECRET: str = "super_secret_key_change_in_production"
-    JWT_ALGORITHM: str = "HS256"
     TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
     
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://medsync:medsync@localhost:5432/medsync_dev"
+    DATABASE_URL: str = "postgresql+asyncpg://supabase_user:supabase_password@supabase-host.supabase.co:5432/postgres?ssl=require"
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_JWT_SECRET: str = ""
+    SUPABASE_STORAGE_BUCKET: str = "medical-records"
+    SUPABASE_STORAGE_MAX_UPLOAD_MB: int = 25
     
     # AI & IPFS (Placeholders for now)
     GROQ_API_KEY: str = ""
