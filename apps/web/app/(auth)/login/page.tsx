@@ -1,105 +1,168 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
-import { authService } from "@/services/auth.service";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { Activity, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { authService } from "@/services/auth.service";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Activity, Shield, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import Link from "next/link";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
+    setError("");
+
     try {
-      const res = await authService.login({ email, password });
-      localStorage.setItem("token", res.access_token);
+      const response = await authService.login({ email, password });
       
-      const user = await authService.me();
-      if (user.role === "patient") router.push("/patient/dashboard");
-      else if (user.role === "doctor") router.push("/doctor/dashboard");
-      else if (user.role === "pharmacy") router.push("/pharmacy/dashboard");
-      else if (user.role === "admin") router.push("/admin/dashboard");
-    } catch (err) {
-      alert("Login failed. Please check your credentials.");
-      setLoading(false);
+      // Persist the token
+      if (response.data?.access_token) {
+        localStorage.setItem("token", response.data.access_token);
+      }
+      
+      // Extract role from the response structure defined in auth endpoint (APIResponse[Token])
+      const userRole = response.data?.role;
+      
+      if (userRole === "patient") router.push("/patient/dashboard");
+      else if (userRole === "doctor") router.push("/doctor/dashboard");
+      else if (userRole === "admin") router.push("/admin/dashboard");
+      else if (userRole === "pharmacy") router.push("/pharmacy/dashboard");
+      else router.push("/");
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail[0]?.msg || "Validation error");
+      } else if (typeof detail === "string") {
+        setError(detail);
+      } else {
+        setError(err.response?.data?.message || "Invalid credentials");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const handleDemoLogin = (role: string) => {
+    setEmail(`${role}@demo.com`);
+    
+    const rolePasswords: Record<string, string> = {
+      admin: "Admin@1234",
+      doctor: "Demo@1234",
+      patient: "Demo@1234",
+      pharmacy: "Demo@1234"
+    };
+    
+    setPassword(rolePasswords[role]);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020817] overflow-hidden relative">
-      {/* Background Gradients */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-[20%] w-[50%] h-[50%] rounded-full bg-primary/20 blur-[150px]" />
-        <div className="absolute bottom-0 right-[10%] w-[40%] h-[40%] rounded-full bg-emerald-500/10 blur-[120px]" />
+    <div className="flex min-h-screen">
+      {/* Left side - Login Form */}
+      <div className="flex w-full flex-col justify-center px-8 sm:px-12 md:w-1/2 lg:px-24 xl:px-32">
+        <div className="mx-auto w-full max-w-sm">
+          <Link href="/" className="flex items-center gap-2 mb-12">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Activity className="h-6 w-6 text-primary" />
+            </div>
+            <span className="text-2xl font-bold tracking-tight">MedSync</span>
+          </Link>
+
+          <div className="mb-8">
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Sign In</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Enter your credentials to access the clinical portal.
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {error && (
+              <Alert variant="destructive" className="py-2.5">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Email
+              </label>
+              <Input
+                type="email"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Password
+                </label>
+                <Link href="#" className="text-xs font-medium text-primary hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </div>
+
+            <Button type="submit" className="w-full mt-4" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Sign In
+            </Button>
+          </form>
+
+          <div className="mt-8 pt-6 border-t border-border">
+            <p className="text-sm text-muted-foreground mb-4 font-medium">Demo Access</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin('patient')} disabled={isLoading}>Patient</Button>
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin('doctor')} disabled={isLoading}>Doctor</Button>
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin('admin')} disabled={isLoading}>Admin</Button>
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin('pharmacy')} disabled={isLoading}>Pharmacy</Button>
+            </div>
+          </div>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="font-medium text-primary hover:underline">
+              Create an account
+            </Link>
+          </p>
+        </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="z-10 w-full max-w-md px-4"
-      >
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-emerald-400 shadow-[0_0_40px_-10px_rgba(59,130,246,0.5)] mb-6">
-            <Activity className="h-8 w-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-heading font-bold text-white tracking-tight">Welcome back</h1>
-          <p className="text-slate-400 mt-2 text-sm text-center">Sign in to your MedSync account to continue</p>
+      {/* Right side - Image/Info */}
+      <div className="hidden w-1/2 flex-col justify-between bg-muted p-12 md:flex border-l border-border relative overflow-hidden">
+        <div className="absolute inset-0 bg-primary/5" />
+        <div className="relative z-10 flex items-center gap-2 font-medium text-primary">
+          <Shield className="h-5 w-5" />
+          Enterprise Grade Security
         </div>
-
-        <Card className="bg-white/5 border-white/10 backdrop-blur-2xl shadow-2xl p-2">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl text-white">Sign In</CardTitle>
-            <CardDescription className="text-slate-400">Enter your email and password below</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div className="space-y-2 relative group">
-                <label className="text-xs font-medium text-slate-300 uppercase tracking-wider ml-1">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 group-focus-within:text-primary transition-colors" />
-                  <input 
-                    type="email" 
-                    required
-                    placeholder="dr.smith@hospital.com"
-                    className="w-full h-12 pl-10 pr-4 bg-black/20 border border-white/10 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2 relative group">
-                <div className="flex items-center justify-between ml-1">
-                  <label className="text-xs font-medium text-slate-300 uppercase tracking-wider">Password</label>
-                  <Link href="/forgot-password" className="text-xs text-primary hover:text-primary/80 transition-colors">Forgot password?</Link>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 group-focus-within:text-primary transition-colors" />
-                  <input 
-                    type="password" 
-                    required
-                    placeholder="••••••••"
-                    className="w-full h-12 pl-10 pr-4 bg-black/20 border border-white/10 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-              </div>
-              <Button type="submit" disabled={loading} className="w-full h-12 text-base font-medium rounded-xl shadow-[0_0_20px_-5px_rgba(59,130,246,0.5)]">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Sign In <ArrowRight className="ml-2 w-5 h-5" /></>}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </motion.div>
+        <div className="relative z-10">
+          <h2 className="text-4xl font-semibold tracking-tight mb-4">
+            Secure Healthcare Infrastructure
+          </h2>
+          <p className="text-lg text-muted-foreground max-w-md leading-relaxed">
+            MedSync utilizes cryptographic verification and immutable ledger technology to ensure all patient data is handled with the highest standards of privacy and security.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

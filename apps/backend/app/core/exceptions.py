@@ -14,3 +14,7 @@ class ForbiddenException(DomainException):
 class NotFoundException(DomainException):
     def __init__(self, message: str = "Resource not found"):
         super().__init__(message, 404)
+
+class BadRequestException(DomainException):
+    def __init__(self, message: str = "Bad Request"):
+        super().__init__(message, 400)

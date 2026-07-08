@@ -1,358 +1,232 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { blockchainService, type BlockchainAnalyticsResponse } from "@/services/blockchain.service";
-import { motion } from "framer-motion";
-import { ArrowLeft, Box, Fuel, Network, ShieldCheck, Activity, Copy, ExternalLink, ActivitySquare, Server, Link2, FileCode, CheckCircle2, XCircle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import api from "@/lib/api";
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(value || 0);
-}
+type BlockchainTask = {
+  id: string;
+  prescription_id: string;
+  status: string;
+  retry_count: number;
+  max_retries: number;
+  error_message: string | null;
+  created_at: string;
+};
 
-function Sparkline({ values }: { values: number[] }) {
-  const points = useMemo(() => {
-    if (!values.length) return "";
-    const max = Math.max(...values, 1);
-    const step = values.length > 1 ? 100 / (values.length - 1) : 100;
-    return values
-      .map((value, index) => {
-        const x = index * step;
-        const y = 100 - (value / max) * 100;
-        return `${x},${y}`;
-      })
-      .join(" ");
-  }, [values]);
+type AuditLog = {
+  id: string;
+  transaction_hash: string;
+  block_number: number;
+  gas_used: number;
+  explorer_url: string;
+  confirmation_time: string;
+  prescription_id: string;
+};
 
-  return (
-    <svg viewBox="-5 -5 110 110" className="h-32 w-full drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">
-      <defs>
-        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#3b82f6" />
-          <stop offset="100%" stopColor="#10b981" />
-        </linearGradient>
-      </defs>
-      <polyline points={points} fill="none" stroke="url(#gradient)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+const STATUS_COLORS: Record<string, string> = {
+  CONFIRMED: "bg-emerald-900/50 text-emerald-300 border-emerald-700/50",
+  FAILED: "bg-red-900/50 text-red-300 border-red-700/50",
+  PENDING: "bg-yellow-900/50 text-yellow-300 border-yellow-700/50",
+  PROCESSING: "bg-blue-900/50 text-blue-300 border-blue-700/50",
+  RETRYING: "bg-orange-900/50 text-orange-300 border-orange-700/50",
+  CANCELLED: "bg-gray-800/50 text-gray-400 border-gray-700/50",
+};
 
-function BarChart({ items }: { items: Array<{ label: string; value: number }> }) {
-  const max = Math.max(...items.map((item) => item.value), 1);
-  return (
-    <div className="flex h-48 items-end gap-3 mt-4">
-      {items.map((item, index) => (
-        <motion.div 
-          initial={{ height: 0 }}
-          animate={{ height: "100%" }}
-          transition={{ duration: 1, delay: index * 0.1, ease: "easeOut" }}
-          key={item.label} 
-          className="flex flex-1 flex-col items-center gap-2 group"
-        >
-          <div className="flex w-full flex-1 items-end relative">
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-black text-white text-xs py-1 px-2 rounded-md whitespace-nowrap z-10 pointer-events-none">
-              {formatNumber(item.value)}
-            </div>
-            <div
-              className="w-full rounded-t-lg bg-gradient-to-t from-primary/40 to-primary/80 group-hover:from-primary/60 group-hover:to-primary transition-colors"
-              style={{ height: `${Math.max((item.value / max) * 100, 4)}%` }}
-            />
-          </div>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</span>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-export default function BlockchainAnalyticsPage() {
-  const [data, setData] = useState<BlockchainAnalyticsResponse | null>(null);
+export default function BlockchainDashboard() {
+  const [tasks, setTasks] = useState<BlockchainTask[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [stats, setStats] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const [searchId, setSearchId] = useState("");
 
-  const refresh = () => {
-    setLoading(true);
-    blockchainService
-      .getAnalytics()
-      .then((response) => setData(response.data))
-      .finally(() => setLoading(false));
-  };
+  const fetchData = useCallback(async () => {
+    try {
+      const taskRes = await api.get("/api/v1/blockchain/tasks");
+      setTasks(taskRes.data.data.tasks);
+      setStats({ ...taskRes.data.data.stats, success_rate: taskRes.data.data.success_rate });
 
-  useEffect(() => {
-    refresh();
+      const logRes = await api.get("/api/v1/blockchain/logs");
+      setLogs(logRes.data.data);
+    } catch (e) {
+      // Silently handle — dashboard will show empty state
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const gasSeries = data?.charts.gasSpentOverTime ?? [];
-  const txSeries = data?.charts.transactionsPerDay ?? [];
-  const successSeries = data?.charts.successfulVsFailed ?? [];
-  const contractSeries = data?.charts.gasByContract ?? [];
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 }
+  const handleRetry = async (taskId: string) => {
+    try {
+      await api.post(`/api/v1/blockchain/tasks/${taskId}/retry`);
+      fetchData();
+    } catch (e) {
+      // Handle silently
     }
   };
 
-  const itemAnim = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 }
-  };
+  const filteredTasks = searchId
+    ? tasks.filter((t) => t.prescription_id.toLowerCase().includes(searchId.toLowerCase()))
+    : tasks;
+
+  const filteredLogs = searchId
+    ? logs.filter((l) => l.prescription_id?.toLowerCase().includes(searchId.toLowerCase()))
+    : logs;
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Blockchain Audit Dashboard</h1>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
+          ))}
+        </div>
+        <div className="h-64 rounded-lg bg-muted animate-pulse" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8 pb-10">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" asChild>
-              <Link href="/admin/dashboard"><ArrowLeft className="h-4 w-4" /></Link>
-            </Button>
-            <h1 className="text-3xl font-heading font-bold tracking-tight text-foreground">Blockchain Explorer</h1>
-          </div>
-          <p className="text-muted-foreground ml-10">Live Polygon network data, contracts, and node metrics.</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Blockchain Audit Dashboard</h1>
+        <input
+          type="text"
+          placeholder="Search by Prescription ID..."
+          value={searchId}
+          onChange={(e) => setSearchId(e.target.value)}
+          className="rounded-lg border border-border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 w-72"
+        />
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Success Rate</p>
+          <p className="text-3xl font-bold text-emerald-500 mt-1">{stats.success_rate ?? 0}%</p>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={refresh} disabled={loading} className="rounded-xl shadow-sm">
-            <Activity className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? "Syncing node..." : "Sync Node"}
-          </Button>
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pending / Processing</p>
+          <p className="text-3xl font-bold text-yellow-500 mt-1">{stats.PENDING ?? 0} / {stats.PROCESSING ?? 0}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Confirmed</p>
+          <p className="text-3xl font-bold text-blue-500 mt-1">{stats.CONFIRMED ?? 0}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Failed</p>
+          <p className="text-3xl font-bold text-red-500 mt-1">{stats.FAILED ?? 0}</p>
         </div>
       </div>
 
-      <motion.div variants={container} initial="hidden" animate="show" className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {/* Network Card */}
-        <motion.div variants={itemAnim}>
-          <Card className="h-full bg-gradient-to-br from-indigo-500/5 to-purple-500/5 border-indigo-500/20 group">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Network</CardTitle>
-                <div className="text-2xl font-bold mt-1 text-indigo-500 flex items-center gap-2">
-                  Polygon <Badge text="Testnet" />
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-500 group-hover:scale-110 transition-transform"><Network className="h-6 w-6" /></div>
-            </CardHeader>
-            <CardContent className="space-y-3 mt-4">
-              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">Chain ID</span>
-                <span className="font-mono font-medium">{data?.network.chainId ?? "-"}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">RPC Provider</span>
-                <span className="font-mono text-xs truncate max-w-[120px]" title={data?.network.rpc}>{data?.network.rpc ?? "-"}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Server Wallet</span>
-                <span className="font-mono text-xs truncate max-w-[120px]" title={data?.network.wallet ?? undefined}>{data?.network.wallet ?? "Not connected"}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+      {/* Tasks Queue */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Background Task Queue</h2>
+        <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-border bg-muted/50">
+              <tr>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Task ID</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Prescription ID</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Status</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Retries</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Created</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filteredTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
+                    No blockchain tasks found.
+                  </td>
+                </tr>
+              ) : (
+                filteredTasks.map((t) => (
+                  <tr key={t.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-5 py-3 font-mono text-xs">{t.id.slice(0, 8)}...</td>
+                    <td className="px-5 py-3 font-mono text-xs">{t.prescription_id.slice(0, 12)}...</td>
+                    <td className="px-5 py-3">
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[t.status] || STATUS_COLORS.PENDING}`}>
+                        {t.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-muted-foreground">{t.retry_count} / {t.max_retries}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{t.created_at ? new Date(t.created_at).toLocaleString() : "—"}</td>
+                    <td className="px-5 py-3">
+                      {(t.status === "FAILED" || t.status === "CANCELLED") && (
+                        <button
+                          onClick={() => handleRetry(t.id)}
+                          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        {/* Gas Card */}
-        <motion.div variants={itemAnim}>
-          <Card className="h-full bg-gradient-to-br from-amber-500/5 to-orange-500/5 border-amber-500/20 group">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Gas Analytics</CardTitle>
-                <div className="text-2xl font-bold mt-1 text-amber-500">{formatNumber(data?.gasAnalytics.totalGasUsed ?? 0)} <span className="text-sm">GWEI</span></div>
-              </div>
-              <div className="p-3 rounded-xl bg-amber-500/10 text-amber-500 group-hover:scale-110 transition-transform"><Fuel className="h-6 w-6" /></div>
-            </CardHeader>
-            <CardContent className="space-y-3 mt-4">
-              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">Average Gas</span>
-                <span className="font-mono font-medium">{formatNumber(data?.gasAnalytics.averageGas ?? 0)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">Highest Gas</span>
-                <span className="font-mono font-medium">{formatNumber(data?.gasAnalytics.highestGas ?? 0)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Today's Usage</span>
-                <span className="font-mono font-medium text-amber-500">{formatNumber(data?.gasAnalytics.todayGas ?? 0)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Transaction Card */}
-        <motion.div variants={itemAnim}>
-          <Card className="h-full bg-gradient-to-br from-emerald-500/5 to-teal-500/5 border-emerald-500/20 group">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Transactions</CardTitle>
-                <div className="text-2xl font-bold mt-1 text-emerald-500">{formatNumber(data?.transactionAnalytics.totalTransactions ?? 0)} <span className="text-sm">TOTAL</span></div>
-              </div>
-              <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-500 group-hover:scale-110 transition-transform"><ActivitySquare className="h-6 w-6" /></div>
-            </CardHeader>
-            <CardContent className="space-y-3 mt-4">
-              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                <span className="text-muted-foreground flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-500"/> Successful</span>
-                <span className="font-mono font-medium">{formatNumber(data?.transactionAnalytics.successful ?? 0)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                <span className="text-muted-foreground flex items-center gap-1"><XCircle className="w-3 h-3 text-destructive"/> Failed</span>
-                <span className="font-mono font-medium">{formatNumber(data?.transactionAnalytics.failed ?? 0)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground flex items-center gap-1"><Server className="w-3 h-3 text-blue-500"/> Pending</span>
-                <span className="font-mono font-medium">{formatNumber(data?.transactionAnalytics.pending ?? 0)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Wallet Card */}
-        <motion.div variants={itemAnim}>
-          <Card className="h-full bg-gradient-to-br from-blue-500/5 to-cyan-500/5 border-blue-500/20 group">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Master Wallet</CardTitle>
-                <div className="text-2xl font-bold mt-1 text-blue-500">{(data?.wallet.balanceMatic ?? 0).toFixed(4)} <span className="text-sm">MATIC</span></div>
-              </div>
-              <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500 group-hover:scale-110 transition-transform"><Box className="h-6 w-6" /></div>
-            </CardHeader>
-            <CardContent className="space-y-3 mt-4">
-              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">Address</span>
-                <span className="font-mono text-xs flex items-center gap-1 truncate max-w-[100px]" title={data?.wallet.address ?? undefined}>
-                  {data?.wallet.address?.substring(0, 8)}... <Copy className="w-3 h-3 cursor-pointer hover:text-foreground" />
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">Network</span>
-                <span className="font-medium">{data?.wallet.network ?? "Polygon"}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Explorer</span>
-                {data?.wallet.explorerUrl ? (
-                  <a className="text-primary hover:underline flex items-center gap-1 font-medium" href={data.wallet.explorerUrl} target="_blank" rel="noreferrer">
-                    View on Scan <ExternalLink className="w-3 h-3" />
-                  </a>
-                ) : <span className="text-muted-foreground">-</span>}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </motion.div>
-
-      <motion.div variants={container} initial="hidden" animate="show" className="grid gap-6 xl:grid-cols-2">
-        <motion.div variants={itemAnim}>
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Fuel className="w-5 h-5 text-amber-500" /> Gas Spent Over Time</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {loading ? <div className="h-32 bg-muted rounded-xl animate-pulse" /> : <Sparkline values={gasSeries.map((item) => item.value)} />}
-            </CardContent>
-          </Card>
-        </motion.div>
-        
-        <motion.div variants={itemAnim}>
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><ActivitySquare className="w-5 h-5 text-emerald-500" /> Transactions per Day</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? <div className="h-48 bg-muted rounded-xl animate-pulse" /> : <BarChart items={txSeries.slice(-7)} />}
-            </CardContent>
-          </Card>
-        </motion.div>
-      </motion.div>
-
-      <motion.div variants={container} initial="hidden" animate="show" className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-        <motion.div variants={itemAnim}>
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><FileCode className="w-5 h-5 text-indigo-500" /> Deployed Smart Contracts</CardTitle>
-              <CardDescription>Track gas usage and interactions for MedSync contracts</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-2">
-              {(data?.smartContracts ?? []).map((contract) => (
-                <div key={contract.address} className="rounded-xl border border-border/50 bg-muted/20 p-5 hover:border-primary/50 transition-colors">
-                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/50 pb-4 mb-4">
-                    <div>
-                      <div className="font-heading font-semibold text-lg text-foreground">{contract.name}</div>
-                      <div className="text-sm text-muted-foreground font-mono mt-1 flex items-center gap-2">
-                        <Link2 className="w-3 h-3" /> {contract.address}
-                      </div>
-                    </div>
-                    <Badge text={contract.status} active={contract.status === "Active"} />
-                  </div>
-                  <div className="grid gap-4 text-sm md:grid-cols-4">
-                    <div className="flex flex-col">
-                      <span className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Total Calls</span>
-                      <span className="font-semibold text-base">{formatNumber(contract.totalCalls)}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Gas Spent</span>
-                      <span className="font-semibold text-base">{formatNumber(contract.gasSpent)}</span>
-                    </div>
-                    <div className="flex flex-col col-span-2 sm:col-span-1">
-                      <span className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Last Sync</span>
-                      <span className="font-medium text-foreground">{contract.lastInteraction}</span>
-                    </div>
-                    <div className="flex items-center sm:justify-end mt-2 sm:mt-0">
-                      <Button variant="outline" size="sm" asChild className="rounded-full">
-                        <a href={contract.explorerUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1">
-                          Verify <ExternalLink className="w-3 h-3" />
+      {/* Audit Logs */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Blockchain Audit Logs</h2>
+        <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-border bg-muted/50">
+              <tr>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Prescription ID</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Tx Hash</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Block</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Gas Used</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Confirmed At</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Explorer</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
+                    No audit logs yet. Logs appear after prescriptions are confirmed on-chain.
+                  </td>
+                </tr>
+              ) : (
+                filteredLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-5 py-3 font-mono text-xs">{log.prescription_id?.slice(0, 12) ?? "—"}...</td>
+                    <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{log.transaction_hash?.slice(0, 18) ?? "—"}...</td>
+                    <td className="px-5 py-3">{log.block_number ?? "—"}</td>
+                    <td className="px-5 py-3">{log.gas_used?.toLocaleString() ?? "—"}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{log.confirmation_time ? new Date(log.confirmation_time).toLocaleString() : "—"}</td>
+                    <td className="px-5 py-3">
+                      {log.explorer_url ? (
+                        <a
+                          href={log.explorer_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline text-xs font-medium"
+                        >
+                          View on PolygonScan ↗
                         </a>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {(!data?.smartContracts || data.smartContracts.length === 0) && !loading && (
-                <div className="py-10 text-center text-muted-foreground border border-dashed rounded-xl">
-                  No contracts deployed yet.
-                </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))
               )}
-            </CardContent>
-          </Card>
-        </motion.div>
-        
-        <motion.div variants={itemAnim}>
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Network className="w-5 h-5 text-blue-500" /> Recent Blockchain Activity</CardTitle>
-              <CardDescription>Live feed of on-chain operations</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 pr-2 overflow-y-auto max-h-[600px] custom-scrollbar">
-              {(data?.recentActivity ?? []).slice(0, 20).map((tx) => (
-                <a key={tx.hash} href={tx.explorerUrl} target="_blank" rel="noreferrer" className="block rounded-xl border border-transparent p-4 hover:border-border/50 hover:bg-muted/30 transition-all group">
-                  <div className="flex items-center justify-between gap-2 text-sm mb-2">
-                    <span className="font-mono font-medium text-primary flex items-center gap-2">
-                      {tx.shortHash} <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </span>
-                    <Badge text={tx.status} active={tx.status === "Success"} />
-                  </div>
-                  <div className="text-xs text-muted-foreground font-medium mb-1 truncate">{tx.contract}</div>
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/30">
-                    <span className="text-xs font-semibold bg-secondary px-2 py-1 rounded-md">{tx.method}</span>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1"><Fuel className="w-3 h-3" /> {formatNumber(tx.gasUsed)}</span>
-                  </div>
-                </a>
-              ))}
-              {(!data?.recentActivity || data.recentActivity.length === 0) && !loading && (
-                <div className="py-10 text-center text-muted-foreground">
-                  No recent activity found.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      </motion.div>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
-}
-
-function Badge({ text, active = true }: { text: string, active?: boolean }) {
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${active ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted text-muted-foreground'}`}>
-      {text}
-    </span>
-  )
 }

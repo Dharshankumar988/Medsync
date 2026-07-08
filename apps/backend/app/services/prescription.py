@@ -21,4 +21,17 @@ class PrescriptionService:
             item_in["prescription_id"] = prescription.id
             await prescription_item_repo.create(db, obj_in=item_in)
             
+        # Enqueue blockchain task (non-blocking - prescription is saved even if queue fails)
+        try:
+            from app.models.blockchain import BlockchainTask, BlockchainTaskStatus
+            task = BlockchainTask(
+                prescription_id=prescription.id,
+                status=BlockchainTaskStatus.PENDING
+            )
+            db.add(task)
+            await db.commit()
+        except Exception:
+            # Blockchain task enqueueing should never block prescription creation
+            pass
+            
         return prescription

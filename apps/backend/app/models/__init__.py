@@ -12,6 +12,7 @@ from app.models.payment import Payment, PaymentStatus, PaymentMethod
 from app.models.pharmacy_system import Medicine, MedicineInventory, MedicineOrder, MedicineOrderItem
 from app.models.notification import Notification
 from app.models.verification import VerificationRequest
+from app.models.blockchain import BlockchainTask, BlockchainTaskStatus, BlockchainAuditLog
 
 __all__ = [
     "Base",
@@ -40,5 +41,7 @@ __all__ = [
     "MedicineOrder",
     "MedicineOrderItem",
     "Notification",
-    "VerificationRequest"
+    "VerificationRequest",
+    "BlockchainTask",
+    "BlockchainAuditLog"
 ]

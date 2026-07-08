@@ -1,5 +1,5 @@
 import "./globals.css";
-import { Inter, Outfit } from "next/font/google";
+import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Providers } from "@/providers/query-provider";
 
@@ -8,14 +8,9 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const outfit = Outfit({ 
-  subsets: ["latin"],
-  variable: "--font-outfit",
-});
-
 export const metadata = {
   title: "MedSync",
-  description: "Decentralized Healthcare Ecosystem",
+  description: "Enterprise Healthcare Platform",
 };
 
 export default function RootLayout({
@@ -25,11 +20,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${outfit.variable} font-sans antialiased`} suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <Providers>
           <ThemeProvider
             attribute="class"
-            defaultTheme="system"
+            defaultTheme="light"
             enableSystem
             disableTransitionOnChange
           >

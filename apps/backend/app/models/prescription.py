@@ -13,6 +13,14 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dispensed: Mapped[bool] = mapped_column(Boolean, default=False)
+    
+    # Blockchain Audit Fields
+    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING")
+    blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
+    block_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    registered_at: Mapped[str | None] = mapped_column(String, nullable=True)
 
 class PrescriptionItem(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "prescription_items"

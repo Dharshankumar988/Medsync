@@ -6,14 +6,28 @@ from app.core.exceptions import DomainException
 from app.api.v1.router import api_router
 from app.schemas.response import APIResponse
 
+from contextlib import asynccontextmanager
+import asyncio
+from app.core.worker import process_blockchain_tasks
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start the blockchain background worker
+    worker_task = asyncio.create_task(process_blockchain_tasks())
+    yield
+    # Cancel the worker on shutdown
+    worker_task.cancel()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
+    lifespan=lifespan
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

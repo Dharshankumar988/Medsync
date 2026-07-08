@@ -384,7 +384,7 @@ def upgrade() -> None:
     sa.Column('version_id', sa.UUID(), nullable=False),
     sa.Column('extracted_text', sa.Text(), nullable=True),
     sa.Column('confidence', sa.Float(), nullable=True),
-    sa.Column('detected_fields', postgresql.JSONB(astext_type=Text()), nullable=True),
+    sa.Column('detected_fields', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),

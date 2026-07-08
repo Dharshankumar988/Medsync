@@ -21,11 +21,35 @@ __pycache__/
 .Python
 env/
 venv/
+venv_wsl/
+venv_test/
 .env/
 .venv/
 pip-log.txt
 pip-delete-this-directory.txt
+*.egg-info/
+
+# Database
+*.db
+*.sqlite3
+
+# Hardhat / Blockchain
+blockchain/artifacts/
+blockchain/cache/
+blockchain/typechain-types/
+blockchain/node_modules/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test
+htmlcov/
+.pytest_cache/
+.coverage
