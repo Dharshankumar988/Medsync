@@ -23,6 +23,8 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
     status: Mapped[UserStatus] = mapped_column(Enum(UserStatus), default=UserStatus.ACTIVE)
+    profile_completion_percentage: Mapped[int] = mapped_column(default=0)
+    is_verified: Mapped[bool] = mapped_column(default=False)
     
     # Relationships
     patient_profile = relationship("Patient", back_populates="user", uselist=False)

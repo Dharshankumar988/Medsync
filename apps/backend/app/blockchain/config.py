@@ -1,40 +1,25 @@
 import os
-
-from pydantic_settings import BaseSettings
-
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 def _clean(value: str | None) -> str:
     return value.strip() if value else ""
 
 class BlockchainSettings(BaseSettings):
-    POLYGON_RPC_URL: str = _clean(os.getenv("POLYGON_RPC_URL"))
-    BACKEND_PRIVATE_KEY: str = _clean(os.getenv("BACKEND_PRIVATE_KEY"))
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    POLYGON_RPC_URL: str = _clean(os.getenv("POLYGON_RPC_URL", "http://127.0.0.1:8545"))
+    BACKEND_PRIVATE_KEY: str = _clean(os.getenv("BACKEND_PRIVATE_KEY", ""))
+    NETWORK_NAME: str = _clean(os.getenv("BLOCKCHAIN_NETWORK", "amoy"))
     
-    # Contract Addresses
-    DOCTOR_REGISTRY_ADDRESS: str = _clean(os.getenv("DOCTOR_REGISTRY_ADDRESS"))
-    PHARMACY_REGISTRY_ADDRESS: str = _clean(os.getenv("PHARMACY_REGISTRY_ADDRESS"))
-    RECORD_REGISTRY_ADDRESS: str = _clean(os.getenv("RECORD_REGISTRY_ADDRESS"))
-    PRESCRIPTION_REGISTRY_ADDRESS: str = _clean(os.getenv("PRESCRIPTION_REGISTRY_ADDRESS"))
-    CONSENT_MANAGER_ADDRESS: str = _clean(os.getenv("CONSENT_MANAGER_ADDRESS"))
-    AUDIT_LOGGER_ADDRESS: str = _clean(os.getenv("AUDIT_LOGGER_ADDRESS"))
-
-    def missing_required(self) -> list[str]:
-        return [
-            name
-            for name, value in (
-                ("POLYGON_RPC_URL", self.POLYGON_RPC_URL),
-                ("BACKEND_PRIVATE_KEY", self.BACKEND_PRIVATE_KEY),
-                ("DOCTOR_REGISTRY_ADDRESS", self.DOCTOR_REGISTRY_ADDRESS),
-                ("PHARMACY_REGISTRY_ADDRESS", self.PHARMACY_REGISTRY_ADDRESS),
-                ("RECORD_REGISTRY_ADDRESS", self.RECORD_REGISTRY_ADDRESS),
-                ("PRESCRIPTION_REGISTRY_ADDRESS", self.PRESCRIPTION_REGISTRY_ADDRESS),
-                ("CONSENT_MANAGER_ADDRESS", self.CONSENT_MANAGER_ADDRESS),
-                ("AUDIT_LOGGER_ADDRESS", self.AUDIT_LOGGER_ADDRESS),
-            )
-            if not value
-        ]
-
-    def is_configured(self) -> bool:
-        return not self.missing_required()
+    # Gas & Transactions
+    GAS_MULTIPLIER: float = float(os.getenv("GAS_MULTIPLIER", "1.2"))
+    MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
+    RETRY_DELAY_SECONDS: int = int(os.getenv("RETRY_DELAY_SECONDS", "5"))
+    TX_TIMEOUT_SECONDS: int = int(os.getenv("TX_TIMEOUT_SECONDS", "120"))
+    
+    def validate(self):
+        if not self.POLYGON_RPC_URL:
+            raise ValueError("POLYGON_RPC_URL must be configured")
+        if not self.BACKEND_PRIVATE_KEY:
+            raise ValueError("BACKEND_PRIVATE_KEY must be configured")
 
 blockchain_settings = BlockchainSettings()

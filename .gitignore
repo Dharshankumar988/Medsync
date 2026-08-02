@@ -32,6 +32,8 @@ pip-delete-this-directory.txt
 # Database
 *.db
 *.sqlite3
+dummy_values.sql
+dummy_values_utf8.sql
 
 # Hardhat / Blockchain
 blockchain/artifacts/
@@ -53,3 +55,6 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 .coverage
+
+venv_dev/
+

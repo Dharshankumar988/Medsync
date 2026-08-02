@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@medsync/ui";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<string | null>(null);
@@ -45,8 +45,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </div>
   );
 
+  // Role-based accent colors (HSL format)
+  const roleColors: Record<string, string> = {
+    admin: '0 84% 60%',      // Red
+    doctor: '142 71% 45%',   // Green
+    pharmacy: '48 96% 53%',  // Yellow
+    patient: '221 83% 53%',  // Default Blue
+  };
+  
+  const primaryColor = roleColors[role] || roleColors.patient;
+
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div 
+      className="flex min-h-screen bg-background text-foreground"
+      style={{ '--primary': primaryColor } as React.CSSProperties}
+    >
       <Sidebar role={role} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header role={role} />

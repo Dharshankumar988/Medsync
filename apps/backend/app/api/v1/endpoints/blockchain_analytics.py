@@ -36,14 +36,11 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-PLACEHOLDER_ADDRESSES = {
-    blockchain_settings.DOCTOR_REGISTRY_ADDRESS,
-    blockchain_settings.PHARMACY_REGISTRY_ADDRESS,
-    blockchain_settings.RECORD_REGISTRY_ADDRESS,
-    blockchain_settings.PRESCRIPTION_REGISTRY_ADDRESS,
-    blockchain_settings.CONSENT_MANAGER_ADDRESS,
-    blockchain_settings.AUDIT_LOGGER_ADDRESS,
+UNCONFIGURED_ADDRESSES = {
+    "",
+    "0x0000000000000000000000000000000000000000",
 }
+
 
 
 @router.get("/analytics", response_model=APIResponse[dict])
@@ -152,7 +149,7 @@ async def blockchain_analytics() -> APIResponse[dict]:
         contract_stats.append({
             "name": name,
             "address": address,
-            "status": "Configured" if address and address not in PLACEHOLDER_ADDRESSES else "Not configured",
+            "status": "Configured" if address and address not in UNCONFIGURED_ADDRESSES else "Not configured",
             "lastInteraction": last_interaction_by_contract.get(address, "No recent activity"),
             "totalCalls": _safe_int(calls_by_contract.get(address, 0)),
             "gasSpent": contract_gas_spent,

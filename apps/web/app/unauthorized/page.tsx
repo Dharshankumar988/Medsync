@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@medsync/ui";
 
 export default function UnauthorizedPage() {
   return (

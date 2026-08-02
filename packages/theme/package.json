@@ -1,0 +1,9 @@
+{
+  "name": "@medsync/theme",
+  "version": "1.0.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "dependencies": {
+    "tailwindcss": "^3.4.1"
+  }
+}

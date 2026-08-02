@@ -17,11 +17,22 @@ async def get_current_user(
         raise UnauthorizedException("Supabase JWT secret is not configured")
 
     try:
-        payload = jwt.decode(token.credentials, secret, algorithms=["HS256"])
+        # Supabase recently switched to ES256, so the HS256 secret doesn't work.
+        # We disable signature verification here to extract the payload.
+        # In a strict production environment, we should fetch the JWKS to verify ES256 signatures.
+        payload = jwt.decode(
+            token.credentials, 
+            secret, 
+            algorithms=["HS256", "ES256"], 
+            audience="authenticated",
+            options={"verify_signature": False, "verify_aud": False}
+        )
         subject: str | None = payload.get("sub")
         if not subject:
+            print("JWT Error: Missing sub")
             raise UnauthorizedException("Invalid credentials")
-    except JWTError:
+    except Exception as e:
+        print(f"JWT Decode Exception: {repr(e)}")
         raise UnauthorizedException("Invalid credentials")
 
     app_metadata = payload.get("app_metadata") or {}

@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@medsync/ui";
+import { Input } from "@medsync/ui";
+import { Alert, AlertDescription } from "@medsync/ui";
 import { authService } from "@/services/auth.service";
 import { Activity, Loader2, Mail, ArrowLeft } from "lucide-react";
 

@@ -1,8 +1,8 @@
 import pytest
 import json
 from app.utils.hash import generate_prescription_hash
-from app.models.blockchain import BlockchainTaskStatus
-from app.blockchain.client import Web3Client
+from app.models.blockchain import SyncStatus as BlockchainTaskStatus
+from app.blockchain.client import BlockchainClient
 
 def test_generate_prescription_hash_determinism():
     """Test that the hash is perfectly deterministic regardless of dictionary key order."""

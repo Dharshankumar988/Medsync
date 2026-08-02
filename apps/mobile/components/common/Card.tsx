@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewProps } from 'react-native';
 
-export function Card({ style, children, ...props }: ViewProps) {
+export const Card = React.memo(function Card({ style, children, ...props }: ViewProps) {
   return <View style={[styles.card, style]} {...props}>{children}</View>;
-}
+});
 
-export function CardContent({ style, children, ...props }: ViewProps) {
+export const CardContent = React.memo(function CardContent({ style, children, ...props }: ViewProps) {
   return <View style={[styles.content, style]} {...props}>{children}</View>;
-}
+});
 
 const styles = StyleSheet.create({
   card: {

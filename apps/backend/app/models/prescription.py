@@ -13,7 +13,8 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dispensed: Mapped[bool] = mapped_column(Boolean, default=False)
-    
+    pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    qr_token: Mapped[str | None] = mapped_column(Text, nullable=True)    
     # Blockchain Audit Fields
     blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING")
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)

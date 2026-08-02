@@ -35,6 +35,31 @@ class VerificationService:
         await db.commit()
         await db.refresh(req)
         
+        # Enqueue Blockchain Sync
+        if user:
+            # Need to get role properly
+            role = user.role
+            try:
+                from app.services.blockchain_sync import BlockchainSyncService
+                from app.models.blockchain import SyncEntityType, SyncActionType
+                
+                entity_type = None
+                if role == "DOCTOR" or role.value == "DOCTOR":
+                    entity_type = SyncEntityType.DOCTOR
+                elif role == "PHARMACY" or role.value == "PHARMACY":
+                    entity_type = SyncEntityType.PHARMACY
+                
+                if entity_type:
+                    await BlockchainSyncService.enqueue_sync_task(
+                        db=db,
+                        entity_type=entity_type,
+                        entity_id=user.id,
+                        action_type=SyncActionType.CREATE
+                    )
+                    await db.commit()
+            except Exception as e:
+                print(f"Error enqueueing blockchain task for verification: {e}")
+        
         return req
 
     @staticmethod

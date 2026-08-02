@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@medsync/ui";
+import { Input } from "@medsync/ui";
 import { Activity, Shield, Loader2, ArrowRight, LockKeyhole } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@medsync/ui";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -128,6 +128,7 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
+
 
           <p className="mt-10 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}

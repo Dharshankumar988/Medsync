@@ -13,6 +13,7 @@ const createSupabaseStub = () => ({
     resetPasswordForEmail: async () => ({ data: null, error: new Error('Supabase is not configured') }),
     resend: async () => ({ data: null, error: new Error('Supabase is not configured') }),
     refreshSession: async () => ({ data: { session: null }, error: null }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
   },
 });
 

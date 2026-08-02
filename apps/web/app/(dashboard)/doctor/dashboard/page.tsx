@@ -1,21 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
+import { Skeleton } from "@medsync/ui";
 import { Users, Calendar, Activity, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@medsync/ui";
+import { AuditHistory } from "@medsync/ui";
+import { ProfileCompletionBanner } from "@/components/profile-wizard/ProfileCompletionBanner";
+import { supabase } from "@/lib/supabase";
 
 export default function DoctorDashboard() {
   const [isMounted, setIsMounted] = useState(false);
 
+  const [userId, setUserId] = useState<string>("");
+
   useEffect(() => {
     setIsMounted(true);
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setUserId(data.user.id);
+    });
   }, []);
 
   if (!isMounted) return null;
 
   return (
     <div className="space-y-6">
+      {userId && <ProfileCompletionBanner userId={userId} role="doctor" initialPercentage={20} />}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Clinical Overview</h1>
@@ -24,10 +34,18 @@ export default function DoctorDashboard() {
         <Button>View Full Schedule</Button>
       </div>
 
+      {!userId ? (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+        </div>
+      ) : (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Today's Patients</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Today&apos;s Patients</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -69,6 +87,7 @@ export default function DoctorDashboard() {
           </CardContent>
         </Card>
       </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
@@ -122,6 +141,11 @@ export default function DoctorDashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Audit History Row */}
+      <div className="grid gap-6 grid-cols-1">
+        <AuditHistory />
       </div>
     </div>
   );

@@ -45,6 +45,21 @@ class MedicalRecordService:
             supabase_storage_path=storage_path,
             mime_type=mime_type,
         ))
+        
+        try:
+            from app.services.blockchain_sync import BlockchainSyncService
+            from app.models.blockchain import SyncEntityType, SyncActionType
+            
+            await BlockchainSyncService.enqueue_sync_task(
+                db=db,
+                entity_type=SyncEntityType.MEDICAL_RECORD,
+                entity_id=version.id,
+                action_type=SyncActionType.CREATE,
+                payload={"file_hash": file_hash, "file_type": f_type.value, "file_size_bytes": file_size_bytes}
+            )
+        except Exception as e:
+            print(f"Error enqueueing blockchain task for medical record: {e}")
+            
         await db.commit()
         
         return record

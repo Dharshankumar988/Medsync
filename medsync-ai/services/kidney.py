@@ -33,8 +33,8 @@ class KidneyDetectionService:
         best_class = "No Stones Detected"
         
         for box in result.boxes:
-            conf = float(box.conf[0].cpu().numpy())
-            cls_id = int(box.cls[0].cpu().numpy())
+            conf = float(box.conf[0].item())
+            cls_id = int(box.cls[0].item())
             class_name = result.names[cls_id]
             coords = box.xyxy[0].cpu().numpy().tolist()
             

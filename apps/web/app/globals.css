@@ -4,28 +4,29 @@
 
 @layer base {
   :root {
-    --background: 0 0% 99%;
-    --foreground: 224 71% 4%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
     
     --card: 0 0% 100%;
-    --card-foreground: 224 71% 4%;
+    --card-foreground: 0 0% 0%;
     --popover: 0 0% 100%;
-    --popover-foreground: 224 71% 4%;
+    --popover-foreground: 0 0% 0%;
     
-    /* Medical Blue - #2563EB */
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
+    /* Default Role (Patient/Blue) */
+    --role-primary: 221 83% 53%;
+    --role-primary-foreground: 210 40% 98%;
     
-    /* Slate-50 */
+    --primary: var(--role-primary);
+    --primary-foreground: var(--role-primary-foreground);
+    
     --secondary: 220 14% 96%;
     --secondary-foreground: 224 71% 4%;
     
     --muted: 220 14% 96%;
     --muted-foreground: 220 9% 46%;
     
-    /* Emerald */
-    --accent: 160 84% 39%; 
-    --accent-foreground: 210 40% 98%;
+    --accent: 221 83% 90%; 
+    --accent-foreground: 221 83% 53%;
     
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
@@ -33,24 +34,28 @@
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     
-    --ring: 221 83% 53%;
-    --radius: 0.625rem;
+    --ring: var(--role-primary);
+    --radius: 0.5rem;
     --panel: 220 14% 96%;
   }
 
   .dark {
-    /* Deep slate */
-    --background: 224 71% 4%; 
+    /* Pure Black / Near Black */
+    --background: 0 0% 0%; 
     --foreground: 210 20% 98%;
     
-    --card: 224 71% 7%; 
+    /* Slate */
+    --card: 215 28% 12%; 
     --card-foreground: 210 20% 98%;
-    --popover: 224 71% 7%;
+    --popover: 215 28% 12%;
     --popover-foreground: 210 20% 98%;
     
-    /* Blue */
-    --primary: 217 91% 60%;
-    --primary-foreground: 224 71% 4%;
+    /* Default Role (Patient/Blue) */
+    --role-primary: 221 83% 53%;
+    --role-primary-foreground: 210 40% 98%;
+    
+    --primary: var(--role-primary);
+    --primary-foreground: var(--role-primary-foreground);
     
     --secondary: 215 28% 17%;
     --secondary-foreground: 210 20% 98%;
@@ -58,8 +63,7 @@
     --muted: 215 28% 17%;
     --muted-foreground: 215 20% 65%;
     
-    /* Emerald */
-    --accent: 160 84% 39%; 
+    --accent: 215 28% 17%; 
     --accent-foreground: 210 20% 98%;
     
     --destructive: 0 63% 31%;
@@ -67,8 +71,34 @@
     
     --border: 215 28% 17%;
     --input: 215 28% 17%;
-    --ring: 217 91% 60%;
-    --panel: 224 71% 7%;
+    --ring: var(--role-primary);
+    --panel: 215 28% 12%;
+  }
+
+  /* --- ROLE BASED THEMING --- */
+  
+  /* Role: Admin (Red) */
+  :root[data-role="admin"], .dark[data-role="admin"] {
+    --role-primary: 0 72% 51%;
+    --role-primary-foreground: 210 40% 98%;
+  }
+
+  /* Role: Doctor (Green) */
+  :root[data-role="doctor"], .dark[data-role="doctor"] {
+    --role-primary: 142 71% 45%;
+    --role-primary-foreground: 210 40% 98%;
+  }
+
+  /* Role: Patient (Blue) */
+  :root[data-role="patient"], .dark[data-role="patient"] {
+    --role-primary: 221 83% 53%;
+    --role-primary-foreground: 210 40% 98%;
+  }
+
+  /* Role: Pharmacy (Amber) */
+  :root[data-role="pharmacy"], .dark[data-role="pharmacy"] {
+    --role-primary: 38 92% 50%;
+    --role-primary-foreground: 224 71% 4%;
   }
 }
 
@@ -82,4 +112,45 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight text-foreground;
   }
+}
+
+/* ===== Performance Utilities ===== */
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* GPU-accelerated skeleton shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--muted-foreground) / 0.08) 50%, hsl(var(--muted)) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Content visibility optimization for off-screen content */
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+
+/* GPU acceleration hint for animated elements */
+.gpu-accelerated {
+  will-change: transform;
+  transform: translateZ(0);
 }

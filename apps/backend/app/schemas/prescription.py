@@ -31,5 +31,7 @@ class PrescriptionResponse(BaseModel):
     is_finalized: bool
     is_dispensed: bool
     created_at: datetime
+    pdf_url: Optional[str] = None
+    qr_token: Optional[str] = None
     
     model_config = {"from_attributes": True}

@@ -1,25 +1,43 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
+import { Skeleton } from "@medsync/ui";
 import { Activity, Clock, FileText, CheckCircle2 } from "lucide-react";
+import { AuditHistory } from "@medsync/ui";
+import { ProfileCompletionBanner } from "@/components/profile-wizard/ProfileCompletionBanner";
+import { supabase } from "@/lib/supabase";
 
 export default function PatientDashboard() {
   const [isMounted, setIsMounted] = useState(false);
 
+  const [userId, setUserId] = useState<string>("");
+
   useEffect(() => {
     setIsMounted(true);
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setUserId(data.user.id);
+    });
   }, []);
 
   if (!isMounted) return null;
 
   return (
     <div className="space-y-6">
+      {userId && <ProfileCompletionBanner userId={userId} role="patient" initialPercentage={20} />}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Patient Overview</h1>
         <p className="text-muted-foreground mt-1">Review your health summary and upcoming appointments.</p>
       </div>
 
+      {!userId ? (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+        </div>
+      ) : (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -65,31 +83,10 @@ export default function PatientDashboard() {
           </CardContent>
         </Card>
       </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Your clinical events over the past 30 days.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                { title: "Lab Results Uploaded", desc: "Complete Blood Count", date: "Oct 12, 2026" },
-                { title: "Prescription Renewed", desc: "Lisinopril 10mg", date: "Oct 10, 2026" },
-                { title: "Consultation Completed", desc: "Dr. Sarah Smith", date: "Oct 05, 2026" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between border-b border-border pb-4 last:border-0 last:pb-0">
-                  <div>
-                    <p className="font-medium">{item.title}</p>
-                    <p className="text-sm text-muted-foreground">{item.desc}</p>
-                  </div>
-                  <span className="text-sm text-muted-foreground">{item.date}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <AuditHistory />
 
         <Card className="col-span-3">
           <CardHeader>

@@ -1,75 +1,34 @@
-# MedSync AI Microservice
+---
+title: MedSync AI Microservice
+emoji: 🏥
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
 
-A production-ready, highly scalable FastAPI microservice built to process medical imaging inferences (YOLO for object detection, EfficientNet for classification). This microservice operates completely independently from the main MedSync Web backend.
+# MedSync AI Inference Microservice
 
-## 📁 Architecture
-- **Framework**: FastAPI (Async)
-- **ML Engine**: PyTorch, Ultralytics, Timm
-- **Image Processing**: OpenCV (Headless), Pillow
-- **Global Memory**: Models are loaded exactly once during the `lifespan` hook to prevent memory leaks and ensure blazing fast request latency.
+This repository powers the computer vision backend for the MedSync Healthcare Ecosystem. 
+It provides high-performance inference for medical imaging using YOLO and EfficientNet architectures.
 
-## 🚀 Adding Your Models
-By default, the `models/` directory contains empty placeholder files. The application will boot, but the `/health` endpoint will report that models are not loaded, and the `/predict` endpoint will return a 503 HTTP status code if requested.
+## Deployment on Hugging Face Spaces
 
-To enable inference, copy your real trained weights into the `models/` folder:
-1. `bone.pt` (YOLO)
-2. `brain.pt` (YOLO)
-3. `kidney.pt` (YOLO)
-4. `skin.pth` (PyTorch EfficientNet state_dict)
+This project is configured as a **Docker Space**.
 
-## 🐳 Deployment (Docker / Hugging Face Spaces)
+### Required Environment Variables
 
-This repository is uniquely optimized for **Hugging Face Spaces**. 
+When deploying to Hugging Face Spaces, set the following secrets/variables in the Space settings:
 
-1. Create a new **Docker Space** on Hugging Face.
-2. Clone this repository directly into the Space.
-3. Upload your `.pt` and `.pth` files into the `models/` directory via the Hugging Face UI or Git LFS.
-4. Hugging Face will automatically detect the `Dockerfile`, install `libgl1` (for OpenCV), download dependencies, and spin up the server on port 8080.
+- `HF_TOKEN`: Your Hugging Face read token (Required if downloading weights from a private repo)
+- `AI_SERVICE_TOKEN`: A secure token to protect the endpoints (e.g., `your_secure_random_string`)
+- `HF_MODEL_REPO_ID`: The HF Hub repo containing your weights (e.g., `Dharshankumar988/medsync-ai-weights`)
 
-## 💻 Local Testing
+### Cold Start Optimization
 
-1. Create a virtual environment: `python -m venv venv`
-2. Activate it: `source venv/bin/activate` (Mac/Linux) or `venv\Scripts\activate` (Windows)
-3. Install dependencies: `pip install -r requirements.txt`
-4. Run the server: `python app.py`
+Models are **lazy-loaded** onto the GPU/CPU. When the Space boots, it initializes instantly, allowing health checks to pass. The specific model (Bone, Brain, Kidney, Skin) is only loaded into memory when an inference request is received for that type.
 
-## 🔌 API Endpoints
+### Automatic Model Weights Download
 
-### 1. `GET /health`
-Returns memory usage and model loading status.
-```json
-{
-  "status": "operational",
-  "uptime_seconds": 12.5,
-  "memory_usage_mb": 420.5,
-  "loaded_models": {
-    "bone": true,
-    "brain": true,
-    "kidney": false,
-    "skin": true
-  }
-}
-```
-
-### 2. `POST /predict`
-**Body**: `multipart/form-data`
-- `scan_type` (text): "bone", "brain", "kidney", or "skin"
-- `file` (file): The medical scan image.
-
-Returns the standardized JSON:
-```json
-{
-    "success": true,
-    "scan_type": "brain",
-    "processing_time": 0.61,
-    "diagnosis": "Glioma",
-    "confidence": 0.97,
-    "boxes": [
-        {
-            "class": "Glioma",
-            "confidence": 0.97,
-            "coordinates": [12.5, 34.2, 100.5, 150.3]
-        }
-    ]
-}
-```
+If the local `models/` directory does not contain the required `.pt` files (or if they are 0 bytes), the microservice will automatically attempt to securely download them from your designated Hugging Face Model Repository (`HF_MODEL_REPO_ID`) using `HF_TOKEN`.

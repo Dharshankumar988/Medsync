@@ -7,7 +7,7 @@ interface ButtonProps extends TouchableOpacityProps {
   loading?: boolean;
 }
 
-export function Button({ title, variant = 'primary', loading, style, disabled, ...props }: ButtonProps) {
+export const Button = React.memo(function Button({ title, variant = 'primary', loading, style, disabled, ...props }: ButtonProps) {
   const isPrimary = variant === 'primary';
   const isOutline = variant === 'outline';
   
@@ -36,7 +36,7 @@ export function Button({ title, variant = 'primary', loading, style, disabled, .
       )}
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   button: {

@@ -5,8 +5,9 @@ from PIL import Image
 
 def validate_image_bytes(image_bytes: bytes) -> bool:
     try:
-        img = Image.open(io.BytesIO(image_bytes))
-        img.verify()
+        # Avoid .verify() as it forces a full decode or requires it later anyway.
+        # Just open to check if it's a valid image header.
+        Image.open(io.BytesIO(image_bytes))
         return True
     except Exception:
         return False

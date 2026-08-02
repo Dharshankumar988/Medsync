@@ -44,6 +44,8 @@ class SkinClassificationService:
             # Load state dict
             self.model.load_state_dict(torch.load(path, map_location=self.device))
             self.model.to(self.device)
+            if torch.cuda.is_available():
+                self.model = self.model.half()  # FP16 for faster inference
             self.model.eval()
             
             logger.info("Skin model loaded successfully.")
@@ -57,7 +59,10 @@ class SkinClassificationService:
             
         tensor = self.transform(pil_image).unsqueeze(0).to(self.device)
         
-        with torch.no_grad():
+        if torch.cuda.is_available():
+            tensor = tensor.half()
+            
+        with torch.inference_mode():
             outputs = self.model(tensor)
             probabilities = torch.nn.functional.softmax(outputs, dim=1)[0]
             
@@ -69,7 +74,7 @@ class SkinClassificationService:
         top_predictions = []
         for i in range(len(top3_idx)):
             idx = top3_idx[i].item()
-            prob = float(top3_prob[i].cpu().numpy())
+            prob = float(top3_prob[i].item())
             top_predictions.append({
                 "class": SKIN_CLASSES[idx],
                 "confidence": round(prob, 4)
@@ -77,6 +82,6 @@ class SkinClassificationService:
 
         return {
             "predicted_class": SKIN_CLASSES[top_idx.item()],
-            "confidence": round(float(top_prob.cpu().numpy()), 4),
+            "confidence": round(float(top_prob.item()), 4),
             "top_predictions": top_predictions
         }

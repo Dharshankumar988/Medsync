@@ -7,25 +7,29 @@ interface AvatarProps {
   size?: number;
 }
 
-export function Avatar({ src, fallback, size = 40 }: AvatarProps) {
+export const Avatar = React.memo(function Avatar({ src, fallback, size = 40 }: AvatarProps) {
   const [error, setError] = React.useState(false);
 
+  const dynamicContainerStyle = React.useMemo(() => ({ width: size, height: size, borderRadius: size / 2 }), [size]);
+  const dynamicImageStyle = React.useMemo(() => ({ width: size, height: size, borderRadius: size / 2 }), [size]);
+  const dynamicTextStyle = React.useMemo(() => ({ fontSize: size * 0.4 }), [size]);
+
   return (
-    <View style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]}>
+    <View style={[styles.container, dynamicContainerStyle]}>
       {src && !error ? (
         <Image 
           source={{ uri: src }} 
-          style={{ width: size, height: size, borderRadius: size / 2 }} 
+          style={dynamicImageStyle} 
           onError={() => setError(true)}
         />
       ) : (
-        <Text style={[styles.text, { fontSize: size * 0.4 }]}>
+        <Text style={[styles.text, dynamicTextStyle]}>
           {fallback.substring(0, 2).toUpperCase()}
         </Text>
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

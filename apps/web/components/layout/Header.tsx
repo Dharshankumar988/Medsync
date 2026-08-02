@@ -1,12 +1,20 @@
 "use client";
 
+import { memo, useMemo } from "react";
+
 import { Bell, Search, Command, Settings } from "lucide-react";
 import { usePathname } from "next/navigation";
 
-export function Header({ role }: { role: string }) {
+export const Header = memo(function Header({ role }: { role: string }) {
   const pathname = usePathname();
-  const paths = pathname.split('/').filter(Boolean);
-  const currentPage = paths[paths.length - 1] || 'Dashboard';
+  
+  const { paths, currentPage } = useMemo(() => {
+    const pathsList = pathname.split('/').filter(Boolean);
+    return {
+      paths: pathsList,
+      currentPage: pathsList[pathsList.length - 1] || 'Dashboard'
+    };
+  }, [pathname]);
   
   return (
     <header className="sticky top-0 z-40 flex h-14 w-full items-center justify-between border-b border-border bg-background px-6">
@@ -25,4 +33,4 @@ export function Header({ role }: { role: string }) {
       </div>
     </header>
   );
-}
+});

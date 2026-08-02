@@ -3,6 +3,7 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.models.admin import Admin
+from app.models.hospital import Hospital
 from app.models.pharmacy import Pharmacy
 from app.models.appointment import Appointment, AppointmentStatus, DoctorAvailability, AppointmentStatusHistory
 from app.models.prescription import Prescription
@@ -12,7 +13,8 @@ from app.models.payment import Payment, PaymentStatus, PaymentMethod
 from app.models.pharmacy_system import Medicine, MedicineInventory, MedicineOrder, MedicineOrderItem
 from app.models.notification import Notification
 from app.models.verification import VerificationRequest
-from app.models.blockchain import BlockchainTask, BlockchainTaskStatus, BlockchainAuditLog
+from app.models.blockchain import BlockchainSyncTask, BlockchainTransaction, BlockchainAuditLog
+from app.models.api_log import ApiRequestLog
 
 __all__ = [
     "Base",
@@ -22,6 +24,7 @@ __all__ = [
     "Patient",
     "Doctor",
     "Admin",
+    "Hospital",
     "Pharmacy",
     "Appointment",
     "AppointmentStatus",
@@ -42,6 +45,8 @@ __all__ = [
     "MedicineOrderItem",
     "Notification",
     "VerificationRequest",
-    "BlockchainTask",
-    "BlockchainAuditLog"
+    "BlockchainSyncTask",
+    "BlockchainTransaction",
+    "BlockchainAuditLog",
+    "ApiRequestLog"
 ]

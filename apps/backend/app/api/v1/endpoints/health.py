@@ -1,8 +1,24 @@
 from fastapi import APIRouter
 from app.core.config import settings
-from app.blockchain.client import w3_client
+from app.blockchain.provider import blockchain_gateway
 from app.blockchain.config import blockchain_settings
 import time
+import time as time_module
+import asyncio
+
+_health_cache = {"data": None, "expires": 0}
+
+async def _get_cached_blockchain_health():
+    now = time_module.time()
+    if _health_cache["data"] is not None and now < _health_cache["expires"]:
+        return _health_cache["data"]
+    try:
+        health_data = await asyncio.to_thread(blockchain_gateway.get_health)
+        _health_cache["data"] = health_data
+        _health_cache["expires"] = now + 30  # 30 second TTL
+        return health_data
+    except Exception:
+        return None
 
 router = APIRouter()
 START_TIME = time.time()
@@ -16,7 +32,8 @@ async def system_health():
     blockchain_status = "unreachable"
     rpc_url = blockchain_settings.POLYGON_RPC_URL
     try:
-        blockchain_status = "connected" if w3_client.w3.is_connected() else "unreachable"
+        health_data = await _get_cached_blockchain_health()
+        blockchain_status = "connected" if health_data and health_data.get("status") == "healthy" else "unreachable"
     except Exception:
         blockchain_status = "unreachable"
 

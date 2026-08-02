@@ -19,7 +19,11 @@ export const authService = {
       },
     };
   },
-  register: async (data: { full_name: string; email: string; password: string; role: string }) => {
+  register: async (data: { 
+    full_name: string; email: string; password: string; role: string;
+    hospital_name?: string; hospital_address?: string; license_number?: string;
+    business_name?: string; contact_number?: string;
+  }) => {
     const { data: authData, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
@@ -32,8 +36,28 @@ export const authService = {
     });
 
     if (error) throw error;
+    if (!authData.user) throw new Error("Signup failed");
 
-    const user = authData.user ? getUserProfile(authData.user) : null;
+    // Sync with backend database
+    const { default: api } = await import('@/lib/api');
+    try {
+      await api.post('/api/v1/auth/sync', {
+        id: authData.user.id,
+        email: data.email,
+        role: normalizeRole(data.role).toUpperCase(),
+        full_name: data.full_name,
+        hospital_name: data.hospital_name,
+        hospital_address: data.hospital_address,
+        license_number: data.license_number,
+        business_name: data.business_name,
+        contact_number: data.contact_number
+      });
+    } catch (syncError) {
+      console.error("Backend sync failed:", syncError);
+      // We don't throw here to avoid failing the whole signup, but in prod we might want to handle this better
+    }
+
+    const user = getUserProfile(authData.user);
     return {
       data: {
         user,

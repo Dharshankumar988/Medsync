@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, users, admin, records, appointments, prescriptions, pharmacy, orders, payments, notifications, ai, blockchain, health, internal, blockchain_analytics
+from app.api.v1.endpoints import auth, users, admin, records, appointments, prescriptions, pharmacy, orders, payments, notifications, ai, blockchain, health, internal, profile, hospitals, verify
 
 api_router = APIRouter()
 api_router.include_router(health.router, prefix="/health", tags=["System"])
@@ -16,5 +16,14 @@ api_router.include_router(payments.router, prefix="/payments", tags=["Payments"]
 api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 api_router.include_router(ai.router, prefix="/ai", tags=["Artificial Intelligence"])
 api_router.include_router(blockchain.router, prefix="/blockchain", tags=["Blockchain"])
-api_router.include_router(blockchain_analytics.router, prefix="/blockchain", tags=["Blockchain Analytics"])
+api_router.include_router(profile.router, prefix="/profile", tags=["Profile"])
+api_router.include_router(hospitals.router, prefix="/hospitals", tags=["Hospitals"])
+api_router.include_router(verify.router, prefix="/verify", tags=["Verification"])
+
+try:
+    from app.api.v1.endpoints import blockchain_analytics
+    api_router.include_router(blockchain_analytics.router, prefix="/blockchain", tags=["Blockchain Analytics"])
+except ImportError:
+    import logging
+    logging.warning("Skipped blockchain_analytics router because web3 is not installed.")
 

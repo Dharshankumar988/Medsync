@@ -7,6 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV ENVIRONMENT=production
 
+# Hugging Face Spaces standard port
+ENV PORT=7860
+EXPOSE 7860
+
 # Install system dependencies required for OpenCV and PyTorch
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -14,18 +18,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# Set up a new user named "user" with user ID 1000 (Required for Hugging Face Spaces)
+RUN useradd -m -u 1000 user
+USER user
+
+# Set home to the user's home directory
+ENV HOME=/home/user \
+	PATH=/home/user/.local/bin:$PATH
+
 # Create and set working directory
-WORKDIR /app
+WORKDIR $HOME/app
 
 # Copy requirements file and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=user requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Copy the entire application
-COPY . .
+COPY --chown=user . .
 
-# Expose port (8080 is standard for Hugging Face Spaces / Cloud Run)
-EXPOSE 8080
+# Ensure model and cache directories exist and are writable
+RUN mkdir -p models/cache && chmod -R 777 models
 
-# Run the FastAPI server via Uvicorn
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+ENV TORCH_HOME=/app/models/cache
+ENV TRANSFORMERS_CACHE=/app/models/cache
+ENV HF_HOME=/app/models/cache
+
+# Run the FastAPI server via Uvicorn on 7860
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

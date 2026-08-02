@@ -91,6 +91,39 @@ class StorageService:
         return object_path, content_type, len(file_bytes), file_hash
 
     @staticmethod
+    async def upload_bytes(
+        file_bytes: bytes,
+        filename: str,
+        content_type: str,
+        patient_id: str,
+        record_id: str,
+        version_number: int,
+    ) -> tuple[str, str, int, str]:
+        StorageService._ensure_configured()
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+        object_path = StorageService._object_path(patient_id, record_id, version_number, filename)
+        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+
+        headers = {
+            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+            "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+            "x-upsert": "false",
+        }
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                url,
+                headers=headers,
+                content=file_bytes,
+            )
+
+        if response.status_code not in (200, 201):
+            raise StorageServiceError(f"Supabase upload failed: {response.status_code} {response.text}")
+
+        return object_path, content_type, len(file_bytes), file_hash
+
+    @staticmethod
     async def create_signed_download_url(object_path: str, expires_in: int = 300) -> str:
         StorageService._ensure_configured()
 

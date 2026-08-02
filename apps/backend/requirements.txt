@@ -16,3 +16,11 @@ python-multipart==0.0.9
 groq==0.8.0
 web3==6.19.0
 eth-account==0.11.2
+apscheduler==3.10.4
+slowapi==0.1.9
+ 
+sentence-transformers==2.7.0
+scikit-learn==1.4.2
+ 
+pytesseract==0.3.10
+opencv-python-headless==4.9.0.80

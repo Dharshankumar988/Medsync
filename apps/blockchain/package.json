@@ -13,6 +13,7 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
+    "@nomicfoundation/edr": "^0.14.2",
     "@openzeppelin/contracts": "^5.0.2",
     "dotenv": "^16.4.5"
   }

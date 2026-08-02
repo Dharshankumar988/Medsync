@@ -1,61 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, Activity, LogOut, ChevronLeft, ChevronRight, Settings, Moon, Sun } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, Activity, LogOut, ChevronLeft, ChevronRight, Settings, Moon, Sun, Building2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase";
 
-export function Sidebar({ role }: { role: string }) {
+const menuGroups = {
+  patient: [
+    {
+      label: "OVERVIEW",
+      items: [
+        { name: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
+        { name: "Pulse AI", href: "/patient/pulse-ai", icon: Brain, badge: "AI" },
+      ]
+    }
+  ],
+  doctor: [
+    {
+      label: "OVERVIEW",
+      items: [
+        { name: "Dashboard", href: "/doctor/dashboard", icon: LayoutDashboard },
+        { name: "Pulse AI", href: "/doctor/pulse-ai", icon: Brain, badge: "AI" },
+      ]
+    }
+  ],
+  pharmacy: [
+    {
+      label: "OVERVIEW",
+      items: [
+        { name: "Dashboard", href: "/pharmacy/dashboard", icon: LayoutDashboard },
+        { name: "Pulse AI", href: "/pharmacy/pulse-ai", icon: Brain, badge: "AI" },
+      ]
+    }
+  ],
+  admin: [
+    {
+      label: "OVERVIEW",
+      items: [
+        { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+        { name: "Pulse AI", href: "/admin/pulse-ai", icon: Brain, badge: "AI" },
+      ]
+    },
+    {
+      label: "SYSTEM",
+      items: [
+        { name: "Hospitals", href: "/admin/hospitals", icon: Building2 },
+        { name: "Blockchain", href: "/admin/blockchain", icon: Shield },
+      ]
+    }
+  ]
+};
+
+export const Sidebar = memo(function Sidebar({ role }: { role: string }) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { theme, setTheme } = useTheme();
 
-  const menuGroups = {
-    patient: [
-      {
-        label: "OVERVIEW",
-        items: [
-          { name: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
-        ]
-      }
-    ],
-    doctor: [
-      {
-        label: "OVERVIEW",
-        items: [
-          { name: "Dashboard", href: "/doctor/dashboard", icon: LayoutDashboard },
-        ]
-      }
-    ],
-    pharmacy: [
-      {
-        label: "OVERVIEW",
-        items: [
-          { name: "Dashboard", href: "/pharmacy/dashboard", icon: LayoutDashboard },
-        ]
-      }
-    ],
-    admin: [
-      {
-        label: "OVERVIEW",
-        items: [
-          { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-        ]
-      },
-      {
-        label: "SYSTEM",
-        items: [
-          { name: "Blockchain", href: "/admin/blockchain", icon: Shield },
-        ]
-      }
-    ]
-  };
-
-  const groups = menuGroups[role as keyof typeof menuGroups] || [];
+  const groups = useMemo(() => menuGroups[role as keyof typeof menuGroups] || [], [role]);
 
   return (
     <motion.aside 
@@ -157,4 +162,4 @@ export function Sidebar({ role }: { role: string }) {
       </div>
     </motion.aside>
   )
-}
+});

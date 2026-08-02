@@ -2,6 +2,8 @@ import "./globals.css";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Providers } from "@/providers/query-provider";
+import { RoleProvider } from "@/providers/role-provider";
+import { Web3Provider } from "@/context/Web3Context";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -22,13 +24,17 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <Providers>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="light"
-            enableSystem
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="dark"
+              enableSystem
             disableTransitionOnChange
           >
-            {children}
+            <RoleProvider>
+              <Web3Provider>
+                {children}
+              </Web3Provider>
+            </RoleProvider>
           </ThemeProvider>
         </Providers>
       </body>

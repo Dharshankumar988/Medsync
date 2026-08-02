@@ -18,7 +18,11 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_BUCKET: str = "medical-records"
     SUPABASE_STORAGE_MAX_UPLOAD_MB: int = 25
     
-    # AI & IPFS (Placeholders for now)
+    # Supabase (for Admin user management)
+    SUPABASE_URL: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    
+    # AI & Decentralized Storage Settings
     GROQ_API_KEY: str = ""
     PINATA_API_KEY: str = ""
     PINATA_SECRET_API_KEY: str = ""

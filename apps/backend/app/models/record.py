@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON
 from app.database.base_class import Base
 from app.models.mixins import UUIDMixin, TimestampMixin, SoftDeleteMixin
 
@@ -98,7 +99,7 @@ class OCRResult(Base, UUIDMixin, TimestampMixin):
     version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), unique=True, nullable=False)
     extracted_text: Mapped[str] = mapped_column(Text, nullable=True)
     confidence: Mapped[float] = mapped_column(Float, nullable=True)
-    detected_fields: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    detected_fields: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="PENDING")
 
 class AIAnalysis(Base, UUIDMixin, TimestampMixin):

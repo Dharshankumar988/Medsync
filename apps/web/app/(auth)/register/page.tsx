@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Activity, Loader2, CheckCircle2, ArrowRight, UserPlus, LockKeyhole, Mail, User } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@medsync/ui";
+import { Input } from "@medsync/ui";
+import { Activity, Loader2, CheckCircle2, UserPlus, LockKeyhole, Mail, User, Building, MapPin, BadgeInfo } from "lucide-react";
+import { Alert, AlertDescription } from "@medsync/ui";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -18,11 +18,14 @@ const ROLES = [
 
 export default function RegisterPage() {
   const router = useRouter();
+  
+  // Base fields
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState("PATIENT");
+
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -63,11 +66,17 @@ export default function RegisterPage() {
       } else if (typeof detail === "string") {
         setError(detail);
       } else {
-        setError(err.response?.data?.message || "Registration failed. Please try again.");
+        setError(err.response?.data?.message || err.message || "Registration failed. Please try again.");
       }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getNamePlaceholder = () => {
+    if (role === 'DOCTOR') return "Dr. John Smith";
+    if (role === 'PHARMACY') return "Manager/Owner Name";
+    return "John Smith";
   };
 
   return (
@@ -126,11 +135,13 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2.5 mt-4">
-              <label className="text-sm font-semibold text-foreground/80 tracking-wide">Full Name</label>
+              <label className="text-sm font-semibold text-foreground/80 tracking-wide">
+                {role === 'PHARMACY' ? 'Manager Name' : 'Full Name'}
+              </label>
               <div className="relative">
                 <Input
                   type="text"
-                  placeholder="Dr. John Smith"
+                  placeholder={getNamePlaceholder()}
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
@@ -157,7 +168,9 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Progressive profile completion will collect additional details after registration */}
+
+            <div className="grid grid-cols-2 gap-4 pt-2">
               <div className="space-y-2.5">
                 <label className="text-sm font-semibold text-foreground/80 tracking-wide">Password</label>
                 <div className="relative">
@@ -206,7 +219,7 @@ export default function RegisterPage() {
           {(role === "DOCTOR" || role === "PHARMACY") && (
             <div className="mt-6 rounded-xl bg-amber-500/10 p-4 text-xs text-amber-600/90 dark:text-amber-400/90 border border-amber-500/20 animate-in fade-in slide-in-from-top-2">
               <strong className="block mb-1 font-semibold uppercase tracking-wider text-[10px]">Verification Required</strong>
-              Doctor and Pharmacy accounts require Supabase email verification before platform access is granted.
+              Doctor and Pharmacy accounts require Admin verification before platform access is granted.
             </div>
           )}
 
