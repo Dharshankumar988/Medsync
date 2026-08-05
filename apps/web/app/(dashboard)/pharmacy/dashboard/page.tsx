@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { 
   Pill, 
   Package, 
@@ -65,13 +65,33 @@ export default function PharmacyDashboardPage() {
     setVerifying(false);
   };
 
-  const filteredInventory = inventory.filter(item => 
-    item.medication_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.dosage.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleDispatch = async (orderId: string) => {
+    try {
+      // Mock API call to our new backend endpoint (in real app, we'd use pharmacyService or axios)
+      const res = await fetch(`http://localhost:8000/api/v1/orders/${orderId}/dispatch`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Order dispatched! Simulation started. OTP: ${data.data.otp}`);
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "OUT_FOR_DELIVERY" } : o));
+      } else {
+        alert("Failed to dispatch order.");
+      }
+    } catch (e) {
+      alert("Error dispatching order.");
+    }
+  };
 
-  const pendingOrders = orders.filter(o => o.status === "PENDING").length;
-  const dispensedOrders = orders.filter(o => o.status === "DISPENSED").length;
+  const filteredInventory = useMemo(() => {
+    return inventory.filter(item => 
+      item.medication_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.dosage.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [inventory, searchQuery]);
+
+  const pendingOrders = useMemo(() => orders.filter(o => o.status === "PENDING").length, [orders]);
+  const dispensedOrders = useMemo(() => orders.filter(o => o.status === "DISPENSED").length, [orders]);
 
   return (
     <div className="space-y-6">
@@ -239,8 +259,18 @@ export default function PharmacyDashboardPage() {
                         >
                           Dispense
                         </Button>
+                      ) : order.status === "DISPENSED" ? (
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleDispatch(order.id)}
+                          className="bg-blue-500 hover:bg-blue-600 text-white font-medium h-8"
+                        >
+                          Dispatch
+                        </Button>
+                      ) : order.status === "OUT_FOR_DELIVERY" ? (
+                        <span className="text-xs text-blue-500 font-semibold">Out for Delivery</span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Dispensed</span>
+                        <span className="text-xs text-muted-foreground">{order.status}</span>
                       )}
                     </td>
                   </tr>

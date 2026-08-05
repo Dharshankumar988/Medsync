@@ -1,4 +1,4 @@
-﻿BEGIN;
+BEGIN;
 
 CREATE TABLE alembic_version (
     version_num VARCHAR(32) NOT NULL, 
@@ -156,9 +156,20 @@ CREATE TABLE medical_records (
 
 CREATE TABLE medicines (
     name VARCHAR(255) NOT NULL, 
+    generic_name VARCHAR(255), 
+    brand_name VARCHAR(255), 
     category_id UUID NOT NULL, 
     manufacturer VARCHAR(255), 
+    strength VARCHAR(100), 
     dosage_form VARCHAR(100), 
+    pack_size VARCHAR(100), 
+    price FLOAT, 
+    storage_requirements VARCHAR(255), 
+    prescription_required BOOLEAN DEFAULT FALSE, 
+    controlled_drug BOOLEAN DEFAULT FALSE, 
+    barcode VARCHAR(255), 
+    qr_code VARCHAR(255), 
+    image_url TEXT, 
     description TEXT, 
     id UUID NOT NULL, 
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
@@ -279,19 +290,41 @@ CREATE TABLE medical_record_versions (
     UNIQUE (ipfs_cid)
 );
 
+CREATE TABLE suppliers (
+    name VARCHAR(255) NOT NULL, 
+    contact_person VARCHAR(255), 
+    email VARCHAR(255), 
+    phone_number VARCHAR(20), 
+    address TEXT, 
+    license_number VARCHAR(100), 
+    gst_number VARCHAR(100), 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
+    PRIMARY KEY (id)
+);
+
 CREATE TABLE medicine_inventory (
     pharmacy_id UUID NOT NULL, 
     medicine_id UUID NOT NULL, 
+    supplier_id UUID, 
     batch_number VARCHAR(100) NOT NULL, 
+    manufacturing_date DATE, 
     expiry_date DATE NOT NULL, 
     stock_quantity INTEGER NOT NULL, 
+    minimum_stock INTEGER DEFAULT 10, 
+    maximum_stock INTEGER DEFAULT 1000, 
     unit_price FLOAT NOT NULL, 
+    purchase_price FLOAT, 
+    selling_price FLOAT, 
+    gst FLOAT, 
     id UUID NOT NULL, 
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
     PRIMARY KEY (id), 
     FOREIGN KEY(medicine_id) REFERENCES medicines (id), 
-    FOREIGN KEY(pharmacy_id) REFERENCES users (id)
+    FOREIGN KEY(pharmacy_id) REFERENCES users (id), 
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id)
 );
 
 CREATE TABLE prescriptions (
@@ -919,3 +952,304 @@ COMMIT;
 
 ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS pdf_url VARCHAR(1024);
 ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS qr_token TEXT;
+
+-- ==============================================================================
+
+-- PHASE 13: QR SECURITY & DOWNLOAD AUDIT
+
+-- ==============================================================================
+
+BEGIN;
+
+-- Update prescriptions table
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS is_revoked BOOLEAN DEFAULT FALSE;
+
+-- Update file_metadata table
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS encrypted_filename VARCHAR(255);
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS sha256_hash VARCHAR(64);
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS uploaded_by UUID REFERENCES users(id);
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS download_count INTEGER DEFAULT 0;
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS last_downloaded TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1;
+
+-- Create qr_verification_logs table
+CREATE TABLE IF NOT EXISTS qr_verification_logs (
+    id UUID PRIMARY KEY,
+    prescription_id UUID REFERENCES prescriptions(id),
+    scanned_by UUID REFERENCES users(id),
+    scanned_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create download_audit_logs table
+CREATE TABLE IF NOT EXISTS download_audit_logs (
+    id UUID PRIMARY KEY,
+-- Create storage policies (Assuming files are prefixed with patient_id/)
+CREATE POLICY "Patients can access their own records" ON storage.objects
+  FOR SELECT USING (bucket_id = 'medical-records' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+COMMIT;
+
+
+-- ==============================================================================
+
+-- PHASE 12: UI/UX AUDIT & PROFILE COMPLETION ENGINE
+
+-- ==============================================================================
+
+BEGIN;
+
+-- 1. HOSPITALS TABLE
+CREATE TABLE IF NOT EXISTS hospitals (
+    id UUID PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    address VARCHAR(500) NOT NULL,
+    city VARCHAR(100),
+    state VARCHAR(100),
+    country VARCHAR(100),
+    pincode VARCHAR(20),
+    phone_number VARCHAR(20),
+    email VARCHAR(255),
+    website VARCHAR(255),
+    is_verified BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. USERS TABLE UPDATES
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completion_percentage INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+
+-- 3. PATIENTS TABLE UPDATES
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_name VARCHAR(255);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_number VARCHAR(20);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS profile_picture_url VARCHAR(1024);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS government_id_url VARCHAR(1024);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS medical_alerts TEXT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies TEXT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS primary_physician_id UUID REFERENCES doctors(id);
+
+-- 4. DOCTORS TABLE UPDATES
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS qualifications TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS clinic_name VARCHAR(255);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS clinic_address VARCHAR(500);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS clinic_phone VARCHAR(20);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS clinic_email VARCHAR(255);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS languages TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS consultation_hours TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS certificates_url TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS government_id_url VARCHAR(1024);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS professional_documents_url TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS profile_picture_url VARCHAR(1024);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS verification_documents_url TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES hospitals(id);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS medical_council_reg_number VARCHAR(255);
+
+-- 5. PHARMACIES TABLE UPDATES
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS operating_hours TEXT;
+
+
+-- ==============================================================================
+
+BEGIN;
+
+-- 1. HOSPITALS TABLE
+CREATE TABLE IF NOT EXISTS hospitals (
+    id UUID PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    address VARCHAR(500) NOT NULL,
+    city VARCHAR(100),
+    state VARCHAR(100),
+    country VARCHAR(100),
+    pincode VARCHAR(20),
+    phone_number VARCHAR(20),
+    email VARCHAR(255),
+    website VARCHAR(255),
+    is_verified BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. USERS TABLE UPDATES
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completion_percentage INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+
+-- 3. PATIENTS TABLE UPDATES
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_name VARCHAR(255);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS emergency_contact_number VARCHAR(20);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS profile_picture_url VARCHAR(1024);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS government_id_url VARCHAR(1024);
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS medical_alerts TEXT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies TEXT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS primary_physician_id UUID REFERENCES doctors(id);
+
+-- 4. DOCTORS TABLE UPDATES
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS qualifications TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS clinic_name VARCHAR(255);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS clinic_address VARCHAR(500);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS clinic_phone VARCHAR(20);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS clinic_email VARCHAR(255);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS languages TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS consultation_hours TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS certificates_url TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS government_id_url VARCHAR(1024);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS professional_documents_url TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS profile_picture_url VARCHAR(1024);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS verification_documents_url TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES hospitals(id);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS medical_council_reg_number VARCHAR(255);
+
+-- 5. PHARMACIES TABLE UPDATES
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS state VARCHAR(100);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS operating_hours TEXT;
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS owner_details TEXT;
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS supporting_documents_url TEXT;
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS logo_url VARCHAR(1024);
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS verification_documents_url TEXT;
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS branch_information TEXT;
+ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS business_registration_number VARCHAR(255);
+
+-- 6. BLOCKCHAIN SYNC STATE UPDATES
+ALTER TABLE blockchain_sync_state ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE blockchain_sync_state ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+COMMIT;
+
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS pdf_url VARCHAR(1024);
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS qr_token TEXT;
+
+-- ==============================================================================
+
+-- PHASE 13: QR SECURITY & DOWNLOAD AUDIT
+
+-- ==============================================================================
+
+BEGIN;
+
+-- Update prescriptions table
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS is_revoked BOOLEAN DEFAULT FALSE;
+
+-- Update file_metadata table
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS encrypted_filename VARCHAR(255);
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS sha256_hash VARCHAR(64);
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS uploaded_by UUID REFERENCES users(id);
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS download_count INTEGER DEFAULT 0;
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS last_downloaded TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE file_metadata ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1;
+
+-- Create qr_verification_logs table
+CREATE TABLE IF NOT EXISTS qr_verification_logs (
+    id UUID PRIMARY KEY,
+    prescription_id UUID REFERENCES prescriptions(id),
+    scanned_by UUID REFERENCES users(id),
+    scanned_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create download_audit_logs table
+CREATE TABLE IF NOT EXISTS download_audit_logs (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id),
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id UUID NOT NULL,
+    ip_address VARCHAR(45),
+    downloaded_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMIT;
+
+-- ==============================================================================
+-- PHASE 14: DOCTOR APPROVALS AND IMAGE UPLOADS
+-- ==============================================================================
+
+BEGIN;
+
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS profile_image VARCHAR(1024);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS thumbnail VARCHAR(1024);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS image_uploaded_at TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS approval_date TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES users(id);
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS approval_notes TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS doctor_status VARCHAR(50) DEFAULT 'PENDING';
+
+COMMIT;
+
+-- ==============================================================================
+-- PHASE 15: SIMULATED MEDICINE DELIVERY SYSTEM
+-- ==============================================================================
+
+BEGIN;
+
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS delivery_started_at TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS delivery_completed_at TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS delivery_eta TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS delivery_progress INTEGER DEFAULT 0;
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS delivery_code_hash VARCHAR(255);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS delivery_code_expiry TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS delivery_simulation TEXT; -- JSON
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS driver_name VARCHAR(255);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS driver_avatar VARCHAR(1024);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS vehicle_number VARCHAR(100);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS vehicle_type VARCHAR(100);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS delivery_speed INTEGER DEFAULT 40; -- km/h
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS current_latitude NUMERIC(10, 8);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS current_longitude NUMERIC(11, 8);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS start_latitude NUMERIC(10, 8);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS start_longitude NUMERIC(11, 8);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS end_latitude NUMERIC(10, 8);
+ALTER TABLE delivery_tracking ADD COLUMN IF NOT EXISTS end_longitude NUMERIC(11, 8);
+-- Performance Indexes
+CREATE INDEX IF NOT EXISTS ix_appointments_patient_id ON appointments (patient_id);
+CREATE INDEX IF NOT EXISTS ix_appointments_doctor_id ON appointments (doctor_id);
+CREATE INDEX IF NOT EXISTS ix_appointments_status ON appointments (status);
+CREATE INDEX IF NOT EXISTS ix_medical_records_patient_id ON medical_records (patient_id);
+CREATE INDEX IF NOT EXISTS ix_medical_records_category_id ON medical_records (category_id);
+CREATE INDEX IF NOT EXISTS ix_medicines_category_id ON medicines (category_id);
+CREATE INDEX IF NOT EXISTS ix_prescriptions_patient_id ON prescriptions (patient_id);
+CREATE INDEX IF NOT EXISTS ix_prescriptions_doctor_id ON prescriptions (doctor_id);
+CREATE INDEX IF NOT EXISTS ix_prescriptions_status ON prescriptions (status);
+CREATE INDEX IF NOT EXISTS ix_medicine_orders_patient_id ON medicine_orders (patient_id);
+CREATE INDEX IF NOT EXISTS ix_medicine_orders_pharmacy_id ON medicine_orders (pharmacy_id);
+CREATE INDEX IF NOT EXISTS ix_medicine_orders_status ON medicine_orders (status);
+CREATE INDEX IF NOT EXISTS ix_delivery_tracking_order_id ON delivery_tracking (order_id);
+CREATE INDEX IF NOT EXISTS ix_delivery_tracking_status ON delivery_tracking (status);
+CREATE INDEX IF NOT EXISTS ix_blockchain_transactions_record_id ON blockchain_transactions (record_id);
+CREATE INDEX IF NOT EXISTS ix_blockchain_transactions_status ON blockchain_transactions (status);
+
+COMMIT;

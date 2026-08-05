@@ -57,7 +57,13 @@ async def get_pending_verifications(
                 "hospital_name": doctor.hospital_name,
                 "hospital_address": doctor.hospital_address,
                 "license_number": doctor.license_number,
-                "full_name": doctor.full_name
+                "full_name": doctor.full_name,
+                "specialization": doctor.specialization,
+                "experience_years": doctor.experience_years,
+                "qualifications": doctor.qualifications,
+                "verification_documents_url": doctor.verification_documents_url,
+                "certificates_url": doctor.certificates_url,
+                "medical_council_reg_number": doctor.medical_council_reg_number
             }
         elif user.role == UserRole.PHARMACY and pharmacy:
             profile = {

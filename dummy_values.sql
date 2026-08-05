@@ -1,169 +1,133 @@
 BEGIN;
 
--- 1. users (2 admins, 2 doctors, 2 patients, 2 pharmacies)
+TRUNCATE TABLE 
+    medical_record_categories,
+    medical_record_tags,
+    medicine_categories,
+    users,
+    admins,
+    ai_chat_sessions,
+    appointments,
+    consent_history,
+    doctor_availability,
+    doctors,
+    medical_records,
+    medicines,
+    notification_preferences,
+    notifications,
+    patients,
+    pharmacies,
+    ai_chat_messages,
+    appointment_status_history,
+    medical_record_tag_mappings,
+    medical_record_versions,
+    suppliers,
+    medicine_inventory,
+    prescriptions,
+    record_permissions,
+    verification_requests,
+    ai_analyses,
+    doctor_notes,
+    file_metadata,
+    medicine_orders,
+    ocr_results,
+    prescription_items,
+    delivery_tracking,
+    medicine_order_items,
+    payments,
+    invoices,
+    blockchain_transactions,
+    blockchain_sync_tasks,
+    blockchain_audit_logs,
+    api_request_logs,
+    blockchain_event_queue,
+    blockchain_sync_state,
+    hospitals,
+    qr_verification_logs,
+    download_audit_logs
+CASCADE;
+
+-- Users (Total 10: 2 Admin, 2 Doctor, 4 Patient, 2 Pharmacy)
 INSERT INTO users (id, email, password_hash, role, status, created_at, updated_at) VALUES 
-('a1000000-0000-0000-0000-000000000000', 'admin1@medsync.com', 'admin', 'ADMIN', 'ACTIVE', NOW(), NOW()),
-('a2000000-0000-0000-0000-000000000000', 'admin2@medsync.com', 'admin', 'ADMIN', 'ACTIVE', NOW(), NOW()),
-('b1000000-0000-0000-0000-000000000000', 'doctor1@medsync.com', 'doctor', 'DOCTOR', 'ACTIVE', NOW(), NOW()),
-('b2000000-0000-0000-0000-000000000000', 'doctor2@medsync.com', 'doctor', 'DOCTOR', 'ACTIVE', NOW(), NOW()),
-('c1000000-0000-0000-0000-000000000000', 'patient1@medsync.com', 'patient', 'PATIENT', 'ACTIVE', NOW(), NOW()),
-('c2000000-0000-0000-0000-000000000000', 'patient2@medsync.com', 'patient', 'PATIENT', 'ACTIVE', NOW(), NOW()),
-('d1000000-0000-0000-0000-000000000000', 'pharmacy1@medsync.com', 'pharma', 'PHARMACY', 'ACTIVE', NOW(), NOW()),
-('d2000000-0000-0000-0000-000000000000', 'pharmacy2@medsync.com', 'pharma', 'PHARMACY', 'ACTIVE', NOW(), NOW());
+('cb85f4bd-eef1-4db7-b224-e4c9f5d44398', 'admin1@medsync.com', 'admin', 'ADMIN', 'ACTIVE', NOW(), NOW()),
+('a293d435-24b1-4578-90af-fb652dd2998e', 'admin2@medsync.com', 'admin', 'ADMIN', 'ACTIVE', NOW(), NOW()),
+('8325b2fa-1117-4854-91a2-fce5b9b5dfae', 'doctor1@medsync.com', 'doctor', 'DOCTOR', 'ACTIVE', NOW(), NOW()),
+('9f7ba5b0-da85-44ec-8ab9-f1dbd5c0272b', 'doctor2@medsync.com', 'doctor', 'DOCTOR', 'ACTIVE', NOW(), NOW()),
+('028c8f92-9b00-4eea-8c9b-c394a5d18d4f', 'patient1@medsync.com', 'patient', 'PATIENT', 'ACTIVE', NOW(), NOW()),
+('74b86e1e-58e6-4fe9-b6e7-51810456b8a3', 'patient2@medsync.com', 'patient', 'PATIENT', 'ACTIVE', NOW(), NOW()),
+('8d13ae90-9043-45e2-9ebe-7caf44fc89db', 'patient3@medsync.com', 'patient', 'PATIENT', 'ACTIVE', NOW(), NOW()),
+('5584c0f5-b6c6-4c7e-9936-096527d7d758', 'patient4@medsync.com', 'patient', 'PATIENT', 'ACTIVE', NOW(), NOW()),
+('24c1699d-4ebd-40f0-ab60-255890213ca0', 'pharmacy1@medsync.com', 'pharma', 'PHARMACY', 'ACTIVE', NOW(), NOW()),
+('737fcdef-2562-440c-862f-a9f2a6bd6546', 'pharmacy2@medsync.com', 'pharma', 'PHARMACY', 'ACTIVE', NOW(), NOW());
 
--- 2. admins
+-- Admins
 INSERT INTO admins (id, user_id, full_name, department, created_at, updated_at) VALUES 
-('a1111111-0000-0000-0000-000000000000', 'a1000000-0000-0000-0000-000000000000', 'Admin One', 'IT Support', NOW(), NOW()),
-('a2222222-0000-0000-0000-000000000000', 'a2000000-0000-0000-0000-000000000000', 'Admin Two', 'Operations', NOW(), NOW());
+('90b33e14-03ef-436b-8aab-3c3740d5bb15', 'cb85f4bd-eef1-4db7-b224-e4c9f5d44398', 'Admin Name 1', 'IT', NOW(), NOW()),
+('7e2b9a94-78d1-4b0b-898d-93557ef75e21', 'a293d435-24b1-4578-90af-fb652dd2998e', 'Admin Name 2', 'IT', NOW(), NOW());
 
--- 3. doctors
-INSERT INTO doctors (id, user_id, full_name, specialization, license_number, experience_years, bio, consultation_fee, created_at, updated_at) VALUES 
-('b1111111-0000-0000-0000-000000000000', 'b1000000-0000-0000-0000-000000000000', 'Dr. Alice', 'Cardiology', 'LIC-DOC-001', 10, 'Experienced cardiologist', 500, NOW(), NOW()),
-('b2222222-0000-0000-0000-000000000000', 'b2000000-0000-0000-0000-000000000000', 'Dr. Bob', 'Neurology', 'LIC-DOC-002', 8, 'Expert in neurology', 600, NOW(), NOW());
+-- Hospitals
+INSERT INTO hospitals (id, name, address, city, state, country, pincode, is_verified, is_active, created_at, updated_at) VALUES 
+('92ffabd1-0979-43f4-8216-e9d8763504a6', 'Hospital 1', '1 Main Rd', 'Bangalore', 'Karnataka', 'India', '560001', TRUE, TRUE, NOW(), NOW()),
+('fe65f841-dff2-42c1-8f46-80dd5af027bc', 'Hospital 2', '2 Main Rd', 'Bangalore', 'Karnataka', 'India', '560001', TRUE, TRUE, NOW(), NOW()),
+('3efa13e6-d183-4257-aebd-49c7e4012311', 'Hospital 3', '3 Main Rd', 'Bangalore', 'Karnataka', 'India', '560001', TRUE, TRUE, NOW(), NOW()),
+('08b3a84d-1a26-4be2-a926-ff2a3908e958', 'Hospital 4', '4 Main Rd', 'Bangalore', 'Karnataka', 'India', '560001', TRUE, TRUE, NOW(), NOW());
 
--- 4. patients
-INSERT INTO patients (id, user_id, full_name, date_of_birth, gender, blood_group, phone_number, address, created_at, updated_at) VALUES 
-('c1111111-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'Patient Charlie', '1990-01-01', 'Male', 'O+', '1234567890', '123 Main St', NOW(), NOW()),
-('c2222222-0000-0000-0000-000000000000', 'c2000000-0000-0000-0000-000000000000', 'Patient Diana', '1995-05-05', 'Female', 'A+', '0987654321', '456 Oak St', NOW(), NOW());
+-- Doctors
+INSERT INTO doctors (id, user_id, full_name, specialization, license_number, experience_years, consultation_fee, hospital_id, doctor_status, created_at, updated_at) VALUES 
+('f596cda6-eecc-4cd8-b7cc-76f59ac5a96a', '8325b2fa-1117-4854-91a2-fce5b9b5dfae', 'Dr. Doctor 1', 'General', 'LIC-DOC-1', 5, 500, '92ffabd1-0979-43f4-8216-e9d8763504a6', 'APPROVED', NOW(), NOW()),
+('58848e2c-8476-4f75-8555-d27033f143a8', '9f7ba5b0-da85-44ec-8ab9-f1dbd5c0272b', 'Dr. Doctor 2', 'General', 'LIC-DOC-2', 5, 500, 'fe65f841-dff2-42c1-8f46-80dd5af027bc', 'APPROVED', NOW(), NOW());
 
--- 5. pharmacies
+-- Pharmacies
 INSERT INTO pharmacies (id, user_id, business_name, license_number, gst_number, address, contact_number, created_at, updated_at) VALUES 
-('d1111111-0000-0000-0000-000000000000', 'd1000000-0000-0000-0000-000000000000', 'Pharma Plus', 'LIC-PHM-001', 'GST001', '789 Pine St', '1122334455', NOW(), NOW()),
-('d2222222-0000-0000-0000-000000000000', 'd2000000-0000-0000-0000-000000000000', 'Health Meds', 'LIC-PHM-002', 'GST002', '321 Elm St', '5544332211', NOW(), NOW());
+('826b022a-d5bf-4458-ae85-f657f6bac8b4', '24c1699d-4ebd-40f0-ab60-255890213ca0', 'Pharmacy 1', 'LIC-PHM-1', 'GST-1', '1 Pharma St, Bangalore', '9876543210', NOW(), NOW()),
+('9dfc0211-ea3d-4229-a416-786975931be1', '737fcdef-2562-440c-862f-a9f2a6bd6546', 'Pharmacy 2', 'LIC-PHM-2', 'GST-2', '2 Pharma St, Bangalore', '9876543210', NOW(), NOW());
 
--- 6. medical_record_categories
-INSERT INTO medical_record_categories (id, name, description, created_at, updated_at) VALUES 
-('e1000000-0000-0000-0000-000000000000', 'General Checkup', 'Routine general checkups', NOW(), NOW());
+-- Suppliers
+INSERT INTO suppliers (id, name, contact_person, email, phone_number, address, license_number, gst_number, created_at, updated_at) VALUES 
+('ac945578-6b7d-438f-9301-08ac12e59af4', 'Supplier 1', 'Contact 1', 'sup1@test.com', '123456', 'Address 1', 'LIC-SUP-1', 'GST-1', NOW(), NOW()),
+('2e51d6ca-983d-48cc-8570-e1184030fb72', 'Supplier 2', 'Contact 2', 'sup2@test.com', '123456', 'Address 2', 'LIC-SUP-2', 'GST-2', NOW(), NOW()),
+('3cd4def1-81de-40fb-b352-79474b208c84', 'Supplier 3', 'Contact 3', 'sup3@test.com', '123456', 'Address 3', 'LIC-SUP-3', 'GST-3', NOW(), NOW()),
+('3118070e-a4d9-4034-b22a-fe24536613d7', 'Supplier 4', 'Contact 4', 'sup4@test.com', '123456', 'Address 4', 'LIC-SUP-4', 'GST-4', NOW(), NOW());
 
--- 7. medical_record_tags
-INSERT INTO medical_record_tags (id, name, created_at, updated_at) VALUES 
-('e2000000-0000-0000-0000-000000000000', 'Urgent', NOW(), NOW());
-
--- 8. medicine_categories
+-- Medicine Categories
 INSERT INTO medicine_categories (id, name, description, created_at, updated_at) VALUES 
-('e3000000-0000-0000-0000-000000000000', 'Antibiotics', 'Antibacterial medication', NOW(), NOW());
+('2a385e3e-6130-49df-8cde-379711ad0343', 'Antibiotics', 'Kills bacteria', NOW(), NOW()),
+('8644c1fb-67a3-459d-9dfc-71f5d0cce689', 'Analgesics', 'Pain relievers', NOW(), NOW()),
+('2b5a33ba-cc37-4c10-9f71-a48bc69cf831', 'Antipyretics', 'Reduces fever', NOW(), NOW()),
+('16e12955-b9b2-4cff-b5c4-d321198fa809', 'Antiseptics', 'Prevents infection', NOW(), NOW()),
+('41e19c03-5764-4149-aad3-9018ddcf77aa', 'Vitamins', 'Dietary supplements', NOW(), NOW());
 
--- 9. ai_chat_sessions
-INSERT INTO ai_chat_sessions (id, user_id, title, is_doctor_mode, is_pinned, created_at, updated_at) VALUES 
-('e4000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'Headache Discussion', FALSE, FALSE, NOW(), NOW());
-
--- 10. appointments
-INSERT INTO appointments (id, patient_id, doctor_id, appointment_date, start_time, end_time, status, notes, created_at, updated_at) VALUES 
-('e5000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'b1000000-0000-0000-0000-000000000000', '2025-01-01', '10:00:00', '10:30:00', 'SCHEDULED', 'First visit', NOW(), NOW());
-
--- 11. consent_history
-INSERT INTO consent_history (id, patient_id, doctor_id, action, blockchain_tx_hash, created_at, updated_at) VALUES 
-('e6000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'b1000000-0000-0000-0000-000000000000', 'GRANTED', '0xabc123', NOW(), NOW());
-
--- 12. doctor_availability
-INSERT INTO doctor_availability (id, doctor_id, day_of_week, start_time, end_time, is_available, created_at, updated_at) VALUES 
-('e7000000-0000-0000-0000-000000000000', 'b1000000-0000-0000-0000-000000000000', 1, '09:00:00', '17:00:00', TRUE, NOW(), NOW());
-
--- 13. medical_records
-INSERT INTO medical_records (id, patient_id, uploaded_by, category_id, title, description, is_archived, created_at, updated_at) VALUES 
-('e8000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'e1000000-0000-0000-0000-000000000000', 'Blood Test', 'Routine blood test results', FALSE, NOW(), NOW());
-
--- 14. medicines
-INSERT INTO medicines (id, name, category_id, manufacturer, dosage_form, description, created_at, updated_at) VALUES 
-('e9000000-0000-0000-0000-000000000000', 'Amoxicillin', 'e3000000-0000-0000-0000-000000000000', 'PharmaCorp', 'Tablet', 'Used for bacterial infections', NOW(), NOW());
-
--- 15. notification_preferences
-INSERT INTO notification_preferences (id, user_id, email_enabled, push_enabled, in_app_enabled, created_at, updated_at) VALUES 
-('ea000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', TRUE, TRUE, TRUE, NOW(), NOW());
-
--- 16. notifications
-INSERT INTO notifications (id, user_id, title, message, type, is_read, created_at, updated_at) VALUES 
-('eb000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'Welcome', 'Welcome to MedSync', 'SYSTEM', FALSE, NOW(), NOW());
-
--- 17. ai_chat_messages
-INSERT INTO ai_chat_messages (id, session_id, role, content, model_used, inference_time_ms, created_at, updated_at) VALUES 
-('ec000000-0000-0000-0000-000000000000', 'e4000000-0000-0000-0000-000000000000', 'USER', 'I have a headache', 'gpt-4', 1200, NOW(), NOW());
-
--- 18. appointment_status_history
-INSERT INTO appointment_status_history (id, appointment_id, status, changed_by, reason, created_at, updated_at) VALUES 
-('ed000000-0000-0000-0000-000000000000', 'e5000000-0000-0000-0000-000000000000', 'SCHEDULED', 'c1000000-0000-0000-0000-000000000000', 'Initial booking', NOW(), NOW());
-
--- 19. medical_record_tag_mappings
-INSERT INTO medical_record_tag_mappings (id, record_id, tag_id, created_at, updated_at) VALUES 
-('ee000000-0000-0000-0000-000000000000', 'e8000000-0000-0000-0000-000000000000', 'e2000000-0000-0000-0000-000000000000', NOW(), NOW());
-
--- 20. medical_record_versions
-INSERT INTO medical_record_versions (id, record_id, version_number, ipfs_cid, file_type, file_size_bytes, change_description, is_current, blockchain_tx_hash, created_at, updated_at) VALUES 
-('ef000000-0000-0000-0000-000000000000', 'e8000000-0000-0000-0000-000000000000', 1, 'QmTestCid123', 'application/pdf', 1024, 'Initial upload', TRUE, '0xdef456', NOW(), NOW());
-
--- 21. medicine_inventory
-INSERT INTO medicine_inventory (id, pharmacy_id, medicine_id, batch_number, expiry_date, stock_quantity, unit_price, created_at, updated_at) VALUES 
-('f0000000-0000-0000-0000-000000000000', 'd1000000-0000-0000-0000-000000000000', 'e9000000-0000-0000-0000-000000000000', 'BATCH-001', '2026-12-31', 100, 10.5, NOW(), NOW());
-
--- 22. prescriptions
-INSERT INTO prescriptions (id, appointment_id, patient_id, doctor_id, diagnosis, notes, is_finalized, is_dispensed, created_at, updated_at) VALUES 
-('f1000000-0000-0000-0000-000000000000', 'e5000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'b1000000-0000-0000-0000-000000000000', 'Common Cold', 'Rest and drink fluids', TRUE, FALSE, NOW(), NOW());
-
--- 23. record_permissions
-INSERT INTO record_permissions (id, record_id, granted_to, granted_by, access_level, expires_at, is_revoked, created_at, updated_at) VALUES 
-('f2000000-0000-0000-0000-000000000000', 'e8000000-0000-0000-0000-000000000000', 'b1000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'READ', NULL, FALSE, NOW(), NOW());
-
--- 24. verification_requests
-INSERT INTO verification_requests (id, user_id, role_type, status, reviewer_id, review_date, approval_date, rejection_reason, blockchain_tx_hash, created_at, updated_at) VALUES 
-('f3000000-0000-0000-0000-000000000000', 'b1000000-0000-0000-0000-000000000000', 'DOCTOR', 'APPROVED', 'a1111111-0000-0000-0000-000000000000', NOW(), NOW(), NULL, '0xverify123', NOW(), NOW());
-
--- 25. ai_analyses
-INSERT INTO ai_analyses (id, version_id, model_name, analysis_status, summary, confidence_score, processing_time_ms, created_at, updated_at) VALUES 
-('f4000000-0000-0000-0000-000000000000', 'ef000000-0000-0000-0000-000000000000', 'med-ai-v1', 'COMPLETED', 'Patient seems healthy based on blood test', 0.95, 5000, NOW(), NOW());
-
--- 26. doctor_notes
-INSERT INTO doctor_notes (id, version_id, doctor_id, note_text, created_at, updated_at) VALUES 
-('f5000000-0000-0000-0000-000000000000', 'ef000000-0000-0000-0000-000000000000', 'b1000000-0000-0000-0000-000000000000', 'Everything looks normal.', NOW(), NOW());
-
--- 27. file_metadata
-INSERT INTO file_metadata (id, version_id, supabase_storage_path, mime_type, created_at, updated_at) VALUES 
-('f6000000-0000-0000-0000-000000000000', 'ef000000-0000-0000-0000-000000000000', '/storage/records/e8000000-0000-0000-0000-000000000000', 'application/pdf', NOW(), NOW());
-
--- 28. medicine_orders
-INSERT INTO medicine_orders (id, patient_id, pharmacy_id, prescription_id, status, total_amount, delivery_address, created_at, updated_at) VALUES 
-('f7000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'd1000000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000000', 'PENDING', 21.0, '123 Main St', NOW(), NOW());
-
--- 29. ocr_results
-INSERT INTO ocr_results (id, version_id, extracted_text, confidence, detected_fields, status, created_at, updated_at) VALUES 
-('f8000000-0000-0000-0000-000000000000', 'ef000000-0000-0000-0000-000000000000', 'Blood Test Results...', 0.98, '{"WBC": "normal"}', 'COMPLETED', NOW(), NOW());
-
--- 30. prescription_items
-INSERT INTO prescription_items (id, prescription_id, medicine_name, dosage, frequency, duration_days, instructions, created_at, updated_at) VALUES 
-('f9000000-0000-0000-0000-000000000000', 'f1000000-0000-0000-0000-000000000000', 'Amoxicillin', '500mg', 'Twice a day', 5, 'Take after meals', NOW(), NOW());
-
--- 31. delivery_tracking
-INSERT INTO delivery_tracking (id, order_id, tracking_number, current_status, delivery_partner, estimated_delivery, notes, created_at, updated_at) VALUES 
-('fa000000-0000-0000-0000-000000000000', 'f7000000-0000-0000-0000-000000000000', 'TRK-001', 'DISPATCHED', 'FastDelivery', '2025-01-02', 'Handle with care', NOW(), NOW());
-
--- 32. medicine_order_items
-INSERT INTO medicine_order_items (id, order_id, inventory_id, quantity, price_at_purchase, created_at, updated_at) VALUES 
-('fb000000-0000-0000-0000-000000000000', 'f7000000-0000-0000-0000-000000000000', 'f0000000-0000-0000-0000-000000000000', 2, 10.5, NOW(), NOW());
-
--- 33. payments
-INSERT INTO payments (id, user_id, order_id, appointment_id, amount, status, method, transaction_id, created_at, updated_at) VALUES 
-('fc000000-0000-0000-0000-000000000000', 'c1000000-0000-0000-0000-000000000000', 'f7000000-0000-0000-0000-000000000000', 'e5000000-0000-0000-0000-000000000000', 21.0, 'COMPLETED', 'CREDIT_CARD', 'TXN-001', NOW(), NOW());
-
--- 34. invoices
-INSERT INTO invoices (id, payment_id, invoice_number, invoice_url, created_at, updated_at) VALUES 
-('fd000000-0000-0000-0000-000000000000', 'fc000000-0000-0000-0000-000000000000', 'INV-001', 'https://example.com/invoice/INV-001.pdf', NOW(), NOW());
-
+-- Medicines
+INSERT INTO medicines (id, name, generic_name, brand_name, category_id, manufacturer, strength, dosage_form, pack_size, price, storage_requirements, prescription_required, controlled_drug, created_at, updated_at) VALUES 
+('fe928f50-c49f-4a47-a3f1-96d989ed1325', 'Medicine 1', 'Generic 1', 'Brand 1', '2a385e3e-6130-49df-8cde-379711ad0343', 'Manufacturer 1', '500mg', 'Tablet', '10s', 10.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('0d4aa913-8930-485f-8c21-7e4bd1e37c9d', 'Medicine 2', 'Generic 2', 'Brand 2', '8644c1fb-67a3-459d-9dfc-71f5d0cce689', 'Manufacturer 2', '500mg', 'Tablet', '10s', 21.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('e8b0b66f-674c-4a01-b03e-04f6ea59d4fb', 'Medicine 3', 'Generic 3', 'Brand 3', '2b5a33ba-cc37-4c10-9f71-a48bc69cf831', 'Manufacturer 3', '500mg', 'Tablet', '10s', 31.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('8ed15e21-72fe-45b9-937a-56cddacb5fef', 'Medicine 4', 'Generic 4', 'Brand 4', '16e12955-b9b2-4cff-b5c4-d321198fa809', 'Manufacturer 1', '500mg', 'Tablet', '10s', 42.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('7f28b6b4-10bb-4569-86e9-22942e38f58b', 'Medicine 5', 'Generic 5', 'Brand 5', '41e19c03-5764-4149-aad3-9018ddcf77aa', 'Manufacturer 2', '500mg', 'Tablet', '10s', 52.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('23a27cdc-b84d-4aa1-9fdf-e9be668adc5c', 'Medicine 6', 'Generic 6', 'Brand 6', '2a385e3e-6130-49df-8cde-379711ad0343', 'Manufacturer 3', '500mg', 'Tablet', '10s', 63.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('b3d9dc8b-881b-48fc-81bc-745ee1488a97', 'Medicine 7', 'Generic 7', 'Brand 7', '8644c1fb-67a3-459d-9dfc-71f5d0cce689', 'Manufacturer 1', '500mg', 'Tablet', '10s', 73.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('2f484544-b7cd-4acb-aa6c-5458d081036c', 'Medicine 8', 'Generic 8', 'Brand 8', '2b5a33ba-cc37-4c10-9f71-a48bc69cf831', 'Manufacturer 2', '500mg', 'Tablet', '10s', 84.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('e1d0ff26-0938-44d5-9d10-da4577ac585a', 'Medicine 9', 'Generic 9', 'Brand 9', '16e12955-b9b2-4cff-b5c4-d321198fa809', 'Manufacturer 3', '500mg', 'Tablet', '10s', 94.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('49410dd6-556f-428c-af64-bdbdb95bb3a3', 'Medicine 10', 'Generic 10', 'Brand 10', '41e19c03-5764-4149-aad3-9018ddcf77aa', 'Manufacturer 1', '500mg', 'Tablet', '10s', 105.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('4e1ee755-fa18-4bad-8728-b613273467b7', 'Medicine 11', 'Generic 11', 'Brand 11', '2a385e3e-6130-49df-8cde-379711ad0343', 'Manufacturer 2', '500mg', 'Tablet', '10s', 115.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('c1a81b13-0e70-45dc-ae55-ee6f9a71675c', 'Medicine 12', 'Generic 12', 'Brand 12', '8644c1fb-67a3-459d-9dfc-71f5d0cce689', 'Manufacturer 3', '500mg', 'Tablet', '10s', 126.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('e875b33e-0c89-4dbc-81da-961f7269085a', 'Medicine 13', 'Generic 13', 'Brand 13', '2b5a33ba-cc37-4c10-9f71-a48bc69cf831', 'Manufacturer 1', '500mg', 'Tablet', '10s', 136.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('6c0cf227-ef40-4b80-847f-50d44599c658', 'Medicine 14', 'Generic 14', 'Brand 14', '16e12955-b9b2-4cff-b5c4-d321198fa809', 'Manufacturer 2', '500mg', 'Tablet', '10s', 147.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('41746cb6-f203-4299-af8b-1c2222801e41', 'Medicine 15', 'Generic 15', 'Brand 15', '41e19c03-5764-4149-aad3-9018ddcf77aa', 'Manufacturer 3', '500mg', 'Tablet', '10s', 157.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('9fd7c0e8-3566-46c1-9596-ec2784fe8c9b', 'Medicine 16', 'Generic 16', 'Brand 16', '2a385e3e-6130-49df-8cde-379711ad0343', 'Manufacturer 1', '500mg', 'Tablet', '10s', 168.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('b884d2a7-fce7-474e-9073-4883f24633a1', 'Medicine 17', 'Generic 17', 'Brand 17', '8644c1fb-67a3-459d-9dfc-71f5d0cce689', 'Manufacturer 2', '500mg', 'Tablet', '10s', 178.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('e8a3e573-9a65-4b1e-bacc-4f1aa96b8d79', 'Medicine 18', 'Generic 18', 'Brand 18', '2b5a33ba-cc37-4c10-9f71-a48bc69cf831', 'Manufacturer 3', '500mg', 'Tablet', '10s', 189.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('a9257a80-68ff-4485-a455-0cdd590ee87b', 'Medicine 19', 'Generic 19', 'Brand 19', '16e12955-b9b2-4cff-b5c4-d321198fa809', 'Manufacturer 1', '500mg', 'Tablet', '10s', 199.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('85a53084-35ef-4e56-ba38-ac750f336bc9', 'Medicine 20', 'Generic 20', 'Brand 20', '41e19c03-5764-4149-aad3-9018ddcf77aa', 'Manufacturer 2', '500mg', 'Tablet', '10s', 210.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('42754a0d-03fd-410d-8165-d379520c45a2', 'Medicine 21', 'Generic 21', 'Brand 21', '2a385e3e-6130-49df-8cde-379711ad0343', 'Manufacturer 3', '500mg', 'Tablet', '10s', 220.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('4fc5aa6c-47f6-4a94-b914-f95bdb5a5ad0', 'Medicine 22', 'Generic 22', 'Brand 22', '8644c1fb-67a3-459d-9dfc-71f5d0cce689', 'Manufacturer 1', '500mg', 'Tablet', '10s', 231.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('3f445017-c16e-451d-9c4f-d37b020c27ec', 'Medicine 23', 'Generic 23', 'Brand 23', '2b5a33ba-cc37-4c10-9f71-a48bc69cf831', 'Manufacturer 2', '500mg', 'Tablet', '10s', 241.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('b8502a92-91d5-4042-a2d2-8c826ce2cab1', 'Medicine 24', 'Generic 24', 'Brand 24', '16e12955-b9b2-4cff-b5c4-d321198fa809', 'Manufacturer 3', '500mg', 'Tablet', '10s', 252.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('bac935d7-d9ca-4632-a00c-4726663483f1', 'Medicine 25', 'Generic 25', 'Brand 25', '41e19c03-5764-4149-aad3-9018ddcf77aa', 'Manufacturer 1', '500mg', 'Tablet', '10s', 262.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('b2b05698-a70d-4010-8c77-c954bada6041', 'Medicine 26', 'Generic 26', 'Brand 26', '2a385e3e-6130-49df-8cde-379711ad0343', 'Manufacturer 2', '500mg', 'Tablet', '10s', 273.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('fad1f964-5c72-4357-9aa3-ec99da000363', 'Medicine 27', 'Generic 27', 'Brand 27', '8644c1fb-67a3-459d-9dfc-71f5d0cce689', 'Manufacturer 3', '500mg', 'Tablet', '10s', 283.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('00c997c5-c8f8-4a88-86fe-7a0df44fe8c4', 'Medicine 28', 'Generic 28', 'Brand 28', '2b5a33ba-cc37-4c10-9f71-a48bc69cf831', 'Manufacturer 1', '500mg', 'Tablet', '10s', 294.0, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('1f5db56a-5c44-4dac-bf3a-11263cc51535', 'Medicine 29', 'Generic 29', 'Brand 29', '16e12955-b9b2-4cff-b5c4-d321198fa809', 'Manufacturer 2', '500mg', 'Tablet', '10s', 304.5, 'Room Temp', FALSE, FALSE, NOW(), NOW()),
+('7509e94b-5fae-47d9-b61b-2fcf22fde783', 'Medicine 30', 'Generic 30', 'Brand 30', '41e19c03-5764-4149-aad3-9018ddcf77aa', 'Manufacturer 3', '500mg', 'Tablet', '10s', 315.0, 'Room Temp', FALSE, FALSE, NOW(), NOW());
 
 COMMIT;
-
-
-
--- 50. BANGALORE HOSPITALS
-INSERT INTO hospitals (id, name, address, city, state, country, pincode, phone_number, email, website, is_verified, is_active) VALUES
-('b0000000-0000-0000-0000-000000000001', 'Manipal Hospital Whitefield', 'ITPL Main Rd, Whitefield', 'Bangalore', 'Karnataka', 'India', '560066', '080-2502-3333', 'contact@manipalwhitefield.com', 'https://manipalhospitals.com', TRUE, TRUE),
-('b0000000-0000-0000-0000-000000000002', 'Apollo Hospitals Jayanagar', '14th Cross, 3rd Block, Jayanagar', 'Bangalore', 'Karnataka', 'India', '560011', '080-2630-4050', 'info@apollojayanagar.com', 'https://apollohospitals.com', TRUE, TRUE),
-('b0000000-0000-0000-0000-000000000003', 'Fortis Hospital Bannerghatta', '154/9, Bannerghatta Road, Opp IIM-B', 'Bangalore', 'Karnataka', 'India', '560076', '080-6621-4444', 'bgroad@fortishealthcare.com', 'https://fortishealthcare.com', TRUE, TRUE);
-
--- 51. BANGALORE DOCTORS
-INSERT INTO doctors (id, user_id, specialization, license_number, hospital_id, qualifications, clinic_name, clinic_address, city, state, country, pincode, clinic_phone, clinic_email, is_verified) VALUES
-('d0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'Cardiology', 'KMC12345', 'b0000000-0000-0000-0000-000000000001', 'MBBS, MD', 'Manipal Heart Care', 'ITPL Main Rd, Whitefield', 'Bangalore', 'Karnataka', 'India', '560066', '9876543210', 'dr.rao@manipal.com', TRUE),
-('d0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', 'Neurology', 'KMC54321', 'b0000000-0000-0000-0000-000000000002', 'MBBS, DM', 'Apollo Neuro', 'Jayanagar', 'Bangalore', 'Karnataka', 'India', '560011', '9876543211', 'dr.shetty@apollo.com', TRUE);
-
--- 52. BANGALORE PHARMACIES
-INSERT INTO pharmacies (id, user_id, license_number, address, city, state, country, pincode, is_verified) VALUES
-('p0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003', 'PHARM-BLR-001', 'Koramangala 5th Block', 'Bangalore', 'Karnataka', 'India', '560095', TRUE),
-('p0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000004', 'PHARM-BLR-002', 'HSR Layout Sector 2', 'Bangalore', 'Karnataka', 'India', '560102', TRUE);

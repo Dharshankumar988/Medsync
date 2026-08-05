@@ -128,8 +128,15 @@ class DoctorAIService:
     @staticmethod
     async def analyze_drug_interaction(db: AsyncSession, doctor_id: uuid.UUID, session_id: uuid.UUID, medications: List[str]) -> Dict[str, Any]:
         meds_str = ", ".join(medications)
-        instruction = "Analyze the following medication list for drug-drug interactions, contraindications, and warnings. Return structured JSON."
+        instruction = "Analyze the following medication list for drug-drug interactions, contraindications, and warnings. Ensure you consider clinical pharmacology, black box warnings, and adverse effects. Return structured JSON."
         return await DoctorAIService._execute_structured_task(db, doctor_id, session_id, meds_str, instruction, json_mode=True)
+
+    @staticmethod
+    async def analyze_prescription_safety(db: AsyncSession, doctor_id: uuid.UUID, session_id: uuid.UUID, patient_context: str, diagnosis: str, medications: List[dict]) -> Dict[str, Any]:
+        meds_str = ", ".join([f"{m.get('medicine_name')} {m.get('dosage')} {m.get('frequency')} for {m.get('duration')}" for m in medications])
+        context = f"Patient Info: {patient_context}\nDiagnosis: {diagnosis}\nPrescription: {meds_str}"
+        instruction = "Perform a clinical pharmacology safety check for this prescription. Check for interactions, allergies, duplicate therapies, contraindications, and age/organ-specific dosing (e.g., renal/hepatic adjustments). Highlight any critical warnings. Return structured JSON."
+        return await DoctorAIService._execute_structured_task(db, doctor_id, session_id, context, instruction, json_mode=True)
 
     @staticmethod
     async def interpret_lab_results(db: AsyncSession, doctor_id: uuid.UUID, session_id: uuid.UUID, lab_data: str) -> Dict[str, Any]:

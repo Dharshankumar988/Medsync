@@ -91,16 +91,53 @@ async def download_record(
         raise HTTPException(status_code=403, detail="You do not have access to this record")
 
     stmt = (
-        select(FileMetadata.supabase_storage_path)
+        select(FileMetadata, MedicalRecordVersion)
         .join(MedicalRecordVersion, MedicalRecordVersion.id == FileMetadata.version_id)
         .where(MedicalRecordVersion.record_id == record_id)
         .order_by(MedicalRecordVersion.version_number.desc())
         .limit(1)
     )
     result = await db.execute(stmt)
-    storage_path = result.scalar_one_or_none()
-    if not storage_path:
+    row = result.first()
+    if not row:
         raise HTTPException(status_code=404, detail="No stored file found for this record")
+        
+    file_meta, version_data = row
+    
+    if version_data.blockchain_status != "CONFIRMED":
+        raise HTTPException(status_code=403, detail="Record is not verified on the blockchain")
 
-    signed_url = await StorageService.create_signed_download_url(storage_path)
-    return APIResponse(message="Download URL generated", data={"record_id": str(record_id), "signed_url": signed_url})
+    signed_url = await StorageService.create_signed_download_url(file_meta.supabase_storage_path, expires_in=300)
+    
+    # Log download event
+    from sqlalchemy import text
+    log_stmt = text("""
+        INSERT INTO download_audit_logs (id, user_id, entity_type, entity_id) 
+        VALUES (:id, :user_id, :type, :entity_id)
+    """)
+    await db.execute(log_stmt, {
+        "id": uuid.uuid4(),
+        "user_id": current_user.id,
+        "type": "MEDICAL_RECORD",
+        "entity_id": record_id
+    })
+    
+    # Update download count and last downloaded
+    update_stmt = text("""
+        UPDATE file_metadata SET 
+            download_count = download_count + 1,
+            last_downloaded = CURRENT_TIMESTAMP
+        WHERE id = :id
+    """)
+    await db.execute(update_stmt, {"id": file_meta.id})
+    await db.commit()
+    
+    return APIResponse(
+        message="Download URL generated", 
+        data={
+            "record_id": str(record_id), 
+            "signed_url": signed_url,
+            "sha256_hash": file_meta.sha256_hash
+        }
+    )
+

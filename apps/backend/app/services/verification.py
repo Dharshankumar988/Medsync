@@ -32,6 +32,16 @@ class VerificationService:
         if user:
             user.status = UserStatus.ACTIVE
             
+            if user.role.value == "DOCTOR":
+                from app.models.doctor import Doctor
+                doc_stmt = select(Doctor).where(Doctor.user_id == user.id)
+                doc_result = await db.execute(doc_stmt)
+                doctor = doc_result.scalar_one_or_none()
+                if doctor:
+                    doctor.doctor_status = "ACTIVE"
+                    doctor.approval_date = datetime.now(timezone.utc)
+                    doctor.approved_by = admin_id
+            
         await db.commit()
         await db.refresh(req)
         
@@ -78,6 +88,20 @@ class VerificationService:
         req.reviewer_id = admin_id
         req.review_date = datetime.now(timezone.utc)
         req.rejection_reason = reason
+        
+        user_stmt = select(User).where(User.id == req.user_id)
+        user_result = await db.execute(user_stmt)
+        user = user_result.scalar_one_or_none()
+        if user and user.role.value == "DOCTOR":
+            from app.models.doctor import Doctor
+            doc_stmt = select(Doctor).where(Doctor.user_id == user.id)
+            doc_result = await db.execute(doc_stmt)
+            doctor = doc_result.scalar_one_or_none()
+            if doctor:
+                doctor.doctor_status = "REJECTED"
+                doctor.approval_notes = reason
+                doctor.approval_date = datetime.now(timezone.utc)
+                doctor.approved_by = admin_id
         
         await db.commit()
         await db.refresh(req)

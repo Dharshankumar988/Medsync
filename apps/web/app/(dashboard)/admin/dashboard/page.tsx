@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
-import { Users, Server, Activity, ShieldCheck, CheckCircle, XCircle, Trash2, UserPlus, Loader2 } from "lucide-react";
+import { Users, Server, Activity, ShieldCheck, CheckCircle, XCircle, Trash2, UserPlus, Loader2, Truck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@medsync/ui";
 import { Button } from "@medsync/ui";
 import { Badge, Skeleton } from "@medsync/ui";
@@ -142,7 +142,7 @@ export default function AdminDashboard() {
               exit={{ opacity: 0, y: -10 }}
             >
               <TabsContent value="overview" className="m-0 focus-visible:outline-none">
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
                   <motion.div variants={itemVariants}>
                     <Card className="border-primary/10 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
                       <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -202,6 +202,21 @@ export default function AdminDashboard() {
                       </CardContent>
                     </Card>
                   </motion.div>
+                  
+                  <motion.div variants={itemVariants}>
+                    <Card className="border-blue-500/10 shadow-sm transition-all hover:shadow-md hover:border-blue-500/30">
+                      <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Active Deliveries</CardTitle>
+                        <div className="h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+                          <Truck className="h-4 w-4 text-blue-600" />
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">12</div>
+                        <p className="text-xs text-muted-foreground mt-1">Simulated en-route</p>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 </div>
               </TabsContent>
 
@@ -235,8 +250,12 @@ export default function AdminDashboard() {
                                 {req.role === 'DOCTOR' ? (
                                   <>
                                     <p><strong className="text-foreground/70">Hospital:</strong> {req.profile?.hospital_name}</p>
-                                    <p><strong className="text-foreground/70">Address:</strong> {req.profile?.hospital_address}</p>
+                                    <p><strong className="text-foreground/70">Specialization:</strong> {req.profile?.specialization}</p>
+                                    <p><strong className="text-foreground/70">Experience:</strong> {req.profile?.experience_years} years</p>
+                                    <p><strong className="text-foreground/70">Qualifications:</strong> {req.profile?.qualifications}</p>
                                     <p><strong className="text-foreground/70">License:</strong> {req.profile?.license_number}</p>
+                                    {req.profile?.medical_council_reg_number && <p><strong className="text-foreground/70">Med Council Reg:</strong> {req.profile.medical_council_reg_number}</p>}
+                                    {req.profile?.verification_documents_url && <p><strong className="text-foreground/70">Docs:</strong> <a href={req.profile.verification_documents_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">View</a></p>}
                                   </>
                                 ) : (
                                   <>

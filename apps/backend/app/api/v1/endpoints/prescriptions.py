@@ -26,7 +26,7 @@ async def download_prescription(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user)
 ):
-    from sqlalchemy import select
+    from sqlalchemy import select, text
     from app.models.prescription import Prescription
     from app.services.storage import StorageService
     from fastapi import HTTPException
@@ -44,7 +44,23 @@ async def download_prescription(
     if not rx.pdf_url:
         raise HTTPException(status_code=404, detail="PDF not generated for this prescription")
         
-    # Generate signed URL valid for 1 hour
-    signed_url = await StorageService.create_signed_download_url(rx.pdf_url, expires_in=3600)
+    if rx.blockchain_status != "CONFIRMED":
+        raise HTTPException(status_code=403, detail="Prescription is not verified on the blockchain")
+
+    # Generate signed URL valid for 5 minutes (300 seconds)
+    signed_url = await StorageService.create_signed_download_url(rx.pdf_url, expires_in=300)
     
-    return APIResponse(message="Download URL generated", data=signed_url)
+    # Log download event
+    log_stmt = text("""
+        INSERT INTO download_audit_logs (id, user_id, entity_type, entity_id) 
+        VALUES (:id, :user_id, :type, :entity_id)
+    """)
+    await db.execute(log_stmt, {
+        "id": uuid.uuid4(),
+        "user_id": current_user.id,
+        "type": "PRESCRIPTION",
+        "entity_id": rx.id
+    })
+    await db.commit()
+    
+    return APIResponse(message="Download URL generated", data={"url": signed_url, "sha256_hash": rx.hash})

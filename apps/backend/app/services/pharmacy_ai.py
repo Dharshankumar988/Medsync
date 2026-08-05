@@ -109,8 +109,14 @@ class PharmacyAIService:
     # Specialized Pharmacy Capabilities
     @staticmethod
     async def interpret_prescription(db: AsyncSession, pharmacy_id: uuid.UUID, session_id: uuid.UUID, rx_data: str) -> Dict[str, Any]:
-        instruction = "Interpret this prescription data. Clarify ambiguous dosing instructions, identify the drug class, and verify the indication."
+        instruction = "Interpret this prescription data. Clarify ambiguous dosing instructions, identify the drug class, and verify the indication. Include black box warnings and adverse effects."
         return await PharmacyAIService._execute_structured_task(db, pharmacy_id, session_id, rx_data, instruction)
+
+    @staticmethod
+    async def receive_prescription(db: AsyncSession, pharmacy_id: uuid.UUID, session_id: uuid.UUID, prescription_details: str, inventory_context: str) -> Dict[str, Any]:
+        context = f"Prescription: {prescription_details}\nLocal Inventory: {inventory_context}"
+        instruction = "Process this incoming prescription. Recommend generic/brand substitutes if out of stock based on the inventory context. Estimate refill timing for the patient, and identify any immediate counseling points."
+        return await PharmacyAIService._execute_structured_task(db, pharmacy_id, session_id, context, instruction)
 
     @staticmethod
     async def warn_drug_interactions(db: AsyncSession, pharmacy_id: uuid.UUID, session_id: uuid.UUID, medications: str) -> Dict[str, Any]:

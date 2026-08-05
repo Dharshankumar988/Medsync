@@ -5,10 +5,19 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
-import { Activity, Shield, Loader2, ArrowRight, LockKeyhole } from "lucide-react";
+import { Activity, Shield, Loader2, ArrowRight, LockKeyhole, Mail, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription } from "@medsync/ui";
 import Link from "next/link";
-import Image from "next/image";
+import { motion } from "framer-motion";
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] } },
+};
+
+const stagger = {
+  visible: { transition: { staggerChildren: 0.06 } },
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,6 +25,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,127 +62,200 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Left side - Login Form */}
-      <div className="flex w-full flex-col justify-center px-8 sm:px-12 md:w-1/2 lg:px-24 xl:px-32 relative z-10 animate-in fade-in duration-700 slide-in-from-left-8">
-        
-        <div className="mx-auto w-full max-w-[420px]">
-          <Link href="/" className="flex items-center gap-3 mb-16 group w-fit">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/20">
-              <Activity className="h-7 w-7" />
-            </div>
-            <span className="text-3xl font-bold tracking-tight text-foreground/90">MedSync</span>
-          </Link>
+    <div className="flex min-h-screen">
 
-          <div className="mb-10 space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">Welcome back</h1>
-            <p className="text-base text-muted-foreground/80 leading-relaxed">
-              Securely authenticate to access your decentralized clinical dashboard and health records.
-            </p>
+      {/* ─── Left Panel — Illustration ─── */}
+      <div className="hidden lg:flex w-1/2 bg-muted/30 dark:bg-muted/10 relative overflow-hidden items-center justify-center border-r border-border/60">
+        {/* Subtle radial glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/[0.03] rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center text-center px-16 max-w-lg">
+          {/* Floating composition */}
+          <div className="relative h-64 w-64 mb-12" aria-hidden="true">
+            {/* Connecting lines */}
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 256 256" fill="none">
+              <line x1="128" y1="128" x2="48" y2="20" className="stroke-border" strokeWidth="1" />
+              <line x1="128" y1="128" x2="220" y2="40" className="stroke-border" strokeWidth="1" />
+              <line x1="128" y1="128" x2="36" y2="200" className="stroke-border" strokeWidth="1" />
+              <line x1="128" y1="128" x2="210" y2="220" className="stroke-border" strokeWidth="1" />
+            </svg>
+
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="h-28 w-28 rounded-3xl bg-card border border-border flex items-center justify-center shadow-2xl shadow-black/5 dark:shadow-black/30 animate-float-slow">
+                <Shield className="h-12 w-12 text-blue-500" />
+              </div>
+            </div>
+            <div className="absolute top-0 right-3 animate-float-slow-reverse">
+              <div className="h-12 w-12 rounded-xl bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
+                <LockKeyhole className="h-5 w-5 text-muted-foreground" />
+              </div>
+            </div>
+            <div className="absolute bottom-4 left-0 animate-float-slow" style={{ animationDelay: "1.5s" }}>
+              <div className="h-11 w-11 rounded-xl bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
+                <Activity className="h-5 w-5 text-muted-foreground" />
+              </div>
+            </div>
+            <div className="absolute bottom-8 right-0 animate-float-slow-reverse" style={{ animationDelay: "0.8s" }}>
+              <div className="h-10 w-10 rounded-lg bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
-            {error && (
-              <Alert variant="destructive" className="py-3 bg-destructive/10 text-destructive border-destructive/20 animate-in zoom-in-95">
-                <AlertDescription className="font-medium">{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-2.5 group">
-              <label className="text-sm font-semibold text-foreground/80 tracking-wide">
-                Email Address
-              </label>
-              <div className="relative">
-                <Input
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="h-12 px-4 transition-all duration-300 focus:ring-2 focus:ring-primary/20 border-input bg-background hover:bg-muted/50"
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold text-foreground/80 tracking-wide">
-                  Password
-                </label>
-                <Link href="/reset-password" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="h-12 px-4 pr-10 transition-all duration-300 focus:ring-2 focus:ring-primary/20 border-input bg-background hover:bg-muted/50"
-                />
-                <LockKeyhole className="absolute right-3.5 top-3.5 h-5 w-5 text-muted-foreground/50" />
-              </div>
-            </div>
-
-            <Button type="submit" size="lg" className="w-full h-12 mt-2 text-base font-semibold group transition-all duration-300 hover:shadow-lg hover:shadow-primary/25" disabled={isLoading}>
-              {isLoading ? (
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  Sign In to Dashboard
-                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </>
-              )}
-            </Button>
-          </form>
-
-
-          <p className="mt-10 text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/register" className="font-semibold text-primary transition-colors hover:text-primary/80 hover:underline underline-offset-4">
-              Create an account
-            </Link>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground mb-3">
+            Secure Healthcare Infrastructure
+          </h2>
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
+            Your clinical data is protected by end-to-end encryption and blockchain-verified access controls.
           </p>
+
+          <div className="mt-8 flex items-center gap-5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-blue-500" /> HIPAA Ready</span>
+            <span className="flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5 text-blue-500" /> Encrypted</span>
+          </div>
         </div>
       </div>
 
-      {/* Right side - Image/Info */}
-      <div className="hidden w-1/2 md:flex relative overflow-hidden bg-black">
-        {/* The beautiful generated AI image */}
-        <Image 
-          src="/auth-bg.png" 
-          alt="Abstract medical blockchain" 
-          fill
-          priority
-          className="object-cover object-center opacity-80 mix-blend-screen"
-        />
-        
-        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
-        
-        <div className="absolute bottom-0 left-0 right-0 p-16 z-20 animate-in fade-in duration-1000 slide-in-from-bottom-12 delay-300 fill-mode-both">
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-8 backdrop-blur-xl shadow-2xl">
-            <div className="absolute -left-10 -top-10 h-40 w-40 rounded-full bg-primary/30 blur-3xl mix-blend-screen" />
-            <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-blue-500/30 blur-3xl mix-blend-screen" />
-            
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 font-semibold text-primary mb-4 text-sm tracking-widest uppercase">
-                <Shield className="h-5 w-5" />
-                Enterprise Grade Security
-              </div>
-              <h2 className="text-3xl font-bold tracking-tight text-white mb-4 leading-tight">
-                Secure Healthcare<br />Infrastructure
-              </h2>
-              <p className="text-base text-gray-300 max-w-md leading-relaxed font-light">
-                MedSync utilizes cryptographic verification and immutable ledger technology to ensure all patient data is handled with the highest standards of privacy, transparency, and clinical security.
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* ─── Right Panel — Login Form ─── */}
+      <div className="flex w-full lg:w-1/2 flex-col justify-center bg-background px-6 sm:px-12 lg:px-20 xl:px-28">
+        <motion.div
+          className="mx-auto w-full max-w-[400px]"
+          initial="hidden"
+          animate="visible"
+          variants={stagger}
+        >
+          {/* Logo */}
+          <motion.div variants={fadeUp}>
+            <Link href="/" className="inline-flex items-center gap-2 mb-12 group" aria-label="MedSync Home">
+              <Activity className="h-5 w-5 text-blue-500" />
+              <span className="text-lg font-semibold tracking-tight text-foreground">MedSync</span>
+            </Link>
+          </motion.div>
+
+          {/* Heading */}
+          <motion.div variants={fadeUp} className="mb-8">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">Welcome back</h1>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Sign in to access your dashboard and health records.
+            </p>
+          </motion.div>
+
+          {/* Form */}
+          <form onSubmit={handleLogin}>
+            <motion.div variants={stagger} className="space-y-5">
+              {/* Error */}
+              {error && (
+                <motion.div variants={fadeUp}>
+                  <Alert variant="destructive" className="py-3 bg-destructive/10 text-destructive border-destructive/20">
+                    <AlertDescription className="text-sm">{error}</AlertDescription>
+                  </Alert>
+                </motion.div>
+              )}
+
+              {/* Email */}
+              <motion.div variants={fadeUp} className="space-y-2">
+                <label htmlFor="email" className="text-sm font-medium text-foreground/80">
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={isLoading}
+                    autoComplete="email"
+                    className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all duration-200"
+                  />
+                </div>
+              </motion.div>
+
+              {/* Password */}
+              <motion.div variants={fadeUp} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="text-sm font-medium text-foreground/80">
+                    Password
+                  </label>
+                  <Link href="/reset-password" className="text-xs font-medium text-blue-500 hover:text-blue-400 transition-colors">
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <LockKeyhole className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    disabled={isLoading}
+                    autoComplete="current-password"
+                    className="h-12 pl-10 pr-12 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all duration-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-3.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </motion.div>
+
+              {/* Remember me */}
+              <motion.div variants={fadeUp} className="flex items-center gap-2">
+                <input
+                  id="remember"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-input text-blue-500 focus:ring-blue-500/20 bg-background"
+                />
+                <label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
+                  Remember me
+                </label>
+              </motion.div>
+
+              {/* Submit */}
+              <motion.div variants={fadeUp}>
+                <Button
+                  type="submit"
+                  className="w-full h-12 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all duration-200 group"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Sign In
+                      <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+            </motion.div>
+          </form>
+
+          {/* Secure indicator */}
+          <motion.div variants={fadeUp} className="mt-6 flex items-center justify-center gap-1.5 text-xs text-muted-foreground/60">
+            <Shield className="h-3 w-3" />
+            <span>Secured with end-to-end encryption</span>
+          </motion.div>
+
+          {/* Sign up link */}
+          <motion.p variants={fadeUp} className="mt-8 text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="font-medium text-blue-500 hover:text-blue-400 transition-colors">
+              Create account
+            </Link>
+          </motion.p>
+        </motion.div>
       </div>
     </div>
   );

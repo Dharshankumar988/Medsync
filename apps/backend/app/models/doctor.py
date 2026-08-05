@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import String, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime
 from app.database.base_class import Base
 from app.models.mixins import UUIDMixin, TimestampMixin
 
@@ -36,6 +37,15 @@ class Doctor(Base, UUIDMixin, TimestampMixin):
     verification_documents_url: Mapped[str] = mapped_column(String, nullable=True)
     hospital_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("hospitals.id"), nullable=True)
     medical_council_reg_number: Mapped[str] = mapped_column(String(255), nullable=True)
+    
+    # Image upload and approval fields
+    profile_image: Mapped[str] = mapped_column(String(1024), nullable=True)
+    thumbnail: Mapped[str] = mapped_column(String(1024), nullable=True)
+    image_uploaded_at: Mapped[datetime] = mapped_column(nullable=True)
+    approval_date: Mapped[datetime] = mapped_column(nullable=True)
+    approved_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approval_notes: Mapped[str] = mapped_column(String, nullable=True)
+    doctor_status: Mapped[str] = mapped_column(String(50), default="PENDING")
     
     user = relationship("User", back_populates="doctor_profile")
     hospital = relationship("Hospital", back_populates="doctors")

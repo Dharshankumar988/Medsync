@@ -60,6 +60,7 @@ class MedicalRecordVersion(Base, UUIDMixin, TimestampMixin):
     change_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING")
     
     record = relationship("MedicalRecord", back_populates="versions")
     doctor_notes = relationship("DoctorNote", back_populates="version", cascade="all, delete-orphan")
@@ -118,3 +119,9 @@ class FileMetadata(Base, UUIDMixin, TimestampMixin):
     version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), unique=True, nullable=False)
     supabase_storage_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=True)
+    encrypted_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sha256_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    download_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_downloaded: Mapped[datetime | None] = mapped_column(nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)

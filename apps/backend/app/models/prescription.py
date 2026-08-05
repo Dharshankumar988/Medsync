@@ -13,6 +13,8 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dispensed: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    expires_at: Mapped[str | None] = mapped_column(String, nullable=True) # ISO format timestamp or Date
     pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     qr_token: Mapped[str | None] = mapped_column(Text, nullable=True)    
     # Blockchain Audit Fields

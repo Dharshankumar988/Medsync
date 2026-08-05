@@ -11,8 +11,13 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "MedSync",
-  description: "Enterprise Healthcare Platform",
+  title: "MedSync — Secure Healthcare Platform",
+  description: "Enterprise healthcare platform powered by AI diagnostics and blockchain-verified medical records. Built for hospitals, doctors, pharmacies, and patients.",
+  openGraph: {
+    title: "MedSync — Secure Healthcare Platform",
+    description: "Enterprise healthcare platform powered by AI diagnostics and blockchain-verified medical records.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

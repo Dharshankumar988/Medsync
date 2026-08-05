@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { hospitalService, Hospital } from "@/services/hospital.service";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
@@ -81,10 +81,12 @@ export default function HospitalsManagementPage() {
     }
   };
 
-  const filteredHospitals = hospitals.filter(h => 
-    h.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    h.city?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredHospitals = useMemo(() => {
+    return hospitals.filter(h => 
+      h.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      h.city?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [hospitals, searchTerm]);
 
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">

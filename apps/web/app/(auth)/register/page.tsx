@@ -1,20 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
-import { Activity, Loader2, CheckCircle2, UserPlus, LockKeyhole, Mail, User, Building, MapPin, BadgeInfo } from "lucide-react";
+import { 
+  Activity, Loader2, UserPlus, LockKeyhole, Mail, User, 
+  Eye, EyeOff, Shield, Heart, Stethoscope, Pill, 
+  CheckCircle2, AlertTriangle, Building2, Phone, BriefcaseMedical 
+} from "lucide-react";
 import { Alert, AlertDescription } from "@medsync/ui";
 import Link from "next/link";
-import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] } },
+};
+
+const stagger = {
+  visible: { transition: { staggerChildren: 0.05 } },
+};
 
 const ROLES = [
-  { value: "PATIENT", label: "Patient", description: "Book appointments & manage health." },
-  { value: "DOCTOR", label: "Doctor", description: "Write prescriptions & see patients." },
-  { value: "PHARMACY", label: "Pharmacy", description: "Manage medicine & dispensing." },
-];
+  { value: "PATIENT", label: "Patient", description: "Manage health records & appointments", icon: Heart, accent: "blue" },
+  { value: "DOCTOR", label: "Doctor", description: "Prescribe, diagnose & clinical AI", icon: Stethoscope, accent: "emerald" },
+  { value: "PHARMACY", label: "Pharmacy", description: "Inventory & prescription fulfillment", icon: Pill, accent: "amber" },
+] as const;
+
+const accentMap: Record<string, { border: string; bg: string; text: string; ring: string }> = {
+  blue:    { border: "border-blue-500/50",    bg: "bg-blue-500/10",    text: "text-blue-500",    ring: "ring-blue-500/20" },
+  emerald: { border: "border-emerald-500/50", bg: "bg-emerald-500/10", text: "text-emerald-500", ring: "ring-emerald-500/20" },
+  amber:   { border: "border-amber-500/50",   bg: "bg-amber-500/10",   text: "text-amber-500",   ring: "ring-amber-500/20" },
+};
+
+function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  if (score <= 1) return { score: 1, label: "Weak", color: "bg-red-500" };
+  if (score <= 2) return { score: 2, label: "Fair", color: "bg-amber-500" };
+  if (score <= 3) return { score: 3, label: "Good", color: "bg-blue-500" };
+  return { score: 4, label: "Strong", color: "bg-emerald-500" };
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -25,9 +58,21 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState("PATIENT");
+  
+  // Additional fields for Doctor & Pharmacy
+  const [licenseNumber, setLicenseNumber] = useState("");
+  const [hospitalName, setHospitalName] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
 
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const passwordStrength = useMemo(() => getPasswordStrength(password), [password]);
+  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +88,16 @@ export default function RegisterPage() {
       return;
     }
 
+    // Role specific validation
+    if (role === "DOCTOR" && !licenseNumber) {
+      setError("Medical License Number is required for doctors.");
+      return;
+    }
+    if (role === "PHARMACY" && (!businessName || !licenseNumber || !contactNumber)) {
+      setError("Business Name, License Number, and Contact Number are required for pharmacies.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -51,6 +106,10 @@ export default function RegisterPage() {
         email,
         password,
         role,
+        license_number: role !== "PATIENT" ? licenseNumber : undefined,
+        hospital_name: role === "DOCTOR" ? hospitalName : undefined,
+        business_name: role === "PHARMACY" ? businessName : undefined,
+        contact_number: role === "PHARMACY" ? contactNumber : undefined,
       });
 
       if (response.data?.needsEmailVerification) {
@@ -79,191 +138,418 @@ export default function RegisterPage() {
     return "John Smith";
   };
 
-  return (
-    <div className="flex min-h-screen bg-background">
-      {/* Left side - Register Form */}
-      <div className="flex w-full flex-col justify-center px-8 py-10 sm:px-12 md:w-1/2 lg:px-24 xl:px-32 relative z-10 animate-in fade-in duration-700 slide-in-from-left-8 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[420px]">
-          <Link href="/" className="flex items-center gap-3 mb-10 group w-fit">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/20">
-              <Activity className="h-7 w-7" />
-            </div>
-            <span className="text-3xl font-bold tracking-tight text-foreground/90">MedSync</span>
-          </Link>
+  const selectedRole = ROLES.find(r => r.value === role);
+  const selectedAccent = selectedRole ? accentMap[selectedRole.accent] : accentMap.blue;
 
-          <div className="mb-8 space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">Create Account</h1>
-            <p className="text-base text-muted-foreground/80 leading-relaxed">
-              Join the MedSync platform to experience seamless, blockchain-verified healthcare.
-            </p>
+  return (
+    <div className="flex min-h-screen">
+
+      {/* ─── Left Panel — Illustration ─── */}
+      <div className="hidden lg:flex w-5/12 bg-muted/30 dark:bg-muted/10 relative overflow-hidden items-center justify-center border-r border-border/60">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-500/[0.03] rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center text-center px-12 max-w-md">
+          {/* Floating composition (matching login/landing page style) */}
+          <div className="relative h-56 w-56 mb-10" aria-hidden="true">
+            {/* Connecting lines */}
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 224 224" fill="none">
+              <line x1="112" y1="112" x2="30" y2="10" className="stroke-border" strokeWidth="1" />
+              <line x1="112" y1="112" x2="200" y2="20" className="stroke-border" strokeWidth="1" />
+              <line x1="112" y1="112" x2="20" y2="180" className="stroke-border" strokeWidth="1" />
+              <line x1="112" y1="112" x2="190" y2="200" className="stroke-border" strokeWidth="1" />
+            </svg>
+
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="h-24 w-24 rounded-3xl bg-card border border-border flex items-center justify-center shadow-2xl shadow-black/5 dark:shadow-black/30 animate-float-slow">
+                <UserPlus className="h-10 w-10 text-blue-500" />
+              </div>
+            </div>
+            <div className="absolute top-0 right-1 animate-float-slow-reverse">
+              <div className="h-11 w-11 rounded-xl bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
+                <Shield className="h-5 w-5 text-muted-foreground" />
+              </div>
+            </div>
+            <div className="absolute bottom-2 left-0 animate-float-slow" style={{ animationDelay: "1s" }}>
+              <div className="h-10 w-10 rounded-lg bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+            <div className="absolute bottom-6 right-0 animate-float-slow-reverse" style={{ animationDelay: "2s" }}>
+              <div className="h-9 w-9 rounded-lg bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
+                <Heart className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
           </div>
 
-          <form onSubmit={handleRegister} className="space-y-4">
-            {error && (
-              <Alert variant="destructive" className="py-3 bg-destructive/10 text-destructive border-destructive/20 animate-in zoom-in-95">
-                <AlertDescription className="font-medium">{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground/80 tracking-wide">Account Type</label>
-              <div className="grid grid-cols-1 gap-2.5">
-                {ROLES.map((r) => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => setRole(r.value)}
-                    disabled={isLoading}
-                    className={`flex items-center gap-4 rounded-xl border p-3.5 text-left transition-all duration-300 ${
-                      role === r.value
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-sm shadow-primary/10"
-                        : "border-border hover:border-primary/40 hover:bg-muted/30"
-                    }`}
-                  >
-                    <div className={`flex h-6 w-6 items-center justify-center rounded-full border transition-colors ${
-                      role === r.value ? "border-primary bg-primary" : "border-muted-foreground/30 bg-background"
-                    }`}>
-                      {role === r.value && <CheckCircle2 className="h-4 w-4 text-primary-foreground" />}
-                    </div>
-                    <div>
-                      <p className={`text-sm font-semibold ${role === r.value ? 'text-primary' : 'text-foreground'}`}>{r.label}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{r.description}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2.5 mt-4">
-              <label className="text-sm font-semibold text-foreground/80 tracking-wide">
-                {role === 'PHARMACY' ? 'Manager Name' : 'Full Name'}
-              </label>
-              <div className="relative">
-                <Input
-                  type="text"
-                  placeholder={getNamePlaceholder()}
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="h-12 px-4 pl-10 transition-all duration-300 focus:ring-2 focus:ring-primary/20 bg-background hover:bg-muted/50"
-                />
-                <User className="absolute left-3.5 top-3.5 h-5 w-5 text-muted-foreground/50" />
-              </div>
-            </div>
-
-            <div className="space-y-2.5">
-              <label className="text-sm font-semibold text-foreground/80 tracking-wide">Email Address</label>
-              <div className="relative">
-                <Input
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="h-12 px-4 pl-10 transition-all duration-300 focus:ring-2 focus:ring-primary/20 bg-background hover:bg-muted/50"
-                />
-                <Mail className="absolute left-3.5 top-3.5 h-5 w-5 text-muted-foreground/50" />
-              </div>
-            </div>
-
-            {/* Progressive profile completion will collect additional details after registration */}
-
-            <div className="grid grid-cols-2 gap-4 pt-2">
-              <div className="space-y-2.5">
-                <label className="text-sm font-semibold text-foreground/80 tracking-wide">Password</label>
-                <div className="relative">
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    disabled={isLoading}
-                    className="h-12 px-4 pl-10 transition-all duration-300 focus:ring-2 focus:ring-primary/20 bg-background hover:bg-muted/50"
-                  />
-                  <LockKeyhole className="absolute left-3.5 top-3.5 h-5 w-5 text-muted-foreground/50" />
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                <label className="text-sm font-semibold text-foreground/80 tracking-wide">Confirm</label>
-                <div className="relative">
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    disabled={isLoading}
-                    className="h-12 px-4 pl-10 transition-all duration-300 focus:ring-2 focus:ring-primary/20 bg-background hover:bg-muted/50"
-                  />
-                  <LockKeyhole className="absolute left-3.5 top-3.5 h-5 w-5 text-muted-foreground/50" />
-                </div>
-              </div>
-            </div>
-
-            <Button type="submit" size="lg" className="w-full h-12 mt-6 text-base font-semibold group transition-all duration-300 hover:shadow-lg hover:shadow-primary/25" disabled={isLoading}>
-              {isLoading ? (
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  Register Account
-                  <UserPlus className="ml-2 h-4 w-4 transition-transform group-hover:scale-110" />
-                </>
-              )}
-            </Button>
-          </form>
-
-          {(role === "DOCTOR" || role === "PHARMACY") && (
-            <div className="mt-6 rounded-xl bg-amber-500/10 p-4 text-xs text-amber-600/90 dark:text-amber-400/90 border border-amber-500/20 animate-in fade-in slide-in-from-top-2">
-              <strong className="block mb-1 font-semibold uppercase tracking-wider text-[10px]">Verification Required</strong>
-              Doctor and Pharmacy accounts require Admin verification before platform access is granted.
-            </div>
-          )}
-
-          <p className="mt-8 text-center text-sm text-muted-foreground pb-8">
-            Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-primary transition-colors hover:text-primary/80 hover:underline underline-offset-4">
-              Sign in here
-            </Link>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground mb-3">
+            Join the Network of Trust
+          </h2>
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+            Create your account to access AI-powered diagnostics, secure records, and connected healthcare.
           </p>
         </div>
       </div>
 
-      {/* Right side - Image/Info */}
-      <div className="hidden w-1/2 md:flex relative overflow-hidden bg-black">
-        <Image 
-          src="/auth-bg.png" 
-          alt="Abstract medical blockchain" 
-          fill
-          priority
-          className="object-cover object-center opacity-70 mix-blend-screen scale-105"
-        />
-        
-        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
-        
-        <div className="absolute bottom-0 left-0 right-0 p-16 z-20 animate-in fade-in duration-1000 slide-in-from-bottom-12 delay-300 fill-mode-both">
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 p-8 backdrop-blur-xl shadow-2xl">
-            <div className="absolute -left-10 -top-10 h-40 w-40 rounded-full bg-teal-500/30 blur-3xl mix-blend-screen" />
-            <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-primary/30 blur-3xl mix-blend-screen" />
-            
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 font-semibold text-primary mb-4 text-sm tracking-widest uppercase">
-                <Activity className="h-5 w-5" />
-                Decentralized Health
+      {/* ─── Right Panel — Register Form ─── */}
+      <div className="flex w-full lg:w-7/12 flex-col justify-center bg-background px-6 py-8 sm:px-12 lg:px-16 xl:px-24 overflow-y-auto">
+        <motion.div
+          className="mx-auto w-full max-w-[480px]"
+          initial="hidden"
+          animate="visible"
+          variants={stagger}
+        >
+          {/* Logo */}
+          <motion.div variants={fadeUp}>
+            <Link href="/" className="inline-flex items-center gap-2 mb-8 group" aria-label="MedSync Home">
+              <Activity className="h-5 w-5 text-blue-500" />
+              <span className="text-lg font-semibold tracking-tight text-foreground">MedSync</span>
+            </Link>
+          </motion.div>
+
+          {/* Heading */}
+          <motion.div variants={fadeUp} className="mb-8">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">Create Your MedSync Account</h1>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Join the next generation of secure digital healthcare.
+            </p>
+          </motion.div>
+
+          {/* Form */}
+          <form onSubmit={handleRegister}>
+            <motion.div variants={stagger} className="space-y-5">
+              {/* Error */}
+              {error && (
+                <motion.div variants={fadeUp}>
+                  <Alert variant="destructive" className="py-3 bg-destructive/10 text-destructive border-destructive/20">
+                    <AlertDescription className="text-sm">{error}</AlertDescription>
+                  </Alert>
+                </motion.div>
+              )}
+
+              {/* Role Selection Cards */}
+              <motion.div variants={fadeUp} className="space-y-2.5">
+                <label className="text-sm font-medium text-foreground/80">Account Type</label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {ROLES.map((r) => {
+                    const accent = accentMap[r.accent];
+                    const isSelected = role === r.value;
+                    return (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => {
+                          setRole(r.value);
+                          setError("");
+                        }}
+                        disabled={isLoading}
+                        className={`relative flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all duration-200 ${
+                          isSelected
+                            ? `${accent.border} ${accent.bg} ring-1 ${accent.ring}`
+                            : "border-input hover:border-muted-foreground/30 hover:bg-muted/30"
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        <div className={`h-9 w-9 rounded-lg flex items-center justify-center transition-colors ${
+                          isSelected ? `${accent.bg} ${accent.text}` : "bg-muted text-muted-foreground"
+                        }`}>
+                          <r.icon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className={`text-xs font-semibold ${isSelected ? accent.text : "text-foreground"}`}>{r.label}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{r.description}</p>
+                        </div>
+                        {isSelected && (
+                          <div className={`absolute -top-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center ${accent.text.replace("text-", "bg-")}`}>
+                            <CheckCircle2 className="h-3 w-3 text-white" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Full Name */}
+                <motion.div variants={fadeUp} className="space-y-2">
+                  <label htmlFor="fullName" className="text-sm font-medium text-foreground/80">
+                    {role === 'PHARMACY' ? 'Manager Name' : 'Full Name'}
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                    <Input
+                      id="fullName"
+                      type="text"
+                      placeholder={getNamePlaceholder()}
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      autoComplete="name"
+                      className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all duration-200"
+                    />
+                  </div>
+                </motion.div>
+
+                {/* Email */}
+                <motion.div variants={fadeUp} className="space-y-2">
+                  <label htmlFor="regEmail" className="text-sm font-medium text-foreground/80">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                    <Input
+                      id="regEmail"
+                      type="email"
+                      placeholder="name@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      autoComplete="email"
+                      className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all duration-200"
+                    />
+                  </div>
+                </motion.div>
               </div>
-              <h2 className="text-3xl font-bold tracking-tight text-white mb-4 leading-tight">
-                Join the Network<br />of Trust
-              </h2>
-              <p className="text-base text-gray-300 max-w-md leading-relaxed font-light">
-                MedSync bridges the gap between patients, doctors, and pharmacies through an immutable, blockchain-verified platform designed for modern, transparent healthcare.
-              </p>
-            </div>
-          </div>
-        </div>
+
+              {/* Dynamic Role Fields */}
+              <AnimatePresence mode="popLayout">
+                {role === "DOCTOR" && (
+                  <motion.div
+                    key="doctor-fields"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="grid grid-cols-1 md:grid-cols-2 gap-5 overflow-hidden"
+                  >
+                    <div className="space-y-2 pt-1">
+                      <label htmlFor="license" className="text-sm font-medium text-foreground/80">Medical License No.</label>
+                      <div className="relative">
+                        <BriefcaseMedical className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                        <Input
+                          id="license"
+                          type="text"
+                          placeholder="Registration number"
+                          value={licenseNumber}
+                          onChange={(e) => setLicenseNumber(e.target.value)}
+                          required
+                          disabled={isLoading}
+                          className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2 pt-1">
+                      <label htmlFor="hospital" className="text-sm font-medium text-foreground/80">Hospital/Clinic Name <span className="text-muted-foreground font-normal">(Optional)</span></label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                        <Input
+                          id="hospital"
+                          type="text"
+                          placeholder="Where you practice"
+                          value={hospitalName}
+                          onChange={(e) => setHospitalName(e.target.value)}
+                          disabled={isLoading}
+                          className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {role === "PHARMACY" && (
+                  <motion.div
+                    key="pharmacy-fields"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-5 overflow-hidden pt-1"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-2">
+                        <label htmlFor="business" className="text-sm font-medium text-foreground/80">Business Name</label>
+                        <div className="relative">
+                          <Building2 className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                          <Input
+                            id="business"
+                            type="text"
+                            placeholder="Pharmacy store name"
+                            value={businessName}
+                            onChange={(e) => setBusinessName(e.target.value)}
+                            required
+                            disabled={isLoading}
+                            className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label htmlFor="pharmaLicense" className="text-sm font-medium text-foreground/80">Pharmacy License No.</label>
+                        <div className="relative">
+                          <BriefcaseMedical className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                          <Input
+                            id="pharmaLicense"
+                            type="text"
+                            placeholder="License/Registration"
+                            value={licenseNumber}
+                            onChange={(e) => setLicenseNumber(e.target.value)}
+                            required
+                            disabled={isLoading}
+                            className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label htmlFor="contact" className="text-sm font-medium text-foreground/80">Contact Number</label>
+                      <div className="relative">
+                        <Phone className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                        <Input
+                          id="contact"
+                          type="tel"
+                          placeholder="Store contact number"
+                          value={contactNumber}
+                          onChange={(e) => setContactNumber(e.target.value)}
+                          required
+                          disabled={isLoading}
+                          className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+                {/* Password */}
+                <motion.div variants={fadeUp} className="space-y-2">
+                  <label htmlFor="regPassword" className="text-sm font-medium text-foreground/80">Password</label>
+                  <div className="relative">
+                    <LockKeyhole className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                    <Input
+                      id="regPassword"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Min 8 characters"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      autoComplete="new-password"
+                      className="h-12 pl-10 pr-12 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all duration-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-3.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {/* Password strength indicator */}
+                  {password.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4].map((level) => (
+                          <div
+                            key={level}
+                            className={`h-1 flex-1 rounded-full transition-colors duration-200 ${
+                              level <= passwordStrength.score ? passwordStrength.color : "bg-muted"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <p className={`text-[11px] font-medium ${passwordStrength.color.replace("bg-", "text-")}`}>
+                        {passwordStrength.label}
+                      </p>
+                    </div>
+                  )}
+                </motion.div>
+
+                {/* Confirm Password */}
+                <motion.div variants={fadeUp} className="space-y-2">
+                  <label htmlFor="confirmPassword" className="text-sm font-medium text-foreground/80">Confirm Password</label>
+                  <div className="relative">
+                    <LockKeyhole className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirm ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      autoComplete="new-password"
+                      className={`h-12 pl-10 pr-12 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all duration-200 ${
+                        passwordsMatch ? "border-emerald-500/50" : passwordsMismatch ? "border-red-500/50" : ""
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                      className="absolute right-3.5 top-3.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                      aria-label={showConfirm ? "Hide password" : "Show password"}
+                      tabIndex={-1}
+                    >
+                      {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {passwordsMatch && (
+                    <p className="text-[11px] font-medium text-emerald-500 flex items-center gap-1 pt-1">
+                      <CheckCircle2 className="h-3 w-3" /> Passwords match
+                    </p>
+                  )}
+                  {passwordsMismatch && (
+                    <p className="text-[11px] font-medium text-red-500 flex items-center gap-1 pt-1">
+                      <AlertTriangle className="h-3 w-3" /> Passwords do not match
+                    </p>
+                  )}
+                </motion.div>
+              </div>
+
+              {/* Submit */}
+              <motion.div variants={fadeUp} className="pt-2">
+                <Button
+                  type="submit"
+                  className="w-full h-12 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all duration-200 group"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Create Account
+                      <UserPlus className="ml-2 h-4 w-4 transition-transform group-hover:scale-105" />
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+            </motion.div>
+          </form>
+
+          {/* Verification notice */}
+          {(role === "DOCTOR" || role === "PHARMACY") && (
+            <motion.div
+              variants={fadeUp}
+              className="mt-5 rounded-xl bg-amber-500/10 border border-amber-500/20 p-4 text-xs text-amber-500 leading-relaxed"
+            >
+              <strong className="block mb-1 font-semibold text-[10px] uppercase tracking-wider">Verification Required</strong>
+              Doctor and Pharmacy accounts require admin verification before full platform access.
+            </motion.div>
+          )}
+
+          {/* Secure indicator */}
+          <motion.div variants={fadeUp} className="mt-5 flex items-center justify-center gap-1.5 text-xs text-muted-foreground/60">
+            <Shield className="h-3 w-3" />
+            <span>Secured with end-to-end encryption</span>
+          </motion.div>
+
+          {/* Sign in link */}
+          <motion.p variants={fadeUp} className="mt-6 text-center text-sm text-muted-foreground pb-6">
+            Already have an account?{" "}
+            <Link href="/login" className="font-medium text-blue-500 hover:text-blue-400 transition-colors">
+              Sign in
+            </Link>
+          </motion.p>
+        </motion.div>
       </div>
     </div>
   );

@@ -7,7 +7,12 @@ from app.core.config import settings
 from app.models.prescription import Prescription
 from app.models.user import User, UserStatus
 from app.schemas.response import APIResponse
+from app.dependencies.auth import get_current_user, RoleChecker
+from app.models.user import UserRole
+from app.schemas.session import AuthenticatedPrincipal
 from pydantic import BaseModel
+from sqlalchemy import text
+from datetime import datetime, timezone
 import uuid
 
 router = APIRouter()
@@ -21,11 +26,13 @@ class VerifyResponse(BaseModel):
     blockchain_status: str
     blockchain_tx: str
     is_dispensed: bool
+require_pharmacy = RoleChecker([UserRole.PHARMACY])
 
 @router.get("/qr/{token}", response_model=APIResponse[VerifyResponse])
 async def verify_qr(
     token: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_pharmacy)
 ):
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
@@ -55,6 +62,32 @@ async def verify_qr(
         raise HTTPException(status_code=403, detail="Prescribing doctor is no longer active")
         
     # The frontend will enforce dispensing blockers if `is_dispensed` is True
+    if rx.is_revoked:
+        raise HTTPException(status_code=403, detail="Prescription has been revoked")
+        
+    if rx.expires_at:
+        try:
+            exp_date = datetime.fromisoformat(rx.expires_at.replace("Z", "+00:00"))
+            if exp_date < datetime.now(timezone.utc):
+                raise HTTPException(status_code=403, detail="Prescription has expired")
+        except ValueError:
+            pass
+            
+    if rx.blockchain_status != "CONFIRMED":
+        raise HTTPException(status_code=403, detail="Prescription is not verified on the blockchain")
+
+    # Log verification event
+    log_stmt = text("""
+        INSERT INTO qr_verification_logs (id, prescription_id, scanned_by, status) 
+        VALUES (:id, :rx_id, :pharmacy_id, :status)
+    """)
+    await db.execute(log_stmt, {
+        "id": uuid.uuid4(),
+        "rx_id": rx.id,
+        "pharmacy_id": current_user.id,
+        "status": "SUCCESS"
+    })
+    await db.commit()
     
     return APIResponse(
         message="Verification Successful",

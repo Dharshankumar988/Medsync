@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { supabase } from './supabase';
 
 const api = axios.create({
@@ -12,34 +12,93 @@ const api = axios.create({
 let _cachedToken: string | null = null;
 let _tokenExpiry: number = 0;
 
-api.interceptors.request.use(async (config) => {
+// Performance Optimization: Deduplication and Caching for GET requests
+const pendingRequests = new Map<string, Promise<AxiosResponse>>();
+const responseCache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL = 30000; // 30 seconds cache for identical GET requests
+
+api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const now = Date.now();
   if (_cachedToken && now < _tokenExpiry) {
     config.headers.Authorization = `Bearer ${_cachedToken}`;
-    return config;
+  } else {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token ?? null;
+    if (token) {
+      _cachedToken = token;
+      _tokenExpiry = now + 4 * 60 * 1000; // Cache for 4 minutes
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
 
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token ?? null;
-  if (token) {
-    _cachedToken = token;
-    _tokenExpiry = now + 4 * 60 * 1000; // Cache for 4 minutes
-    config.headers.Authorization = `Bearer ${token}`;
+  // Deduplication and caching logic (only for GET requests)
+  if (config.method?.toLowerCase() === 'get' && config.url) {
+    const cacheKey = `${config.url}?${new URLSearchParams(config.params || {}).toString()}`;
+    
+    // 1. Check Cache
+    const cached = responseCache.get(cacheKey);
+    if (cached && now - cached.timestamp < CACHE_TTL) {
+      // Return a mocked adapter to resolve immediately with cached data
+      config.adapter = () => Promise.resolve({
+        data: cached.data,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+        request: {}
+      });
+      return config;
+    }
+
+    // 2. Check Pending Requests (Deduplication)
+    if (pendingRequests.has(cacheKey)) {
+      config.adapter = () => pendingRequests.get(cacheKey) as Promise<AxiosResponse>;
+      return config;
+    }
   }
+
   return config;
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response: AxiosResponse) => {
+    // Cache the successful GET response
+    if (response.config.method?.toLowerCase() === 'get' && response.config.url) {
+      const cacheKey = `${response.config.url}?${new URLSearchParams(response.config.params || {}).toString()}`;
+      responseCache.set(cacheKey, { data: response.data, timestamp: Date.now() });
+      pendingRequests.delete(cacheKey);
+    }
+    return response;
+  },
   async (error) => {
+    if (error.config?.method?.toLowerCase() === 'get' && error.config?.url) {
+      const cacheKey = `${error.config.url}?${new URLSearchParams(error.config.params || {}).toString()}`;
+      pendingRequests.delete(cacheKey);
+    }
+    
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       console.error("401 Unauthorized API Call:", error.config?.url);
-      // Temporarily disabled automatic signout to debug the login loop
-      // await supabase.auth.signOut();
-      // window.location.href = '/login';
     }
     return Promise.reject(error);
   }
 );
+
+// Helper to wrap axios get to actually populate pendingRequests
+const originalGet = api.get;
+api.get = async function(url: string, config?: any) {
+    const cacheKey = `${url}?${new URLSearchParams(config?.params || {}).toString()}`;
+    if (!pendingRequests.has(cacheKey)) {
+        const reqPromise = originalGet.call(this, url, config);
+        pendingRequests.set(cacheKey, reqPromise);
+        try {
+            const res = await reqPromise;
+            return res;
+        } catch(e) {
+            pendingRequests.delete(cacheKey);
+            throw e;
+        }
+    }
+    return pendingRequests.get(cacheKey);
+}
 
 export default api;

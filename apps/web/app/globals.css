@@ -5,12 +5,12 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
+    --foreground: 0 0% 9%;
     
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
+    --card-foreground: 0 0% 9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
+    --popover-foreground: 0 0% 9%;
     
     /* Default Role (Patient/Blue) */
     --role-primary: 221 83% 53%;
@@ -40,15 +40,13 @@
   }
 
   .dark {
-    /* Pure Black / Near Black */
-    --background: 0 0% 0%; 
-    --foreground: 210 20% 98%;
+    --background: 0 0% 2%;
+    --foreground: 0 0% 96%;
     
-    /* Slate */
-    --card: 215 28% 12%; 
-    --card-foreground: 210 20% 98%;
-    --popover: 215 28% 12%;
-    --popover-foreground: 210 20% 98%;
+    --card: 0 0% 6%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 96%;
     
     /* Default Role (Patient/Blue) */
     --role-primary: 221 83% 53%;
@@ -57,22 +55,22 @@
     --primary: var(--role-primary);
     --primary-foreground: var(--role-primary-foreground);
     
-    --secondary: 215 28% 17%;
-    --secondary-foreground: 210 20% 98%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 96%;
     
-    --muted: 215 28% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 55%;
     
-    --accent: 215 28% 17%; 
-    --accent-foreground: 210 20% 98%;
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 96%;
     
     --destructive: 0 63% 31%;
     --destructive-foreground: 210 20% 98%;
     
-    --border: 215 28% 17%;
-    --input: 215 28% 17%;
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
     --ring: var(--role-primary);
-    --panel: 215 28% 12%;
+    --panel: 0 0% 6%;
   }
 
   /* --- ROLE BASED THEMING --- */
@@ -114,14 +112,33 @@
   }
 }
 
+/* ===== Landing Page ===== */
+
+.landing-section {
+  @apply relative px-6 md:px-8 lg:px-12;
+}
+
+.landing-container {
+  @apply mx-auto w-full max-w-6xl;
+}
+
+.landing-bg {
+  background-color: hsl(0 0% 2%);
+  color: hsl(0 0% 96%);
+}
+
+/* Dot pattern background */
+.dot-pattern {
+  background-image: radial-gradient(circle, hsl(0 0% 100% / 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
 /* ===== Performance Utilities ===== */
 
-/* Smooth scrolling */
 html {
   scroll-behavior: smooth;
 }
 
-/* Reduced motion for accessibility */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -131,7 +148,6 @@ html {
   }
 }
 
-/* GPU-accelerated skeleton shimmer animation */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -143,14 +159,30 @@ html {
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
-/* Content visibility optimization for off-screen content */
 .content-auto {
   content-visibility: auto;
   contain-intrinsic-size: auto 500px;
 }
 
-/* GPU acceleration hint for animated elements */
 .gpu-accelerated {
   will-change: transform;
   transform: translateZ(0);
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes float-slow-reverse {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(12px); }
+}
+
+.animate-float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+.animate-float-slow-reverse {
+  animation: float-slow-reverse 7s ease-in-out infinite;
 }
