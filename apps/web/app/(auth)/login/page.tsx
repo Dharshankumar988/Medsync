@@ -73,31 +73,46 @@ export default function LoginPage() {
           {/* Floating composition */}
           <div className="relative h-64 w-64 mb-12" aria-hidden="true">
             {/* Connecting lines */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 256 256" fill="none">
-              <line x1="128" y1="128" x2="48" y2="20" className="stroke-border" strokeWidth="1" />
-              <line x1="128" y1="128" x2="220" y2="40" className="stroke-border" strokeWidth="1" />
-              <line x1="128" y1="128" x2="36" y2="200" className="stroke-border" strokeWidth="1" />
-              <line x1="128" y1="128" x2="210" y2="220" className="stroke-border" strokeWidth="1" />
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 256 256" fill="none">
+              <line x1="128" y1="128" x2="48" y2="20" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+              <line x1="128" y1="128" x2="220" y2="40" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+              <line x1="128" y1="128" x2="36" y2="200" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+              <line x1="128" y1="128" x2="210" y2="220" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
             </svg>
 
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-28 w-28 rounded-3xl bg-card border border-border flex items-center justify-center shadow-2xl shadow-black/5 dark:shadow-black/30 animate-float-slow">
-                <Shield className="h-12 w-12 text-blue-500" />
+            <div className="absolute inset-0 flex items-center justify-center z-10 group cursor-default">
+              <div className="relative h-28 w-28 rounded-3xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-xl border border-border/50 dark:border-white/[0.08] shadow-2xl flex items-center justify-center overflow-hidden animate-float-slow transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <div className="absolute inset-0 bg-blue-500/5 dark:bg-blue-500/10" />
+                <div className="absolute -inset-4 bg-gradient-to-tr from-blue-500/10 to-transparent blur-xl opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
+                <Shield className="h-12 w-12 text-blue-500 relative z-10" strokeWidth={1.5} />
+              </div>
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap z-20 shadow-xl">
+                Secure Authentication
               </div>
             </div>
-            <div className="absolute top-0 right-3 animate-float-slow-reverse">
-              <div className="h-12 w-12 rounded-xl bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
-                <LockKeyhole className="h-5 w-5 text-muted-foreground" />
+            
+            <div className="absolute top-0 right-3 animate-float-slow-reverse group cursor-default z-10">
+              <div className="h-12 w-12 rounded-[14px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <LockKeyhole className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+                End-to-End Encryption
               </div>
             </div>
-            <div className="absolute bottom-4 left-0 animate-float-slow" style={{ animationDelay: "1.5s" }}>
-              <div className="h-11 w-11 rounded-xl bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
-                <Activity className="h-5 w-5 text-muted-foreground" />
+            <div className="absolute bottom-4 left-0 animate-float-slow group cursor-default z-10" style={{ animationDelay: "1.5s" }}>
+              <div className="h-11 w-11 rounded-[14px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <Activity className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+                Live Monitoring
               </div>
             </div>
-            <div className="absolute bottom-8 right-0 animate-float-slow-reverse" style={{ animationDelay: "0.8s" }}>
-              <div className="h-10 w-10 rounded-lg bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
-                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+            <div className="absolute bottom-8 right-0 animate-float-slow-reverse group cursor-default z-10" style={{ animationDelay: "0.8s" }}>
+              <div className="h-10 w-10 rounded-[12px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+                Verified Access
               </div>
             </div>
           </div>

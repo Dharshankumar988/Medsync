@@ -11,11 +11,13 @@ from app.models.user import User, UserRole
 from app.models.pharmacy_system import MedicineInventory, Medicine, Supplier
 from app.schemas.pharmacy_system import MedicineInventoryResponse, MedicineInventoryCreate, MedicineResponse
 from app.schemas.response import APIResponse
+from app.utils.cache import async_ttl_cache
 
 router = APIRouter()
 require_pharmacy = RoleChecker([UserRole.PHARMACY])
 
 @router.get("/", response_model=APIResponse)
+@async_ttl_cache(ttl_seconds=60)
 async def get_inventory(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_pharmacy),

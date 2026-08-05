@@ -106,33 +106,42 @@ function HeroComposition() {
   return (
     <div className="relative h-[420px] w-full" aria-hidden="true">
       {/* Connecting lines from center to orbiting elements */}
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 420" fill="none">
-        <line x1="200" y1="210" x2="80"  y2="80"  className="stroke-border" strokeWidth="1" />
-        <line x1="200" y1="210" x2="330" y2="70"  className="stroke-border" strokeWidth="1" />
-        <line x1="200" y1="210" x2="345" y2="240" className="stroke-border" strokeWidth="1" />
-        <line x1="200" y1="210" x2="330" y2="360" className="stroke-border" strokeWidth="1" />
-        <line x1="200" y1="210" x2="80"  y2="370" className="stroke-border" strokeWidth="1" />
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 400 420" fill="none">
+        <line x1="200" y1="210" x2="68"  y2="78"  className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+        <line x1="200" y1="210" x2="330" y2="63"  className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+        <line x1="200" y1="210" x2="350" y2="226" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+        <line x1="200" y1="210" x2="330" y2="360" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+        <line x1="200" y1="210" x2="64"  y2="370" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
       </svg>
 
       {/* Central shield — larger, more prominent */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 group cursor-default">
         <motion.div
           animate={{ y: [0, -8, 0] }}
           transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-          className="h-[120px] w-[120px] rounded-[28px] bg-card border border-border shadow-2xl shadow-black/10 dark:shadow-black/40 flex items-center justify-center"
+          className="relative h-[120px] w-[120px] rounded-[32px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-xl border border-border/50 dark:border-white/[0.08] shadow-2xl flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20"
         >
-          <Shield className="h-12 w-12 text-blue-500" />
+          <div className="absolute inset-0 bg-blue-500/5 dark:bg-blue-500/10" />
+          <div className="absolute -inset-4 bg-gradient-to-tr from-blue-500/10 to-transparent blur-xl opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
+          <Shield className="h-12 w-12 text-blue-500 relative z-10" strokeWidth={1.5} />
         </motion.div>
+        {/* Tooltip */}
+        <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap z-20 shadow-xl">
+          Core Security
+        </div>
       </div>
 
       {/* Orbiting element — Top Left (Fingerprint) */}
       <motion.div
         animate={{ y: [0, 8, 0] }}
         transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-[50px] left-[40px]"
+        className="absolute top-[50px] left-[40px] group cursor-default z-10"
       >
-        <div className="h-[56px] w-[56px] rounded-2xl bg-card border border-border shadow-lg shadow-black/5 dark:shadow-black/20 flex items-center justify-center">
-          <Fingerprint className="h-6 w-6 text-muted-foreground" />
+        <div className="h-[56px] w-[56px] rounded-[18px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+          <Fingerprint className="h-6 w-6 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+        </div>
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+          Identity Verification
         </div>
       </motion.div>
 
@@ -140,10 +149,13 @@ function HeroComposition() {
       <motion.div
         animate={{ y: [0, -10, 0] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        className="absolute top-[35px] right-[30px]"
+        className="absolute top-[35px] right-[30px] group cursor-default z-10"
       >
-        <div className="h-[56px] w-[56px] rounded-2xl bg-card border border-border shadow-lg shadow-black/5 dark:shadow-black/20 flex items-center justify-center">
-          <Brain className="h-6 w-6 text-muted-foreground" />
+        <div className="h-[56px] w-[56px] rounded-[18px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+          <Brain className="h-6 w-6 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+        </div>
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+          AI Diagnostics
         </div>
       </motion.div>
 
@@ -151,10 +163,13 @@ function HeroComposition() {
       <motion.div
         animate={{ y: [0, 10, 0] }}
         transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-        className="absolute top-[200px] right-[10px]"
+        className="absolute top-[200px] right-[10px] group cursor-default z-10"
       >
-        <div className="h-[52px] w-[52px] rounded-xl bg-card border border-border shadow-lg shadow-black/5 dark:shadow-black/20 flex items-center justify-center">
-          <Zap className="h-5 w-5 text-muted-foreground" />
+        <div className="h-[52px] w-[52px] rounded-2xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+          <Zap className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+        </div>
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+          Real-time Sync
         </div>
       </motion.div>
 
@@ -162,10 +177,13 @@ function HeroComposition() {
       <motion.div
         animate={{ y: [0, -8, 0] }}
         transition={{ duration: 7.5, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-        className="absolute bottom-[25px] right-[30px]"
+        className="absolute bottom-[25px] right-[30px] group cursor-default z-10"
       >
-        <div className="h-[52px] w-[52px] rounded-xl bg-card border border-border shadow-lg shadow-black/5 dark:shadow-black/20 flex items-center justify-center">
-          <FileText className="h-5 w-5 text-muted-foreground" />
+        <div className="h-[52px] w-[52px] rounded-2xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+          <FileText className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+        </div>
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+          Medical Records
         </div>
       </motion.div>
 
@@ -173,10 +191,13 @@ function HeroComposition() {
       <motion.div
         animate={{ y: [0, 10, 0] }}
         transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-        className="absolute bottom-[20px] left-[40px]"
+        className="absolute bottom-[20px] left-[40px] group cursor-default z-10"
       >
-        <div className="h-[48px] w-[48px] rounded-xl bg-card border border-border shadow-lg shadow-black/5 dark:shadow-black/20 flex items-center justify-center">
-          <Heart className="h-5 w-5 text-muted-foreground" />
+        <div className="h-[48px] w-[48px] rounded-2xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+          <Heart className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+        </div>
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+          Patient Vitals
         </div>
       </motion.div>
     </div>
@@ -296,30 +317,6 @@ export default function Home() {
               >
                 <HeroComposition />
               </motion.div>
-            </div>
-          </div>
-        </section>
-
-        {/* ━━━ TRUST BAR ━━━ */}
-        <section className="border-y border-border/60 py-14">
-          <div className="mx-auto max-w-6xl px-6">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
-              {[
-                { icon: ShieldCheck, value: "256-bit", label: "AES Encryption" },
-                { icon: Globe, value: "99.9%", label: "Uptime Guarantee" },
-                { icon: Award, value: "HIPAA", label: "Compliant" },
-                { icon: Clock, value: "24/7", label: "System Monitoring" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
-                    <item.icon className="h-5 w-5 text-blue-500" />
-                  </div>
-                  <div>
-                    <p className="text-base font-bold text-foreground leading-none">{item.value}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.label}</p>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </section>

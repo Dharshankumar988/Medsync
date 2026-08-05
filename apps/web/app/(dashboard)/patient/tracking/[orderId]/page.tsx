@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
+import dynamic from "next/dynamic";
+
+const TrackingMap = dynamic(() => import("@/components/TrackingMap"), { ssr: false });
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
@@ -13,31 +13,7 @@ import { CheckCircle2, Navigation, Package, Clock, ShieldCheck, MapPin } from "l
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
-// Fix for default Leaflet icons not loading in Next.js
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-});
 
-const deliveryIcon = new L.Icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/512/3063/3063822.png", // Delivery bike icon
-  iconSize: [40, 40],
-  iconAnchor: [20, 20],
-});
-
-const pharmacyIcon = new L.Icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/512/4320/4320337.png", // Pharmacy icon
-  iconSize: [40, 40],
-  iconAnchor: [20, 40],
-});
-
-const patientIcon = new L.Icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/512/2991/2991231.png", // Home/Patient icon
-  iconSize: [40, 40],
-  iconAnchor: [20, 40],
-});
 
 export default function PatientTrackingPage() {
   const params = useParams();
@@ -189,34 +165,14 @@ export default function PatientTrackingPage() {
       {/* Map Card */}
       <Card className="overflow-hidden shadow-lg border-primary/10">
         <div className="h-[450px] w-full bg-slate-100 dark:bg-slate-800 relative">
-          {typeof window !== "undefined" && currentPos && trackingData.start_lat && trackingData.end_lat && (
-            <MapContainer 
-              center={currentPos} 
-              zoom={14} 
-              style={{ height: "100%", width: "100%", zIndex: 0 }}
-            >
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution="&copy; OpenStreetMap contributors"
+          {typeof window !== "undefined" && currentPos && (
+            <div className="mt-8">
+              <TrackingMap 
+                currentPos={currentPos} 
+                startPos={[trackingData.start_lat, trackingData.start_lng]} 
+                endPos={[trackingData.end_lat, trackingData.end_lng]} 
               />
-              
-              {/* Pharmacy */}
-              <Marker position={[trackingData.start_lat, trackingData.start_lng]} icon={pharmacyIcon}>
-                <Popup>Pharmacy</Popup>
-              </Marker>
-              
-              {/* Delivery Driver */}
-              {!isDelivered && (
-                <Marker position={currentPos} icon={deliveryIcon}>
-                  <Popup>{trackingData.driver_name} - {trackingData.vehicle_type}</Popup>
-                </Marker>
-              )}
-
-              {/* Patient Location */}
-              <Marker position={[trackingData.end_lat, trackingData.end_lng]} icon={patientIcon}>
-                <Popup>Delivery Address</Popup>
-              </Marker>
-            </MapContainer>
+            </div>
           )}
           {!currentPos && (
              <div className="flex items-center justify-center h-full">

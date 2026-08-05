@@ -152,31 +152,46 @@ export default function RegisterPage() {
           {/* Floating composition (matching login/landing page style) */}
           <div className="relative h-56 w-56 mb-10" aria-hidden="true">
             {/* Connecting lines */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 224 224" fill="none">
-              <line x1="112" y1="112" x2="30" y2="10" className="stroke-border" strokeWidth="1" />
-              <line x1="112" y1="112" x2="200" y2="20" className="stroke-border" strokeWidth="1" />
-              <line x1="112" y1="112" x2="20" y2="180" className="stroke-border" strokeWidth="1" />
-              <line x1="112" y1="112" x2="190" y2="200" className="stroke-border" strokeWidth="1" />
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 224 224" fill="none">
+              <line x1="112" y1="112" x2="30" y2="10" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+              <line x1="112" y1="112" x2="200" y2="20" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+              <line x1="112" y1="112" x2="20" y2="180" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
+              <line x1="112" y1="112" x2="190" y2="200" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
             </svg>
 
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-24 w-24 rounded-3xl bg-card border border-border flex items-center justify-center shadow-2xl shadow-black/5 dark:shadow-black/30 animate-float-slow">
-                <UserPlus className="h-10 w-10 text-blue-500" />
+            <div className="absolute inset-0 flex items-center justify-center z-10 group cursor-default">
+              <div className="relative h-24 w-24 rounded-3xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-xl border border-border/50 dark:border-white/[0.08] shadow-2xl flex items-center justify-center overflow-hidden animate-float-slow transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <div className="absolute inset-0 bg-blue-500/5 dark:bg-blue-500/10" />
+                <div className="absolute -inset-4 bg-gradient-to-tr from-blue-500/10 to-transparent blur-xl opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
+                <UserPlus className="h-10 w-10 text-blue-500 relative z-10" strokeWidth={1.5} />
+              </div>
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap z-20 shadow-xl">
+                Create Profile
               </div>
             </div>
-            <div className="absolute top-0 right-1 animate-float-slow-reverse">
-              <div className="h-11 w-11 rounded-xl bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
-                <Shield className="h-5 w-5 text-muted-foreground" />
+            
+            <div className="absolute top-0 right-1 animate-float-slow-reverse group cursor-default z-10">
+              <div className="h-11 w-11 rounded-[14px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <Shield className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+                Secure Network
               </div>
             </div>
-            <div className="absolute bottom-2 left-0 animate-float-slow" style={{ animationDelay: "1s" }}>
-              <div className="h-10 w-10 rounded-lg bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
-                <Activity className="h-4 w-4 text-muted-foreground" />
+            <div className="absolute bottom-2 left-0 animate-float-slow group cursor-default z-10" style={{ animationDelay: "1s" }}>
+              <div className="h-10 w-10 rounded-[14px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <Activity className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+                Health Insights
               </div>
             </div>
-            <div className="absolute bottom-6 right-0 animate-float-slow-reverse" style={{ animationDelay: "2s" }}>
-              <div className="h-9 w-9 rounded-lg bg-card border border-border flex items-center justify-center shadow-lg shadow-black/5 dark:shadow-black/20">
-                <Heart className="h-4 w-4 text-muted-foreground" />
+            <div className="absolute bottom-6 right-0 animate-float-slow-reverse group cursor-default z-10" style={{ animationDelay: "2s" }}>
+              <div className="h-9 w-9 rounded-[12px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <Heart className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
+                Patient Care
               </div>
             </div>
           </div>

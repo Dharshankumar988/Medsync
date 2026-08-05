@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.schemas.response import APIResponse
+from app.utils.cache import async_ttl_cache
 from app.models.hospital import Hospital
 from app.models.user import UserRole
 import uuid
@@ -40,6 +41,7 @@ class HospitalResponse(HospitalCreate):
     model_config = {"from_attributes": True}
 
 @router.get("/", response_model=APIResponse[List[HospitalResponse]])
+@async_ttl_cache(ttl_seconds=60)
 async def list_hospitals(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
