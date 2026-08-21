@@ -9,9 +9,10 @@ from app.repositories.ai_chat import chat_session_repo, chat_message_repo
 from app.schemas.ai import ChatRequest
 from app.ai.prompts.templates import PHARMACY_SYSTEM_PROMPT
 from app.ai.core.service_manager import ai_service_manager
-from app.ai.rag.retriever import RAGRetriever
 from app.ai.core.conversation import ConversationManager
+from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.config import ai_config
+from app.ai.rag.retriever import RAGRetriever
 
 logger = logging.getLogger("medsync.ai.pharmacy")
 
@@ -50,19 +51,17 @@ class PharmacyAIService:
 
     @staticmethod
     async def _build_messages(db: AsyncSession, session_id: uuid.UUID, user_message: str, specific_instruction: str = None) -> List[Dict[str, str]]:
-        rag_context = await RAGRetriever.retrieve_context(user_message)
-        
+        rag_context = await RAGRetriever.retrieve_context(user_message, role="pharmacy", db=db)
         system_msg_content = PHARMACY_SYSTEM_PROMPT.format(rag_context=rag_context)
-        if specific_instruction:
-            system_msg_content += f"\n\nCRITICAL INSTRUCTION FOR THIS REQUEST: {specific_instruction}"
 
         history = await ConversationManager.get_recent_messages(db, session_id)
         
-        messages = [{"role": "system", "content": system_msg_content}]
-        messages.extend(history)
-        messages.append({"role": "user", "content": user_message})
-        
-        return messages
+        return PromptManager.build_messages(
+            system_prompt=system_msg_content,
+            history=history,
+            user_message=user_message,
+            specific_instruction=specific_instruction,
+        )
 
     @staticmethod
     async def handle_chat(db: AsyncSession, pharmacy_id: uuid.UUID, req: ChatRequest) -> Dict[str, Any]:

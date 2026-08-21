@@ -166,3 +166,104 @@ async def get_admins(
     } for user in users]
     
     return APIResponse(message="Admins retrieved", data=data)
+
+from pydantic import BaseModel
+from typing import Optional
+
+class AdminPharmacyCreate(BaseModel):
+    business_name: str
+    license_number: str
+    address: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    pincode: Optional[str] = None
+    contact_number: Optional[str] = None
+    email: str
+    latitude: float
+    longitude: float
+
+@router.get("/pharmacies", response_model=APIResponse[list[dict]])
+async def get_all_pharmacies(
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200)
+):
+    stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    rows = result.all()
+    
+    data = []
+    for pharmacy, user in rows:
+        location_data = pharmacy.location if hasattr(pharmacy, 'location') and pharmacy.location else {}
+        data.append({
+            "id": str(pharmacy.id),
+            "user_id": str(pharmacy.user_id),
+            "business_name": pharmacy.business_name,
+            "license_number": pharmacy.license_number,
+            "address": pharmacy.address,
+            "city": pharmacy.city,
+            "state": pharmacy.state,
+            "contact_number": pharmacy.contact_number,
+            "email": user.email,
+            "location": location_data
+        })
+    return APIResponse(message="Pharmacies retrieved", data=data)
+
+@router.post("/pharmacies", response_model=APIResponse)
+async def create_pharmacy_admin(
+    req: AdminPharmacyCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    import uuid
+    from fastapi import HTTPException
+    
+    user_stmt = select(User).where(User.email == req.email)
+    existing_user = await db.scalar(user_stmt)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+        
+    user_id = uuid.uuid4()
+    new_user = User(
+        id=user_id,
+        email=req.email,
+        role=UserRole.PHARMACY,
+        status="ACTIVE",
+        is_verified=True,
+        profile_completion_percentage=100
+    )
+    db.add(new_user)
+    
+    new_pharmacy = Pharmacy(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        business_name=req.business_name,
+        license_number=req.license_number,
+        address=req.address,
+        city=req.city,
+        state=req.state,
+        country=req.country,
+        pincode=req.pincode,
+        contact_number=req.contact_number,
+        location={"latitude": req.latitude, "longitude": req.longitude},
+        blockchain_status="PENDING"
+    )
+    db.add(new_pharmacy)
+    await db.commit()
+    
+    try:
+        from app.services.blockchain_sync import BlockchainSyncService
+        from app.models.blockchain import SyncEntityType, SyncActionType
+        await BlockchainSyncService.enqueue_sync_task(
+            db=db,
+            entity_type=SyncEntityType.PHARMACY,
+            entity_id=new_user.id,
+            action_type=SyncActionType.CREATE
+        )
+        await db.commit()
+    except Exception:
+        pass
+        
+    return APIResponse(message="Pharmacy created successfully", data={"pharmacy_id": str(new_pharmacy.id)})

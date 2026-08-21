@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 import logging
-from typing import List
+from typing import List, Optional
 
 from app.dependencies.db import get_db
 from app.dependencies.auth import RoleChecker
@@ -12,22 +12,19 @@ from app.schemas.response import APIResponse
 from app.schemas.session import AuthenticatedPrincipal
 from app.schemas.ai import (
     ChatRequest, ChatResponse, AIChatSessionResponse, 
-    AIChatMessageResponse, SessionPinRequest, 
+    AIChatMessageResponse, SessionPinRequest, SessionRenameRequest,
     AIHealthResponse, ImageAnalysisResponse
 )
-import cv2
-import numpy as np
-import asyncio
-from app.ai.services.groq_client import groq_client
+from app.dependencies.rate_limit import limiter
 
 # Services
 from app.services.doctor_ai import DoctorAIService
 from app.services.patient_ai import PatientAIService
 from app.services.pharmacy_ai import PharmacyAIService
 from app.services.admin_ai import AdminAIService
-from app.ai.services.yolo import YOLOService
-from app.ai.services.efficientnet import EfficientNetService
+from app.ai.services.image_analysis import ImageAnalysisService
 from app.ai.core.service_manager import ai_service_manager
+from app.ai.core.orchestrator import AIOrchestrator
 from app.repositories.ai_chat import chat_session_repo, chat_message_repo
 from app.ai.core.exceptions import AIException
 
@@ -41,144 +38,81 @@ require_patient = RoleChecker([UserRole.PATIENT])
 require_pharmacy = RoleChecker([UserRole.PHARMACY])
 require_admin = RoleChecker([UserRole.ADMIN])
 require_any_user = RoleChecker([UserRole.DOCTOR, UserRole.PATIENT, UserRole.PHARMACY, UserRole.ADMIN])
+require_doctor_or_patient = RoleChecker([UserRole.DOCTOR, UserRole.PATIENT])
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 # ==========================================
-# DOCTOR ENDPOINTS
+# UNIFIED PULSE ENDPOINTS
 # ==========================================
 
-@router.post("/doctor/chat", response_model=APIResponse[ChatResponse])
-async def doctor_chat(
+@router.post("/pulse/chat", response_model=APIResponse[ChatResponse])
+@limiter.limit("20/minute")
+async def pulse_chat(
+    request: Request,
     req: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_doctor)
+    current_user: AuthenticatedPrincipal = Depends(require_any_user)
 ):
     try:
-        result = await DoctorAIService.handle_chat(db, current_user.id, req)
+        role = current_user.role.value.lower()
+        AIOrchestrator.validate_request(req.message, role)
+        
+        if role == "doctor":
+            result = await DoctorAIService.handle_chat(db, current_user.id, req)
+        elif role == "patient":
+            result = await PatientAIService.handle_chat(db, current_user.id, req)
+        elif role == "pharmacy":
+            result = await PharmacyAIService.handle_chat(db, current_user.id, req)
+        elif role == "admin":
+            result = await AdminAIService.handle_chat(db, current_user.id, req)
+        else:
+            raise HTTPException(status_code=403, detail="Role not supported by PULSE")
+            
         return APIResponse(message="Success", data=result)
     except AIException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Doctor chat failed: {e}", exc_info=True)
+        logger.error(f"PULSE chat failed for role {current_user.role.value}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal AI service error.")
 
-@router.post("/doctor/chat/stream")
-async def doctor_chat_stream(
+@router.post("/pulse/chat/stream")
+@limiter.limit("40/minute")
+async def pulse_chat_stream(
+    request: Request,
     req: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_doctor)
+    current_user: AuthenticatedPrincipal = Depends(require_any_user)
 ):
     try:
-        generator = DoctorAIService.handle_chat_stream(db, current_user.id, req)
+        role = current_user.role.value.lower()
+        AIOrchestrator.validate_request(req.message, role)
+        
+        if role == "doctor":
+            generator = DoctorAIService.handle_chat_stream(db, current_user.id, req)
+        elif role == "patient":
+            generator = PatientAIService.handle_chat_stream(db, current_user.id, req)
+        elif role == "pharmacy":
+            generator = PharmacyAIService.handle_chat_stream(db, current_user.id, req)
+        elif role == "admin":
+            generator = AdminAIService.handle_chat_stream(db, current_user.id, req)
+        else:
+            raise HTTPException(status_code=403, detail="Role not supported by PULSE")
+            
         return StreamingResponse(generator, media_type="text/event-stream")
     except AIException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Doctor stream failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal AI service error.")
-
-# ==========================================
-# PATIENT ENDPOINTS
-# ==========================================
-
-@router.post("/patient/chat", response_model=APIResponse[ChatResponse])
-async def patient_chat(
-    req: ChatRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_patient)
-):
-    try:
-        result = await PatientAIService.handle_chat(db, current_user.id, req)
-        return APIResponse(message="Success", data=result)
-    except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
-    except Exception as e:
-        logger.error(f"Patient chat failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal AI service error.")
-
-@router.post("/patient/chat/stream")
-async def patient_chat_stream(
-    req: ChatRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_patient)
-):
-    try:
-        generator = PatientAIService.handle_chat_stream(db, current_user.id, req)
-        return StreamingResponse(generator, media_type="text/event-stream")
-    except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
-    except Exception as e:
-        logger.error(f"Patient stream failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal AI service error.")
-
-# ==========================================
-# PHARMACY ENDPOINTS
-# ==========================================
-
-@router.post("/pharmacy/chat", response_model=APIResponse[ChatResponse])
-async def pharmacy_chat(
-    req: ChatRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_pharmacy)
-):
-    try:
-        result = await PharmacyAIService.handle_chat(db, current_user.id, req)
-        return APIResponse(message="Success", data=result)
-    except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
-    except Exception as e:
-        logger.error(f"Pharmacy chat failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal AI service error.")
-
-@router.post("/pharmacy/chat/stream")
-async def pharmacy_chat_stream(
-    req: ChatRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_pharmacy)
-):
-    try:
-        generator = PharmacyAIService.handle_chat_stream(db, current_user.id, req)
-        return StreamingResponse(generator, media_type="text/event-stream")
-    except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
-    except Exception as e:
-        logger.error(f"Pharmacy stream failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal AI service error.")
-
-# ==========================================
-# ADMIN ENDPOINTS
-# ==========================================
-
-@router.post("/admin/chat", response_model=APIResponse[ChatResponse])
-async def admin_chat(
-    req: ChatRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_admin)
-):
-    try:
-        result = await AdminAIService.handle_chat(db, current_user.id, req)
-        return APIResponse(message="Success", data=result)
-    except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
-    except Exception as e:
-        logger.error(f"Admin chat failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal AI service error.")
-
-@router.post("/admin/chat/stream")
-async def admin_chat_stream(
-    req: ChatRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_admin)
-):
-    try:
-        generator = AdminAIService.handle_chat_stream(db, current_user.id, req)
-        return StreamingResponse(generator, media_type="text/event-stream")
-    except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
-    except Exception as e:
-        logger.error(f"Admin stream failed: {e}", exc_info=True)
+        logger.error(f"PULSE stream failed for role {current_user.role.value}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal AI service error.")
 
 # ==========================================
@@ -258,30 +192,86 @@ async def pin_session(
         logger.error(f"Pin session failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update session pin status.")
 
+@router.patch("/sessions/{session_id}/rename", response_model=APIResponse[AIChatSessionResponse])
+async def rename_session(
+    session_id: uuid.UUID,
+    req: SessionRenameRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_any_user)
+):
+    try:
+        session = await chat_session_repo.get(db, session_id)
+        if not session or session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this session.")
+        
+        session.title = req.title
+        await db.commit()
+        await db.refresh(session)
+        return APIResponse(message="Session renamed", data=session)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Rename session failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to rename session.")
+
+@router.get("/sessions/search", response_model=APIResponse[List[AIChatSessionResponse]])
+async def search_sessions(
+    q: str = Query(..., min_length=1, max_length=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_any_user)
+):
+    try:
+        from sqlalchemy import select
+        from app.models.ai_chat import AIChatSession
+        
+        result = await db.execute(
+            select(AIChatSession)
+            .filter(AIChatSession.user_id == current_user.id)
+            .filter(AIChatSession.title.ilike(f"%{q}%"))
+            .order_by(AIChatSession.created_at.desc())
+        )
+        sessions = list(result.scalars().all())
+        return APIResponse(message="Search results", data=sessions)
+    except Exception as e:
+        logger.error(f"Search sessions failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to search sessions.")
+
 # ==========================================
 # IMAGE ANALYSIS & HEALTH
 # ==========================================
 
-def _process_image_sync(image_bytes: bytes) -> bytes:
-    """CPU-bound image preprocessing — runs in threadpool."""
-    np_arr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    if img is None:
-        raise ValueError("Corrupted or unreadable image file.")
-    h, w = img.shape[:2]
-    if max(h, w) > 1024:
-        scale = 1024 / max(h, w)
-        img = cv2.resize(img, (int(w * scale), int(h * scale)))
-    _, buffer = cv2.imencode('.jpg', img)
-    return buffer.tobytes()
-
 @router.post("/analyze-image", response_model=APIResponse[ImageAnalysisResponse])
+@limiter.limit("5/minute")
 async def analyze_image(
+    request: Request,
     file: UploadFile = File(...),
+    scan_type: str = Form(default="bone"),
+    patient_context: Optional[str] = Form(default=None),
+    patient_id: Optional[uuid.UUID] = Form(default=None),
+    session_id: Optional[uuid.UUID] = Form(default=None),
+    version_id: Optional[uuid.UUID] = Form(default=None),
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_doctor)
+    current_user: AuthenticatedPrincipal = Depends(require_doctor_or_patient)
 ):
-    # Validation
+    """
+    Analyze a medical image using the AI pipeline:
+    1. Route to correct HF model based on scan_type
+    2. Get prediction + confidence
+    3. Generate Groq explanations (clinical + patient-friendly)
+    4. Return structured report
+    """
+    # Validate scan_type
+    try:
+        scan_type = AIOrchestrator.validate_scan_type(scan_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if current_user.role == UserRole.DOCTOR and patient_id:
+        from app.services.permission import PermissionService
+        if not await PermissionService.can_access_patient(db, current_user.id, patient_id):
+            raise HTTPException(status_code=403, detail="Not authorized to analyze images for this patient.")
+
+    # Validate file
     if file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, and WebP are supported.")
     
@@ -292,41 +282,89 @@ async def analyze_image(
         raise HTTPException(status_code=400, detail="File is empty.")
         
     try:
-        try:
-            processed_bytes = await asyncio.to_thread(_process_image_sync, image_bytes)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-        # Run vision inference
-        yolo_res = await YOLOService.analyze_image(processed_bytes)
-        eff_res = await EfficientNetService.classify_image(processed_bytes)
+        # Determine user role for explanation style
+        user_role = "doctor" if current_user.role == UserRole.DOCTOR else "patient"
         
-        # Generate Clinical & Patient Summaries via LLM
-        inference_summary = f"Object Detection: {yolo_res}\nClassification: {eff_res}"
+        # Parse patient context if provided
+        parsed_context = None
+        if patient_context:
+            import json
+            try:
+                parsed_context = json.loads(patient_context)
+            except json.JSONDecodeError:
+                logger.warning("Invalid JSON for patient_context, ignoring.")
         
-        doctor_prompt = f"You are a Doctor AI. Based on the following raw image inference, write a brief, professional clinical summary of findings.\n{inference_summary}"
-        patient_prompt = f"You are a Patient AI. Based on the following raw image inference, write a brief, reassuring, easy-to-understand explanation for a patient.\n{inference_summary}"
-        
-        clinical_summary, patient_explanation = await asyncio.gather(
-            groq_client.generate_standard_response(
-                system_prompt="You are Doctor Pulse AI. Be concise and clinical.",
-                user_message=doctor_prompt
-            ),
-            groq_client.generate_standard_response(
-                system_prompt="You are Patient Pulse AI. Be empathetic and clear.",
-                user_message=patient_prompt
-            )
+        # Run the complete image analysis pipeline
+        result = await ImageAnalysisService.analyze(
+            image_bytes=image_bytes,
+            scan_type=scan_type,
+            user_role=user_role,
+            patient_context=parsed_context,
         )
         
-        data = {
-            "yolo": yolo_res,
-            "efficientnet": eff_res,
-            "clinical_summary": clinical_summary,
-            "patient_explanation": patient_explanation
-        }
+        # Check if result is an error
+        if result.get("error"):
+            raise HTTPException(status_code=503, detail=result.get("message", "Image analysis failed."))
+
+        # Image analyses belong to the same persistent PULSE timeline as chat.
+        session = None
+        if session_id:
+            session = await chat_session_repo.get(db, session_id)
+            if not session or session.user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to access this session.")
+        else:
+            from app.models.ai_chat import AIChatSession
+            session = AIChatSession(
+                id=uuid.uuid4(), user_id=current_user.id,
+                patient_id=patient_id if current_user.role == UserRole.DOCTOR else None,
+                title="Image Analysis", is_doctor_mode=current_user.role == UserRole.DOCTOR,
+            )
+            db.add(session)
+            await db.flush()
+        from app.models.ai_chat import AIChatMessage, AIChatRole
+        db.add(AIChatMessage(id=uuid.uuid4(), session_id=session.id, role=AIChatRole.USER,
+                             content=f"Uploaded {scan_type} image for analysis."))
+        db.add(AIChatMessage(id=uuid.uuid4(), session_id=session.id, role=AIChatRole.ASSISTANT,
+                             content=__import__("json").dumps(result), model_used=f"medsync_{scan_type}"))
+        result["session_id"] = session.id
         
-        logger.info(f"Image analyzed successfully for doctor {current_user.id}")
-        return APIResponse(message="Image Analyzed", data=data)
+        # Persist to database if version_id is provided
+        if version_id:
+            from app.models.record import MedicalRecordVersion, MedicalRecord, AIAnalysis
+            from sqlalchemy import select
+            import json
+            
+            stmt = select(MedicalRecordVersion, MedicalRecord).join(MedicalRecord).where(MedicalRecordVersion.id == version_id)
+            ver_result = await db.execute(stmt)
+            row = ver_result.first()
+            if not row:
+                raise HTTPException(status_code=404, detail="Medical record version not found")
+                
+            version_data, record_data = row
+            
+            if record_data.patient_id != current_user.id:
+                if current_user.role == UserRole.DOCTOR:
+                    from app.services.permission import PermissionService
+                    has_perm = await PermissionService.check_permission(db, record_data.id, current_user.id)
+                    if not has_perm:
+                        raise HTTPException(status_code=403, detail="Unauthorized to modify this record")
+                else:
+                    raise HTTPException(status_code=403, detail="Unauthorized to modify this record")
+            
+            ai_record = AIAnalysis(
+                version_id=version_id,
+                model_name=f"medsync_{scan_type}_ai",
+                analysis_status="COMPLETED",
+                summary=json.dumps(result.get("clinical_summary", {})),
+                confidence_score=result.get("prediction", {}).get("confidence"),
+                processing_time_ms=result.get("metadata", {}).get("inference_time_ms")
+            )
+            db.add(ai_record)
+            await db.commit()
+            
+        await db.commit()
+        logger.info(f"Image analyzed: scan_type={scan_type} for user {current_user.id}")
+        return APIResponse(message="Image Analyzed", data=result)
         
     except AIException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)

@@ -10,6 +10,10 @@ import "../interfaces/IMedicalRecordRegistry.sol";
  */
 contract MedicalRecordRegistry is BaseRegistry, IMedicalRecordRegistry {
     mapping(bytes32 => MedicalRecord) public records;
+    mapping(bytes32 => mapping(bytes32 => bool)) public accessGrants; // recordHash => doctorHash => hasAccess
+
+    event AccessGranted(bytes32 indexed recordHash, bytes32 indexed doctorHash, uint256 timestamp);
+    event AccessRevoked(bytes32 indexed recordHash, bytes32 indexed doctorHash, uint256 timestamp);
 
     function registerRecord(bytes32 recordHash, bytes32 patientHash) external onlyBackend whenNotPaused nonReentrant {
         if (recordHash == bytes32(0) || patientHash == bytes32(0)) revert Errors.InvalidHash();
@@ -55,5 +59,22 @@ contract MedicalRecordRegistry is BaseRegistry, IMedicalRecordRegistry {
     function getRecord(bytes32 recordHash) external view returns (MedicalRecord memory) {
         if (records[recordHash].timestamp == 0) revert Errors.EntityNotFound(recordHash);
         return records[recordHash];
+    }
+
+    function grantAccess(bytes32 recordHash, bytes32 doctorHash) external onlyBackend whenNotPaused nonReentrant {
+        if (records[recordHash].timestamp == 0) revert Errors.EntityNotFound(recordHash);
+        accessGrants[recordHash][doctorHash] = true;
+        emit AccessGranted(recordHash, doctorHash, block.timestamp);
+    }
+
+    function revokeAccess(bytes32 recordHash, bytes32 doctorHash) external onlyBackend whenNotPaused nonReentrant {
+        if (records[recordHash].timestamp == 0) revert Errors.EntityNotFound(recordHash);
+        accessGrants[recordHash][doctorHash] = false;
+        emit AccessRevoked(recordHash, doctorHash, block.timestamp);
+    }
+
+    function hasAccess(bytes32 recordHash, bytes32 doctorHash) external view returns (bool) {
+        if (records[recordHash].timestamp == 0) return false;
+        return accessGrants[recordHash][doctorHash];
     }
 }

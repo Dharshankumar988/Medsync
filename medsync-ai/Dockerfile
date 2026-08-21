@@ -14,7 +14,7 @@ EXPOSE 7860
 # Install system dependencies required for OpenCV and PyTorch
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -39,9 +39,9 @@ COPY --chown=user . .
 # Ensure model and cache directories exist and are writable
 RUN mkdir -p models/cache && chmod -R 777 models
 
-ENV TORCH_HOME=/app/models/cache
-ENV TRANSFORMERS_CACHE=/app/models/cache
-ENV HF_HOME=/app/models/cache
+ENV TORCH_HOME=/home/user/app/models/cache
+ENV TRANSFORMERS_CACHE=/home/user/app/models/cache
+ENV HF_HOME=/home/user/app/models/cache
 
 # Run the FastAPI server via Uvicorn on 7860
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

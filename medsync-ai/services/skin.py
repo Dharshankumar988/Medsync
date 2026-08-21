@@ -27,7 +27,7 @@ class SkinClassificationService:
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5])
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
         
         self.load_model(model_path)
@@ -35,6 +35,7 @@ class SkinClassificationService:
     def load_model(self, path: str):
         if not os.path.exists(path):
             logger.error(f"Skin model not found at {path}")
+            self.model = None
             return
         try:
             # Exact model architecture requested by user
@@ -43,12 +44,13 @@ class SkinClassificationService:
             
             # Load state dict
             self.model.load_state_dict(torch.load(path, map_location=self.device))
+            logger.info("Skin model loaded successfully.")
+            
             self.model.to(self.device)
             if torch.cuda.is_available():
                 self.model = self.model.half()  # FP16 for faster inference
             self.model.eval()
             
-            logger.info("Skin model loaded successfully.")
         except Exception as e:
             logger.error(f"Failed to load skin model: {str(e)}")
             self.model = None

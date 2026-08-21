@@ -8,6 +8,8 @@ import asyncio
 
 _health_cache = {"data": None, "expires": 0}
 
+from app.ai.core.service_manager import ai_service_manager
+
 async def _get_cached_blockchain_health():
     now = time_module.time()
     if _health_cache["data"] is not None and now < _health_cache["expires"]:
@@ -52,3 +54,11 @@ async def system_health():
         "blockchain_network": "Polygon Amoy",
         "blockchain_rpc": rpc_url,
     }
+
+@router.get("/ai")
+async def ai_health():
+    try:
+        status = await ai_service_manager.get_health_status()
+        return {"status": "ok", "data": status}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

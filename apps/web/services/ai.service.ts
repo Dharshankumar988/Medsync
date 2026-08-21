@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
 
 let _aiTokenCache: string | null = null;
 let _aiTokenExpiry = 0;
@@ -28,11 +29,12 @@ const getAuthHeaders = async () => {
 
 export const aiService = {
   // Standard Chat
-  async chat(role: 'doctor' | 'patient' | 'pharmacy' | 'admin', message: string, sessionId?: string) {
+  async chat(role: 'doctor' | 'patient' | 'pharmacy' | 'admin', message: string, sessionId?: string, patientId?: string) {
     const headers = await getAuthHeaders();
-    const res = await axios.post(`${API_BASE_URL}/ai/${role}/chat`, {
+    const res = await axios.post(`${API_BASE_URL}/ai/pulse/chat`, {
       message,
-      session_id: sessionId || null
+      session_id: sessionId || null,
+      patient_id: patientId || null,
     }, { headers });
     return res.data;
   },
@@ -45,14 +47,18 @@ export const aiService = {
     onChunk: (text: string) => void,
     onDone: () => void,
     onError: (err: any) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    patientId?: string
   ) {
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/ai/${role}/chat/stream`, {
+      const body: any = { message, session_id: sessionId || null };
+      if (patientId) body.patient_id = patientId;
+      
+      const response = await fetch(`${API_BASE_URL}/ai/pulse/chat/stream`, {
         method: 'POST',
         headers: headers as any,
-        body: JSON.stringify({ message, session_id: sessionId || null }),
+        body: JSON.stringify(body),
         signal
       });
 
@@ -101,11 +107,29 @@ export const aiService = {
     return res.data;
   },
 
+  async renameSession(sessionId: string, title: string) {
+    const headers = await getAuthHeaders();
+    const res = await axios.patch(`${API_BASE_URL}/ai/sessions/${sessionId}/rename`, { title }, { headers });
+    return res.data;
+  },
+
+  async searchSessions(query: string) {
+    const headers = await getAuthHeaders();
+    const res = await axios.get(`${API_BASE_URL}/ai/sessions/search`, {
+      headers,
+      params: { q: query }
+    });
+    return res.data;
+  },
+
   // Image Analysis
-  async analyzeImage(file: File) {
+  async analyzeImage(file: File, scanType: string = 'bone', patientId?: string, sessionId?: string) {
     const headers = await getAuthHeaders();
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('scan_type', scanType);
+    if (patientId) formData.append('patient_id', patientId);
+    if (sessionId) formData.append('session_id', sessionId);
     
     const res = await axios.post(`${API_BASE_URL}/ai/analyze-image`, formData, {
       headers: {

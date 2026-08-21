@@ -3,150 +3,286 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
 import { Skeleton } from "@medsync/ui";
-import { Users, Calendar, Activity, CheckCircle2 } from "lucide-react";
+import { Users, Calendar, Activity, CheckCircle2, TrendingUp, DollarSign, ArrowUpRight, MessageSquare, Stethoscope, Brain, FileText, Clock } from "lucide-react";
 import { Button } from "@medsync/ui";
 import { AuditHistory } from "@medsync/ui";
-import { ProfileCompletionBanner } from "@/components/profile-wizard/ProfileCompletionBanner";
+import { ProfileCompletionCard } from "@/components/profile-wizard/ProfileCompletionCard";
+import { AppointmentHeatmap } from "@/components/doctor/AppointmentHeatmap";
+import { PatientQueue } from "@/components/doctor/PatientQueue";
 import { supabase } from "@/lib/supabase";
+import { motion } from "framer-motion";
+import Link from "next/link";
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: [0.25, 0.1, 0.25, 1] } },
+};
+const stagger = { visible: { transition: { staggerChildren: 0.03 } } };
 
 export default function DoctorDashboard() {
-  const [isMounted, setIsMounted] = useState(false);
-
   const [userId, setUserId] = useState<string>("");
+  const [dashboardData, setDashboardData] = useState<{
+    todayAppointments: any[];
+    pendingPrescriptions: number;
+    pendingRecords: number;
+    loading: boolean;
+  }>({
+    todayAppointments: [],
+    pendingPrescriptions: 0,
+    pendingRecords: 0,
+    loading: true,
+  });
 
   useEffect(() => {
-    setIsMounted(true);
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setUserId(data.user.id);
     });
   }, []);
 
-  if (!isMounted) return null;
+  useEffect(() => {
+    if (!userId) return;
+
+    async function fetchDashboardData() {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        
+        const { data: apptData } = await supabase
+          .from('appointments')
+          .select('*')
+          .eq('doctor_id', userId)
+          .eq('appointment_date', today)
+          .order('start_time', { ascending: true });
+
+        let apptsWithPatients: any[] = [];
+        if (apptData && apptData.length > 0) {
+          const patientIds = apptData.map(a => a.patient_id);
+          const { data: patientsData } = await supabase
+            .from('patients')
+            .select('*')
+            .in('user_id', patientIds);
+          
+          apptsWithPatients = apptData.map(appt => {
+            const patient = patientsData?.find(p => p.user_id === appt.patient_id);
+            return {
+              name: patient?.full_name || "Unknown Patient",
+              time: appt.start_time.slice(0, 5),
+              type: "Consultation",
+              status: appt.status,
+              urgent: false
+            };
+          });
+        }
+
+        const { count: presCount } = await supabase
+          .from('prescriptions')
+          .select('*', { count: 'exact', head: true })
+          .eq('doctor_id', userId)
+          .eq('is_finalized', false);
+
+        setDashboardData({
+          todayAppointments: apptsWithPatients,
+          pendingPrescriptions: presCount || 0,
+          pendingRecords: 0,
+          loading: false
+        });
+      } catch (err) {
+        console.error("Failed to fetch dashboard data", err);
+        setDashboardData(prev => ({ ...prev, loading: false }));
+      }
+    }
+
+    fetchDashboardData();
+  }, [userId]);
+
+  const stats = [
+    {
+      title: "Today's Patients",
+      value: dashboardData.todayAppointments.length.toString(),
+      subtitle: (
+        <span className="flex items-center text-emerald-500 font-medium">
+          Scheduled today
+        </span>
+      ),
+      icon: Users,
+      accent: "emerald",
+    },
+    {
+      title: "Pending Prescriptions",
+      value: dashboardData.pendingPrescriptions.toString(),
+      subtitle: "Requires your sign-off",
+      icon: Activity,
+      accent: "amber",
+    },
+    {
+      title: "AI Analyses",
+      value: "View",
+      subtitle: "Recent model results",
+      icon: Brain,
+      accent: "blue",
+    },
+    {
+      title: "Today's Revenue",
+      value: "View Analytics",
+      subtitle: "Estimated earnings",
+      icon: DollarSign,
+      accent: "violet",
+    },
+  ];
+
+  const accentMap: Record<string, { bg: string; text: string; border: string; glow: string }> = {
+    emerald: { bg: "bg-emerald-500/10", text: "text-emerald-500", border: "hover:border-emerald-500/40", glow: "from-emerald-500/[0.07]" },
+    amber:   { bg: "bg-amber-500/10",   text: "text-amber-500",   border: "hover:border-amber-500/40",   glow: "from-amber-500/[0.07]" },
+    blue:    { bg: "bg-blue-500/10",     text: "text-blue-500",     border: "hover:border-blue-500/40",     glow: "from-blue-500/[0.07]" },
+    violet:  { bg: "bg-violet-500/10",   text: "text-violet-500",   border: "hover:border-violet-500/40",   glow: "from-violet-500/[0.07]" },
+  };
 
   return (
-    <div className="space-y-6">
-      {userId && <ProfileCompletionBanner userId={userId} role="doctor" initialPercentage={20} />}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Clinical Overview</h1>
-          <p className="text-muted-foreground mt-1">Manage your patients, appointments, and daily schedule.</p>
-        </div>
-        <Button>View Full Schedule</Button>
-      </div>
+    <div className="relative space-y-8 pb-12">
+      {/* Ambient glow */}
+      <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-emerald-500/[0.04] rounded-full blur-[100px]" />
 
-      {!userId ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <Skeleton className="h-[120px] w-full rounded-xl" />
-          <Skeleton className="h-[120px] w-full rounded-xl" />
-          <Skeleton className="h-[120px] w-full rounded-xl" />
-          <Skeleton className="h-[120px] w-full rounded-xl" />
+      {userId && <ProfileCompletionCard userId={userId} role="doctor" />}
+
+      {/* ─── Header ─── */}
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        variants={stagger}
+        className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4"
+      >
+        <motion.div variants={fadeUp}>
+          <p className="text-sm font-medium tracking-widest uppercase text-emerald-500 mb-2">Doctor Dashboard</p>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.15]">
+            Clinical Overview
+          </h1>
+          <p className="text-muted-foreground mt-2 max-w-md leading-relaxed">
+            Manage your patients, appointments, and daily schedule.
+          </p>
+        </motion.div>
+        <motion.div variants={fadeUp} className="flex items-center gap-2">
+          <Button variant="outline" className="rounded-xl border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted" asChild>
+            <Link href="/doctor/appointments">Manage Availability</Link>
+          </Button>
+          <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm" asChild>
+            <Link href="/doctor/appointments">View Full Calendar</Link>
+          </Button>
+        </motion.div>
+      </motion.div>
+
+      {/* ─── Stat Cards ─── */}
+      {!userId || dashboardData.loading ? (
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-[140px] w-full rounded-2xl" />)}
         </div>
       ) : (
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Today&apos;s Patients</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground mt-1">4 remaining</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Reports</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-600 dark:text-amber-500">5</div>
-            <p className="text-xs text-muted-foreground mt-1">Requires sign-off</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Next Appointment</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">11:30 AM</div>
-            <p className="text-xs text-muted-foreground mt-1">Michael Chen - Follow up</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">AI Insights</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">3</div>
-            <p className="text-xs text-muted-foreground mt-1">New clinical suggestions</p>
-          </CardContent>
-        </Card>
-      </div>
+        <motion.div
+          className="grid gap-5 md:grid-cols-2 lg:grid-cols-4"
+          initial="hidden"
+          animate="visible"
+          variants={stagger}
+        >
+          {stats.map((s, i) => {
+            const a = accentMap[s.accent];
+            return (
+              <motion.div key={i} variants={fadeUp}>
+                <Card className={`group relative overflow-hidden rounded-2xl border border-border/60 bg-card/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 ${a.border}`}>
+                  <div className={`absolute inset-0 bg-gradient-to-br ${a.glow} to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">{s.title}</CardTitle>
+                    <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${a.bg} transition-colors duration-300 group-hover:scale-110`}>
+                      <s.icon className={`h-5 w-5 ${a.text}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className="text-2xl font-bold tracking-tight">{s.value}</div>
+                    <p className="text-xs text-muted-foreground mt-1.5">{s.subtitle}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </motion.div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Schedule</CardTitle>
-            <CardDescription>Your appointments for today.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                { time: "09:00 AM", name: "Sarah Williams", type: "Annual Physical", status: "Completed" },
-                { time: "10:30 AM", name: "John Doe", type: "Cardiology Consult", status: "Completed" },
-                { time: "11:30 AM", name: "Michael Chen", type: "Follow up", status: "In Progress" },
-                { time: "01:00 PM", name: "Emily Davis", type: "Lab Review", status: "Upcoming" },
-              ].map((apt, i) => (
-                <div key={i} className="flex items-center justify-between border-b border-border pb-4 last:border-0 last:pb-0">
-                  <div className="flex gap-4 items-center">
-                    <span className="text-sm font-medium w-20 shrink-0">{apt.time}</span>
-                    <div>
-                      <p className="font-medium">{apt.name}</p>
-                      <p className="text-sm text-muted-foreground">{apt.type}</p>
-                    </div>
-                  </div>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${
-                    apt.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-600' : 
-                    apt.status === 'In Progress' ? 'bg-blue-500/10 text-blue-600' : 
-                    'bg-muted text-muted-foreground'
-                  }`}>
-                    {apt.status}
-                  </span>
+      {/* ─── Main Grid: Queue + Heatmap ─── */}
+      <motion.div
+        className="grid gap-6 md:grid-cols-2 lg:grid-cols-7"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "-60px" }}
+        variants={stagger}
+      >
+        <motion.div variants={fadeUp} className="col-span-full lg:col-span-4">
+          <PatientQueue queue={dashboardData.todayAppointments} />
+        </motion.div>
+        <motion.div variants={fadeUp} className="col-span-full lg:col-span-3">
+          <AppointmentHeatmap />
+        </motion.div>
+      </motion.div>
+
+      {/* ─── Bottom Grid: Alerts + Audit ─── */}
+      <motion.div
+        className="grid gap-6 md:grid-cols-2 lg:grid-cols-7"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "-60px" }}
+        variants={stagger}
+      >
+        <motion.div variants={fadeUp} className="col-span-full lg:col-span-4 space-y-6">
+          <Card className="rounded-2xl border border-border/60 bg-card/50">
+            <CardHeader>
+              <CardTitle>Recent Patient Alerts</CardTitle>
+              <CardDescription>Critical updates from monitored patients.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col items-center justify-center py-10 text-center bg-emerald-500/[0.04] rounded-xl border border-emerald-500/10">
+                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
+                  <CheckCircle2 className="h-7 w-7 text-emerald-500" />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Recent Patient Alerts</CardTitle>
-            <CardDescription>Critical updates from monitored patients.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <div className="mb-4 rounded-full bg-emerald-500/10 p-3">
-                <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                <p className="font-semibold text-lg text-emerald-600 dark:text-emerald-400">All patients stable</p>
+                <p className="text-sm text-muted-foreground mt-2 max-w-[280px] leading-relaxed">
+                  No abnormal vitals reported in the last 24 hours.
+                </p>
               </div>
-              <p className="font-medium">All patients stable</p>
-              <p className="text-sm text-muted-foreground mt-1 max-w-[200px]">
-                No abnormal vitals reported in the last 24 hours.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-      {/* Audit History Row */}
-      <div className="grid gap-6 grid-cols-1">
-        <AuditHistory />
-      </div>
+        <motion.div variants={fadeUp} className="col-span-full lg:col-span-3 space-y-6">
+          <AuditHistory />
+        </motion.div>
+      </motion.div>
+
+      {/* ─── Quick Access ─── */}
+      <motion.div
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "-60px" }}
+        variants={stagger}
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        {[
+          { icon: Brain, title: "Pulse AI Assistant", desc: "Get AI clinical insights", href: "/doctor/pulse-ai", color: "text-violet-500", bg: "bg-violet-500/10" },
+          { icon: Stethoscope, title: "Consultations", desc: "Manage your consultations", href: "/doctor/appointments", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+          { icon: FileText, title: "Medical Records", desc: "Review patient records", href: "/doctor/records", color: "text-blue-500", bg: "bg-blue-500/10" },
+        ].map((item, i) => (
+          <motion.div key={i} variants={fadeUp}>
+            <Link href={item.href}>
+              <Card className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 hover:border-border/80 cursor-pointer">
+                <CardContent className="flex items-center gap-4 p-5">
+                  <div className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${item.bg} transition-transform duration-300 group-hover:scale-110`}>
+                    <item.icon className={`h-5 w-5 ${item.color}`} />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm text-foreground">{item.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </motion.div>
+        ))}
+      </motion.div>
     </div>
   );
 }

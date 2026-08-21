@@ -12,7 +12,7 @@ class NotificationType(str, enum.Enum):
 
 class Notification(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "notifications"
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     type: Mapped[NotificationType] = mapped_column(String(50), default=NotificationType.IN_APP)
@@ -20,7 +20,7 @@ class Notification(Base, UUIDMixin, TimestampMixin):
 
 class NotificationPreference(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "notification_preferences"
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, unique=True, nullable=False)
     email_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     push_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=True)

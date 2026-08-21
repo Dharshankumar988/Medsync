@@ -10,8 +10,7 @@ import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
 import { Skeleton } from "@medsync/ui";
 import { CheckCircle2, Navigation, Package, Clock, ShieldCheck, MapPin } from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 
 
 
@@ -19,7 +18,6 @@ export default function PatientTrackingPage() {
   const params = useParams();
   const router = useRouter();
   const orderId = params.orderId as string;
-  const { getToken } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [trackingData, setTrackingData] = useState<any>(null);
@@ -31,7 +29,8 @@ export default function PatientTrackingPage() {
   useEffect(() => {
     const fetchTracking = async () => {
       try {
-        const token = await getToken();
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token || "";
         const res = await fetch(`http://localhost:8000/api/v1/orders/${orderId}/tracking`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -46,13 +45,13 @@ export default function PatientTrackingPage() {
           }
         }
       } catch (error) {
-        toast.error("Failed to fetch tracking data");
+        alert("Failed to fetch tracking data");
       } finally {
         setLoading(false);
       }
     };
     fetchTracking();
-  }, [orderId, getToken]);
+  }, [orderId]);
 
   // Simulation Loop
   useEffect(() => {
@@ -103,7 +102,8 @@ export default function PatientTrackingPage() {
   const handleVerifyOTP = async () => {
     setIsVerifying(true);
     try {
-      const token = await getToken();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
       const res = await fetch(`http://localhost:8000/api/v1/orders/${orderId}/verify-delivery`, {
         method: "POST",
         headers: {
@@ -115,13 +115,13 @@ export default function PatientTrackingPage() {
       const data = await res.json();
       
       if (res.ok) {
-        toast.success("Delivery confirmed successfully!");
+        alert("Delivery confirmed successfully!");
         setTrackingData((prev: any) => ({ ...prev, status: "DELIVERED", progress: 100 }));
       } else {
-        toast.error(data.message || "Invalid OTP");
+        alert(data.message || "Invalid OTP");
       }
     } catch (error) {
-      toast.error("An error occurred verifying delivery");
+      alert("An error occurred verifying delivery");
     } finally {
       setIsVerifying(false);
     }
@@ -153,7 +153,12 @@ export default function PatientTrackingPage() {
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Live Tracking</h1>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center">
+            Live Tracking
+            <span className="ml-3 inline-flex items-center rounded-full bg-orange-100 dark:bg-orange-900/30 px-2.5 py-0.5 text-xs font-semibold text-orange-800 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
+              Simulation Mode
+            </span>
+          </h1>
           <p className="text-muted-foreground mt-1">Order #{orderId.slice(0, 8).toUpperCase()}</p>
         </div>
         <div className="text-right">

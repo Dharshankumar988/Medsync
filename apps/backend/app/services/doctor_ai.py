@@ -9,24 +9,34 @@ from app.repositories.ai_chat import chat_session_repo, chat_message_repo
 from app.schemas.ai import ChatRequest
 from app.ai.prompts.templates import DOCTOR_SYSTEM_PROMPT
 from app.ai.core.service_manager import ai_service_manager
-from app.ai.rag.retriever import RAGRetriever
 from app.ai.core.conversation import ConversationManager
+from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.config import ai_config
+from app.ai.rag.retriever import RAGRetriever
+from app.services.permission import PermissionService
 
 logger = logging.getLogger("medsync.ai.doctor")
 
 class DoctorAIService:
     @staticmethod
-    async def _get_or_create_session(db: AsyncSession, doctor_id: uuid.UUID, session_id: uuid.UUID | None) -> AIChatSession:
+    async def _get_or_create_session(db: AsyncSession, doctor_id: uuid.UUID, session_id: uuid.UUID | None, patient_id: uuid.UUID | None = None) -> AIChatSession:
         if session_id:
             session = await chat_session_repo.get(db, session_id)
             if not session or session.user_id != doctor_id:
                 raise ValueError("Invalid or unauthorized chat session.")
+            if patient_id and session.patient_id and patient_id != session.patient_id:
+                raise ValueError("The requested patient does not match this chat session.")
+            if session.patient_id and not await PermissionService.can_access_patient(db, doctor_id, session.patient_id):
+                raise PermissionError("You are no longer authorized to access this patient's PULSE context.")
             return session
+
+        if patient_id and not await PermissionService.can_access_patient(db, doctor_id, patient_id):
+            raise PermissionError("You are not authorized to access this patient's PULSE context.")
         
         new_session = AIChatSession(
             id=uuid.uuid4(),
             user_id=doctor_id,
+            patient_id=patient_id,
             title="Doctor Consultation",
             is_doctor_mode=True
         )
@@ -49,31 +59,33 @@ class DoctorAIService:
         return msg
 
     @staticmethod
-    async def _build_messages(db: AsyncSession, session_id: uuid.UUID, user_message: str, specific_instruction: str = None) -> List[Dict[str, str]]:
-        # Retrieve context from RAG (Only Doctor AI triggers this)
-        rag_context = await RAGRetriever.retrieve_context(user_message, role="doctor")
+    async def _build_messages(db: AsyncSession, session: AIChatSession, user_message: str, specific_instruction: str = None) -> List[Dict[str, str]]:
+        past_history = ""
+        if session.patient_id:
+            past_history = await ConversationManager.get_patient_history_summary(db, session.user_id, session.patient_id, session.id)
+            past_history = f"\n\n--- PREVIOUS CLINICAL CONVERSATIONS FOR THIS PATIENT ---\n{past_history}"
+            
+        rag_context = await RAGRetriever.retrieve_context(user_message, role="doctor", db=db)
+        system_msg_content = DOCTOR_SYSTEM_PROMPT.format(history="", rag_context=f"{rag_context}{past_history}")
         
-        system_msg_content = DOCTOR_SYSTEM_PROMPT.format(history="Context gathered from RAG", rag_context=rag_context)
-        if specific_instruction:
-            system_msg_content += f"\n\nCRITICAL INSTRUCTION FOR THIS REQUEST: {specific_instruction}"
-
         # Get conversation history
-        history = await ConversationManager.get_recent_messages(db, session_id)
+        history = await ConversationManager.get_recent_messages(db, session.id)
         
-        messages = [{"role": "system", "content": system_msg_content}]
-        messages.extend(history)
-        messages.append({"role": "user", "content": user_message})
-        
-        return messages
+        return PromptManager.build_messages(
+            system_prompt=system_msg_content,
+            history=history,
+            user_message=user_message,
+            specific_instruction=specific_instruction,
+        )
 
     @staticmethod
     async def handle_chat(db: AsyncSession, doctor_id: uuid.UUID, req: ChatRequest) -> Dict[str, Any]:
-        session = await DoctorAIService._get_or_create_session(db, doctor_id, req.session_id)
+        session = await DoctorAIService._get_or_create_session(db, doctor_id, req.session_id, getattr(req, 'patient_id', None))
         
         # Save user message
         await DoctorAIService._save_message(db, session.id, AIChatRole.USER, req.message)
         
-        messages = await DoctorAIService._build_messages(db, session.id, req.message)
+        messages = await DoctorAIService._build_messages(db, session, req.message)
         
         start_time = time.time()
         client = ai_service_manager.get_llm_client()
@@ -95,13 +107,13 @@ class DoctorAIService:
 
     @staticmethod
     async def handle_chat_stream(db: AsyncSession, doctor_id: uuid.UUID, req: ChatRequest) -> AsyncGenerator[str, None]:
-        session = await DoctorAIService._get_or_create_session(db, doctor_id, req.session_id)
+        session = await DoctorAIService._get_or_create_session(db, doctor_id, req.session_id, getattr(req, 'patient_id', None))
         
         # Save user message
         await DoctorAIService._save_message(db, session.id, AIChatRole.USER, req.message)
         await db.commit() # Commit user message before streaming starts
         
-        messages = await DoctorAIService._build_messages(db, session.id, req.message)
+        messages = await DoctorAIService._build_messages(db, session, req.message)
         
         client = ai_service_manager.get_llm_client()
         model_name = ai_config.GROQ_MODEL_DOCTOR
@@ -164,7 +176,7 @@ class DoctorAIService:
         session = await DoctorAIService._get_or_create_session(db, doctor_id, session_id)
         await DoctorAIService._save_message(db, session.id, AIChatRole.USER, user_input)
         
-        messages = await DoctorAIService._build_messages(db, session.id, user_input, specific_instruction=instruction)
+        messages = await DoctorAIService._build_messages(db, session, user_input, specific_instruction=instruction)
         
         start_time = time.time()
         client = ai_service_manager.get_llm_client()

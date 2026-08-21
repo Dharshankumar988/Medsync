@@ -9,9 +9,10 @@ from app.repositories.ai_chat import chat_session_repo, chat_message_repo
 from app.schemas.ai import ChatRequest
 from app.ai.prompts.templates import PATIENT_SYSTEM_PROMPT
 from app.ai.core.service_manager import ai_service_manager
-from app.ai.rag.retriever import RAGRetriever
 from app.ai.core.conversation import ConversationManager
+from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.config import ai_config
+from app.ai.rag.retriever import RAGRetriever
 
 logger = logging.getLogger("medsync.ai.patient")
 
@@ -50,19 +51,25 @@ class PatientAIService:
 
     @staticmethod
     async def _build_messages(db: AsyncSession, session_id: uuid.UUID, user_message: str, specific_instruction: str = None) -> List[Dict[str, str]]:
-        rag_context = await RAGRetriever.retrieve_context(user_message)
-        
+        rag_context = await RAGRetriever.retrieve_context(user_message, role="patient", db=db)
         system_msg_content = PATIENT_SYSTEM_PROMPT.format(rag_context=rag_context)
-        if specific_instruction:
-            system_msg_content += f"\n\nCRITICAL INSTRUCTION FOR THIS REQUEST: {specific_instruction}"
+
+        # Check for emergency keywords and prepend urgency instruction
+        if PromptManager.detect_emergency(user_message):
+            specific_instruction = (
+                "⚠️ EMERGENCY DETECTED: The patient may be describing a medical emergency. "
+                "Your FIRST response MUST instruct them to call local emergency services (911/112/999) immediately. "
+                "Then provide any safe first-aid guidance while they wait for help."
+            ) + (f"\n\n{specific_instruction}" if specific_instruction else "")
 
         history = await ConversationManager.get_recent_messages(db, session_id)
         
-        messages = [{"role": "system", "content": system_msg_content}]
-        messages.extend(history)
-        messages.append({"role": "user", "content": user_message})
-        
-        return messages
+        return PromptManager.build_messages(
+            system_prompt=system_msg_content,
+            history=history,
+            user_message=user_message,
+            specific_instruction=specific_instruction,
+        )
 
     @staticmethod
     async def handle_chat(db: AsyncSession, patient_id: uuid.UUID, req: ChatRequest) -> Dict[str, Any]:
@@ -76,6 +83,10 @@ class PatientAIService:
         model_name = ai_config.GROQ_MODEL_PATIENT
         
         reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.3)
+        
+        # Add medical disclaimer
+        reply_content = PromptManager.add_medical_disclaimer(reply_content, "patient")
+        
         inference_time = int((time.time() - start_time) * 1000)
         
         await PatientAIService._save_message(db, session.id, AIChatRole.ASSISTANT, reply_content, model_name, inference_time)
@@ -149,6 +160,7 @@ class PatientAIService:
         model_name = ai_config.GROQ_MODEL_PATIENT
         
         reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.2)
+        reply_content = PromptManager.add_medical_disclaimer(reply_content, "patient")
         inference_time = int((time.time() - start_time) * 1000)
         
         await PatientAIService._save_message(db, session.id, AIChatRole.ASSISTANT, reply_content, model_name, inference_time)

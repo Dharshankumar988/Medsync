@@ -13,7 +13,10 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 import io
-import magic
+try:
+    import magic
+except ImportError:
+    magic = None
 from PIL import Image
 from app.services.storage import StorageService
 
@@ -35,6 +38,7 @@ class ProfileCompletionRequest(BaseModel):
     emergency_contact_number: Optional[str] = None
     medical_alerts: Optional[str] = None
     allergies: Optional[str] = None
+    chronic_diseases: Optional[str] = None
     
     # Doctors
     qualifications: Optional[str] = None
@@ -43,7 +47,9 @@ class ProfileCompletionRequest(BaseModel):
     clinic_phone: Optional[str] = None
     clinic_email: Optional[str] = None
     languages: Optional[str] = None
+    languages_spoken: Optional[str] = None
     consultation_hours: Optional[str] = None
+    consultation_timings: Optional[dict] = None
     hospital_id: Optional[uuid.UUID] = None
     medical_council_reg_number: Optional[str] = None
     license_number: Optional[str] = None
@@ -54,16 +60,65 @@ class ProfileCompletionRequest(BaseModel):
     # Pharmacy
     gst_number: Optional[str] = None
     operating_hours: Optional[str] = None
+    working_days: Optional[str] = None
+    location: Optional[dict] = None
+    is_24x7: Optional[bool] = None
     owner_details: Optional[str] = None
     branch_information: Optional[str] = None
     business_registration_number: Optional[str] = None
     contact_number: Optional[str] = None
 
     # Common
+    cover_image_url: Optional[str] = None
+    social_links: Optional[dict] = None
+
+    # Common
     profile_completion_percentage: int
 
+class PinSetupRequest(BaseModel):
+    pin: str
+
+@router.post("/{user_id}/pin", response_model=APIResponse)
+async def setup_auth_pin(
+    user_id: uuid.UUID,
+    payload: PinSetupRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT]))
+):
+    if current_user.id != user_id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("You cannot modify another user's profile")
+
+    if len(payload.pin) != 6 or not payload.pin.isdigit():
+        raise HTTPException(status_code=400, detail="PIN must be exactly 6 digits")
+
+    import bcrypt
+    salt = bcrypt.gensalt()
+    pin_hash = bcrypt.hashpw(payload.pin.encode('utf-8'), salt).decode('utf-8')
+
+    stmt = select(Patient).where(Patient.user_id == user_id)
+    result = await db.execute(stmt)
+    patient = result.scalar_one_or_none()
+
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient profile not found")
+
+    patient.pin_hash = pin_hash
+    await db.commit()
+
+    return APIResponse(message="Authorization PIN updated successfully")
+
 @router.put("/{user_id}/completion", response_model=APIResponse[dict])
-async def update_profile_completion(user_id: uuid.UUID, payload: ProfileCompletionRequest, db: AsyncSession = Depends(get_db)):
+async def update_profile_completion(
+    user_id: uuid.UUID, 
+    payload: ProfileCompletionRequest, 
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.DOCTOR, UserRole.PATIENT, UserRole.PHARMACY, UserRole.ADMIN]))
+):
+    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("You cannot modify another user's profile")
+
     user = await db.execute(select(User).where(User.id == user_id))
     user = user.scalar_one_or_none()
     
@@ -71,6 +126,14 @@ async def update_profile_completion(user_id: uuid.UUID, payload: ProfileCompleti
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         
     user.profile_completion_percentage = payload.profile_completion_percentage
+    if hasattr(payload, 'cover_image_url') and payload.cover_image_url:
+        user.cover_image_url = payload.cover_image_url
+    if hasattr(payload, 'bio') and payload.bio:
+        user.bio = payload.bio
+    if hasattr(payload, 'social_links') and payload.social_links is not None:
+        user.social_links = payload.social_links
+    if hasattr(payload, 'languages_spoken') and payload.languages_spoken:
+        user.languages_spoken = payload.languages_spoken
 
     if user.role == UserRole.PATIENT:
         profile = await db.execute(select(Patient).where(Patient.user_id == user_id))
@@ -89,6 +152,9 @@ async def update_profile_completion(user_id: uuid.UUID, payload: ProfileCompleti
             profile.emergency_contact_number = payload.emergency_contact_number or profile.emergency_contact_number
             profile.medical_alerts = payload.medical_alerts or profile.medical_alerts
             profile.allergies = payload.allergies or profile.allergies
+            
+            if hasattr(payload, 'chronic_diseases'):
+                profile.chronic_diseases = getattr(payload, 'chronic_diseases') or profile.chronic_diseases
 
     elif user.role == UserRole.DOCTOR:
         profile = await db.execute(select(Doctor).where(Doctor.user_id == user_id))
@@ -105,7 +171,28 @@ async def update_profile_completion(user_id: uuid.UUID, payload: ProfileCompleti
             profile.clinic_email = payload.clinic_email or profile.clinic_email
             profile.languages = payload.languages or profile.languages
             profile.consultation_hours = payload.consultation_hours or profile.consultation_hours
-            profile.hospital_id = payload.hospital_id or profile.hospital_id
+            
+            # XOR Enforcment for Hospital vs Private Clinic
+            has_hospital = payload.hospital_id is not None or (profile.hospital_id is not None and payload.hospital_id is not False)
+            has_clinic = payload.clinic_name is not None or (profile.clinic_name is not None and payload.clinic_name != "")
+            
+            # If payload explicitly tries to set both, fail
+            if payload.hospital_id and payload.clinic_name:
+                raise HTTPException(status_code=400, detail="Cannot belong to both a hospital and a private clinic.")
+            
+            if payload.hospital_id:
+                profile.hospital_id = payload.hospital_id
+                profile.clinic_name = None
+                profile.clinic_address = None
+                profile.clinic_phone = None
+                profile.clinic_email = None
+            elif payload.clinic_name:
+                profile.hospital_id = None
+                profile.clinic_name = payload.clinic_name
+                profile.clinic_address = payload.clinic_address
+                profile.clinic_phone = payload.clinic_phone
+                profile.clinic_email = payload.clinic_email
+                
             profile.medical_council_reg_number = payload.medical_council_reg_number or profile.medical_council_reg_number
             profile.license_number = payload.license_number or profile.license_number
             if payload.experience_years is not None:
@@ -113,6 +200,8 @@ async def update_profile_completion(user_id: uuid.UUID, payload: ProfileCompleti
             profile.bio = payload.bio or profile.bio
             if payload.consultation_fee is not None:
                 profile.consultation_fee = payload.consultation_fee
+            if hasattr(payload, 'consultation_timings') and payload.consultation_timings is not None:
+                profile.consultation_timings = payload.consultation_timings
 
     elif user.role == UserRole.PHARMACY:
         profile = await db.execute(select(Pharmacy).where(Pharmacy.user_id == user_id))
@@ -130,6 +219,12 @@ async def update_profile_completion(user_id: uuid.UUID, payload: ProfileCompleti
             profile.branch_information = payload.branch_information or profile.branch_information
             profile.business_registration_number = payload.business_registration_number or profile.business_registration_number
             profile.contact_number = payload.contact_number or profile.contact_number
+            if hasattr(payload, 'working_days') and payload.working_days:
+                profile.working_days = payload.working_days
+            if hasattr(payload, 'location') and payload.location is not None:
+                profile.location = payload.location
+            if hasattr(payload, 'is_24x7') and payload.is_24x7 is not None:
+                profile.is_24x7 = payload.is_24x7
 
     await db.commit()
     return APIResponse(message="Profile completion updated successfully", data={"completion_percentage": user.profile_completion_percentage})
@@ -149,6 +244,8 @@ async def upload_profile_image(
     if len(file_bytes) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Max 5MB allowed.")
 
+    if magic is None:
+        raise HTTPException(status_code=501, detail="Image upload disabled (python-magic not installed).")
     # Check magic bytes for secure mime type
     mime = magic.from_buffer(file_bytes, mime=True)
     allowed_mimes = ["image/jpeg", "image/png", "image/webp"]

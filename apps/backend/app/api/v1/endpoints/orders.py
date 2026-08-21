@@ -32,8 +32,26 @@ class VerifyDeliveryRequest(BaseModel):
 @router.post("/{order_id}/dispatch", response_model=APIResponse)
 async def dispatch_order(
     order_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(RoleChecker([UserRole.PHARMACY]))
 ):
+    # Verify order ownership and status
+    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id).with_for_update()
+    order_res = await db.execute(order_stmt)
+    order = order_res.scalar_one_or_none()
+    
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    if order.pharmacy_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to dispatch this order")
+        
+    if order.status in [OrderStatus.DELIVERED, OrderStatus.CANCELLED, OrderStatus.OUT_FOR_DELIVERY]:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Cannot dispatch order currently in state {order.status}")
+
     # Retrieve order and delivery tracking
     stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
     result = await db.execute(stmt)
@@ -139,8 +157,25 @@ async def get_tracking(
 async def verify_delivery(
     order_id: uuid.UUID,
     req: VerifyDeliveryRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(RoleChecker([UserRole.PHARMACY]))
 ):
+    # Verify order ownership
+    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id).with_for_update()
+    order_res = await db.execute(order_stmt)
+    order = order_res.scalar_one_or_none()
+    
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    if order.pharmacy_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to verify delivery for this order")
+        
+    if order.status != OrderStatus.OUT_FOR_DELIVERY:
+        return APIResponse(message="Cannot verify delivery: order is not out for delivery", data=None, status_code=400)
+
     stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
     result = await db.execute(stmt)
     tracking = result.scalar_one_or_none()

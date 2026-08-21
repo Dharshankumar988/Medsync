@@ -55,7 +55,7 @@ class MedicalRecordService:
                 entity_type=SyncEntityType.MEDICAL_RECORD,
                 entity_id=version.id,
                 action_type=SyncActionType.CREATE,
-                payload={"file_hash": file_hash, "file_type": f_type.value, "file_size_bytes": file_size_bytes}
+                payload={"patient_id": str(patient_id), "file_hash": file_hash, "file_type": f_type.value, "file_size_bytes": file_size_bytes}
             )
         except Exception as e:
             print(f"Error enqueueing blockchain task for medical record: {e}")

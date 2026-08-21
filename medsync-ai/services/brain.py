@@ -13,12 +13,13 @@ class BrainDetectionService:
     def load_model(self, path: str):
         if not os.path.exists(path):
             logger.error(f"Brain model not found at {path}")
+            self.model = None
             return
         try:
             self.model = YOLO(path)
             logger.info("Brain model loaded successfully.")
         except Exception as e:
-            logger.error(f"Failed to load brain model: {str(e)}")
+            logger.error(f"Failed to load brain model at {path}: {str(e)}")
             self.model = None
 
     def predict(self, image_np) -> Dict[str, Any]:

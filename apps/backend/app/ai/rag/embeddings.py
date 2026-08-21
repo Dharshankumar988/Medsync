@@ -23,11 +23,11 @@ class EmbeddingService:
                 logger.info(f"Loading embedding model: {ai_config.EMBEDDING_MODEL}")
                 self.model = SentenceTransformer(ai_config.EMBEDDING_MODEL)
             except ImportError:
-                logger.error("sentence-transformers not installed. RAG will fallback to mock embeddings.")
-                self.model = "mock"
+                logger.error("sentence-transformers not installed. RAG is unavailable.")
+                raise Exception("RAG service is unavailable (missing dependencies).")
             except Exception as e:
                 logger.error(f"Failed to load embedding model: {e}")
-                self.model = "mock"
+                raise Exception(f"Failed to load embedding model: {e}")
 
     def embed_text(self, text: str) -> np.ndarray:
         """Generate embeddings with a simple memory cache."""
@@ -35,29 +35,29 @@ class EmbeddingService:
             return self.cache[text]
             
         self._load_model()
-        
-        if self.model == "mock":
-            # Deterministic pseudo-embedding for fallback/testing if library is missing
-            vec = np.zeros(384)
-            vec[hash(text) % 384] = 1.0
-            return vec
             
         # Real embedding generation
         embedding = self.model.encode(text, convert_to_numpy=True)
         self.cache[text] = embedding
         
         # Prevent cache from growing indefinitely
-        if len(self.cache) >= 2048:
-            self.cache.pop(next(iter(self.cache)))
+        max_cache = 4096
+        if len(self.cache) >= max_cache:
+            # Remove oldest entries
+            keys_to_remove = list(self.cache.keys())[:max_cache // 4]
+            for k in keys_to_remove:
+                del self.cache[k]
             
         return embedding
 
     def embed_batch(self, texts: List[str]) -> np.ndarray:
         """Batch embedding generation for the knowledge base."""
         self._load_model()
-        if self.model == "mock":
-            return np.array([self.embed_text(t) for t in texts])
-            
         return self.model.encode(texts, convert_to_numpy=True)
+
+    def clear_cache(self):
+        """Clear the embedding cache (useful when corpus refreshes)."""
+        self.cache.clear()
+        logger.info("Embedding cache cleared.")
 
 embedding_service = EmbeddingService()

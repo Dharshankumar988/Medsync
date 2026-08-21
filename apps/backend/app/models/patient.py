@@ -7,7 +7,7 @@ from app.models.mixins import UUIDMixin, TimestampMixin
 class Patient(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "patients"
     
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, unique=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     date_of_birth: Mapped[str] = mapped_column(String(50), nullable=True)
     gender: Mapped[str] = mapped_column(String(50), nullable=True)
@@ -24,6 +24,7 @@ class Patient(Base, UUIDMixin, TimestampMixin):
     government_id_url: Mapped[str] = mapped_column(String(1024), nullable=True)
     medical_alerts: Mapped[str] = mapped_column(String, nullable=True)
     allergies: Mapped[str] = mapped_column(String, nullable=True)
-    primary_physician_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("doctors.id"), nullable=True)
+    chronic_diseases: Mapped[str] = mapped_column(String, nullable=True)
+    primary_physician_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("doctors.id"), index=True, nullable=True)
     
     user = relationship("User", back_populates="patient_profile")

@@ -5,10 +5,11 @@ from app.dependencies.db import get_db
 from app.schemas.response import APIResponse
 from app.schemas.user import UserSyncRequest
 from app.models.user import User, UserRole, UserStatus
+from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.models.pharmacy import Pharmacy
-from app.models.patient import Patient
-from app.models.verification import VerificationRequest, VerificationStatus
+from app.models.doctor_location import DoctorLocation
+from app.models.verification import VerificationRequest, VerificationStatus, RoleType
 
 router = APIRouter()
 
@@ -34,8 +35,9 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
     if payload.role == UserRole.ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin creation is not allowed publicly.")
 
-    # Determine status (Patients are active, others pending verification)
-    new_status = UserStatus.ACTIVE if payload.role == UserRole.PATIENT else UserStatus.PENDING
+    # Determine status (Patients are active and verified, others pending verification)
+    is_patient = payload.role == UserRole.PATIENT
+    new_status = UserStatus.ACTIVE if is_patient else UserStatus.PENDING
 
     # Create base user
     new_user = User(
@@ -43,7 +45,9 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         email=payload.email,
         password_hash="supabase_managed",
         role=payload.role,
-        status=new_status
+        status=new_status,
+        is_verified=is_patient,
+        profile_completion_percentage=80 if is_patient else 40
     )
     db.add(new_user)
     await db.flush()
@@ -55,20 +59,64 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
     elif payload.role == UserRole.DOCTOR:
         profile = Doctor(
             user_id=new_user.id,
-            full_name=payload.full_name
+            full_name=payload.full_name,
+            hospital_name=payload.hospital_name,
+            hospital_address=payload.hospital_address,
+            hospital_id=payload.hospital_id,
+            clinic_name=payload.clinic_name,
+            clinic_address=payload.clinic_address,
+            license_number=payload.license_number or f"LIC-{str(new_user.id)[:8]}",
+            experience_years=1,
+            consultation_fee=500,
+            doctor_status="PENDING"
         )
         db.add(profile)
+        await db.flush() # flush to get doctor profile id
+
+        # Add location if private clinic
+        if payload.clinic_name and payload.latitude and payload.longitude:
+            location = DoctorLocation(
+                doctor_id=profile.id,
+                location_type="CLINIC",
+                location_name=payload.clinic_name,
+                address=payload.clinic_address,
+                latitude=payload.latitude,
+                longitude=payload.longitude,
+                is_primary=True,
+                is_active=True
+            )
+            db.add(location)
+        elif payload.hospital_id:
+            # Add hospital location link
+            location = DoctorLocation(
+                doctor_id=profile.id,
+                location_type="HOSPITAL",
+                hospital_id=payload.hospital_id,
+                is_primary=True,
+                is_active=True
+            )
+            db.add(location)
         # Create verification request
-        vreq = VerificationRequest(user_id=new_user.id, status=VerificationStatus.PENDING)
+        vreq = VerificationRequest(
+            user_id=new_user.id,
+            role_type=RoleType.DOCTOR,
+            status=VerificationStatus.PENDING
+        )
         db.add(vreq)
     elif payload.role == UserRole.PHARMACY:
         profile = Pharmacy(
             user_id=new_user.id,
-            business_name=payload.full_name
+            business_name=payload.business_name or payload.full_name,
+            license_number=payload.license_number or f"LIC-PHM-{str(new_user.id)[:8]}",
+            contact_number=payload.contact_number
         )
         db.add(profile)
         # Create verification request
-        vreq = VerificationRequest(user_id=new_user.id, status=VerificationStatus.PENDING)
+        vreq = VerificationRequest(
+            user_id=new_user.id,
+            role_type=RoleType.PHARMACY,
+            status=VerificationStatus.PENDING
+        )
         db.add(vreq)
 
     await db.commit()

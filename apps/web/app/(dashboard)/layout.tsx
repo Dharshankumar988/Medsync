@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { Skeleton } from "@medsync/ui";
+
+import { PulseAIFloating } from "@/components/pulse-ai/PulseAIFloating";
+import ProfileCompletionModal from "@/components/patient/ProfileCompletionModal";
+import SecurityEnrollmentModal from "@/components/patient/SecurityEnrollmentModal";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = useState<string | null>(null);
+  const [authRole, setAuthRole] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     authService.me().then(user => {
       const roleValue = String(user.role).toLowerCase();
-      setRole(roleValue);
+      setAuthRole(roleValue);
       if (pathname.includes('/patient') && roleValue !== 'patient') router.push('/unauthorized');
       if (pathname.includes('/doctor') && roleValue !== 'doctor') router.push('/unauthorized');
       if (pathname.includes('/admin') && roleValue !== 'admin') router.push('/unauthorized');
@@ -25,25 +28,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     });
   }, [pathname, router]);
 
-  if (!role) return (
-    <div className="flex h-screen bg-background">
-      <div className="w-[260px] border-r border-border p-4">
-        <Skeleton className="h-8 w-32 mb-8" />
-        <Skeleton className="h-10 w-full mb-2" />
-        <Skeleton className="h-10 w-full mb-2" />
-        <Skeleton className="h-10 w-full mb-2" />
-      </div>
-      <div className="flex-1 flex flex-col">
-        <div className="h-14 border-b border-border flex items-center px-6">
-          <Skeleton className="h-6 w-48" />
-        </div>
-        <div className="p-8">
-          <Skeleton className="h-32 w-full mb-4" />
-          <Skeleton className="h-64 w-full" />
-        </div>
-      </div>
-    </div>
-  );
+  // Derive expected role from URL to render shell immediately
+  const expectedRole = useMemo(() => {
+    if (pathname.includes('/patient')) return 'patient';
+    if (pathname.includes('/doctor')) return 'doctor';
+    if (pathname.includes('/admin')) return 'admin';
+    if (pathname.includes('/pharmacy')) return 'pharmacy';
+    return 'patient'; // Fallback
+  }, [pathname]);
+
+  const displayRole = authRole || expectedRole;
 
   // Role-based accent colors (HSL format)
   const roleColors: Record<string, string> = {
@@ -53,22 +47,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     patient: '221 83% 53%',  // Default Blue
   };
   
-  const primaryColor = roleColors[role] || roleColors.patient;
+  const primaryColor = roleColors[displayRole] || roleColors.patient;
 
   return (
     <div 
-      className="flex min-h-screen bg-background text-foreground"
+      className="flex h-screen bg-background text-foreground"
       style={{ '--primary': primaryColor } as React.CSSProperties}
     >
-      <Sidebar role={role} />
+      <Sidebar role={displayRole} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header role={role} />
+        <Header role={displayRole} />
         <main className="flex-1 overflow-y-auto p-6 lg:p-8">
           <div className="mx-auto w-full max-w-[1400px]">
             {children}
           </div>
         </main>
       </div>
+      <PulseAIFloating role={displayRole as any} />
+      <ProfileCompletionModal />
+      <SecurityEnrollmentModal />
     </div>
   )
 }

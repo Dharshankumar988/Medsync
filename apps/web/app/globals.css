@@ -186,3 +186,13 @@ html {
 .animate-float-slow-reverse {
   animation: float-slow-reverse 7s ease-in-out infinite;
 }
+
+/* Hide scrollbars globally */
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}

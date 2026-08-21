@@ -22,12 +22,17 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (_cachedToken && now < _tokenExpiry) {
     config.headers.Authorization = `Bearer ${_cachedToken}`;
   } else {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? null;
-    if (token) {
-      _cachedToken = token;
-      _tokenExpiry = now + 4 * 60 * 1000; // Cache for 4 minutes
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token ?? null;
+
+      if (token) {
+        _cachedToken = token;
+        _tokenExpiry = now + 4 * 60 * 1000; // Cache for 4 minutes
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (err) {
+      console.warn('Could not retrieve Supabase session token:', err);
     }
   }
 
@@ -38,7 +43,6 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     // 1. Check Cache
     const cached = responseCache.get(cacheKey);
     if (cached && now - cached.timestamp < CACHE_TTL) {
-      // Return a mocked adapter to resolve immediately with cached data
       config.adapter = () => Promise.resolve({
         data: cached.data,
         status: 200,
@@ -85,20 +89,21 @@ api.interceptors.response.use(
 
 // Helper to wrap axios get to actually populate pendingRequests
 const originalGet = api.get;
+// @ts-ignore
 api.get = async function(url: string, config?: any) {
-    const cacheKey = `${url}?${new URLSearchParams(config?.params || {}).toString()}`;
-    if (!pendingRequests.has(cacheKey)) {
-        const reqPromise = originalGet.call(this, url, config);
-        pendingRequests.set(cacheKey, reqPromise);
-        try {
-            const res = await reqPromise;
-            return res;
-        } catch(e) {
-            pendingRequests.delete(cacheKey);
-            throw e;
-        }
+  const cacheKey = `${url}?${new URLSearchParams(config?.params || {}).toString()}`;
+  if (!pendingRequests.has(cacheKey)) {
+    const reqPromise = originalGet.call(this, url, config) as Promise<AxiosResponse>;
+    pendingRequests.set(cacheKey, reqPromise);
+    try {
+      const res = await reqPromise;
+      return res;
+    } catch(e) {
+      pendingRequests.delete(cacheKey);
+      throw e;
     }
-    return pendingRequests.get(cacheKey);
-}
+  }
+  return pendingRequests.get(cacheKey);
+};
 
 export default api;

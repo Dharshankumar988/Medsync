@@ -8,7 +8,6 @@ import {
   Shield,
   Activity,
   Brain,
-  FileText,
   Scan,
   Stethoscope,
   Heart,
@@ -22,24 +21,27 @@ import {
   ChevronDown,
   Menu,
   X,
-  BarChart3,
   Fingerprint,
-  Zap,
-  Globe,
-  Award,
-  ShieldCheck,
-  Clock,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@medsync/ui";
+import dynamic from "next/dynamic";
+
+import { HeroGraphic } from "../components/HeroGraphic";
+
+const BentoGrid = dynamic(() => import("../components/BentoGrid").then((mod) => mod.BentoGrid), {
+  ssr: true,
+  loading: () => <div className="min-h-[600px] w-full bg-transparent" />,
+});
 
 /* ─── Animation Variants ─── */
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: [0.25, 0.1, 0.25, 1] } },
 };
 
 const stagger = {
-  visible: { transition: { staggerChildren: 0.1 } },
+  visible: { transition: { staggerChildren: 0.03 } },
 };
 
 /* ─── Reusable Section Header ─── */
@@ -101,108 +103,6 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
   );
 }
 
-/* ─── Hero Floating Composition (matches uploaded reference) ─── */
-function HeroComposition() {
-  return (
-    <div className="relative h-[420px] w-full" aria-hidden="true">
-      {/* Connecting lines from center to orbiting elements */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 400 420" fill="none">
-        <line x1="200" y1="210" x2="68"  y2="78"  className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-        <line x1="200" y1="210" x2="330" y2="63"  className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-        <line x1="200" y1="210" x2="350" y2="226" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-        <line x1="200" y1="210" x2="330" y2="360" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-        <line x1="200" y1="210" x2="64"  y2="370" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-      </svg>
-
-      {/* Central shield — larger, more prominent */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 group cursor-default">
-        <motion.div
-          animate={{ y: [0, -8, 0] }}
-          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-          className="relative h-[120px] w-[120px] rounded-[32px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-xl border border-border/50 dark:border-white/[0.08] shadow-2xl flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20"
-        >
-          <div className="absolute inset-0 bg-blue-500/5 dark:bg-blue-500/10" />
-          <div className="absolute -inset-4 bg-gradient-to-tr from-blue-500/10 to-transparent blur-xl opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
-          <Shield className="h-12 w-12 text-blue-500 relative z-10" strokeWidth={1.5} />
-        </motion.div>
-        {/* Tooltip */}
-        <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap z-20 shadow-xl">
-          Core Security
-        </div>
-      </div>
-
-      {/* Orbiting element — Top Left (Fingerprint) */}
-      <motion.div
-        animate={{ y: [0, 8, 0] }}
-        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-[50px] left-[40px] group cursor-default z-10"
-      >
-        <div className="h-[56px] w-[56px] rounded-[18px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
-          <Fingerprint className="h-6 w-6 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
-        </div>
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
-          Identity Verification
-        </div>
-      </motion.div>
-
-      {/* Orbiting element — Top Right (Brain) */}
-      <motion.div
-        animate={{ y: [0, -10, 0] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        className="absolute top-[35px] right-[30px] group cursor-default z-10"
-      >
-        <div className="h-[56px] w-[56px] rounded-[18px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
-          <Brain className="h-6 w-6 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
-        </div>
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
-          AI Diagnostics
-        </div>
-      </motion.div>
-
-      {/* Orbiting element — Middle Right (Zap) */}
-      <motion.div
-        animate={{ y: [0, 10, 0] }}
-        transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-        className="absolute top-[200px] right-[10px] group cursor-default z-10"
-      >
-        <div className="h-[52px] w-[52px] rounded-2xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
-          <Zap className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
-        </div>
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
-          Real-time Sync
-        </div>
-      </motion.div>
-
-      {/* Orbiting element — Bottom Right (FileText) */}
-      <motion.div
-        animate={{ y: [0, -8, 0] }}
-        transition={{ duration: 7.5, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-        className="absolute bottom-[25px] right-[30px] group cursor-default z-10"
-      >
-        <div className="h-[52px] w-[52px] rounded-2xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
-          <FileText className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
-        </div>
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
-          Medical Records
-        </div>
-      </motion.div>
-
-      {/* Orbiting element — Bottom Left (Heart) */}
-      <motion.div
-        animate={{ y: [0, 10, 0] }}
-        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-        className="absolute bottom-[20px] left-[40px] group cursor-default z-10"
-      >
-        <div className="h-[48px] w-[48px] rounded-2xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] shadow-lg flex items-center justify-center transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
-          <Heart className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
-        </div>
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
-          Patient Vitals
-        </div>
-      </motion.div>
-    </div>
-  );
-}
 
 /* ─── Main Page ─── */
 export default function Home() {
@@ -308,14 +208,13 @@ export default function Home() {
                 </motion.div>
               </motion.div>
 
-              {/* Floating composition */}
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.7, delay: 0.3 }}
-                className="hidden lg:block"
+                className="hidden lg:flex w-full max-w-md mx-auto items-center justify-center"
               >
-                <HeroComposition />
+                <HeroGraphic />
               </motion.div>
             </div>
           </div>
@@ -326,17 +225,10 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-6">
             <SectionHeader
               label="Why MedSync"
-              title="Everything your healthcare practice needs. Nothing it doesn't."
+              title="Everything healthcare needs"
               description="A single platform that replaces fragmented systems with intelligent, secure, and interoperable healthcare infrastructure."
             />
-            <motion.div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5" initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={stagger}>
-              <FeatureCard icon={FileText} title="Unified Records" description="All patient data in one place — accessible to authorized professionals, verified by blockchain." />
-              <FeatureCard icon={Shield} title="Zero-Trust Security" description="Role-based access control, cryptographic verification, and immutable audit trails at every layer." />
-              <FeatureCard icon={Brain} title="AI-Powered Insights" description="Intelligent diagnostics, drug interaction checks, and clinical decision support built right in." />
-              <FeatureCard icon={Users} title="Multi-Role Access" description="Purpose-built experiences for patients, doctors, pharmacies, hospitals, and administrators." />
-              <FeatureCard icon={Activity} title="Real-Time Monitoring" description="Live dashboards, instant notifications, and continuous health data synchronization." />
-              <FeatureCard icon={Stethoscope} title="Clinical Workflows" description="Prescriptions, appointments, lab results, and imaging — all digitized and connected." />
-            </motion.div>
+            <BentoGrid />
           </div>
         </section>
 
@@ -431,25 +323,6 @@ export default function Home() {
                   </div>
                   <h3 className="text-sm font-semibold text-foreground mb-1">{role.label}</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed">{role.desc}</p>
-                </motion.div>
-              ))}
-            </motion.div>
-          </div>
-        </section>
-
-        {/* ━━━ STATISTICS ━━━ */}
-        <section className="py-24 md:py-32 border-t border-border/60 content-auto">
-          <div className="mx-auto max-w-6xl px-6">
-            <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-8" initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={stagger}>
-              {[
-                { value: "50K+", label: "Records Secured" },
-                { value: "1,200+", label: "Healthcare Professionals" },
-                { value: "99.9%", label: "Uptime SLA" },
-                { value: "10K+", label: "AI Analyses Performed" },
-              ].map((stat) => (
-                <motion.div key={stat.label} variants={fadeUp} className="text-center">
-                  <p className="text-4xl sm:text-5xl font-bold text-foreground tracking-tight">{stat.value}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{stat.label}</p>
                 </motion.div>
               ))}
             </motion.div>

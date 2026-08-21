@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Image as ImageIcon, Paperclip, X, Copy, Check, MoreVertical } from "lucide-react";
+import { Send, Image as ImageIcon, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { aiService } from "@/services/ai.service";
 import { PulseAIIcon } from "./PulseAIIcon";
@@ -18,6 +18,7 @@ interface Message {
 interface PulseAIChatProps {
   role: "doctor" | "patient" | "pharmacy" | "admin";
   fullPage?: boolean;
+  patientId?: string;
 }
 
 const PLUGINS = [remarkGfm];
@@ -65,13 +66,25 @@ const ChatMessage = memo(function ChatMessage({
   );
 });
 
-export function PulseAIChat({ role, fullPage = false }: PulseAIChatProps) {
+export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [scanType, setScanType] = useState("bone");
+
+  // Cleanup pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -98,32 +111,44 @@ export function PulseAIChat({ role, fullPage = false }: PulseAIChatProps) {
     setMessages((prev) => [...prev, { id: assistantMessageId, role: "assistant", content: "" }]);
 
     try {
-      await aiService.streamChat(
-        role,
-        userMessage.content,
-        sessionId,
-        (chunk) => {
-          setMessages((prev) => 
-            prev.map((m) => 
-              m.id === assistantMessageId 
-                ? { ...m, content: m.content + chunk } 
-                : m
-            )
-          );
-        },
-        () => {
-          setIsLoading(false);
-        },
-        (error) => {
-          console.error("Stream error:", error);
-          setIsLoading(false);
-        }
-      );
-    } catch (error) {
+      const response = await aiService.chat(role, userMessage.content, sessionId || undefined, patientId);
+      const result = response.data;
+      setSessionId(result.session_id);
+      setMessages((prev) => prev.map((m) =>
+        m.id === assistantMessageId ? { ...m, content: result.reply } : m
+      ));
+      setIsLoading(false);
+    } catch (error: any) {
       console.error(error);
+      setMessages((prev) => prev.map((m) =>
+        m.id === assistantMessageId ? { ...m, content: "Pulse could not complete that request. Please retry." } : m
+      ));
       setIsLoading(false);
     }
-  }, [input, isLoading, role, sessionId]);
+  }, [input, isLoading, role, sessionId, patientId]);
+
+  const handleImage = useCallback(async (file?: File) => {
+    if (!file || isLoading) return;
+    const userMessage: Message = { id: Date.now().toString(), role: "user", content: `Image uploaded for ${scanType.toUpperCase()} analysis: ${file.name}` };
+    const assistantMessageId = (Date.now() + 1).toString();
+    setMessages((prev) => [...prev, userMessage, { id: assistantMessageId, role: "assistant", content: "" }]);
+    setIsLoading(true);
+    try {
+      const response = await aiService.analyzeImage(file, scanType, patientId, sessionId || undefined);
+      const report = response.data;
+      if (report.session_id) setSessionId(report.session_id);
+      const finding = report.prediction;
+      const explanation = role === "doctor" ? report.clinical_summary : report.patient_explanation;
+      const text = `**Model finding (${report.scan_type.toUpperCase()})**: ${finding.diagnosis}\n\nConfidence: ${finding.confidence_percent}%${explanation?.summary ? `\n\n${explanation.summary}` : "\n\nThe model result is available, but the explanatory service is unavailable."}`;
+      setMessages((prev) => prev.map((m) => m.id === assistantMessageId ? { ...m, content: text } : m));
+    } catch (error) {
+      console.error(error);
+      setMessages((prev) => prev.map((m) => m.id === assistantMessageId ? { ...m, content: "Image analysis failed. No result was generated; retry after checking the image and service status." } : m));
+    } finally {
+      setIsLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [isLoading, patientId, role, scanType, sessionId]);
 
   const handleCopy = useCallback((id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -165,8 +190,12 @@ export function PulseAIChat({ role, fullPage = false }: PulseAIChatProps) {
       {/* Input */}
       <div className="p-4 border-t border-border bg-background">
         <div className="relative flex items-end gap-2 bg-muted/50 p-2 rounded-xl border border-border focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
-          <button className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md shrink-0">
-            <Paperclip size={18} />
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => handleImage(e.target.files?.[0])} />
+          <select aria-label="Image model" value={scanType} onChange={(e) => setScanType(e.target.value)} className="hidden sm:block bg-transparent text-xs text-muted-foreground outline-none">
+            <option value="bone">Bone</option><option value="brain">Brain</option><option value="kidney">Kidney</option><option value="skin">Skin</option>
+          </select>
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md shrink-0 disabled:opacity-50" title="Upload image for model analysis">
+            <ImageIcon size={18} />
           </button>
           <textarea
             value={input}

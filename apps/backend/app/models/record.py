@@ -34,9 +34,9 @@ class MedicalRecordTag(Base, UUIDMixin, TimestampMixin):
 class MedicalRecord(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "medical_records"
     
-    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    uploaded_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    category_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("medical_record_categories.id"), nullable=True)
+    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    category_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("medical_record_categories.id"), index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -46,13 +46,13 @@ class MedicalRecord(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
 
 class MedicalRecordTagMapping(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "medical_record_tag_mappings"
-    record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_records.id"), nullable=False)
-    tag_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_tags.id"), nullable=False)
+    record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_records.id"), index=True, nullable=False)
+    tag_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_tags.id"), index=True, nullable=False)
 
 class MedicalRecordVersion(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "medical_record_versions"
     
-    record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_records.id"), nullable=False)
+    record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_records.id"), index=True, nullable=False)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     ipfs_cid: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     file_type: Mapped[FileType] = mapped_column(String(50), nullable=False)
@@ -60,17 +60,18 @@ class MedicalRecordVersion(Base, UUIDMixin, TimestampMixin):
     change_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING")
+    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
     
     record = relationship("MedicalRecord", back_populates="versions")
     doctor_notes = relationship("DoctorNote", back_populates="version", cascade="all, delete-orphan")
+    ai_analyses = relationship("AIAnalysis", back_populates="version", cascade="all, delete-orphan")
 
 class RecordPermission(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "record_permissions"
     
-    record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_records.id"), nullable=False)
-    granted_to: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    granted_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_records.id"), index=True, nullable=False)
+    granted_to: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    granted_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     access_level: Mapped[str] = mapped_column(String(50), default="READ")
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -80,16 +81,16 @@ class RecordPermission(Base, UUIDMixin, TimestampMixin):
 class ConsentHistory(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "consent_history"
     
-    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    doctor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    doctor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     action: Mapped[str] = mapped_column(String(50), nullable=False)  # GRANTED, REVOKED
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 class DoctorNote(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "doctor_notes"
     
-    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), nullable=False)
-    doctor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), index=True, nullable=False)
+    doctor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     note_text: Mapped[str] = mapped_column(Text, nullable=False)
     
     version = relationship("MedicalRecordVersion", back_populates="doctor_notes")
@@ -97,31 +98,33 @@ class DoctorNote(Base, UUIDMixin, TimestampMixin):
 class OCRResult(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "ocr_results"
     
-    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), unique=True, nullable=False)
+    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), index=True, unique=True, nullable=False)
     extracted_text: Mapped[str] = mapped_column(Text, nullable=True)
     confidence: Mapped[float] = mapped_column(Float, nullable=True)
     detected_fields: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
-    status: Mapped[str] = mapped_column(String(50), default="PENDING")
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)
 
 class AIAnalysis(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "ai_analyses"
     
-    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), nullable=False)
+    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), index=True, nullable=False)
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    analysis_status: Mapped[str] = mapped_column(String(50), default="PENDING")
+    analysis_status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     processing_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    
+    version = relationship("MedicalRecordVersion", back_populates="ai_analyses")
 
 class FileMetadata(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "file_metadata"
     
-    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), unique=True, nullable=False)
+    version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_record_versions.id"), index=True, unique=True, nullable=False)
     supabase_storage_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=True)
     encrypted_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sha256_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     download_count: Mapped[int] = mapped_column(Integer, default=0)
     last_downloaded: Mapped[datetime | None] = mapped_column(nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)

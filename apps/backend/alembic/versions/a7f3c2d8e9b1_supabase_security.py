@@ -104,7 +104,7 @@ def upgrade() -> None:
         "alter table public.file_metadata enable row level security;",
         "alter table public.record_permissions enable row level security;",
         "alter table public.doctor_notes enable row level security;",
-        "alter table storage.objects enable row level security;",
+        # "alter table storage.objects enable row level security;",
         "drop policy if exists medical_records_select_own on public.medical_records;",
         "drop policy if exists medical_records_insert_own on public.medical_records;",
         "drop policy if exists medical_records_update_own on public.medical_records;",
@@ -145,14 +145,14 @@ def upgrade() -> None:
         "create policy doctor_notes_insert_own on public.doctor_notes for insert with check ((doctor_id = public.current_supabase_user_id() and public.current_supabase_role() = 'doctor') or public.is_medsync_admin());",
         "create policy doctor_notes_update_own on public.doctor_notes for update using ((doctor_id = public.current_supabase_user_id()) or public.is_medsync_admin()) with check ((doctor_id = public.current_supabase_user_id()) or public.is_medsync_admin());",
         "create policy doctor_notes_delete_own on public.doctor_notes for delete using ((doctor_id = public.current_supabase_user_id()) or public.is_medsync_admin());",
-        "drop policy if exists storage_objects_select_own on storage.objects;",
-        "drop policy if exists storage_objects_insert_own on storage.objects;",
-        "drop policy if exists storage_objects_update_own on storage.objects;",
-        "drop policy if exists storage_objects_delete_own on storage.objects;",
-        "create policy storage_objects_select_own on storage.objects for select using (bucket_id = 'medical-records' and public.storage_object_owner(name));",
-        "create policy storage_objects_insert_own on storage.objects for insert with check (bucket_id = 'medical-records' and public.storage_object_owner(name));",
-        "create policy storage_objects_update_own on storage.objects for update using (bucket_id = 'medical-records' and public.storage_object_owner(name)) with check (bucket_id = 'medical-records' and public.storage_object_owner(name));",
-        "create policy storage_objects_delete_own on storage.objects for delete using (bucket_id = 'medical-records' and public.storage_object_owner(name));",
+        # "drop policy if exists storage_objects_select_own on storage.objects;",
+        # "drop policy if exists storage_objects_insert_own on storage.objects;",
+        # "drop policy if exists storage_objects_update_own on storage.objects;",
+        # "drop policy if exists storage_objects_delete_own on storage.objects;",
+        # "create policy storage_objects_select_own on storage.objects for select using (bucket_id = 'medical-records' and public.storage_object_owner(name));",
+        # "create policy storage_objects_insert_own on storage.objects for insert with check (bucket_id = 'medical-records' and public.storage_object_owner(name));",
+        # "create policy storage_objects_update_own on storage.objects for update using (bucket_id = 'medical-records' and public.storage_object_owner(name)) with check (bucket_id = 'medical-records' and public.storage_object_owner(name));",
+        # "create policy storage_objects_delete_own on storage.objects for delete using (bucket_id = 'medical-records' and public.storage_object_owner(name));",
     ]
 
     _execute_statements(statements)
@@ -160,11 +160,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     statements = [
-        "drop policy if exists storage_objects_delete_own on storage.objects;",
-        "drop policy if exists storage_objects_update_own on storage.objects;",
-        "drop policy if exists storage_objects_insert_own on storage.objects;",
-        "drop policy if exists storage_objects_select_own on storage.objects;",
-        "alter table storage.objects disable row level security;",
+        # "drop policy if exists storage_objects_delete_own on storage.objects;",
+        # "drop policy if exists storage_objects_update_own on storage.objects;",
+        # "drop policy if exists storage_objects_insert_own on storage.objects;",
+        # "drop policy if exists storage_objects_select_own on storage.objects;",
+        # "alter table storage.objects disable row level security;",
         "drop policy if exists doctor_notes_delete_own on public.doctor_notes;",
         "drop policy if exists doctor_notes_update_own on public.doctor_notes;",
         "drop policy if exists doctor_notes_insert_own on public.doctor_notes;",

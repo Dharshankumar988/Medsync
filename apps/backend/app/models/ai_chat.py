@@ -12,7 +12,8 @@ class AIChatRole(str, enum.Enum):
 
 class AIChatSession(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "ai_chat_sessions"
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    patient_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(255), default="New Conversation")
     is_doctor_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -21,7 +22,7 @@ class AIChatSession(Base, UUIDMixin, TimestampMixin):
 
 class AIChatMessage(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "ai_chat_messages"
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_chat_sessions.id"), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_chat_sessions.id"), index=True, nullable=False)
     role: Mapped[AIChatRole] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     

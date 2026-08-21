@@ -82,7 +82,7 @@ async def download_record(
         raise HTTPException(status_code=404, detail="Record not found")
 
     is_owner = record.patient_id == current_user.id
-    is_doctor = current_user.role == "doctor"
+    is_doctor = current_user.role == UserRole.DOCTOR
     if not is_owner and is_doctor:
         has_permission = await PermissionService.check_permission(db, record_id, current_user.id)
         if not has_permission:

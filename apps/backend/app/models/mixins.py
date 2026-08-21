@@ -7,11 +7,11 @@ class UUIDMixin:
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
 class TimestampMixin:
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.utcnow, 
         onupdate=datetime.utcnow
     )
 
 class SoftDeleteMixin:
-    deleted_at: Mapped[datetime | None] = mapped_column(default=None)
+    deleted_at: Mapped[datetime | None] = mapped_column(default=None, index=True)

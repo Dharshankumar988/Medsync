@@ -115,3 +115,37 @@ async def get_inventory_alerts(
     }
     
     return APIResponse(message="Inventory alerts retrieved", data=data)
+
+from pydantic import BaseModel
+import uuid
+
+class StockAdjustmentRequest(BaseModel):
+    quantity_change: int
+    reason: str
+
+@router.post("/{inventory_id}/adjust-stock", response_model=APIResponse)
+async def adjust_stock(
+    inventory_id: uuid.UUID,
+    req: StockAdjustmentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_pharmacy)
+):
+    stmt = select(MedicineInventory).where(MedicineInventory.id == inventory_id).with_for_update()
+    result = await db.execute(stmt)
+    inv = result.scalar_one_or_none()
+    
+    if not inv:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+        
+    if inv.pharmacy_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to adjust this stock")
+        
+    new_stock = inv.stock_quantity + req.quantity_change
+    if new_stock < 0:
+        raise HTTPException(status_code=400, detail="Stock quantity cannot be negative")
+        
+    inv.stock_quantity = new_stock
+    await db.commit()
+    
+    return APIResponse(message="Stock adjusted successfully", data={"new_quantity": inv.stock_quantity})

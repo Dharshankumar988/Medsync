@@ -14,6 +14,7 @@ import {
   ArchiveX
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Web3Provider } from "@/context/Web3Context";
 
 const sidebarLinks = [
   { name: "Overview", href: "/admin/blockchain", icon: LayoutDashboard },
@@ -75,7 +76,9 @@ export default function BlockchainAdminLayout({
       {/* Main Content Area */}
       <main className="flex-1 p-6 md:p-8 bg-background overflow-y-auto">
         <div className="mx-auto max-w-7xl">
-          {children}
+          <Web3Provider>
+            {children}
+          </Web3Provider>
         </div>
       </main>
     </div>

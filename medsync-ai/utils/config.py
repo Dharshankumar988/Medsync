@@ -9,7 +9,12 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "production"
     
     # Model Paths & Hugging Face Config
-    MODEL_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
+    # Local development keeps the four approved weights in the repository root.
+    # Deployments can override MODEL_DIR and keep the same filenames.
+    MODEL_DIR: str = os.getenv(
+        "MODEL_DIR",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "models"),
+    )
     BONE_MODEL_PATH: str = os.path.join(MODEL_DIR, "bone.pt")
     BRAIN_MODEL_PATH: str = os.path.join(MODEL_DIR, "brain.pt")
     KIDNEY_MODEL_PATH: str = os.path.join(MODEL_DIR, "kidney.pt")

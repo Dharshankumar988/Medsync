@@ -16,6 +16,17 @@ class AppointmentCreate(BaseModel):
     start_time: time
     end_time: time
     notes: Optional[str] = None
+    location_id: Optional[uuid.UUID] = None
+
+class AppointmentStatusUpdate(BaseModel):
+    status: str  # CONFIRMED, REJECTED, CANCELLED, COMPLETED
+    reason: Optional[str] = None
+
+class AppointmentReschedule(BaseModel):
+    appointment_date: date
+    start_time: time
+    end_time: time
+    reason: Optional[str] = None
 
 class AppointmentResponse(BaseModel):
     id: uuid.UUID
@@ -24,8 +35,24 @@ class AppointmentResponse(BaseModel):
     appointment_date: date
     start_time: time
     end_time: time
-    status: AppointmentStatus
+    status: str
     notes: Optional[str] = None
+    location_id: Optional[uuid.UUID] = None
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
+    # Enriched fields (populated by service layer, not from ORM directly)
+    patient_name: Optional[str] = None
+    patient_picture: Optional[str] = None
+    doctor_name: Optional[str] = None
+    doctor_specialization: Optional[str] = None
+    doctor_picture: Optional[str] = None
+    hospital_name: Optional[str] = None
+    location_name: Optional[str] = None
     
     model_config = {"from_attributes": True}
+
+class AppointmentListResponse(BaseModel):
+    appointments: list[AppointmentResponse]
+    total: int

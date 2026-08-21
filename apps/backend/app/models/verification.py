@@ -19,10 +19,10 @@ class VerificationStatus(str, enum.Enum):
 class VerificationRequest(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "verification_requests"
     
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     role_type: Mapped[RoleType] = mapped_column(Enum(RoleType), nullable=False)
-    status: Mapped[VerificationStatus] = mapped_column(Enum(VerificationStatus), default=VerificationStatus.PENDING)
-    reviewer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("admins.id"), nullable=True)
+    status: Mapped[VerificationStatus] = mapped_column(Enum(VerificationStatus), default=VerificationStatus.PENDING, index=True)
+    reviewer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("admins.id"), index=True, nullable=True)
     review_date: Mapped[datetime | None] = mapped_column(nullable=True)
     approval_date: Mapped[datetime | None] = mapped_column(nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

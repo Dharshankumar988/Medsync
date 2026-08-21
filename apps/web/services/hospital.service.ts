@@ -13,6 +13,8 @@ export interface Hospital {
   phone_number?: string;
   email?: string;
   website?: string;
+  latitude?: number;
+  longitude?: number;
   is_verified: boolean;
   is_active: boolean;
 }

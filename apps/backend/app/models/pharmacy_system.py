@@ -35,7 +35,7 @@ class Medicine(Base, UUIDMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     generic_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     brand_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    category_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_categories.id"), nullable=False)
+    category_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_categories.id"), index=True, nullable=False)
     manufacturer: Mapped[str | None] = mapped_column(String(255), nullable=True)
     strength: Mapped[str | None] = mapped_column(String(100), nullable=True)
     dosage_form: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -51,9 +51,9 @@ class Medicine(Base, UUIDMixin, TimestampMixin):
 
 class MedicineInventory(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "medicine_inventory"
-    pharmacy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    medicine_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicines.id"), nullable=False)
-    supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
+    pharmacy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    medicine_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicines.id"), index=True, nullable=False)
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"), index=True, nullable=True)
     batch_number: Mapped[str] = mapped_column(String(100), nullable=False)
     manufacturing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -67,25 +67,25 @@ class MedicineInventory(Base, UUIDMixin, TimestampMixin):
 
 class MedicineOrder(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "medicine_orders"
-    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    pharmacy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    prescription_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("prescriptions.id"), nullable=True)
-    status: Mapped[OrderStatus] = mapped_column(String(50), default=OrderStatus.PENDING)
+    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    pharmacy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    prescription_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("prescriptions.id"), index=True, nullable=True)
+    status: Mapped[OrderStatus] = mapped_column(String(50), default=OrderStatus.PENDING, index=True)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 class MedicineOrderItem(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "medicine_order_items"
-    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_orders.id"), nullable=False)
-    inventory_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_inventory.id"), nullable=False)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_orders.id"), index=True, nullable=False)
+    inventory_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_inventory.id"), index=True, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     price_at_purchase: Mapped[float] = mapped_column(Float, nullable=False)
 
 class DeliveryTracking(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "delivery_tracking"
-    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_orders.id"), unique=True, nullable=False)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_orders.id"), index=True, unique=True, nullable=False)
     tracking_number: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    current_status: Mapped[str] = mapped_column(String(100), nullable=False)
+    current_status: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     delivery_partner: Mapped[str | None] = mapped_column(String(255), nullable=True)
     estimated_delivery: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -7,7 +7,7 @@ from app.models.mixins import UUIDMixin, TimestampMixin
 class Admin(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "admins"
     
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, unique=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     department: Mapped[str] = mapped_column(String(255), nullable=True)
     

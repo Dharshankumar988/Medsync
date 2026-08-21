@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
+import { hospitalService, Hospital } from "@/services/hospital.service";
+import dynamic from "next/dynamic";
 import { Button } from "@medsync/ui";
+const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 import { Input } from "@medsync/ui";
 import { 
   Activity, Loader2, UserPlus, LockKeyhole, Mail, User, 
   Eye, EyeOff, Shield, Heart, Stethoscope, Pill, 
-  CheckCircle2, AlertTriangle, Building2, Phone, BriefcaseMedical 
+  CheckCircle2, AlertTriangle, Building2, Phone, BriefcaseMedical, Brain 
 } from "lucide-react";
 import { Alert, AlertDescription } from "@medsync/ui";
 import Link from "next/link";
@@ -16,11 +19,11 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: [0.25, 0.1, 0.25, 1] } },
 };
 
 const stagger = {
-  visible: { transition: { staggerChildren: 0.05 } },
+  visible: { transition: { staggerChildren: 0.03 } },
 };
 
 const ROLES = [
@@ -61,9 +64,22 @@ export default function RegisterPage() {
   
   // Additional fields for Doctor & Pharmacy
   const [licenseNumber, setLicenseNumber] = useState("");
-  const [hospitalName, setHospitalName] = useState("");
+  const [doctorPracticeType, setDoctorPracticeType] = useState<"HOSPITAL" | "CLINIC">("HOSPITAL");
+  const [selectedHospitalId, setSelectedHospitalId] = useState("");
+  const [clinicName, setClinicName] = useState("");
+  const [clinicAddress, setClinicAddress] = useState("");
+  const [latitude, setLatitude] = useState(0);
+  const [longitude, setLongitude] = useState(0);
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
+
   const [businessName, setBusinessName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+
+  useEffect(() => {
+    if (role === "DOCTOR" && doctorPracticeType === "HOSPITAL") {
+      hospitalService.getHospitals().then(res => setHospitals(res.data.data)).catch(console.error);
+    }
+  }, [role, doctorPracticeType]);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -89,9 +105,19 @@ export default function RegisterPage() {
     }
 
     // Role specific validation
-    if (role === "DOCTOR" && !licenseNumber) {
-      setError("Medical License Number is required for doctors.");
-      return;
+    if (role === "DOCTOR") {
+      if (!licenseNumber) {
+        setError("Medical License Number is required for doctors.");
+        return;
+      }
+      if (doctorPracticeType === "HOSPITAL" && !selectedHospitalId) {
+        setError("Please select a hospital.");
+        return;
+      }
+      if (doctorPracticeType === "CLINIC" && (!clinicName || !latitude)) {
+        setError("Please provide clinic name and map location.");
+        return;
+      }
     }
     if (role === "PHARMACY" && (!businessName || !licenseNumber || !contactNumber)) {
       setError("Business Name, License Number, and Contact Number are required for pharmacies.");
@@ -107,7 +133,11 @@ export default function RegisterPage() {
         password,
         role,
         license_number: role !== "PATIENT" ? licenseNumber : undefined,
-        hospital_name: role === "DOCTOR" ? hospitalName : undefined,
+        hospital_id: role === "DOCTOR" && doctorPracticeType === "HOSPITAL" ? selectedHospitalId : undefined,
+        clinic_name: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? clinicName : undefined,
+        clinic_address: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? clinicAddress : undefined,
+        latitude: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? latitude : undefined,
+        longitude: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? longitude : undefined,
         business_name: role === "PHARMACY" ? businessName : undefined,
         contact_number: role === "PHARMACY" ? contactNumber : undefined,
       });
@@ -127,7 +157,6 @@ export default function RegisterPage() {
       } else {
         setError(err.response?.data?.message || err.message || "Registration failed. Please try again.");
       }
-    } finally {
       setIsLoading(false);
     }
   };
@@ -151,47 +180,32 @@ export default function RegisterPage() {
         <div className="relative z-10 flex flex-col items-center text-center px-12 max-w-md">
           {/* Floating composition (matching login/landing page style) */}
           <div className="relative h-56 w-56 mb-10" aria-hidden="true">
-            {/* Connecting lines */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 224 224" fill="none">
-              <line x1="112" y1="112" x2="30" y2="10" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-              <line x1="112" y1="112" x2="200" y2="20" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-              <line x1="112" y1="112" x2="20" y2="180" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-              <line x1="112" y1="112" x2="190" y2="200" className="stroke-border/60 dark:stroke-white/[0.06]" strokeWidth="1.5" />
-            </svg>
-
             <div className="absolute inset-0 flex items-center justify-center z-10 group cursor-default">
               <div className="relative h-24 w-24 rounded-3xl bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-xl border border-border/50 dark:border-white/[0.08] shadow-2xl flex items-center justify-center overflow-hidden animate-float-slow transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
                 <div className="absolute inset-0 bg-blue-500/5 dark:bg-blue-500/10" />
                 <div className="absolute -inset-4 bg-gradient-to-tr from-blue-500/10 to-transparent blur-xl opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
                 <UserPlus className="h-10 w-10 text-blue-500 relative z-10" strokeWidth={1.5} />
               </div>
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap z-20 shadow-xl">
-                Create Profile
-              </div>
             </div>
             
+            <div className="absolute top-2 left-2 animate-float-slow group cursor-default z-10" style={{ animationDelay: "0.5s" }}>
+              <div className="h-9 w-9 rounded-[12px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
+                <Brain className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
+              </div>
+            </div>
             <div className="absolute top-0 right-1 animate-float-slow-reverse group cursor-default z-10">
               <div className="h-11 w-11 rounded-[14px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
                 <Shield className="h-5 w-5 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
-              </div>
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
-                Secure Network
               </div>
             </div>
             <div className="absolute bottom-2 left-0 animate-float-slow group cursor-default z-10" style={{ animationDelay: "1s" }}>
               <div className="h-10 w-10 rounded-[14px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
                 <Activity className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
               </div>
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
-                Health Insights
-              </div>
             </div>
             <div className="absolute bottom-6 right-0 animate-float-slow-reverse group cursor-default z-10" style={{ animationDelay: "2s" }}>
               <div className="h-9 w-9 rounded-[12px] bg-background/80 dark:bg-[#0a0a0a]/90 backdrop-blur-md border border-border/50 dark:border-white/[0.08] flex items-center justify-center shadow-lg transition-all duration-300 group-hover:border-blue-500/50 group-hover:shadow-blue-500/20">
                 <Heart className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" strokeWidth={1.5} />
-              </div>
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none whitespace-nowrap shadow-xl">
-                Patient Care
               </div>
             </div>
           </div>
@@ -334,9 +348,23 @@ export default function RegisterPage() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="grid grid-cols-1 md:grid-cols-2 gap-5 overflow-hidden"
+                    className="grid grid-cols-1 gap-5 overflow-hidden pt-1"
                   >
-                    <div className="space-y-2 pt-1">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground/80">Practice Type</label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="radio" checked={doctorPracticeType === "HOSPITAL"} onChange={() => setDoctorPracticeType("HOSPITAL")} className="accent-blue-500" />
+                          Join Existing Hospital
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="radio" checked={doctorPracticeType === "CLINIC"} onChange={() => setDoctorPracticeType("CLINIC")} className="accent-blue-500" />
+                          Register Private Clinic
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
                       <label htmlFor="license" className="text-sm font-medium text-foreground/80">Medical License No.</label>
                       <div className="relative">
                         <BriefcaseMedical className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
@@ -352,21 +380,37 @@ export default function RegisterPage() {
                         />
                       </div>
                     </div>
-                    <div className="space-y-2 pt-1">
-                      <label htmlFor="hospital" className="text-sm font-medium text-foreground/80">Hospital/Clinic Name <span className="text-muted-foreground font-normal">(Optional)</span></label>
-                      <div className="relative">
-                        <Building2 className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
-                        <Input
-                          id="hospital"
-                          type="text"
-                          placeholder="Where you practice"
-                          value={hospitalName}
-                          onChange={(e) => setHospitalName(e.target.value)}
-                          disabled={isLoading}
-                          className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
-                        />
+
+                    {doctorPracticeType === "HOSPITAL" ? (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground/80">Select Hospital</label>
+                        <select 
+                          value={selectedHospitalId} 
+                          onChange={(e) => setSelectedHospitalId(e.target.value)}
+                          className="w-full h-12 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">Select a hospital...</option>
+                          {hospitals.map(h => (
+                            <option key={h.id} value={h.id}>{h.name} - {h.city}</option>
+                          ))}
+                        </select>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground/80">Clinic Name</label>
+                          <Input value={clinicName} onChange={e => setClinicName(e.target.value)} placeholder="Your Clinic Name" className="h-12 bg-background border-input" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground/80">Clinic Location (Map)</label>
+                          <LocationPickerMap onLocationSelect={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground/80">Clinic Address</label>
+                          <Input value={clinicAddress} onChange={e => setClinicAddress(e.target.value)} placeholder="123 Health St" className="h-12 bg-background border-input" />
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 )}
 
@@ -528,7 +572,10 @@ export default function RegisterPage() {
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Just a second...
+                    </>
                   ) : (
                     <>
                       Create Account

@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Providers } from "@/providers/query-provider";
 import { RoleProvider } from "@/providers/role-provider";
-import { Web3Provider } from "@/context/Web3Context";
+import { AuthProvider } from "@/components/providers/AuthProvider";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -29,18 +29,18 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <Providers>
+          <AuthProvider>
             <ThemeProvider
               attribute="class"
               defaultTheme="dark"
               enableSystem
-            disableTransitionOnChange
-          >
-            <RoleProvider>
-              <Web3Provider>
+              disableTransitionOnChange
+            >
+              <RoleProvider>
                 {children}
-              </Web3Provider>
-            </RoleProvider>
-          </ThemeProvider>
+              </RoleProvider>
+            </ThemeProvider>
+          </AuthProvider>
         </Providers>
       </body>
     </html>

@@ -6,9 +6,9 @@ from app.models.mixins import UUIDMixin, TimestampMixin
 
 class Prescription(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "prescriptions"
-    appointment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("appointments.id"), unique=True, nullable=False)
-    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    doctor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    appointment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("appointments.id"), index=True, unique=True, nullable=False)
+    patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    doctor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     diagnosis: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -18,7 +18,7 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     qr_token: Mapped[str | None] = mapped_column(Text, nullable=True)    
     # Blockchain Audit Fields
-    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING")
+    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
     block_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -27,7 +27,7 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
 
 class PrescriptionItem(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "prescription_items"
-    prescription_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("prescriptions.id"), nullable=False)
+    prescription_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("prescriptions.id"), index=True, nullable=False)
     medicine_name: Mapped[str] = mapped_column(String(255), nullable=False)
     dosage: Mapped[str] = mapped_column(String(100), nullable=False)
     frequency: Mapped[str] = mapped_column(String(100), nullable=False)

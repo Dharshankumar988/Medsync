@@ -14,14 +14,13 @@ class BoneDetectionService:
     def load_model(self, path: str):
         if not os.path.exists(path):
             logger.error(f"Bone model not found at {path}")
+            self.model = None
             return
         try:
-            # We attempt to load the model. 
-            # If the file is invalid/empty, this will throw an error.
             self.model = YOLO(path)
             logger.info("Bone model loaded successfully.")
         except Exception as e:
-            logger.error(f"Failed to load bone model: {str(e)}")
+            logger.error(f"Failed to load bone model at {path}: {str(e)}")
             self.model = None
 
     def predict(self, image_np) -> Dict[str, Any]:

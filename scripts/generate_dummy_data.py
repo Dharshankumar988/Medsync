@@ -5,135 +5,133 @@ import datetime
 def generate_sql():
     sql = "BEGIN;\n\n"
 
-    # Define standard users
-    admin1_id = "a1000000-0000-0000-0000-000000000000"
-    admin2_id = "a2000000-0000-0000-0000-000000000000"
-    doc1_id = "b1000000-0000-0000-0000-000000000000"
-    doc2_id = "b2000000-0000-0000-0000-000000000000"
-    doc3_id = "00000000-0000-0000-0000-000000000001"
-    doc4_id = "00000000-0000-0000-0000-000000000002"
-    pat1_id = "c1000000-0000-0000-0000-000000000000"
-    pat2_id = "c2000000-0000-0000-0000-000000000000"
+    # Minimal target: 1 Admin, 3 Doctors, 5 Patients, 2 Pharmacies, 4 Hospitals
     
-    pharmacy_users = [str(uuid.uuid4()) for _ in range(10)]
-    supplier_ids = [str(uuid.uuid4()) for _ in range(10)]
-    category_ids = [str(uuid.uuid4()) for _ in range(10)]
+    # 1. Hospitals (Bangalore)
+    hospitals = [
+        ('11111111-0000-0000-0000-000000000001', 'Manipal Hospital HAL Airport Road', '98, HAL Old Airport Rd, Kodihalli', 'Bangalore', 'Karnataka', 'India', '560017', '+91 80 2502 4444', '12.95920000', '77.65680000'),
+        ('11111111-0000-0000-0000-000000000002', 'Apollo Hospitals Bannerghatta Road', '154/11, Opp IIM-B, Bannerghatta Road', 'Bangalore', 'Karnataka', 'India', '560076', '+91 80 2630 4050', '12.89400000', '77.59860000'),
+        ('11111111-0000-0000-0000-000000000003', 'Fortis Hospital Cunningham Road', '14, Cunningham Rd, Vasanth Nagar', 'Bangalore', 'Karnataka', 'India', '560052', '+91 80 4199 4444', '12.98820000', '77.59370000'),
+        ('11111111-0000-0000-0000-000000000004', 'Aster CMI Hospital Hebbal', 'No. 43/2, New Airport Road, NH 44', 'Bangalore', 'Karnataka', 'India', '560092', '+91 80 4342 0100', '13.05600000', '77.59000000')
+    ]
+
+    sql += "TRUNCATE TABLE \n"
+    sql += "  medicine_order_items, delivery_tracking, medicine_orders, prescription_items, prescriptions, \n"
+    sql += "  appointments, medicine_inventory, medicines, suppliers, medicine_categories, \n"
+    sql += "  doctor_availability, patients, doctors, pharmacies, admins, users, hospitals CASCADE;\n\n"
+
+    sql += "-- Hospitals\n"
+    sql += "INSERT INTO hospitals (id, name, address, city, state, country, pincode, phone_number, latitude, longitude, is_verified, is_active, created_at, updated_at) VALUES \n"
+    h_inserts = []
+    for h in hospitals:
+        h_inserts.append(f"('{h[0]}', '{h[1]}', '{h[2]}', '{h[3]}', '{h[4]}', '{h[5]}', '{h[6]}', '{h[7]}', {h[8]}, {h[9]}, TRUE, TRUE, NOW(), NOW())")
+    sql += ",\n".join(h_inserts) + ";\n\n"
+
+    # 2. Users
+    pw_hash = "$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiNb/ALeZ1g0aFukw3w/pQ8eQ984jW" # password123
+    
+    admin_id = "a1000000-0000-0000-0000-000000000000"
+    doc_ids = ["b1000000-0000-0000-0000-000000000001", "b1000000-0000-0000-0000-000000000002", "b1000000-0000-0000-0000-000000000003"]
+    pat_ids = ["c1000000-0000-0000-0000-000000000001", "c1000000-0000-0000-0000-000000000002", "c1000000-0000-0000-0000-000000000003", "c1000000-0000-0000-0000-000000000004", "c1000000-0000-0000-0000-000000000005"]
+    pharm_ids = ["d1000000-0000-0000-0000-000000000001", "d1000000-0000-0000-0000-000000000002"]
 
     sql += "-- Users\n"
     sql += "INSERT INTO users (id, email, password_hash, role, status, created_at, updated_at) VALUES \n"
-    
-    users = [
-        f"('{admin1_id}', 'admin1@medsync.com', 'admin', 'ADMIN', 'ACTIVE', NOW(), NOW())",
-        f"('{admin2_id}', 'admin2@medsync.com', 'admin', 'ADMIN', 'ACTIVE', NOW(), NOW())",
-        f"('{doc1_id}', 'doctor1@medsync.com', 'doctor', 'DOCTOR', 'ACTIVE', NOW(), NOW())",
-        f"('{doc2_id}', 'doctor2@medsync.com', 'doctor', 'DOCTOR', 'ACTIVE', NOW(), NOW())",
-        f"('{doc3_id}', 'dr.rao@manipal.com', 'doctor', 'DOCTOR', 'ACTIVE', NOW(), NOW())",
-        f"('{doc4_id}', 'dr.shetty@apollo.com', 'doctor', 'DOCTOR', 'ACTIVE', NOW(), NOW())",
-        f"('{pat1_id}', 'patient1@medsync.com', 'patient', 'PATIENT', 'ACTIVE', NOW(), NOW())",
-        f"('{pat2_id}', 'patient2@medsync.com', 'patient', 'PATIENT', 'ACTIVE', NOW(), NOW())"
-    ]
-    
-    for i, p_id in enumerate(pharmacy_users):
-        users.append(f"('{p_id}', 'pharmacy{i+1}@medsync.com', 'pharma', 'PHARMACY', 'ACTIVE', NOW(), NOW())")
-    
+    users = []
+    users.append(f"('{admin_id}', 'admin@medsync.blr.in', '{pw_hash}', 'ADMIN', 'ACTIVE', NOW(), NOW())")
+    for i, d_id in enumerate(doc_ids):
+        users.append(f"('{d_id}', 'doctor{i+1}@medsync.blr.in', '{pw_hash}', 'DOCTOR', 'ACTIVE', NOW(), NOW())")
+    for i, p_id in enumerate(pat_ids):
+        users.append(f"('{p_id}', 'patient{i+1}@example.com', '{pw_hash}', 'PATIENT', 'ACTIVE', NOW(), NOW())")
+    for i, ph_id in enumerate(pharm_ids):
+        users.append(f"('{ph_id}', 'pharmacy{i+1}@medsync.blr.in', '{pw_hash}', 'PHARMACY', 'ACTIVE', NOW(), NOW())")
     sql += ",\n".join(users) + ";\n\n"
+
+    # Admins
+    sql += "-- Admins\n"
+    sql += "INSERT INTO admins (id, user_id, full_name, department, created_at, updated_at) VALUES \n"
+    sql += f"('{uuid.uuid4()}', '{admin_id}', 'Admin Chief', 'Operations', NOW(), NOW());\n\n"
+
+    # Doctors
+    sql += "-- Doctors\n"
+    sql += "INSERT INTO doctors (id, user_id, full_name, specialization, license_number, hospital_name, hospital_address, experience_years, consultation_fee, hospital_id, created_at, updated_at) VALUES \n"
+    docs = []
+    docs.append(f"('{uuid.uuid4()}', '{doc_ids[0]}', 'Ramesh Rao', 'Cardiologist', 'LIC-DOC-101', '{hospitals[0][1]}', '{hospitals[0][2]}', 18, 1500, '{hospitals[0][0]}', NOW(), NOW())")
+    docs.append(f"('{uuid.uuid4()}', '{doc_ids[1]}', 'Ananya Hegde', 'Neurologist', 'LIC-DOC-102', '{hospitals[1][1]}', '{hospitals[1][2]}', 12, 1200, '{hospitals[1][0]}', NOW(), NOW())")
+    docs.append(f"('{uuid.uuid4()}', '{doc_ids[2]}', 'Suresh Kumar', 'Orthopedic', 'LIC-DOC-103', '{hospitals[2][1]}', '{hospitals[2][2]}', 8, 1000, '{hospitals[2][0]}', NOW(), NOW())")
+    sql += ",\n".join(docs) + ";\n\n"
+
+    # Patients
+    sql += "-- Patients\n"
+    sql += "INSERT INTO patients (id, user_id, full_name, date_of_birth, gender, blood_group, city, state, created_at, updated_at) VALUES \n"
+    pats = []
+    names = ["Rajesh Gowda", "Sneha Patil", "Karthik N", "Priya K", "Arjun Reddy"]
+    for i, p_id in enumerate(pat_ids):
+        pats.append(f"('{uuid.uuid4()}', '{p_id}', '{names[i]}', '1990-01-01', 'Male', 'O+', 'Bangalore', 'Karnataka', NOW(), NOW())")
+    sql += ",\n".join(pats) + ";\n\n"
 
     # Pharmacies
     sql += "-- Pharmacies\n"
-    sql += "INSERT INTO pharmacies (id, user_id, business_name, license_number, gst_number, address, contact_number, created_at, updated_at) VALUES \n"
-    pharmacies = []
-    for i, p_id in enumerate(pharmacy_users):
-        pharm_id = str(uuid.uuid4())
-        pharmacies.append(f"('{pharm_id}', '{p_id}', 'Medsync Pharmacy {i+1}', 'LIC-PHM-{i:03d}', 'GST{i:03d}', '{i} Pharmacy St, Bangalore', '9876543{i:03d}', NOW(), NOW())")
-    sql += ",\n".join(pharmacies) + ";\n\n"
+    sql += "INSERT INTO pharmacies (id, user_id, business_name, license_number, address, city, state, contact_number, created_at, updated_at) VALUES \n"
+    pharms = []
+    pharms.append(f"('{uuid.uuid4()}', '{pharm_ids[0]}', 'Apollo Pharmacy Indiranagar', 'LIC-PHM-01', 'Indiranagar 100ft road', 'Bangalore', 'Karnataka', '9876543210', NOW(), NOW())")
+    pharms.append(f"('{uuid.uuid4()}', '{pharm_ids[1]}', 'MedPlus Koramangala', 'LIC-PHM-02', 'Koramangala 80ft road', 'Bangalore', 'Karnataka', '9876543211', NOW(), NOW())")
+    sql += ",\n".join(pharms) + ";\n\n"
 
-    # Suppliers
-    sql += "-- Suppliers\n"
-    sql += "INSERT INTO suppliers (id, name, contact_person, email, phone_number, address, license_number, gst_number, created_at, updated_at) VALUES \n"
-    suppliers = []
-    for i, s_id in enumerate(supplier_ids):
-        suppliers.append(f"('{s_id}', 'Supplier {i+1} Pharma', 'Contact {i+1}', 'supplier{i+1}@pharma.com', '123456789{i}', 'Warehouse {i}', 'LIC-SUP-{i}', 'GST-SUP-{i}', NOW(), NOW())")
-    sql += ",\n".join(suppliers) + ";\n\n"
-    
     # Medicine Categories
     sql += "-- Medicine Categories\n"
-    sql += "INSERT INTO medicine_categories (id, name, description, created_at, updated_at) VALUES \n"
-    cat_names = ['Antibiotics', 'Analgesics', 'Antipyretics', 'Antihistamines', 'Antihypertensives', 'Antidiabetics', 'Vitamins', 'Antacids', 'Antidepressants', 'Statins']
-    cats = []
-    for i, c_id in enumerate(category_ids):
-        cats.append(f"('{c_id}', '{cat_names[i]}', 'Category for {cat_names[i]}', NOW(), NOW())")
-    sql += ",\n".join(cats) + ";\n\n"
-    
-    # Medicines (500+)
-    generic_names = ['Paracetamol', 'Amoxicillin', 'Ibuprofen', 'Metformin', 'Amlodipine', 'Omeprazole', 'Azithromycin', 'Losartan', 'Atorvastatin', 'Cetirizine'] * 5
-    manufacturers = ['Cipla', 'Sun Pharma', 'Lupin', 'Dr. Reddys', 'Torrent', 'Mankind', 'Abbott', 'GSK', 'Pfizer', 'Sanofi']
-    dosage_forms = ['Tablet', 'Capsule', 'Syrup', 'Injection']
-    strengths = ['100mg', '250mg', '500mg', '1g']
-    pack_sizes = ['10s', '15s', '30s', '100ml']
-    
+    cat_id = str(uuid.uuid4())
+    sql += f"INSERT INTO medicine_categories (id, name, description, created_at, updated_at) VALUES ('{cat_id}', 'General', 'General Medicines', NOW(), NOW());\n\n"
+
+    # Medicines
     sql += "-- Medicines\n"
-    sql += "INSERT INTO medicines (id, name, generic_name, brand_name, category_id, manufacturer, strength, dosage_form, pack_size, price, storage_requirements, prescription_required, controlled_drug, barcode, qr_code, image_url, description, created_at, updated_at) VALUES \n"
-    
-    medicine_ids = []
-    medicine_inserts = []
-    
-    for i in range(550):
-        med_id = str(uuid.uuid4())
-        medicine_ids.append(med_id)
-        generic = generic_names[i % len(generic_names)]
-        brand = f"{generic[:3].capitalize()}Brand-{i}"
-        name = brand
-        cat_id = category_ids[i % 10]
-        mfg = manufacturers[i % 10]
-        strength = strengths[i % 4]
-        form = dosage_forms[i % 4]
-        pack = pack_sizes[i % 4]
-        price = round(random.uniform(10.0, 500.0), 2)
-        storage = "Room temperature"
-        presc = "TRUE" if i % 3 == 0 else "FALSE"
-        ctrl = "FALSE"
-        barcode = f"8901234{i:06d}"
-        qrcode = f"QR-{i:06d}"
-        img = "https://via.placeholder.com/150"
-        desc = f"Effective for treatment using {generic}"
-        
-        val = f"('{med_id}', '{name}', '{generic}', '{brand}', '{cat_id}', '{mfg}', '{strength}', '{form}', '{pack}', {price}, '{storage}', {presc}, {ctrl}, '{barcode}', '{qrcode}', '{img}', '{desc}', NOW(), NOW())"
-        medicine_inserts.append(val)
-        
-    sql += ",\n".join(medicine_inserts) + ";\n\n"
-    
-    # Inventory
-    sql += "-- Inventory\n"
-    sql += "INSERT INTO medicine_inventory (id, pharmacy_id, medicine_id, supplier_id, batch_number, manufacturing_date, expiry_date, stock_quantity, minimum_stock, maximum_stock, unit_price, purchase_price, selling_price, gst, created_at, updated_at) VALUES \n"
-    
-    inventory_inserts = []
-    for pharm_id in pharmacy_users:
-        # Give each pharmacy 100 random medicines
-        meds_for_pharm = random.sample(medicine_ids, 100)
-        for med_id in meds_for_pharm:
-            inv_id = str(uuid.uuid4())
-            sup_id = random.choice(supplier_ids)
-            batch = f"BAT-{random.randint(1000,9999)}"
-            mfg_date = f"'{datetime.date.today() - datetime.timedelta(days=random.randint(30, 300))}'"
-            exp_date = f"'{datetime.date.today() + datetime.timedelta(days=random.randint(10, 800))}'"
-            stock = random.randint(0, 500)
-            min_stk = 50
-            max_stk = 1000
-            pur_price = round(random.uniform(5.0, 300.0), 2)
-            sell_price = round(pur_price * 1.3, 2)
-            gst = 12.0
-            
-            val = f"('{inv_id}', '{pharm_id}', '{med_id}', '{sup_id}', '{batch}', {mfg_date}, {exp_date}, {stock}, {min_stk}, {max_stk}, {sell_price}, {pur_price}, {sell_price}, {gst}, NOW(), NOW())"
-            inventory_inserts.append(val)
-            
-    sql += ",\n".join(inventory_inserts) + ";\n\n"
+    sql += "INSERT INTO medicines (id, name, generic_name, category_id, manufacturer, price, prescription_required, created_at, updated_at) VALUES \n"
+    med_ids = [str(uuid.uuid4()) for _ in range(8)]
+    med_names = ['Paracetamol', 'Amoxicillin', 'Ibuprofen', 'Cetirizine', 'Azithromycin', 'Omeprazole', 'Metformin', 'Amlodipine']
+    meds = []
+    for i, m_id in enumerate(med_ids):
+        presc = "TRUE" if i % 2 == 0 else "FALSE"
+        meds.append(f"('{m_id}', '{med_names[i]}', '{med_names[i]}', '{cat_id}', 'Cipla', {50.0 + i*10}, {presc}, NOW(), NOW())")
+    sql += ",\n".join(meds) + ";\n\n"
+
+    # Appointments
+    sql += "-- Appointments\n"
+    sql += "INSERT INTO appointments (id, patient_id, doctor_id, appointment_date, start_time, end_time, status, created_at, updated_at) VALUES \n"
+    appts = []
+    appt_ids = [str(uuid.uuid4()) for _ in range(10)]
+    for i, a_id in enumerate(appt_ids):
+        pat_id = random.choice(pat_ids)
+        doc_id = random.choice(doc_ids)
+        status = random.choice(['COMPLETED', 'PENDING', 'CONFIRMED'])
+        date_offset = random.randint(-5, 5)
+        appt_date = (datetime.date.today() + datetime.timedelta(days=date_offset)).isoformat()
+        appts.append(f"('{a_id}', '{pat_id}', '{doc_id}', '{appt_date}', '10:00:00', '10:30:00', '{status}', NOW(), NOW())")
+    sql += ",\n".join(appts) + ";\n\n"
+
+    # Prescriptions
+    sql += "-- Prescriptions\n"
+    sql += "INSERT INTO prescriptions (id, appointment_id, patient_id, doctor_id, diagnosis, is_finalized, is_dispensed, created_at, updated_at) VALUES \n"
+    rx_ids = [str(uuid.uuid4()) for _ in range(3)]
+    rxs = []
+    for i, rx_id in enumerate(rx_ids):
+        rxs.append(f"('{rx_id}', '{appt_ids[i]}', '{pat_ids[0]}', '{doc_ids[0]}', 'Common Cold', TRUE, FALSE, NOW(), NOW())")
+    sql += ",\n".join(rxs) + ";\n\n"
+
+    # Orders
+    sql += "-- Orders\n"
+    sql += "INSERT INTO medicine_orders (id, patient_id, pharmacy_id, status, total_amount, created_at, updated_at) VALUES \n"
+    ord_ids = [str(uuid.uuid4()) for _ in range(3)]
+    ords = []
+    for i, o_id in enumerate(ord_ids):
+        ords.append(f"('{o_id}', '{pat_ids[0]}', '{pharm_ids[0]}', 'PENDING', 250.0, NOW(), NOW())")
+    sql += ",\n".join(ords) + ";\n\n"
 
     sql += "COMMIT;\n"
     
     with open('dummy_values.sql', 'w', encoding='utf-8') as f:
         f.write(sql)
         
-    print("Successfully generated dummy_values.sql with 500+ medicines and realistic inventory data.")
+    print("Successfully generated dummy_values.sql with minimal Bangalore dataset.")
 
 if __name__ == "__main__":
     generate_sql()

@@ -12,8 +12,12 @@ class BaseRepository(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     def __init__(self, model: Type[ModelType]):
         self.model = model
 
-    async def get(self, db: AsyncSession, id: Any) -> ModelType | None:
-        result = await db.execute(select(self.model).filter(self.model.id == id))
+    async def get(self, db: AsyncSession, id: Any, options: list = None) -> ModelType | None:
+        stmt = select(self.model).filter(self.model.id == id)
+        if options:
+            for option in options:
+                stmt = stmt.options(option)
+        result = await db.execute(stmt)
         return result.scalars().first()
     
     async def create(self, db: AsyncSession, obj_in: CreateSchemaType | dict) -> ModelType:

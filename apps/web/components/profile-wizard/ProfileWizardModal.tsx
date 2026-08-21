@@ -4,9 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@medsync/ui";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
-import { Loader2, Building, Building2, MapPin, Search } from "lucide-react";
+import { Loader2, Building, Building2 } from "lucide-react";
 import { profileService, ProfileCompletionData } from "@/services/profile.service";
 import { hospitalService, Hospital } from "@/services/hospital.service";
+import { ImageUpload } from "./ImageUpload";
+import { Textarea } from "@medsync/ui"; // Ensure you export Textarea from @medsync/ui or handle it
 
 interface ProfileWizardModalProps {
   isOpen: boolean;
@@ -31,14 +33,16 @@ export function ProfileWizardModal({ isOpen, onClose, userId, role, onComplete }
     }
   }, [role, isOpen]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData((prev: any) => ({ ...prev, [e.target.name]: e.target.value }));
   }, []);
 
+  const handleImageUpload = (field: string, base64: string) => {
+    setFormData((prev: any) => ({ ...prev, [field]: base64 }));
+  };
+
   const calculatePercentage = useCallback(() => {
-    // Basic calculation depending on role
-    // This could be more sophisticated
-    return 100;
+    return 100; // Simulated full completion on finish
   }, []);
 
   const handleComplete = useCallback(async () => {
@@ -60,93 +64,125 @@ export function ProfileWizardModal({ isOpen, onClose, userId, role, onComplete }
     }
   }, [formData, userId, onComplete, onClose, calculatePercentage]);
 
-  const renderPatientStep1 = () => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Date of Birth</label>
-          <Input type="date" name="date_of_birth" onChange={handleChange} />
+  const renderCommonFields = () => (
+    <form onSubmit={(e) => { e.preventDefault(); setStep(2); }} className="space-y-6 animate-in fade-in zoom-in-95">
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <label className="text-sm font-medium block mb-2">Profile Picture</label>
+            <ImageUpload onUpload={(url) => handleImageUpload("profile_picture_url", url)} label="Upload Profile Picture" />
+          </div>
         </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Gender</label>
-          <Input placeholder="Gender" name="gender" onChange={handleChange} />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Blood Group</label>
-          <Input placeholder="e.g. O+" name="blood_group" onChange={handleChange} />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Phone Number</label>
-          <Input placeholder="Phone Number" name="phone_number" onChange={handleChange} />
-        </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Bio / About</label>
+        <textarea 
+          name="bio"
+          onChange={handleChange}
+          required
+          className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          placeholder="Tell us about yourself..."
+        />
       </div>
-      <Button className="w-full mt-4" onClick={() => setStep(2)}>Next Step</Button>
-    </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Languages Spoken</label>
+        <Input placeholder="e.g. English, Spanish" name="languages_spoken" onChange={handleChange} required />
+      </div>
+      <Button type="submit" className="w-full mt-4">Next Step</Button>
+    </form>
   );
 
   const renderPatientStep2 = () => (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Address</label>
-        <Input placeholder="Full Address" name="address" onChange={handleChange} />
-      </div>
+    <form onSubmit={(e) => { e.preventDefault(); setStep(3); }} className="space-y-4 animate-in slide-in-from-right">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">City</label>
-          <Input placeholder="City" name="city" onChange={handleChange} />
+          <label className="text-sm font-medium">Date of Birth</label>
+          <Input type="date" name="date_of_birth" onChange={handleChange} required />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">State</label>
-          <Input placeholder="State" name="state" onChange={handleChange} />
+          <label className="text-sm font-medium">Gender</label>
+          <Input placeholder="Gender" name="gender" onChange={handleChange} required />
         </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Blood Group</label>
+          <Input placeholder="e.g. O+" name="blood_group" onChange={handleChange} required />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Phone Number</label>
+          <Input placeholder="Phone Number" name="phone_number" onChange={handleChange} required />
+        </div>
+      </div>
+      <Button type="submit" className="w-full mt-4">Next Step</Button>
+    </form>
+  );
+
+  const renderPatientStep3 = () => (
+    <form onSubmit={(e) => { e.preventDefault(); handleComplete(); }} className="space-y-4 animate-in slide-in-from-right">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Address</label>
+        <Input placeholder="Full Address" name="address" onChange={handleChange} required />
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">Emergency Contact</label>
-        <Input placeholder="Name" name="emergency_contact_name" onChange={handleChange} className="mb-2" />
-        <Input placeholder="Phone" name="emergency_contact_number" onChange={handleChange} />
+        <div className="flex gap-2">
+           <Input placeholder="Name" name="emergency_contact_name" onChange={handleChange} required />
+           <Input placeholder="Phone" name="emergency_contact_number" onChange={handleChange} required />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Allergies</label>
+        <Input placeholder="e.g. Peanuts, Penicillin" name="allergies" onChange={handleChange} />
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Chronic Diseases</label>
+        <Input placeholder="e.g. Diabetes, Hypertension" name="chronic_diseases" onChange={handleChange} />
       </div>
       <div className="flex gap-2 mt-4">
-        <Button variant="outline" className="w-full" onClick={() => setStep(1)}>Back</Button>
-        <Button className="w-full" onClick={handleComplete} disabled={isLoading}>
+        <Button type="button" variant="outline" className="w-full" onClick={() => setStep(2)}>Back</Button>
+        <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "Complete Profile"}
         </Button>
       </div>
-    </div>
-  );
-
-  const renderDoctorStep1 = () => (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Medical Council Reg. Number</label>
-        <Input placeholder="Registration Number" name="medical_council_reg_number" onChange={handleChange} />
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">License Number</label>
-        <Input placeholder="License Number" name="license_number" onChange={handleChange} />
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Qualifications</label>
-        <Input placeholder="e.g. MBBS, MD" name="qualifications" onChange={handleChange} />
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Years of Experience</label>
-        <Input type="number" placeholder="0" name="experience_years" onChange={handleChange} />
-      </div>
-      <Button className="w-full mt-4" onClick={() => setStep(2)}>Next Step</Button>
-    </div>
+    </form>
   );
 
   const renderDoctorStep2 = () => (
-    <div className="space-y-4">
+    <form onSubmit={(e) => { e.preventDefault(); setStep(3); }} className="space-y-4 animate-in slide-in-from-right">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Medical Council Reg. Number</label>
+        <Input placeholder="Registration Number" name="medical_council_reg_number" onChange={handleChange} required />
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">License Number</label>
+        <Input placeholder="License Number" name="license_number" onChange={handleChange} required />
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Qualifications</label>
+        <Input placeholder="e.g. MBBS, MD" name="qualifications" onChange={handleChange} required />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+         <div className="space-y-2">
+           <label className="text-sm font-medium">Years of Experience</label>
+           <Input type="number" placeholder="0" name="experience_years" onChange={handleChange} required />
+         </div>
+         <div className="space-y-2">
+           <label className="text-sm font-medium">Consultation Timings</label>
+           <Input placeholder="e.g. 9 AM - 5 PM" name="consultation_hours" onChange={handleChange} required />
+         </div>
+      </div>
+      <Button type="submit" className="w-full mt-4">Next Step</Button>
+    </form>
+  );
+
+  const renderDoctorStep3 = () => (
+    <form onSubmit={(e) => { e.preventDefault(); handleComplete(); }} className="space-y-4 animate-in slide-in-from-right">
       <div className="flex flex-col gap-4 mb-4">
-        <Button variant={!isIndependent ? "default" : "outline"} className="justify-start h-auto p-4" onClick={() => setIsIndependent(false)}>
+        <Button type="button" variant={!isIndependent ? "default" : "outline"} className="justify-start h-auto p-4" onClick={() => setIsIndependent(false)}>
           <Building2 className="h-5 w-5 mr-3" />
           <div className="text-left">
             <div className="font-semibold">Associated with Hospital</div>
             <div className="text-xs opacity-80">Select from verified hospitals</div>
           </div>
         </Button>
-        <Button variant={isIndependent ? "default" : "outline"} className="justify-start h-auto p-4" onClick={() => setIsIndependent(true)}>
+        <Button type="button" variant={isIndependent ? "default" : "outline"} className="justify-start h-auto p-4" onClick={() => setIsIndependent(true)}>
           <Building className="h-5 w-5 mr-3" />
           <div className="text-left">
             <div className="font-semibold">Independent Clinic</div>
@@ -161,7 +197,8 @@ export function ProfileWizardModal({ isOpen, onClose, userId, role, onComplete }
           <select 
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             name="hospital_id"
-            onChange={(e) => setFormData({...formData, hospital_id: e.target.value})}
+            onChange={(e: any) => setFormData({...formData, hospital_id: e.target.value})}
+            required
           >
             <option value="">Select a hospital...</option>
             {hospitals.map(h => (
@@ -171,51 +208,64 @@ export function ProfileWizardModal({ isOpen, onClose, userId, role, onComplete }
         </div>
       ) : (
         <div className="space-y-3 animate-in fade-in zoom-in-95">
-          <Input placeholder="Clinic Name" name="clinic_name" onChange={handleChange} />
-          <Input placeholder="Address" name="clinic_address" onChange={handleChange} />
+          <Input placeholder="Clinic Name" name="clinic_name" onChange={handleChange} required />
+          <Input placeholder="Address" name="clinic_address" onChange={handleChange} required />
           <div className="grid grid-cols-2 gap-2">
-            <Input placeholder="City" name="city" onChange={handleChange} />
-            <Input placeholder="Phone" name="clinic_phone" onChange={handleChange} />
+            <Input placeholder="City" name="city" onChange={handleChange} required />
+            <Input placeholder="Phone" name="clinic_phone" onChange={handleChange} required />
           </div>
         </div>
       )}
       
       <div className="flex gap-2 mt-6">
-        <Button variant="outline" className="w-full" onClick={() => setStep(1)}>Back</Button>
-        <Button className="w-full" onClick={handleComplete} disabled={isLoading}>
+        <Button type="button" variant="outline" className="w-full" onClick={() => setStep(2)}>Back</Button>
+        <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "Complete Profile"}
         </Button>
       </div>
-    </div>
+    </form>
   );
 
-  const renderPharmacyStep1 = () => (
-    <div className="space-y-4">
+  const renderPharmacyStep2 = () => (
+    <form onSubmit={(e) => { e.preventDefault(); handleComplete(); }} className="space-y-4 animate-in slide-in-from-right">
       <div className="space-y-2">
         <label className="text-sm font-medium">GST Number</label>
-        <Input placeholder="GST Number" name="gst_number" onChange={handleChange} />
+        <Input placeholder="GST Number" name="gst_number" onChange={handleChange} required />
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">Drug License Number</label>
-        <Input placeholder="Drug License" name="license_number" onChange={handleChange} />
+        <Input placeholder="Drug License" name="license_number" onChange={handleChange} required />
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">Business Reg. Number</label>
-        <Input placeholder="Reg Number" name="business_registration_number" onChange={handleChange} />
+        <Input placeholder="Reg Number" name="business_registration_number" onChange={handleChange} required />
       </div>
       <div className="space-y-2">
-        <label className="text-sm font-medium">Address</label>
-        <Input placeholder="Full Address" name="address" onChange={handleChange} />
+        <label className="text-sm font-medium">Address / Location</label>
+        <Input placeholder="Full Address" name="address" onChange={handleChange} required />
       </div>
-      <Button className="w-full mt-4" onClick={handleComplete} disabled={isLoading}>
-        {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "Complete Profile"}
-      </Button>
-    </div>
+      <div className="grid grid-cols-2 gap-4">
+         <div className="space-y-2">
+           <label className="text-sm font-medium">Store Timings</label>
+           <Input placeholder="e.g. 24x7 or 9AM-9PM" name="operating_hours" onChange={handleChange} required />
+         </div>
+         <div className="space-y-2">
+           <label className="text-sm font-medium">Working Days</label>
+           <Input placeholder="e.g. Mon-Sat" name="working_days" onChange={handleChange} required />
+         </div>
+      </div>
+      <div className="flex gap-2 mt-4">
+        <Button type="button" variant="outline" className="w-full" onClick={() => setStep(1)}>Back</Button>
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "Complete Profile"}
+        </Button>
+      </div>
+    </form>
   );
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Profile Completion (Step {step})</DialogTitle>
           <DialogDescription>
@@ -224,13 +274,15 @@ export function ProfileWizardModal({ isOpen, onClose, userId, role, onComplete }
         </DialogHeader>
         
         <div className="py-4">
-          {role === 'patient' && step === 1 && renderPatientStep1()}
-          {role === 'patient' && step === 2 && renderPatientStep2()}
-          
-          {role === 'doctor' && step === 1 && renderDoctorStep1()}
-          {role === 'doctor' && step === 2 && renderDoctorStep2()}
+          {step === 1 && renderCommonFields()}
 
-          {role === 'pharmacy' && renderPharmacyStep1()}
+          {role === 'patient' && step === 2 && renderPatientStep2()}
+          {role === 'patient' && step === 3 && renderPatientStep3()}
+          
+          {role === 'doctor' && step === 2 && renderDoctorStep2()}
+          {role === 'doctor' && step === 3 && renderDoctorStep3()}
+
+          {role === 'pharmacy' && step === 2 && renderPharmacyStep2()}
         </div>
       </DialogContent>
     </Dialog>

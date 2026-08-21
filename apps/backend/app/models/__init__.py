@@ -15,6 +15,15 @@ from app.models.notification import Notification
 from app.models.verification import VerificationRequest
 from app.models.blockchain import BlockchainSyncTask, BlockchainTransaction, BlockchainAuditLog
 from app.models.api_log import ApiRequestLog
+from app.models.rag import KnowledgeDocument, KnowledgeChunk
+# New models for role-function completion
+from app.models.qr_token import QRAuthorizationToken, QRPurpose, QRTokenStatus
+from app.models.consultation import Consultation
+from app.models.doctor_location import DoctorLocation, LocationType, LocationVerificationStatus
+from app.models.pharmacy_location import PharmacyLocation
+from app.models.medical_history_share import MedicalHistoryShare
+from app.models.audit_log import AuditLog
+from app.models.security import PatientSecurityCredential, PatientBiometricProfile, PrescriptionDownloadAuthorization
 
 __all__ = [
     "Base",
@@ -48,5 +57,20 @@ __all__ = [
     "BlockchainSyncTask",
     "BlockchainTransaction",
     "BlockchainAuditLog",
-    "ApiRequestLog"
+    "ApiRequestLog",
+    "KnowledgeDocument",
+    "KnowledgeChunk",
+    "QRAuthorizationToken",
+    "QRPurpose",
+    "QRTokenStatus",
+    "Consultation",
+    "DoctorLocation",
+    "LocationType",
+    "LocationVerificationStatus",
+    "PharmacyLocation",
+    "MedicalHistoryShare",
+    "AuditLog",
+    "PatientSecurityCredential",
+    "PatientBiometricProfile",
+    "PrescriptionDownloadAuthorization",
 ]

@@ -18,4 +18,7 @@ interface IMedicalRecordRegistry {
     function verifyRecord(bytes32 recordHash) external;
     function updateVersion(bytes32 oldRecordHash, bytes32 newRecordHash) external;
     function getRecord(bytes32 recordHash) external view returns (MedicalRecord memory);
+    function grantAccess(bytes32 recordHash, bytes32 doctorHash) external;
+    function revokeAccess(bytes32 recordHash, bytes32 doctorHash) external;
+    function hasAccess(bytes32 recordHash, bytes32 doctorHash) external view returns (bool);
 }

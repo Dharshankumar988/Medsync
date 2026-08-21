@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class AIMicroserviceClient:
     def __init__(self):
-        self.base_url = settings.AI_SERVICE_URL.rstrip("/")
+        self.base_url = settings.MEDSYNC_AI_URL.rstrip("/")
         self.timeout = settings.AI_TIMEOUT
         self.headers = {}
         if settings.AI_SERVICE_TOKEN:

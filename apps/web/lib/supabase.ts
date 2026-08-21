@@ -15,6 +15,13 @@ const createSupabaseStub = () => ({
     refreshSession: async () => ({ data: { session: null }, error: null }),
     onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
   },
+  from: (table: string) => ({
+    select: () => ({
+      eq: () => ({
+        single: async () => ({ data: null, error: null })
+      })
+    })
+  })
 });
 
 export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey, {
@@ -23,7 +30,7 @@ export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUr
     persistSession: true,
     detectSessionInUrl: true,
   },
-}) : createSupabaseStub();
+}) : (createSupabaseStub() as unknown as ReturnType<typeof createClient>);
 
 export const normalizeRole = (role: unknown) => {
   if (typeof role !== 'string' || !role) return 'patient';

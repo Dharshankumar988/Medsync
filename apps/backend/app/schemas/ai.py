@@ -31,6 +31,7 @@ class AIChatSessionResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     session_id: Optional[uuid.UUID] = None
+    patient_id: Optional[uuid.UUID] = None
 
 class ChatResponse(BaseModel):
     session_id: uuid.UUID
@@ -38,6 +39,9 @@ class ChatResponse(BaseModel):
 
 class SessionPinRequest(BaseModel):
     is_pinned: bool
+
+class SessionRenameRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
 
 class AIHealthComponentResponse(BaseModel):
     groq: str
@@ -48,7 +52,43 @@ class AIHealthResponse(BaseModel):
     status: str
     components: AIHealthComponentResponse
 
+class ImageAnalysisRequest(BaseModel):
+    scan_type: str = Field(default="bone", description="Type of scan: bone, brain, kidney, skin")
+
 class ImageAnalysisResponse(BaseModel):
-    yolo: Dict[str, Any]
-    efficientnet: Dict[str, Any]
-    clinical_summary: Optional[str] = None
+    session_id: Optional[uuid.UUID] = None
+    scan_type: str
+    prediction: Dict[str, Any]
+    clinical_summary: Optional[Dict[str, Any]] = None
+    patient_explanation: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+class GroqClinicalSummary(BaseModel):
+    summary: str = "Analysis completed"
+    model_interpretation: str = "Pending"
+    confidence_context: str = "Unavailable"
+    key_findings: List[str] = []
+    possible_considerations: List[str] = []
+    recommended_next_steps: List[str] = []
+    questions_for_clinician: List[str] = []
+    urgency: str = "routine"
+    disclaimer: str = "For educational purposes only."
+
+class GroqPatientExplanation(BaseModel):
+    summary: str = "Your scan has been analyzed."
+    model_interpretation: str = "Pending"
+    confidence_context: str = "Unavailable"
+    key_findings: List[str] = []
+    possible_considerations: List[str] = []
+    recommended_next_steps: List[str] = []
+    questions_for_clinician: List[str] = []
+    urgency: str = "routine"
+    disclaimer: str = "This information is for educational purposes only and does not constitute medical advice."
+
+class HFInferenceOutput(BaseModel):
+    success: bool = True
+    confidence: float = Field(ge=0.0, le=1.0, default=0.0)
+    diagnosis: Optional[str] = None
+    predicted_class: Optional[str] = None
+    top_predictions: Optional[List[Dict[str, Any]]] = None
+    boxes: Optional[List[Any]] = None

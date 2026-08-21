@@ -11,9 +11,17 @@ from app.ai.prompts.templates import ADMIN_SYSTEM_PROMPT
 from app.ai.core.service_manager import ai_service_manager
 from app.ai.rag.retriever import RAGRetriever
 from app.ai.core.conversation import ConversationManager
+from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.config import ai_config
 
 logger = logging.getLogger("medsync.ai.admin")
+
+from sqlalchemy import select, func
+from app.models.user import User, UserRole
+from app.models.appointment import Appointment
+from app.models.prescription import Prescription
+from app.ai.core.orchestrator import AIOrchestrator
+import json
 
 class AdminAIService:
     @staticmethod
@@ -49,20 +57,56 @@ class AdminAIService:
         return msg
 
     @staticmethod
-    async def _build_messages(db: AsyncSession, session_id: uuid.UUID, user_message: str, specific_instruction: str = None) -> List[Dict[str, str]]:
-        rag_context = await RAGRetriever.retrieve_context(user_message)
+    async def _get_db_stats(db: AsyncSession) -> str:
+        total_users = await db.scalar(select(func.count(User.id)))
+        total_patients = await db.scalar(select(func.count(User.id)).where(User.role == UserRole.PATIENT))
+        total_doctors = await db.scalar(select(func.count(User.id)).where(User.role == UserRole.DOCTOR))
+        total_pharmacies = await db.scalar(select(func.count(User.id)).where(User.role == UserRole.PHARMACY))
+        total_appointments = await db.scalar(select(func.count(Appointment.id)))
+        total_prescriptions = await db.scalar(select(func.count(Prescription.id)))
         
-        system_msg_content = ADMIN_SYSTEM_PROMPT.format(rag_context=rag_context)
-        if specific_instruction:
-            system_msg_content += f"\n\nCRITICAL INSTRUCTION FOR THIS REQUEST: {specific_instruction}"
+        stats = {
+            "users": {
+                "total": total_users,
+                "patients": total_patients,
+                "doctors": total_doctors,
+                "pharmacies": total_pharmacies
+            },
+            "operations": {
+                "appointments": total_appointments,
+                "prescriptions": total_prescriptions
+            }
+        }
+        return json.dumps(stats, indent=2)
+
+    @staticmethod
+    async def _build_messages(db: AsyncSession, session_id: uuid.UUID, user_message: str, specific_instruction: str = None) -> List[Dict[str, str]]:
+        intent = AIOrchestrator.classify_admin_intent(user_message)
+        logger.info(f"Admin intent classified as: {intent}")
+        
+        context_parts = []
+        
+        if intent in ["RAG", "COMBINED"]:
+            rag_context = await RAGRetriever.retrieve_context(user_message, role="admin", db=db)
+            if rag_context:
+                context_parts.append(f"--- Document Context ---\n{rag_context}")
+                
+        if intent in ["ANALYTICS", "COMBINED"]:
+            db_stats = await AdminAIService._get_db_stats(db)
+            context_parts.append(f"--- Live Database Stats ---\n{db_stats}")
+            
+        final_context = "\n\n".join(context_parts) if context_parts else "No specific context retrieved."
+        
+        system_msg_content = ADMIN_SYSTEM_PROMPT.format(rag_context=final_context)
 
         history = await ConversationManager.get_recent_messages(db, session_id)
         
-        messages = [{"role": "system", "content": system_msg_content}]
-        messages.extend(history)
-        messages.append({"role": "user", "content": user_message})
-        
-        return messages
+        return PromptManager.build_messages(
+            system_prompt=system_msg_content,
+            history=history,
+            user_message=user_message,
+            specific_instruction=specific_instruction,
+        )
 
     @staticmethod
     async def handle_chat(db: AsyncSession, admin_id: uuid.UUID, req: ChatRequest) -> Dict[str, Any]:

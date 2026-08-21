@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 router = APIRouter()
+require_admin = RoleChecker([UserRole.ADMIN])
 
 class HospitalCreate(BaseModel):
     name: str
@@ -26,6 +27,8 @@ class HospitalCreate(BaseModel):
     phone_number: Optional[str] = None
     email: Optional[str] = None
     website: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class HospitalUpdate(HospitalCreate):
     name: Optional[str] = None
@@ -63,10 +66,10 @@ async def list_hospitals(
 @router.post("/", response_model=APIResponse[HospitalResponse])
 async def create_hospital(
     payload: HospitalCreate, 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(require_admin)
 ):
-    # Should be protected by admin role, but relying on frontend / proxy for now if dependencies are simple
-    # Or implement require_role(UserRole.ADMIN) if available
+    # Protected by admin role
     new_hospital = Hospital(**payload.model_dump())
     new_hospital.is_verified = True # Admins create verified hospitals directly
     db.add(new_hospital)
@@ -78,7 +81,8 @@ async def create_hospital(
 async def update_hospital(
     hospital_id: uuid.UUID, 
     payload: HospitalUpdate, 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(require_admin)
 ):
     hospital = await db.execute(select(Hospital).where(Hospital.id == hospital_id))
     hospital = hospital.scalar_one_or_none()
@@ -96,7 +100,8 @@ async def update_hospital(
 @router.delete("/{hospital_id}", response_model=APIResponse[dict])
 async def deactivate_hospital(
     hospital_id: uuid.UUID, 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(require_admin)
 ):
     hospital = await db.execute(select(Hospital).where(Hospital.id == hospital_id))
     hospital = hospital.scalar_one_or_none()
@@ -106,3 +111,62 @@ async def deactivate_hospital(
     hospital.is_active = False
     await db.commit()
     return APIResponse(message="Hospital deactivated successfully")
+
+
+@router.get("/{hospital_id}/doctors", response_model=APIResponse[List[dict]])
+async def get_doctors_at_hospital(
+    hospital_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all doctors practicing at a specific hospital via their doctor_locations."""
+    from app.models.doctor_location import DoctorLocation
+    from app.models.doctor import Doctor
+
+    # First verify hospital exists
+    hospital_result = await db.execute(select(Hospital).where(Hospital.id == hospital_id))
+    hospital = hospital_result.scalar_one_or_none()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    # Get doctor locations at this hospital
+    loc_stmt = (
+        select(DoctorLocation)
+        .where(DoctorLocation.hospital_id == hospital_id)
+        .where(DoctorLocation.is_active == True)
+    )
+    loc_result = await db.execute(loc_stmt)
+    locations = loc_result.scalars().all()
+
+    # Get unique doctor profiles
+    doctor_ids = list(set(loc.doctor_id for loc in locations))
+    if not doctor_ids:
+        return APIResponse(data=[])
+
+    doc_stmt = select(Doctor).where(Doctor.id.in_(doctor_ids))
+    doc_result = await db.execute(doc_stmt)
+    doctors = doc_result.scalars().all()
+
+    doctors_list = []
+    for doc in doctors:
+        doc_locations = [loc for loc in locations if loc.doctor_id == doc.id]
+        doctors_list.append({
+            "id": str(doc.id),
+            "user_id": str(doc.user_id),
+            "full_name": doc.full_name,
+            "specialization": doc.specialization,
+            "experience_years": doc.experience_years,
+            "consultation_fee": doc.consultation_fee,
+            "profile_picture_url": doc.profile_picture_url,
+            "bio": doc.bio,
+            "locations": [
+                {
+                    "id": str(loc.id),
+                    "consultation_hours": loc.consultation_hours,
+                    "working_days": loc.working_days,
+                    "phone": loc.phone,
+                }
+                for loc in doc_locations
+            ],
+        })
+
+    return APIResponse(data=doctors_list)

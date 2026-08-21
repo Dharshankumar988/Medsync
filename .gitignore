@@ -58,3 +58,14 @@ htmlcov/
 
 venv_dev/
 
+# Local run output and one-off diagnostics
+logs/
+*.log
+*_output.txt
+output_utf8.txt
+test_run.log
+temp_check.py
+db_setup_output.txt
+toast.json
+apps/backend/app/api/v1/endpoints/admin_stats.py
+

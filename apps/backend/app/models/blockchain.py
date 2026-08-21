@@ -19,6 +19,8 @@ class SyncActionType(str, enum.Enum):
     UPDATE = "UPDATE"
     REVOKE = "REVOKE"
     VERIFY = "VERIFY"
+    GRANT_ACCESS = "GRANT_ACCESS"
+    REVOKE_ACCESS = "REVOKE_ACCESS"
 
 class SyncStatus(str, enum.Enum):
     PENDING = "PENDING"
@@ -57,7 +59,7 @@ class BlockchainSyncTask(Base, UUIDMixin, TimestampMixin):
     action_type: Mapped[SyncActionType] = mapped_column(Enum(SyncActionType, native_enum=False), nullable=False)
     status: Mapped[SyncStatus] = mapped_column(Enum(SyncStatus, native_enum=False), default=SyncStatus.PENDING, index=True)
     
-    transaction_hash: Mapped[str | None] = mapped_column(ForeignKey("blockchain_transactions.transaction_hash"), nullable=True)
+    transaction_hash: Mapped[str | None] = mapped_column(ForeignKey("blockchain_transactions.transaction_hash"), index=True, nullable=True)
     payload: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
     
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -75,12 +77,12 @@ class BlockchainAuditLog(Base, UUIDMixin, TimestampMixin):
     entity_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     
-    transaction_hash: Mapped[str | None] = mapped_column(ForeignKey("blockchain_transactions.transaction_hash"), nullable=True)
+    transaction_hash: Mapped[str | None] = mapped_column(ForeignKey("blockchain_transactions.transaction_hash"), index=True, nullable=True)
     block_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     contract_address: Mapped[str | None] = mapped_column(String(42), nullable=True)
     caller_address: Mapped[str | None] = mapped_column(String(42), nullable=True)
     event_data: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
-    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     
     transaction = relationship("BlockchainTransaction")
 

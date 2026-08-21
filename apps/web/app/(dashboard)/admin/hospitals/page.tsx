@@ -5,6 +5,9 @@ import { hospitalService, Hospital } from "@/services/hospital.service";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
 import { Plus, Search, Building2, MapPin, Mail, Phone, MoreVertical, Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
+
+const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 import { Skeleton } from "@medsync/ui";
 import {
   Table,
@@ -38,7 +41,9 @@ export default function HospitalsManagementPage() {
     pincode: "",
     phone_number: "",
     email: "",
-    website: ""
+    website: "",
+    latitude: 0,
+    longitude: 0
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -60,6 +65,10 @@ export default function HospitalsManagementPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newHospital.latitude || !newHospital.longitude) {
+      alert("Please select a location on the map.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       await hospitalService.createHospital(newHospital);
@@ -112,6 +121,13 @@ export default function HospitalsManagementPage() {
                     onChange={e => setNewHospital({...newHospital, name: e.target.value})} 
                     placeholder="General Hospital" 
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Location Map</label>
+                  <LocationPickerMap 
+                    onLocationSelect={(lat, lng) => setNewHospital({...newHospital, latitude: lat, longitude: lng})} 
+                  />
+                  {!newHospital.latitude && <p className="text-xs text-amber-500">Please click the map to select the exact location.</p>}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Address</label>

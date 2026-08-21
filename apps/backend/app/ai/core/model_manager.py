@@ -1,19 +1,21 @@
+"""
+Model Manager — Resolves endpoints and checks overall AI microservice status.
+Inference caching/retries are now handled by InferenceService.
+"""
 import logging
-import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from app.ai.core.config import ai_config
-from app.ai.core.exceptions import AIExternalServiceException, AIModelNotLoadedException
+from app.ai.core.inference_service import inference_service
 
 logger = logging.getLogger("medsync.ai.model_manager")
 
 class ModelManager:
+    """Manages high-level AI model availability and endpoint resolution."""
     _instance = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ModelManager, cls).__new__(cls)
-            cls._instance._models = {}
-            cls._instance.client = httpx.AsyncClient(timeout=30.0)
         return cls._instance
 
     async def get_endpoint(self, scan_type: str) -> str:
@@ -34,22 +36,14 @@ class ModelManager:
         if unified and unified.strip():
             return unified
             
-        raise AIModelNotLoadedException(f"{scan_type} (no configured endpoints)")
+        raise ValueError(f"No configured endpoint for scan_type: {scan_type}")
 
     async def check_health(self) -> Dict[str, Any]:
-        """Check health of the primary unified space"""
-        unified = ai_config.HF_UNIFIED_SPACE_URL.rstrip("/")
-        if not unified:
-            return "unconfigured"
-            
-        try:
-            headers = {"Authorization": f"Bearer {ai_config.HF_TOKEN}"} if ai_config.HF_TOKEN else {}
-            response = await self.client.get(f"{unified}/health", headers=headers, timeout=5.0)
-            if response.status_code == 200:
-                return response.json()
-            return f"degraded (HTTP {response.status_code})"
-        except Exception as e:
-            logger.warning(f"Model manager health check failed: {e}")
-            return "unreachable"
+        """Check health of the unified space via inference service."""
+        return await inference_service.check_health()
+
+    async def warmup(self) -> Dict[str, Any]:
+        """Warm up the AI microservice."""
+        return await inference_service.warmup()
 
 model_manager = ModelManager()

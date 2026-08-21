@@ -22,7 +22,12 @@ class PrescriptionService:
 
         # 2. Pre-generate ID to sign JWT
         prescription_id = uuid.uuid4()
-        qr_token = QRPdfService.generate_verification_token(prescription_id, doctor_id)
+        qr_token = QRPdfService.generate_dynamic_token(
+            resource_id=prescription_id, 
+            user_id=doctor_id, 
+            purpose="PRESCRIPTION_ACCESS", 
+            expires_in_minutes=15
+        )
         
         # 3. Generate QR Image and PDF
         qr_image_bytes = QRPdfService.generate_qr_code(qr_token)
@@ -48,6 +53,19 @@ class PrescriptionService:
         # Better to store object path in pdf_url and resolve it on frontend/backend API.
         pdf_url = object_path
 
+        # 5. Generate canonical hash
+        import hashlib
+        import json
+        items_to_hash = [{"medicine_name": i.medicine_name, "dosage": i.dosage, "frequency": i.frequency, "duration_days": i.duration_days} for i in req.items]
+        payload = {
+            "doctor_id": str(doctor_id),
+            "patient_id": str(req.patient_id),
+            "diagnosis": req.diagnosis,
+            "items": items_to_hash
+        }
+        payload_str = json.dumps(payload, sort_keys=True)
+        canonical_hash = hashlib.sha256(payload_str.encode('utf-8')).hexdigest()
+
         rx_in = {
             "id": prescription_id,
             "appointment_id": req.appointment_id,
@@ -57,7 +75,8 @@ class PrescriptionService:
             "notes": req.notes,
             "is_finalized": True,
             "pdf_url": pdf_url,
-            "qr_token": qr_token
+            "qr_token": qr_token,
+            "hash": canonical_hash
         }
         
         prescription = await prescription_repo.create(db, obj_in=rx_in)
@@ -66,7 +85,7 @@ class PrescriptionService:
             item["prescription_id"] = prescription.id
             await prescription_item_repo.create(db, obj_in=item)
             
-        # Enqueue blockchain task
+        # Enqueue blockchain task (best-effort, non-blocking)
         try:
             from app.services.blockchain_sync import BlockchainSyncService
             from app.models.blockchain import SyncEntityType, SyncActionType
@@ -75,10 +94,14 @@ class PrescriptionService:
                 db=db,
                 entity_type=SyncEntityType.PRESCRIPTION,
                 entity_id=prescription.id,
-                action_type=SyncActionType.CREATE
+                action_type=SyncActionType.CREATE,
+                payload={
+                    "patient_id": str(req.patient_id),
+                    "doctor_id": str(doctor_id)
+                }
             )
             await db.commit()
-        except Exception as e:
-            pass
+        except Exception:
+            pass  # Blockchain sync is best-effort
             
         return prescription

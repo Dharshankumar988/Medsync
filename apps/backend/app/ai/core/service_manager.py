@@ -2,6 +2,8 @@ import logging
 from app.ai.core.model_manager import model_manager
 from app.ai.services.groq_client import groq_client
 from app.ai.core.health import ai_health_monitor
+from app.ai.core.orchestrator import AIOrchestrator
+from app.ai.core.inference_service import inference_service
 
 logger = logging.getLogger("medsync.ai.service_manager")
 
@@ -19,5 +21,13 @@ class AIServiceManager:
     @staticmethod
     def get_llm_client():
         return groq_client
+        
+    @staticmethod
+    def get_orchestrator():
+        return AIOrchestrator
+        
+    @staticmethod
+    def get_inference_service():
+        return inference_service
 
 ai_service_manager = AIServiceManager()

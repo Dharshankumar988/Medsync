@@ -13,12 +13,13 @@ class KidneyDetectionService:
     def load_model(self, path: str):
         if not os.path.exists(path):
             logger.error(f"Kidney model not found at {path}")
+            self.model = None
             return
         try:
             self.model = YOLO(path)
             logger.info("Kidney model loaded successfully.")
         except Exception as e:
-            logger.error(f"Failed to load kidney model: {str(e)}")
+            logger.error(f"Failed to load kidney model at {path}: {str(e)}")
             self.model = None
 
     def predict(self, image_np) -> Dict[str, Any]:

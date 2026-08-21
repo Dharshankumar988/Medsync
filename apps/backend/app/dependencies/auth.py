@@ -3,6 +3,10 @@ import uuid
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.dependencies.db import get_db
+from app.models.user import User
 from app.core.config import settings
 from app.core.exceptions import UnauthorizedException, ForbiddenException
 from app.schemas.session import AuthenticatedPrincipal
@@ -10,7 +14,8 @@ from app.schemas.session import AuthenticatedPrincipal
 security = HTTPBearer()
 
 async def get_current_user(
-    token: HTTPAuthorizationCredentials = Depends(security)
+    token: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db)
 ) -> AuthenticatedPrincipal:
     secret = settings.SUPABASE_JWT_SECRET
     if not secret:
@@ -23,7 +28,7 @@ async def get_current_user(
         payload = jwt.decode(
             token.credentials, 
             secret, 
-            algorithms=["HS256", "ES256"], 
+            algorithms=["HS256"], 
             audience="authenticated",
             options={"verify_signature": False, "verify_aud": False}
         )
@@ -35,14 +40,27 @@ async def get_current_user(
         print(f"JWT Decode Exception: {repr(e)}")
         raise UnauthorizedException("Invalid credentials")
 
+    try:
+        user_uuid = uuid.UUID(subject)
+    except ValueError:
+        raise UnauthorizedException("Invalid user ID format in token")
+
+    db_user = await db.execute(select(User).where(User.id == user_uuid))
+    db_user = db_user.scalar_one_or_none()
+
+    if not db_user:
+        raise UnauthorizedException("User not found in database")
+
     app_metadata = payload.get("app_metadata") or {}
     user_metadata = payload.get("user_metadata") or {}
-    email = payload.get("email")
-    role = str(user_metadata.get("role") or app_metadata.get("role") or payload.get("role") or "patient").lower()
-    status = str(user_metadata.get("status") or app_metadata.get("status") or "ACTIVE").upper()
+    email = payload.get("email") or db_user.email
+    
+    # Verify role and status securely from the database rather than JWT payload
+    role = db_user.role.value.lower()
+    status = db_user.status.value.upper()
 
     return AuthenticatedPrincipal(
-        id=uuid.UUID(subject),
+        id=user_uuid,
         email=email,
         role=role,
         status=status,

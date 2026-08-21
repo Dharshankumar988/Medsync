@@ -15,12 +15,26 @@ class QRPdfService:
     @staticmethod
     def generate_verification_token(prescription_id: uuid.UUID, doctor_id: uuid.UUID) -> str:
         """Generates a secure JWT token containing the prescription ID for QR embedding"""
-        expire = datetime.now(timezone.utc) + timedelta(days=365)
+        expire = datetime.now(timezone.utc) + timedelta(days=30)
         to_encode = {
             "exp": expire,
             "sub": str(prescription_id),
             "doc": str(doctor_id),
             "type": "rx_verify"
+        }
+        encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+        return encoded_jwt
+
+    @staticmethod
+    def generate_dynamic_token(resource_id: uuid.UUID, user_id: uuid.UUID, purpose: str, expires_in_minutes: int = 15) -> str:
+        """Generates a short-lived purpose-scoped JWT token for dynamic QR authorization"""
+        expire = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
+        to_encode = {
+            "exp": expire,
+            "sub": str(resource_id),
+            "user_id": str(user_id),
+            "purpose": purpose,
+            "type": "dynamic_qr"
         }
         encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
         return encoded_jwt

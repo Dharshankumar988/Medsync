@@ -6,8 +6,9 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Security
+    SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
     TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://supabase_user:supabase_password@supabase-host.supabase.co:5432/postgres?ssl=require"
@@ -18,17 +19,13 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_BUCKET: str = "medical-records"
     SUPABASE_STORAGE_MAX_UPLOAD_MB: int = 25
     
-    # Supabase (for Admin user management)
-    SUPABASE_URL: str = ""
-    SUPABASE_SERVICE_ROLE_KEY: str = ""
-    
     # AI & Decentralized Storage Settings
     GROQ_API_KEY: str = ""
     PINATA_API_KEY: str = ""
     PINATA_SECRET_API_KEY: str = ""
     
     # External AI Microservice
-    AI_SERVICE_URL: str = "http://localhost:8080"
+    MEDSYNC_AI_URL: str = "https://dharshan8197-medsync-ai.hf.space"
     AI_SERVICE_TOKEN: str = ""
     AI_TIMEOUT: int = 30
     

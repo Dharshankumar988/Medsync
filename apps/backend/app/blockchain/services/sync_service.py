@@ -76,7 +76,17 @@ class BlockchainSyncService:
                 if task.action_type == SyncActionType.CREATE:
                     receipt = blockchain_gateway.write_contract(
                         "MedicalRecordRegistry", "registerRecord",
-                        data_hash, str(task.payload.get("patient_id", "")), str(task.payload.get("cid", ""))
+                        data_hash, str(task.payload.get("patient_id", ""))
+                    )
+                elif task.action_type == SyncActionType.GRANT_ACCESS:
+                    receipt = blockchain_gateway.write_contract(
+                        "MedicalRecordRegistry", "grantAccess",
+                        data_hash, str(task.payload.get("doctor_id", ""))
+                    )
+                elif task.action_type == SyncActionType.REVOKE_ACCESS:
+                    receipt = blockchain_gateway.write_contract(
+                        "MedicalRecordRegistry", "revokeAccess",
+                        data_hash, str(task.payload.get("doctor_id", ""))
                     )
             elif task.entity_type == SyncEntityType.PATIENT:
                 if task.action_type == SyncActionType.CREATE:
