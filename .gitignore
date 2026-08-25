@@ -1,9 +1,8 @@
 # Environments
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+env_backup/
 
 # Node
 node_modules/
@@ -69,3 +68,5 @@ db_setup_output.txt
 toast.json
 apps/backend/app/api/v1/endpoints/admin_stats.py
 
+# Portable Runner
+medsync.env

@@ -1,16 +1,262 @@
 # MedSync Portable Runner
 
-This directory contains everything you need to run the MedSync backend on your local machine using Docker.
+Run MedSync on Windows without cloning the entire repository.
 
-## Requirements
-- Docker Desktop (Windows/Mac) or Docker Engine (Linux) installed and running.
+You only need:
+1. Windows
+2. Docker Desktop
+3. Internet connection
+4. Your MedSync configuration values
 
-## Setup
-1. Copy `medsync.env.example` to `medsync.env`.
-2. Fill in your credentials in `medsync.env`.
+You do NOT need to clone the GitHub repository.
+You do NOT need a GitHub login to download the public Docker image.
+You do NOT need a GitHub `read:packages` token.
 
-## Usage
-- **Start**: Run `start-medsync` (use `.bat` or `.ps1` for Windows, `.sh` for Linux/Mac).
-- **Stop**: Run `stop-medsync`.
-- **Status**: Run `medsync-status` to see if it's running and healthy.
-- **Update**: Run `update-medsync` to pull the latest image and restart.
+---
+
+## 🚀 Quick Install — Windows
+
+Open PowerShell and run the following command:
+
+```powershell
+curl.exe -L --fail --retry 3 -o "$env:TEMP\install-medsync.ps1" "https://raw.githubusercontent.com/dharshankumar988/Medsync/main/install-medsync.ps1"; powershell.exe -ExecutionPolicy Bypass -File "$env:TEMP\install-medsync.ps1"
+```
+
+The installer will ask where you want MedSync installed.
+
+Example:
+`D:\My Projects\MedSync`
+
+You can choose:
+- `C:\MedSync`
+- `D:\MedSync`
+- `E:\Applications\MedSync`
+or another writable folder.
+
+The installer will:
+1. Ask where you want MedSync installed.
+2. Download the portable runner.
+3. Extract it.
+4. Find the portable_runner folder automatically.
+5. Create .env from .env.example if required.
+6. Preserve an existing .env.
+7. Finish the installation.
+
+---
+
+## ⚙️ Configure MedSync
+
+`.env` contains the configuration and private keys required by MedSync. Keep this file private. Do not upload it to GitHub.
+
+You can configure it by opening Notepad. If your installation path was `D:\My Projects\MedSync`, open PowerShell and run:
+
+```powershell
+notepad "D:\My Projects\MedSync\portable_runner\.env"
+```
+*(The installer also offers to open this file for you automatically).*
+
+⚠️ **IMPORTANT — KEEP YOUR .ENV PRIVATE**
+
+Never:
+- upload .env to GitHub
+- paste API keys into GitHub Issues
+- send your API keys to other people
+- put secrets directly inside source code
+
+Only .env.example should be committed to GitHub.
+
+---
+
+## ▶️ Start MedSync
+
+To start the backend, open PowerShell and navigate to your portable_runner folder, then run the start script:
+
+```powershell
+cd "YOUR_INSTALLATION_PATH\portable_runner"
+.\start-medsync.ps1
+```
+
+Or using CMD:
+```cmd
+cd /d "YOUR_INSTALLATION_PATH\portable_runner"
+start-medsync.bat
+```
+
+Docker will:
+1. Download the MedSync backend image if necessary.
+2. Start the backend.
+3. Load/cache the AI models.
+4. Check the backend health.
+5. Start the Tailscale Funnel if configured.
+
+**Note:** The first startup can take longer.
+Later startups are faster because the AI model cache is stored in a persistent Docker volume.
+
+---
+
+## 📦 Docker Image
+
+MedSync uses the Docker image:
+
+`ghcr.io/dharshankumar988/medsync-backend:latest`
+
+The image is publicly accessible, so normal users do not need a GitHub login or read:packages token.
+
+---
+
+## 🌐 Tailscale Funnel (Constant Public URL)
+
+To expose your backend securely to the internet for free (so Vercel can connect to it):
+
+1. **Install Tailscale**: Download and install [Tailscale for Windows](https://tailscale.com/download/windows).
+2. **Enable Funnel**: Go to your [Tailscale Admin Console](https://login.tailscale.com/admin/acls/funnel) and ensure "Funnel" is enabled for your node.
+3. **Start the Funnel**: Open PowerShell in your `portable_runner` folder and run:
+   ```powershell
+   .\start-tailscale-funnel.ps1
+   ```
+   *(Or double-click `start-tailscale-funnel.bat`)*
+
+Tailscale will give you a constant public URL (e.g., `https://your-laptop-name.tailnet-name.ts.net`). 
+Use this URL in your Vercel `NEXT_PUBLIC_API_URL` environment variable!
+
+---
+
+## 🛑 Stop MedSync
+
+To cleanly stop the MedSync backend, run:
+
+```powershell
+.\stop-medsync.ps1
+```
+
+Or using CMD:
+```cmd
+stop-medsync.bat
+```
+
+Stopping MedSync does not delete the persistent model cache or your `.env` file.
+
+---
+
+## 🔄 Update MedSync
+
+Updating MedSync:
+* downloads the latest portable runner/configuration as appropriate.
+* pulls the latest Docker backend image.
+* preserves `.env`.
+* preserves the Docker model cache.
+
+### Local update
+
+Open PowerShell and run:
+```powershell
+cd "YOUR_INSTALLATION_PATH\portable_runner"
+.\update-medsync.ps1
+```
+
+⚠️ **IMPORTANT**
+
+Do not manually delete:
+- `.env`
+- `medsync-model-cache`
+
+unless you intentionally want to remove your configuration or cached AI models.
+
+---
+
+## 🛠️ Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| Docker is not running | Open Docker Desktop and try again |
+| Backend is not healthy | Run `docker logs medsync-backend` |
+| `.env` is missing | Copy `.env.example` to `.env` and configure it |
+| Port 8000 is already in use | Follow the project's actual port troubleshooting |
+| Tailscale Funnel fails | Make sure you installed Tailscale and enabled Funnel in your admin console |
+| Docker image cannot be downloaded | Check your internet connection and confirm Docker is running |
+| AI model startup takes a long time | Wait for the first model download to finish |
+| Something else fails | Contact the project owners |
+
+---
+
+⚠️ **NEED HELP?**
+
+If you encounter an error that is not covered here, contact the MedSync project owners.
+
+Before contacting the owners, please provide:
+1. The exact error message.
+2. The command you ran.
+3. Your Windows version.
+4. Your Docker Desktop version.
+5. Relevant logs.
+
+NEVER send your `.env` file, API keys, passwords, tokens, or other secrets.
+
+⚠️ **NEVER SEND:**
+- `.env`
+- API keys
+- Supabase service-role keys
+- Groq keys
+- JWT secrets
+- database passwords
+
+Please use the project's official GitHub repository/issues/contact method.
+
+---
+
+## 📂 Installation Folder Example
+
+```text
+D:\My Projects\MedSync\
+└── portable_runner\
+    ├── .env
+    ├── .env.example
+    ├── start-medsync.ps1
+    ├── start-medsync.bat
+    ├── update-medsync.ps1
+    ├── update-medsync.bat
+    ├── stop-medsync.ps1
+    └── stop-medsync.bat
+```
+
+---
+
+## 💾 AI Model Cache
+
+MedSync stores downloaded AI models in a persistent Docker volume.
+
+Volume:
+`medsync-model-cache`
+
+This means:
+
+First run:
+Download models → cache them
+
+Later runs:
+Reuse cached models
+
+Update:
+Keep cached models
+
+---
+
+## 🏛️ Architecture
+
+```text
+Vercel Frontend
+      ↓
+Tailscale Funnel
+      ↓
+Local MedSync Backend
+      ↓
+Docker
+      ↓
+Supabase + AI Services
+```
+
+---
+
+© 2026 Dharshankumar988. All rights reserved.
+
+Unauthorized copying, redistribution, or commercial use of this project or its deployment materials is not permitted unless explicitly authorized by the copyright holder.

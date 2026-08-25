@@ -1,13 +1,36 @@
-FROM --platform=linux/amd64 python:3.11-slim
+# ─── Stage 1: Builder ───
+FROM --platform=linux/amd64 python:3.11-slim as builder
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    PYTHONUNBUFFERED=1
 
-# Install system dependencies required for OpenCV, MediaPipe, etc.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ─── Stage 2: Runtime ───
+FROM --platform=linux/amd64 python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    HF_HOME=/models/huggingface \
+    DEEPFACE_HOME=/models \
+    PATH="/opt/venv/bin:$PATH"
+
+# Install ONLY runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -17,22 +40,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy the virtual environment from the builder
+COPY --from=builder /opt/venv /opt/venv
 
-# Copy application code
-COPY . .
+# Copy only the necessary application files (exclude .git, tests, etc.)
+COPY alembic.ini .
+COPY alembic/ alembic/
+COPY app/ app/
+COPY main.py .
 
-# Expose port (default to standard FastAPI port)
 EXPOSE 8000
 
 # Create a non-root user and switch to it
 RUN adduser --disabled-password --gecos "" medsyncuser && \
+    mkdir -p /models && chown -R medsyncuser:medsyncuser /models && \
     chown -R medsyncuser:medsyncuser /app
 USER medsyncuser
 

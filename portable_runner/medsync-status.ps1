@@ -1,46 +1,93 @@
 # MedSync Backend Status Script (PowerShell)
+$ErrorActionPreference = "Stop"
+
+Write-Host "MedSync Portable Backend Status" -ForegroundColor Cyan
+Write-Host "============================="
+
 $CONTAINER_NAME = "medsync-backend"
 $PORT = 8000
+$ENV_FILE = ".env"
 
-Write-Host "=== MedSync Status ===" -ForegroundColor Cyan
+if (-not (Test-Path $ENV_FILE) -and (Test-Path "medsync.env")) {
+    $ENV_FILE = "medsync.env"
+}
 
-# Docker status
+# Docker Status
+$dockerRunning = $false
 try {
     $null = docker info 2>&1
-    Write-Host "Docker:           READY"
+    $dockerRunning = $true
 } catch {
-    Write-Host "Docker:           NOT RUNNING" -ForegroundColor Red
-    exit 1
 }
 
-# Container status
-$status = docker inspect -f '{{.State.Status}}' $CONTAINER_NAME 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "Container:        $status".ToUpper()
+if (-not $dockerRunning) {
+    Write-Host "Docker: NOT RUNNING" -ForegroundColor Red
+    exit 1
 } else {
-    Write-Host "Container:        NOT FOUND" -ForegroundColor Yellow
-    exit 1
+    Write-Host "Docker: READY" -ForegroundColor Green
 }
 
-# Image version
-$image = docker inspect -f '{{.Config.Image}}' $CONTAINER_NAME 2>&1
-Write-Host "Image version:    $image"
-Write-Host "Port:             $PORT"
+# Container Status
+$container = docker ps -a --format "{{.Status}}" -f "name=^/${CONTAINER_NAME}$"
+$image = docker ps -a --format "{{.Image}}" -f "name=^/${CONTAINER_NAME}$"
 
-# Health status
+if (-not $container) {
+    Write-Host "Container: NOT FOUND" -ForegroundColor Red
+} else {
+    if ($container -match "Up") {
+        Write-Host "Container: RUNNING ($image)" -ForegroundColor Green
+    } else {
+        Write-Host "Container: STOPPED ($container)" -ForegroundColor Yellow
+    }
+}
+
+# Local API Health
 try {
     $response = Invoke-WebRequest -Uri "http://localhost:${PORT}/health" -UseBasicParsing -ErrorAction SilentlyContinue
     if ($response.StatusCode -eq 200) {
-        Write-Host "Backend:          READY" -ForegroundColor Green
-        Write-Host "Health endpoint:  HTTP 200"
+        Write-Host "Local API: HEALTHY" -ForegroundColor Green
     } else {
-        Write-Host "Backend:          UNHEALTHY" -ForegroundColor Red
-        Write-Host "Health endpoint:  HTTP $($response.StatusCode)"
+        Write-Host "Local API: UNHEALTHY" -ForegroundColor Red
     }
 } catch {
-    Write-Host "Backend:          UNREACHABLE" -ForegroundColor Red
-    Write-Host "Health endpoint:  FAILED"
+    Write-Host "Local API: UNREACHABLE" -ForegroundColor Red
 }
 
-Write-Host "`n--- Recent Logs ---" -ForegroundColor Cyan
-docker logs --tail 15 $CONTAINER_NAME
+# Tailscale Status
+$tsProcess = Get-Process "tailscale" -ErrorAction SilentlyContinue
+$tsService = Get-Service "Tailscale" -ErrorAction SilentlyContinue
+
+if ($tsProcess -or ($tsService -and $tsService.Status -eq "Running")) {
+    Write-Host "Tailscale: CONNECTED" -ForegroundColor Green
+} else {
+    Write-Host "Tailscale: NOT RUNNING" -ForegroundColor Yellow
+}
+
+# Public API Health
+$hostname = ""
+if (Test-Path $ENV_FILE) {
+    $envContent = Get-Content $ENV_FILE
+    foreach ($line in $envContent) {
+        if ($line -match "^MEDSYNC_API_HOSTNAME=(.*)$") {
+            $hostname = $matches[1].Trim()
+        }
+    }
+}
+
+if ($hostname) {
+    Write-Host "API URL: https://${hostname}/api/v1" -ForegroundColor Cyan
+    try {
+        $response = Invoke-WebRequest -Uri "https://${hostname}/health" -UseBasicParsing -ErrorAction SilentlyContinue
+        if ($response.StatusCode -eq 200) {
+            Write-Host "Public API: HEALTHY" -ForegroundColor Green
+        } else {
+            Write-Host "Public API: UNHEALTHY" -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "Public API: UNREACHABLE" -ForegroundColor Red
+    }
+} else {
+    Write-Host "Public API URL: Not Configured" -ForegroundColor Yellow
+}
+
+Write-Host "============================="

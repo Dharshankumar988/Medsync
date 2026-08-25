@@ -1,75 +1,42 @@
-# MedSync AI Microservice
+# MedSync
 
-A production-ready, highly scalable FastAPI microservice built to process medical imaging inferences (YOLO for object detection, EfficientNet for classification). This microservice operates completely independently from the main MedSync Web backend.
+MedSync is a comprehensive, AI-powered healthcare management platform designed to securely handle patient records, streamline hospital operations, and provide advanced medical image diagnostics using local and remote AI microservices.
 
-## 📁 Architecture
-- **Framework**: FastAPI (Async)
-- **ML Engine**: PyTorch, Ultralytics, Timm
-- **Image Processing**: OpenCV (Headless), Pillow
-- **Global Memory**: Models are loaded exactly once during the `lifespan` hook to prevent memory leaks and ensure blazing fast request latency.
+## Features
+- **Secure Medical Records**: End-to-end security for patient data management.
+- **Role-Based Access Control**: Isolated dashboards and permissions for Patients, Doctors, Pharmacies, and Admins.
+- **Diagnostic AI**: Integrated support for analyzing medical imaging (Bone Fractures, Brain Tumors, Kidney Stones, Skin Conditions).
+- **PULSE AI Assistant**: Intelligent RAG-based search and clinical reasoning powered by Groq.
+- **Portable Deployment**: Run the entire backend stack locally on any Windows machine with zero configuration.
 
-## 🚀 Adding Your Models
-By default, the `models/` directory contains empty placeholder files. The application will boot, but the `/health` endpoint will report that models are not loaded, and the `/predict` endpoint will return a 503 HTTP status code if requested.
+## Architecture
+Vercel Frontend → Tailscale Funnel → Local MedSync Backend (Docker) → Supabase + AI Services
 
-To enable inference, copy your real trained weights into the `models/` folder:
-1. `bone.pt` (YOLO)
-2. `brain.pt` (YOLO)
-3. `kidney.pt` (YOLO)
-4. `skin.pth` (PyTorch EfficientNet state_dict)
+## AI Capabilities
+MedSync leverages a hybrid AI architecture:
+- **Local AI**: DeepFace (for Face Authentication) and SentenceTransformers (for RAG embeddings) run directly within the backend container.
+- **Remote Diagnostics**: Heavy medical imaging models (YOLO/EfficientNet) are offloaded to an external Hugging Face AI Microservice to ensure the core backend remains fast and lightweight.
 
-## 🐳 Deployment (Docker / Hugging Face Spaces)
+## Deployment
 
-This repository is uniquely optimized for **Hugging Face Spaces**. 
+### Portable Windows Deployment
+The easiest way to run MedSync is using our standalone portable runner for Windows. It requires no Git knowledge and automatically sets up Docker and Cloudflare.
 
-1. Create a new **Docker Space** on Hugging Face.
-2. Clone this repository directly into the Space.
-3. Upload your `.pt` and `.pth` files into the `models/` directory via the Hugging Face UI or Git LFS.
-4. Hugging Face will automatically detect the `Dockerfile`, install `libgl1` (for OpenCV), download dependencies, and spin up the server on port 8080.
+→ **[See portable_runner/README.md](portable_runner/README.md) for the complete installation guide.**
 
-## 💻 Local Testing
+## Development
+To contribute to MedSync, clone the repository and navigate to the respective application directories (`apps/backend` or `apps/blockchain`). See the internal documentation within those folders for local development setups.
 
-1. Create a virtual environment: `python -m venv venv`
-2. Activate it: `source venv/bin/activate` (Mac/Linux) or `venv\Scripts\activate` (Windows)
-3. Install dependencies: `pip install -r requirements.txt`
-4. Run the server: `python app.py`
+## Security
+- **Never commit `.env` files** or hardcode API keys.
+- All secrets are managed locally or via secure vault systems.
+- Patient data is strictly authorized via JWT and Row Level Security (RLS) policies.
 
-## 🔌 API Endpoints
+## Support
+If you encounter issues, please open a GitHub Issue in this repository providing your environment details and error logs.
 
-### 1. `GET /health`
-Returns memory usage and model loading status.
-```json
-{
-  "status": "operational",
-  "uptime_seconds": 12.5,
-  "memory_usage_mb": 420.5,
-  "loaded_models": {
-    "bone": true,
-    "brain": true,
-    "kidney": false,
-    "skin": true
-  }
-}
-```
+---
 
-### 2. `POST /predict`
-**Body**: `multipart/form-data`
-- `scan_type` (text): "bone", "brain", "kidney", or "skin"
-- `file` (file): The medical scan image.
+© 2026 Dharshankumar988. All rights reserved.
 
-Returns the standardized JSON:
-```json
-{
-    "success": true,
-    "scan_type": "brain",
-    "processing_time": 0.61,
-    "diagnosis": "Glioma",
-    "confidence": 0.97,
-    "boxes": [
-        {
-            "class": "Glioma",
-            "confidence": 0.97,
-            "coordinates": [12.5, 34.2, 100.5, 150.3]
-        }
-    ]
-}
-```
+Unauthorized copying, redistribution, or commercial use of this project or its deployment materials is not permitted unless explicitly authorized by the copyright holder.

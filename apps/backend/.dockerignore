@@ -1,6 +1,8 @@
 .env
 .venv
 venv_dev
+venv_test
+venv_wsl
 __pycache__
 *.pyc
 *.pyo
@@ -12,3 +14,6 @@ htmlcov
 .gitignore
 scratch/
 brain/
+tests/
+portable_runner/
+documentation/

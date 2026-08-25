@@ -1,0 +1,40 @@
+name: Package Portable Runner
+
+on:
+  push:
+    branches: [ "main" ]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create Portable Runner Archive
+        run: |
+          mkdir -p package_temp/portable_runner
+          cp -r portable_runner/* package_temp/portable_runner/
+          cd package_temp
+          # Ensure .env is removed if it somehow got committed
+          rm -f portable_runner/.env
+          rm -f portable_runner/medsync.env
+          # Zip the contents
+          zip -r ../portable_runner.zip portable_runner
+          cd ..
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable_runner
+          path: portable_runner.zip
+          retention-days: 90
+
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: portable_runner.zip

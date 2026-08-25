@@ -60,10 +60,26 @@ async def lifespan(app: FastAPI):
             logger.info("AI Warmup: Groq LLM → healthy")
         else:
             logger.warning("AI Warmup: Groq LLM → not configured (missing GROQ_API_KEY)")
+            
+        # 4. Warm up Local Models (Downloading weights if necessary)
+        logger.info("AI Warmup: Initializing local models (may take time on first run)...")
+        
+        def _load_local_models():
+            from app.services.rag_service import rag_service
+            from deepface import DeepFace
+            
+            # SentenceTransformers
+            rag_service._get_embedding_model()
+            
+            # DeepFace ArcFace
+            DeepFace.build_model("ArcFace")
+            
+        await asyncio.to_thread(_load_local_models)
+        logger.info("AI Warmup: Local models downloaded and cached successfully.")
         
         logger.info("═══ AI Subsystem Ready ═══")
     except Exception as e:
-        logger.warning(f"AI warmup skipped (non-critical): {e}")
+        logger.warning(f"AI warmup skipped or failed (non-critical): {e}")
     
     yield
     
