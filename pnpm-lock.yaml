@@ -258,6 +258,9 @@ importers:
       lucide-react:
         specifier: ^0.400.0
         version: 0.400.0(react@19.0.0-rc-f994737d14-20240522)
+      qrcode.react:
+        specifier: ^4.2.0
+        version: 4.2.0(react@19.0.0-rc-f994737d14-20240522)
       react:
         specifier: 19.0.0-rc-f994737d14-20240522
         version: 19.0.0-rc-f994737d14-20240522
@@ -271,6 +274,9 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.19(yaml@2.9.0))
     devDependencies:
+      '@types/qrcode.react':
+        specifier: ^3.0.0
+        version: 3.0.0(react@19.0.0-rc-f994737d14-20240522)
       '@types/react':
         specifier: ^18
         version: 18.2.79
