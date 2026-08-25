@@ -28,7 +28,7 @@ def report(name, status, details=""):
     print(f"{color}[{status}]{RESET} {name} {details}")
     results[name] = status
 
-async def make_request(method, endpoint, token, json_data=None):
+async def make_request(method, endpoint, token, json_data=None, files=None, data=None):
     if not token:
         return None, "BLOCKED (No Token Provided)"
     
@@ -40,7 +40,7 @@ async def make_request(method, endpoint, token, json_data=None):
             if method.upper() == "GET":
                 response = await client.get(url, headers=headers)
             elif method.upper() == "POST":
-                response = await client.post(url, headers=headers, json=json_data)
+                response = await client.post(url, headers=headers, json=json_data, data=data, files=files)
             return response, None
         except Exception as e:
             return None, f"FAIL (Connection Error: {e})"
