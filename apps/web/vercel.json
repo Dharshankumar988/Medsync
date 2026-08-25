@@ -1,3 +1,3 @@
 {
-  "installCommand": "npm install -g pnpm@latest && pnpm install"
+  "installCommand": "pnpm install --frozen-lockfile"
 }
