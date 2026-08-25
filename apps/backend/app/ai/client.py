@@ -11,8 +11,8 @@ class AIMicroserviceClient:
         self.base_url = settings.MEDSYNC_AI_URL.rstrip("/")
         self.timeout = settings.AI_TIMEOUT
         self.headers = {}
-        if settings.AI_SERVICE_TOKEN:
-            self.headers["Authorization"] = f"Bearer {settings.AI_SERVICE_TOKEN}"
+        if settings.MEDSYNC_AI_TOKEN:
+            self.headers["Authorization"] = f"Bearer {settings.MEDSYNC_AI_TOKEN}"
 
     async def predict(self, scan_type: str, image_bytes: bytes) -> Dict[str, Any]:
         url = f"{self.base_url}/predict"

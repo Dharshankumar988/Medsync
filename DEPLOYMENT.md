@@ -1,126 +1,102 @@
-# MedSync Full Production Deployment Guide
+# MedSync Production Deployment Guide
 
-This guide describes the exact steps and correct sequence to successfully deploy MedSync's architecture:
-`Vercel → HF Space #1 (FastAPI/PULSE) → Supabase + Groq + HF Space #2 (Diagnostics)`.
+This guide covers deploying MedSync to production using Render (Backend) and Vercel (Frontend), while preserving the existing diagnostic models hosted on HF Space #2.
 
-**WARNING**: Do NOT deviate from this order. Do NOT deploy Vercel before the backend is fully running.
+## Deployment Architecture
 
----
-
-## 1. Initial Setup (GitHub)
-1. Push all your latest changes to the `main` branch.
-2. Ensure you have accounts created at: [Supabase](https://supabase.com/), [Groq](https://console.groq.com/), [Hugging Face](https://huggingface.co/), and [Vercel](https://vercel.com/).
-
----
-
-## 2. Supabase Configuration
-1. Create a new Supabase project.
-2. Under **Project Settings > API**, copy the `Project URL` and `anon public` key. 
-3. Under **Project Settings > Database**, copy the `Connection string` (URI).
-4. Run the contents of `database_setup.sql` in the Supabase SQL Editor.
-   *Ensure you DO NOT run `dummy_values.sql` in production.*
-5. Note these variables for later:
-   - `SUPABASE_URL`
-   - `SUPABASE_KEY`
-   - `DATABASE_URL`
-
----
-
-## 3. Groq LLM Configuration
-1. Navigate to the [Groq API Console](https://console.groq.com/keys) and generate an API key.
-2. Ensure you have access to `groq/compound` and `groq/compound-mini`.
-3. Note this variable for later:
-   - `GROQ_API_KEY`
-
----
-
-## 4. Deploy HF Space #2 (Diagnostic AI)
-1. In Hugging Face, create a new Space (Docker template).
-2. Upload the Diagnostic AI codebase to this space.
-3. Once deployed and running successfully, copy the Space URL (e.g., `https://username-diagnostic-ai.hf.space`).
-4. Generate an access token from your Hugging Face Settings (Access Tokens) with `read` permissions.
-5. Note these variables for later:
-   - `MEDSYNC_AI_URL` (the Space #2 URL)
-   - `MEDSYNC_AI_TOKEN` (the HF access token)
-
----
-
-## 5. Test Space #2
-*Before proceeding, verify Space #2 works.*
-```bash
-curl -X GET <MEDSYNC_AI_URL>/api/v1/health \
-  -H "Authorization: Bearer <MEDSYNC_AI_TOKEN>"
+```text
+Vercel (Frontend)
+   ↓ HTTPS
+Render (Backend: FastAPI + PULSE + Auth + RAG + Groq + Face Auth)
+   ↓ Authenticated Server-to-Server HTTPS
+HF Space #2 (Diagnostic Inference)
 ```
-- **Expected Result**: HTTP 200 OK
-- **Common Failure**: HTTP 401 Unauthorized (Check token), or HTTP 503 (Space is asleep).
 
 ---
 
-## 6. Deploy HF Space #1 (FastAPI/PULSE)
-1. In Hugging Face, create another new Space, select **Docker** as the environment.
-2. Link it to your GitHub repository or upload the `apps/backend` directory.
-3. Go to **Settings > Variables and secrets** in Space #1 and add the following **Secrets**:
-   - `SUPABASE_URL`: (From Step 2)
-   - `SUPABASE_KEY`: (From Step 2)
-   - `DATABASE_URL`: (From Step 2)
-   - `JWT_SECRET_KEY`: (Generate a secure random string)
-   - `BIOMETRIC_ENCRYPTION_KEY`: (Generate a secure random 32-byte base64 string)
-   - `GROQ_API_KEY`: (From Step 3)
-   - `GROQ_MODEL`: `groq/compound`
-   - `GROQ_FALLBACK_MODEL`: `groq/compound-mini`
-   - `MEDSYNC_AI_URL`: (From Step 4)
-   - `MEDSYNC_AI_TOKEN`: (From Step 4)
-   - `CORS_ORIGINS`: `*` (Temporarily allow all until Vercel is deployed)
+## 1. Environment Variables Overview
+
+You will need to configure variables in two distinct places:
+
+### Render Environment Variables (Backend)
+These variables must be set securely in the Render dashboard and **NEVER** exposed to the browser.
+
+| Variable | Description | Example |
+| -------- | ----------- | ------- |
+| `SUPABASE_URL` | Your Supabase project URL | `https://xxxx.supabase.co` |
+| `SUPABASE_KEY` | Your Supabase service role key (or anon key depending on backend DB config) | `eyJhb...` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...` |
+| `JWT_SECRET_KEY` | Secret for encoding auth tokens | `your-secure-random-string` |
+| `BIOMETRIC_ENCRYPTION_KEY`| Key for encrypting face templates | `your-32-byte-hex-string` |
+| `GROQ_API_KEY` | Your Groq API key | `gsk_...` |
+| `GROQ_MODEL` | Primary PULSE orchestration model | `groq/compound` |
+| `GROQ_FALLBACK_MODEL` | Fallback model if primary fails | `groq/compound-mini` |
+| `MEDSYNC_AI_URL` | The HF Space #2 URL | `https://your-space.hf.space` |
+| `MEDSYNC_AI_TOKEN` | Bearer token for HF Space #2 | `hf_...` |
+| `CORS_ORIGINS` | Permitted frontend origins | `https://medsync-app.vercel.app` |
+
+### Vercel Environment Variables (Frontend)
+These variables are safe for the browser.
+
+| Variable | Description | Example |
+| -------- | ----------- | ------- |
+| `NEXT_PUBLIC_API_URL` | The URL of your Render backend | `https://medsync-api.onrender.com/api/v1` |
 
 ---
 
-## 7. Test Space #1 /health
-Wait for the Space #1 build to complete.
-```bash
-curl -X GET https://<SPACE-1-ID>.hf.space/health
-```
-- **Expected Result**: `{"status": "ok", "version": "1.0.0"}`
-- **Common Failure**: HTTP 500 (Check Space logs for missing environment variables).
+## 2. Render Deployment Steps (Backend)
+
+1. **Log in to Render:** Go to [render.com](https://render.com) and log in.
+2. **Create New Web Service:** Click **New +** and select **Web Service**.
+3. **Connect Repository:** Connect your GitHub account and select the MedSync repository.
+4. **Configuration Details:**
+   - **Name:** `medsync-backend` (or your choice)
+   - **Root Directory:** `apps/backend` (Crucial! Do not leave blank)
+   - **Runtime:** `Docker`
+   - **Instance Type:** Select **Standard** or higher (at least 2GB RAM is recommended because Face Auth loads DeepFace/TensorFlow into memory).
+5. **Environment Variables:**
+   - Scroll down to the Environment Variables section.
+   - Click "Add Environment Variable" and copy each variable from the Render table above.
+   - For `CORS_ORIGINS`, you can temporarily set it to `*` until Vercel is deployed, but be sure to update it to your exact Vercel URL (e.g., `https://my-medsync.vercel.app`) afterward.
+6. **Deploy:** Click **Create Web Service**.
+7. **Verify Health:** Once the build finishes and the service is "Live", copy the Render URL (e.g., `https://medsync-xyz.onrender.com`).
+   - Open your browser to `https://medsync-xyz.onrender.com/health` and verify you receive `{"status":"ok","version":"1.0.0"}`.
 
 ---
 
-## 8. Test Complete PULSE Backend
-Test the authentication flow and AI endpoints using the interactive Swagger UI at:
-`https://<SPACE-1-ID>.hf.space/docs`
-Verify that `POST /api/v1/pulse/chat` returns a successful Groq response using a test patient token.
+## 3. Vercel Deployment Steps (Frontend)
+
+1. **Log in to Vercel:** Go to [vercel.com](https://vercel.com) and log in.
+2. **Add New Project:** Click **Add New... -> Project**.
+3. **Import Repository:** Select the MedSync GitHub repository.
+4. **Configuration Details:**
+   - **Framework Preset:** Next.js
+   - **Root Directory:** Edit this and select `apps/web`.
+5. **Environment Variables:**
+   - Key: `NEXT_PUBLIC_API_URL`
+   - Value: `https://<your-render-url>.onrender.com/api/v1` (replace with the URL from Render Step 7)
+6. **Deploy:** Click **Deploy**.
+7. **Copy URL:** Once deployed, copy your production domain (e.g., `https://medsync.vercel.app`).
+8. **Update Render CORS (Important):** Go back to your Render dashboard, edit the `CORS_ORIGINS` variable to match your Vercel URL exactly, and wait for Render to redeploy.
 
 ---
 
-## 9. Deploy Vercel (Frontend)
-1. Import `apps/web` into a new Vercel project.
-2. In the Vercel **Environment Variables** configuration, add ONLY the following:
-   - `NEXT_PUBLIC_API_URL`: `https://<SPACE-1-ID>.hf.space/api/v1`
-3. Click **Deploy**.
-4. Once deployed, copy your final Vercel domain (e.g., `https://medsync-frontend.vercel.app`).
+## 4. End-to-End Testing Procedure
 
----
+Do not consider the application production-ready until you complete these manual tests:
 
-## 10. Update CORS_ORIGINS
-1. Return to Hugging Face **Space #1 Settings**.
-2. Update the `CORS_ORIGINS` secret to your exact Vercel domain:
-   - `CORS_ORIGINS`: `https://medsync-frontend.vercel.app`
-3. Restart Space #1.
-
----
-
-## 11. Test Vercel → Space #1
-Navigate to your Vercel URL in your browser. Attempt to log in or create an account.
-- **Expected Result**: Seamless login and dashboard load.
-- **Common Failure**: CORS Error in browser console.
-- **Fix**: Verify `CORS_ORIGINS` exactly matches the Vercel domain (no trailing slash).
-
----
-
-## 12. Execute Complete Role Matrix Verification
-Log into the production Vercel app using 4 different accounts to verify the security models:
-1. **Patient**: Verify AI chat works, try to access diagnostics (should fail).
-2. **Doctor**: Verify AI chat works, try to analyze an image (should succeed).
-3. **Pharmacy**: Verify AI chat works, query medicine inventory (should succeed).
-4. **Admin**: Verify AI chat works, try to access diagnostics (should fail).
-
-If all tests pass, the system is fully deployed.
+1. **Patient Registration & Auth:**
+   - Visit the Vercel URL.
+   - Register a new Patient.
+   - Verify Face Authentication captures the image and successfully registers.
+2. **PULSE Role Isolation:**
+   - **Patient:** Attempt to ask a general medical question. Verify Groq answers via RAG.
+   - **Pharmacy:** Attempt to ask an inventory question. Verify Groq answers. Attempt to ask for a diagnostic evaluation and ensure it is blocked or gracefully handled without calling HF Space #2.
+3. **Doctor Diagnostic Flow:**
+   - Log in as a Doctor.
+   - Upload a test image (e.g., a skin lesion image) and select the "skin" scan type.
+   - Verify the request succeeds.
+   - Confirm the response contains a structured interpretation (diagnosis, confidence) that matches the raw output of HF Space #2, along with Groq's clinical explanation.
+4. **Resilience Check:**
+   - Modify the `MEDSYNC_AI_TOKEN` in Render to an invalid value, wait for restart, and attempt a diagnostic scan.
+   - Verify the backend returns a structured `DIAGNOSTIC_SERVICE_UNAVAILABLE` or similar authorization error, rather than crashing.
