@@ -16,6 +16,9 @@ const fadeUp = {
 
 const stagger = { visible: { transition: { staggerChildren: 0.03 } } };
 
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { dashboardService } from "@/services/dashboard.service";
+
 // Mock system health data (Normally fetched from API)
 const systemHealth = [
   { name: "Core API", status: "operational", latency: "42ms", icon: Server },
@@ -26,23 +29,15 @@ const systemHealth = [
 ];
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const { data: stats, isLoading: loading } = useQuery({
+    queryKey: ["adminDashboard"],
+    queryFn: () => dashboardService.getAdminDashboard(),
+  });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const res = await api.get('/api/v1/admin/stats/dashboard');
-      setStats(res.data.data);
-    } catch (err) {
-      console.error("Failed to fetch dashboard stats", err);
-    } finally {
-      setLoading(false);
-    }
+  const fetchData = () => {
+    queryClient.invalidateQueries({ queryKey: ["adminDashboard"] });
   };
 
   const accentMap: Record<string, { bg: string; text: string; border: string; glow: string }> = {

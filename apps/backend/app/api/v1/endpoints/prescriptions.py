@@ -29,8 +29,8 @@ async def create_prescription(
 async def authorize_prescription_download(
     id: uuid.UUID,
     pin: str = Form(...),
-    password: str = Form(...),
     face_image: UploadFile = File(...),
+    challenge_type: str = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user)
 ):
@@ -55,19 +55,11 @@ async def authorize_prescription_download(
     if current_user.role == UserRole.PATIENT:
         from app.models.user import User
         from app.services.security_service import validate_patient_pin, create_download_authorization
-        from app.ai.face_verification import verify_face
+        from app.services.face_auth_service import face_auth_service
         from app.models.security import PatientBiometricProfile
-        import bcrypt
         import asyncio
         import tempfile, shutil, os
 
-        user_stmt = select(User).where(User.id == current_user.id)
-        user_res = await db.execute(user_stmt)
-        user = user_res.scalar_one_or_none()
-
-        if not bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
-            raise HTTPException(status_code=401, detail="Invalid password")
-            
         pin_valid = await validate_patient_pin(db, current_user.id, pin)
         if not pin_valid:
             raise HTTPException(status_code=401, detail="Invalid Authorization PIN")
@@ -86,19 +78,20 @@ async def authorize_prescription_download(
             tmp_path = tmp.name
 
         try:
-            face_verified = await asyncio.to_thread(verify_face, tmp_path, bio_profile.encrypted_template)
+            challenge_data = {"type": challenge_type} if challenge_type else None
+            face_verified = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path, challenge_data)
             if not face_verified:
                 raise HTTPException(status_code=401, detail="Face verification failed")
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
-        auth_ref = await create_download_authorization(db, current_user.id, rx.id, True, True, True)
+        auth_ref = await create_download_authorization(db, current_user.id, rx.id, password_verified=False, pin_verified=True, face_verified=True)
         return APIResponse(message="Authorization successful", data={"authorization_reference": auth_ref})
     
     # For doctors/admins, just return a direct short-lived auth reference bypassing MFA for now (or a different flow)
     from app.services.security_service import create_download_authorization
-    auth_ref = await create_download_authorization(db, current_user.id, rx.id, True, True, True)
+    auth_ref = await create_download_authorization(db, current_user.id, rx.id, password_verified=False, pin_verified=False, face_verified=False)
     return APIResponse(message="Authorization successful", data={"authorization_reference": auth_ref})
 
 @router.get("/download/{authorization_reference}")
@@ -263,7 +256,7 @@ async def order_prescription_online(
         raise HTTPException(status_code=400, detail="Prescription has already been dispensed")
 
     from app.services.security_service import validate_patient_pin
-    from app.ai.face_verification import verify_face
+    from app.services.face_auth_service import face_auth_service
     from app.models.security import PatientBiometricProfile
     import tempfile, shutil, os, asyncio
 
@@ -286,7 +279,7 @@ async def order_prescription_online(
         tmp_path = tmp.name
 
     try:
-        face_verified = await asyncio.to_thread(verify_face, tmp_path, bio_profile.encrypted_template)
+        face_verified = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
         if not face_verified:
             raise HTTPException(status_code=401, detail="Face verification failed")
     finally:

@@ -12,7 +12,7 @@ from app.ai.core.service_manager import ai_service_manager
 from app.ai.core.conversation import ConversationManager
 from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.config import ai_config
-from app.ai.rag.retriever import RAGRetriever
+from app.services.rag_service import rag_service
 
 logger = logging.getLogger("medsync.ai.pharmacy")
 
@@ -50,11 +50,11 @@ class PharmacyAIService:
         return msg
 
     @staticmethod
-    async def _build_messages(db: AsyncSession, session_id: uuid.UUID, user_message: str, specific_instruction: str = None) -> List[Dict[str, str]]:
-        rag_context = await RAGRetriever.retrieve_context(user_message, role="pharmacy", db=db)
+    async def _build_messages(db: AsyncSession, session: AIChatSession, user_message: str, specific_instruction: str = None) -> List[Dict[str, str]]:
+        rag_context = await rag_service.retrieve_context(db=db, query=user_message, role="pharmacy", scope_id=session.user_id)
         system_msg_content = PHARMACY_SYSTEM_PROMPT.format(rag_context=rag_context)
 
-        history = await ConversationManager.get_recent_messages(db, session_id)
+        history = await ConversationManager.get_recent_messages(db, session.id)
         
         return PromptManager.build_messages(
             system_prompt=system_msg_content,
@@ -68,13 +68,14 @@ class PharmacyAIService:
         session = await PharmacyAIService._get_or_create_session(db, pharmacy_id, req.session_id)
         await PharmacyAIService._save_message(db, session.id, AIChatRole.USER, req.message)
         
-        messages = await PharmacyAIService._build_messages(db, session.id, req.message)
+        messages = await PharmacyAIService._build_messages(db, session, req.message)
         
         start_time = time.time()
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_PHARMACY
+        model_name = ai_config.LLM_MODEL_PHARMACY
         
         reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1)
+        reply_content = AIOrchestrator.filter_output(reply_content, "pharmacy")
         inference_time = int((time.time() - start_time) * 1000)
         
         await PharmacyAIService._save_message(db, session.id, AIChatRole.ASSISTANT, reply_content, model_name, inference_time)
@@ -88,18 +89,19 @@ class PharmacyAIService:
         await PharmacyAIService._save_message(db, session.id, AIChatRole.USER, req.message)
         await db.commit()
         
-        messages = await PharmacyAIService._build_messages(db, session.id, req.message)
+        messages = await PharmacyAIService._build_messages(db, session, req.message)
         
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_PHARMACY
+        model_name = ai_config.LLM_MODEL_PHARMACY
         
         full_reply = ""
         start_time = time.time()
         
         stream = client.chat_stream(messages=messages, model=model_name, temperature=0.1)
         async for chunk in stream:
-            full_reply += chunk
-            yield chunk
+            filtered_chunk = AIOrchestrator.filter_output(chunk, "pharmacy")
+            full_reply += filtered_chunk
+            yield filtered_chunk
             
         inference_time = int((time.time() - start_time) * 1000)
         await PharmacyAIService._save_message(db, session.id, AIChatRole.ASSISTANT, full_reply, model_name, inference_time)
@@ -147,13 +149,14 @@ class PharmacyAIService:
         session = await PharmacyAIService._get_or_create_session(db, pharmacy_id, session_id)
         await PharmacyAIService._save_message(db, session.id, AIChatRole.USER, user_input)
         
-        messages = await PharmacyAIService._build_messages(db, session.id, user_input, specific_instruction=instruction)
+        messages = await PharmacyAIService._build_messages(db, session, user_input, specific_instruction=instruction)
         
         start_time = time.time()
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_PHARMACY
+        model_name = ai_config.LLM_MODEL_PHARMACY
         
         reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1)
+        reply_content = AIOrchestrator.filter_output(reply_content, "pharmacy")
         inference_time = int((time.time() - start_time) * 1000)
         
         await PharmacyAIService._save_message(db, session.id, AIChatRole.ASSISTANT, reply_content, model_name, inference_time)

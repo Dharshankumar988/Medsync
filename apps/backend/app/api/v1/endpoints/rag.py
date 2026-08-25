@@ -1,6 +1,7 @@
 from typing import Any, List, Dict
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 import uuid
 
 from app.dependencies.db import get_db
@@ -25,20 +26,21 @@ class DocumentResponse(BaseModel):
     error_message: str | None = None
 
 @router.get("/documents", response_model=List[DocumentResponse])
-def list_documents(
-    db: Session = Depends(get_db),
+async def list_documents(
+    db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user),
 ) -> Any:
     if current_user.role.upper() != "ADMIN":
         raise HTTPException(status_code=403, detail="Only admins can view knowledge documents")
         
-    docs = db.query(KnowledgeDocument).all()
+    result = await db.execute(select(KnowledgeDocument))
+    docs = result.scalars().all()
     return docs
 
 @router.post("/documents", response_model=DocumentResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user),
 ) -> Any:
     if current_user.role.upper() != "ADMIN":
@@ -48,26 +50,27 @@ async def upload_document(
     return doc
 
 @router.delete("/documents/{id}")
-def delete_document(
+async def delete_document(
     id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user),
 ) -> Any:
     if current_user.role.upper() != "ADMIN":
         raise HTTPException(status_code=403, detail="Only admins can delete documents")
         
-    doc = db.query(KnowledgeDocument).filter(KnowledgeDocument.id == id).first()
+    result = await db.execute(select(KnowledgeDocument).where(KnowledgeDocument.id == id))
+    doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
         
-    db.delete(doc)
-    db.commit()
+    await db.delete(doc)
+    await db.commit()
     return {"message": "Document and associated chunks deleted successfully"}
 
 @router.post("/query")
 async def query_knowledge_base(
     req: QueryRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user),
 ) -> Any:
     if current_user.role.upper() != "ADMIN":

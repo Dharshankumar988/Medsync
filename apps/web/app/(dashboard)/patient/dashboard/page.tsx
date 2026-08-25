@@ -18,25 +18,12 @@ const fadeUp = {
 };
 const stagger = { visible: { transition: { staggerChildren: 0.03 } } };
 
+import { useQuery } from "@tanstack/react-query";
+import { dashboardService } from "@/services/dashboard.service";
+import { appointmentService } from "@/services/appointment.service";
+
 export default function PatientDashboard() {
   const [userId, setUserId] = useState<string>("");
-  const [dashboardData, setDashboardData] = useState<{
-    nextAppointment: any;
-    doctorInfo: any;
-    recordsCount: number;
-    prescriptionsCount: number;
-    ordersCount: number;
-    notifications: any[];
-    loading: boolean;
-  }>({
-    nextAppointment: null,
-    doctorInfo: null,
-    recordsCount: 0,
-    prescriptionsCount: 0,
-    ordersCount: 0,
-    notifications: [],
-    loading: true,
-  });
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -44,110 +31,51 @@ export default function PatientDashboard() {
     });
   }, []);
 
-  useEffect(() => {
-    if (!userId) return;
+  const { data: dashboardData = {
+    upcoming_appointments: 0,
+    total_records: 0,
+    active_prescriptions: 0,
+    ongoing_orders: 0
+  }, isLoading } = useQuery({
+    queryKey: ["patientDashboard", userId],
+    queryFn: () => dashboardService.getPatientDashboard(),
+    enabled: !!userId,
+  });
 
-    async function fetchDashboardData() {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        
-        // Next Appointment
-        const { data: apptData } = await supabase
-          .from('appointments')
-          .select('*')
-          .eq('patient_id', userId)
-          .gte('appointment_date', today)
-          .order('appointment_date', { ascending: true })
-          .limit(1);
-          
-        let docInfo = null;
-        if (apptData && apptData.length > 0) {
-          const { data: docData } = await supabase
-            .from('doctors')
-            .select('*')
-            .eq('user_id', apptData[0].doctor_id)
-            .single();
-          docInfo = docData;
-        }
+  const { data: appointmentsData } = useQuery({
+    queryKey: ["patientAppointments", userId],
+    queryFn: () => appointmentService.getAppointments({ limit: 5 }),
+    enabled: !!userId,
+  });
 
-        // Records Count
-        const { count: recordsCount } = await supabase
-          .from('medical_records')
-          .select('*', { count: 'exact', head: true })
-          .eq('patient_id', userId);
-
-        // Prescriptions Count
-        const { count: presCount } = await supabase
-          .from('prescriptions')
-          .select('*', { count: 'exact', head: true })
-          .eq('patient_id', userId)
-          .eq('is_dispensed', false);
-
-        // Orders Count
-        const { count: ordersCount } = await supabase
-          .from('medicine_orders')
-          .select('*', { count: 'exact', head: true })
-          .eq('patient_id', userId);
-
-        // Recent Notifications for timeline
-        const { data: notifs } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(3);
-
-        setDashboardData({
-          nextAppointment: apptData?.[0] || null,
-          doctorInfo: docInfo,
-          recordsCount: recordsCount || 0,
-          prescriptionsCount: presCount || 0,
-          ordersCount: ordersCount || 0,
-          notifications: notifs || [],
-          loading: false
-        });
-      } catch (err) {
-        console.error("Failed to fetch dashboard data", err);
-        setDashboardData(prev => ({ ...prev, loading: false }));
-      }
-    }
-
-    fetchDashboardData();
-  }, [userId]);
+  const recentAppointments = appointmentsData?.items || [];
 
   const stats = [
     {
-      title: "Next Appointment",
-      value: dashboardData.nextAppointment 
-        ? (() => {
-            const [year, month, day] = dashboardData.nextAppointment.appointment_date.split('-').map(Number);
-            return `${new Date(year, month - 1, day).toLocaleDateString()} at ${dashboardData.nextAppointment.start_time.slice(0,5)}`;
-          })()
-        : "None scheduled",
-      subtitle: dashboardData.doctorInfo 
-        ? `Dr. ${dashboardData.doctorInfo.full_name} (${dashboardData.doctorInfo.specialization})` 
-        : "Book an appointment",
+      title: "Upcoming Appointments",
+      value: dashboardData.upcoming_appointments.toString(),
+      subtitle: "Scheduled consultations",
       icon: Clock,
       accent: "blue",
     },
     {
       title: "Medical Records",
-      value: dashboardData.recordsCount.toString(),
+      value: dashboardData.total_records.toString(),
       subtitle: <span className="text-blue-500 font-medium">Uploaded documents</span>,
       icon: FileText,
       accent: "violet",
     },
     {
       title: "Active Prescriptions",
-      value: dashboardData.prescriptionsCount.toString(),
+      value: dashboardData.active_prescriptions.toString(),
       valueColor: "text-emerald-500",
       subtitle: "Pending dispense",
       icon: Pill,
       accent: "emerald",
     },
     {
-      title: "Recent Orders",
-      value: dashboardData.ordersCount.toString(),
+      title: "Ongoing Orders",
+      value: dashboardData.ongoing_orders.toString(),
       subtitle: "Medicine deliveries",
       icon: ShoppingBag,
       accent: "orange",
@@ -187,7 +115,7 @@ export default function PatientDashboard() {
       </motion.div>
 
       {/* ─── Stat Cards ─── */}
-      {(!userId || dashboardData.loading) ? (
+      {(!userId || isLoading) ? (
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           {[1,2,3,4].map(i => <Skeleton key={i} className="h-[140px] w-full rounded-2xl" />)}
         </div>
@@ -257,22 +185,18 @@ export default function PatientDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-5">
-                {dashboardData.notifications.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No recent events.</div>
+                {recentAppointments.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-4">No recent events.</div>
                 ) : (
-                  dashboardData.notifications.map((item, i) => (
-                    <div key={i} className="flex items-start gap-4 group">
-                      <div className={`shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 transition-transform duration-300 group-hover:scale-110`}>
-                        <Activity className={`h-4 w-4 text-blue-500`} />
-                      </div>
-                      <div className="flex flex-col gap-1 w-full">
-                        <div className="flex justify-between w-full">
-                          <span className="text-sm font-semibold">{item.title}</span>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {new Date(item.created_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">{item.message}</span>
+                  recentAppointments.map((appt: any) => (
+                    <div key={appt.id} className="flex items-start gap-3 border-b border-border/40 pb-3 last:border-0 last:pb-0">
+                      <div className="h-2 w-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Appointment with Dr. {appt.doctor?.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(appt.appointment_date).toLocaleDateString()} at {appt.start_time}</p>
+                        <span className={`text-[10px] font-semibold mt-1 px-2 py-0.5 rounded-full inline-block ${appt.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                          {appt.status}
+                        </span>
                       </div>
                     </div>
                   ))

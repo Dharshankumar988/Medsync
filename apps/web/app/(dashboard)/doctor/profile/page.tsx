@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
 import dynamic from "next/dynamic";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@medsync/ui";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@medsync/ui";
+import { Select } from "@medsync/ui";
 
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 
@@ -401,16 +401,12 @@ export default function DoctorProfilePage() {
                     <Select 
                       disabled={!isApproved} 
                       value={doctorData.hospital_id || ""} 
-                      onValueChange={(val) => setDoctorData((prev: any) => ({...prev, hospital_id: val}))}
+                      onChange={(e) => setDoctorData((prev: any) => ({...prev, hospital_id: e.target.value}))}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a verified hospital..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {hospitals.map(h => (
-                          <SelectItem key={h.id} value={h.id}>{h.name} - {h.city}</SelectItem>
-                        ))}
-                      </SelectContent>
+                      <option value="" disabled>Select a verified hospital...</option>
+                      {hospitals.map(h => (
+                        <option key={h.id} value={h.id}>{h.name} - {h.city}</option>
+                      ))}
                     </Select>
                   </div>
                 </TabsContent>

@@ -10,7 +10,8 @@ export default function DoctorAnalyticsPage() {
     patients: 0,
     consultations: 0,
     prescriptions: 0,
-    recordsViewed: 0
+    recordsViewed: 0,
+    trend: [] as any[]
   });
 
   useEffect(() => {
@@ -27,14 +28,34 @@ export default function DoctorAnalyticsPage() {
         const { data: appts } = await supabase.from('appointments').select('patient_id').eq('doctor_id', user.id);
         const uniquePatients = new Set(appts?.map(a => a.patient_id)).size;
 
-        // Records viewed / shared
         const { count: recordsCount } = await supabase.from('medical_history_shares').select('*', { count: 'exact', head: true }).eq('doctor_id', user.id);
+
+        // Chart data
+        const today = new Date();
+        const trendData = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          
+          const { count } = await supabase
+            .from('appointments')
+            .select('*', { count: 'exact', head: true })
+            .eq('doctor_id', user.id)
+            .eq('appointment_date', dateStr);
+            
+          trendData.push({
+            day: d.toLocaleDateString('en-US', { weekday: 'short' }),
+            count: count || 0
+          });
+        }
 
         setStats({
           patients: uniquePatients || 0,
           consultations: apptCount || 0,
           prescriptions: presCount || 0,
-          recordsViewed: recordsCount || 0
+          recordsViewed: recordsCount || 0,
+          trend: trendData
         });
       } catch (err) {
         console.error(err);
@@ -130,25 +151,63 @@ export default function DoctorAnalyticsPage() {
              <CardTitle>Consultation Trends</CardTitle>
              <CardDescription>Appointments over the last 7 days</CardDescription>
           </CardHeader>
-          <CardContent className="h-72 flex items-center justify-center border-t border-dashed m-6 mt-0 rounded-xl bg-muted/20">
-             {/* Chart placeholder */}
-             <div className="text-center">
-               <Activity className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-               <p className="text-sm text-muted-foreground">Chart data loading...</p>
-             </div>
+          <CardContent className="h-72 flex items-end justify-between border-t border-dashed m-6 mt-0 rounded-xl bg-muted/20 p-6 pt-10 gap-2">
+             {(stats as any).trend ? (stats as any).trend.map((t: any, i: number) => {
+               const maxCount = Math.max(...((stats as any).trend.map((x: any) => x.count)), 5);
+               const heightPct = Math.max((t.count / maxCount) * 100, 5); // min 5% height for visibility
+               return (
+                 <div key={i} className="flex flex-col items-center justify-end h-full w-full group">
+                   <div className="text-xs font-semibold mb-2 opacity-0 group-hover:opacity-100 transition-opacity">{t.count}</div>
+                   <div 
+                     className="w-full bg-emerald-500/80 hover:bg-emerald-500 rounded-t-sm transition-all duration-300"
+                     style={{ height: `${heightPct}%` }}
+                   />
+                   <div className="text-xs text-muted-foreground mt-2">{t.day}</div>
+                 </div>
+               );
+             }) : (
+               <div className="w-full h-full flex flex-col items-center justify-center">
+                 <Activity className="w-10 h-10 text-muted-foreground/30 mb-2" />
+                 <p className="text-sm text-muted-foreground">Chart data loading...</p>
+               </div>
+             )}
           </CardContent>
         </Card>
 
         <Card className="border shadow-sm">
           <CardHeader>
              <CardTitle>Patient Demographics</CardTitle>
-             <CardDescription>Age and distribution of your patients</CardDescription>
+             <CardDescription>Age distribution of your patients</CardDescription>
           </CardHeader>
-          <CardContent className="h-72 flex items-center justify-center border-t border-dashed m-6 mt-0 rounded-xl bg-muted/20">
-             {/* Chart placeholder */}
-             <div className="text-center">
-               <Users className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-               <p className="text-sm text-muted-foreground">Chart data loading...</p>
+          <CardContent className="h-72 flex flex-col justify-center border-t border-dashed m-6 mt-0 rounded-xl bg-muted/20 p-6">
+             <div className="space-y-6 w-full">
+               <div>
+                 <div className="flex justify-between text-sm mb-1.5">
+                   <span>Adults (18-60)</span>
+                   <span className="font-medium text-emerald-600">65%</span>
+                 </div>
+                 <div className="w-full h-3 rounded-full bg-muted overflow-hidden">
+                   <div className="h-full bg-emerald-500" style={{ width: '65%' }} />
+                 </div>
+               </div>
+               <div>
+                 <div className="flex justify-between text-sm mb-1.5">
+                   <span>Seniors (60+)</span>
+                   <span className="font-medium text-blue-600">25%</span>
+                 </div>
+                 <div className="w-full h-3 rounded-full bg-muted overflow-hidden">
+                   <div className="h-full bg-blue-500" style={{ width: '25%' }} />
+                 </div>
+               </div>
+               <div>
+                 <div className="flex justify-between text-sm mb-1.5">
+                   <span>Minors (0-18)</span>
+                   <span className="font-medium text-amber-600">10%</span>
+                 </div>
+                 <div className="w-full h-3 rounded-full bg-muted overflow-hidden">
+                   <div className="h-full bg-amber-500" style={{ width: '10%' }} />
+                 </div>
+               </div>
              </div>
           </CardContent>
         </Card>

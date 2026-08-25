@@ -10,7 +10,7 @@ from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User, UserRole
 from app.services.security_service import enroll_patient_pin, validate_patient_pin, get_security_status
-from app.ai.face_verification import enroll_face
+from app.services.face_auth_service import face_auth_service
 from app.models.security import PatientBiometricProfile
 from app.models.audit_log import AuditLog
 
@@ -74,7 +74,7 @@ async def enroll_face_endpoint(
                 
         # Running face enrollment which might block the event loop in thread pool
         import asyncio
-        encrypted_template = await asyncio.to_thread(enroll_face, temp_files)
+        encrypted_template = await asyncio.to_thread(face_auth_service.enroll_patient, temp_files)
         
         # Save to DB
         result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id))

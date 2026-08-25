@@ -25,7 +25,8 @@ export default function PharmacyOrdersPage() {
 
   const handleDispatch = async (orderId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/orders/${orderId}/dispatch`, {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const res = await fetch(`${baseUrl}/orders/${orderId}/dispatch`, {
         method: "POST",
       });
       if (res.ok) {

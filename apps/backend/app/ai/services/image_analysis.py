@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 
 from app.ai.core.inference_service import inference_service
 from app.ai.services.groq_client import groq_client
+from app.ai.core.exceptions import DiagnosticModelException
 from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.response_formatter import ResponseFormatter
 from app.ai.core.config import ai_config
@@ -56,10 +57,7 @@ class ImageAnalysisService:
             hf_result = await inference_service.predict(scan_type, image_bytes)
         except Exception as e:
             logger.error(f"HF inference failed: {e}")
-            return ResponseFormatter.format_error(
-                f"Image analysis model unavailable: {str(e)}",
-                code="hf_inference_error",
-            )
+            raise DiagnosticModelException(f"Image analysis model unavailable: {str(e)}")
 
         prediction_time_ms = int((time.time() - start_time) * 1000)
 
@@ -87,7 +85,7 @@ class ImageAnalysisService:
                         {"role": "system", "content": "You are Doctor Pulse AI, a clinical imaging specialist. Provide structured, evidence-based analysis."},
                         {"role": "user", "content": doctor_prompt},
                     ],
-                    model=ai_config.GROQ_MODEL_DOCTOR,
+                    model=ai_config.LLM_MODEL_DOCTOR,
                     temperature=0.1,
                     max_tokens=2048,
                     json_mode=True,
@@ -97,7 +95,7 @@ class ImageAnalysisService:
                         {"role": "system", "content": "You are Patient Pulse AI, a kind and reassuring healthcare guide. Explain medical findings in simple terms."},
                         {"role": "user", "content": patient_prompt},
                     ],
-                    model=ai_config.GROQ_MODEL_PATIENT,
+                    model=ai_config.LLM_MODEL_PATIENT,
                     temperature=0.1,
                     max_tokens=2048,
                     json_mode=True,

@@ -7,6 +7,7 @@ from app.models.hospital import Hospital
 from app.models.pharmacy import Pharmacy
 from app.models.appointment import Appointment, AppointmentStatus, DoctorAvailability, AppointmentStatusHistory
 from app.models.prescription import Prescription
+from app.models.prescription_transfer import PrescriptionTransfer
 from app.models.record import MedicalRecord, MedicalRecordVersion, RecordPermission
 from app.models.ai_chat import AIChatSession, AIChatMessage
 from app.models.payment import Payment, PaymentStatus, PaymentMethod
@@ -40,6 +41,7 @@ __all__ = [
     "DoctorAvailability",
     "AppointmentStatusHistory",
     "Prescription",
+    "PrescriptionTransfer",
     "MedicalRecord",
     "MedicalRecordVersion",
     "RecordPermission",

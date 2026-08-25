@@ -77,8 +77,8 @@ export default function MedicalRecordsPage() {
             const appt = data.find((a: any) => a.doctor_id === id);
             return {
               id,
-              name: appt?.doctors?.full_name || "Unknown Doctor",
-              specialization: appt?.doctors?.specialization || ""
+              name: (appt as any)?.doctors?.full_name || "Unknown Doctor",
+              specialization: (appt as any)?.doctors?.specialization || ""
             };
           });
         setDoctors(uniqueDoctors);
@@ -218,7 +218,7 @@ export default function MedicalRecordsPage() {
                   ))}
                 </select>
                 {doctors.length === 0 && (
-                  <p className="text-xs text-muted-foreground">You don't have any past or upcoming appointments with doctors yet.</p>
+                  <p className="text-xs text-muted-foreground">You don&apos;t have any past or upcoming appointments with doctors yet.</p>
                 )}
               </div>
               <Button type="submit" className="w-full" disabled={isSharing || !selectedDoctorId}>

@@ -9,7 +9,7 @@ from app.repositories.ai_chat import chat_session_repo, chat_message_repo
 from app.schemas.ai import ChatRequest
 from app.ai.prompts.templates import ADMIN_SYSTEM_PROMPT
 from app.ai.core.service_manager import ai_service_manager
-from app.ai.rag.retriever import RAGRetriever
+from app.services.rag_service import rag_service
 from app.ai.core.conversation import ConversationManager
 from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.config import ai_config
@@ -87,7 +87,7 @@ class AdminAIService:
         context_parts = []
         
         if intent in ["RAG", "COMBINED"]:
-            rag_context = await RAGRetriever.retrieve_context(user_message, role="admin", db=db)
+            rag_context = await rag_service.retrieve_context(db=db, query=user_message, role="admin")
             if rag_context:
                 context_parts.append(f"--- Document Context ---\n{rag_context}")
                 
@@ -117,9 +117,32 @@ class AdminAIService:
         
         start_time = time.time()
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_ADMIN
+        model_name = ai_config.LLM_MODEL_ADMIN
         
-        reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1)
+        from app.ai.tools.admin_tools import AdminAITools
+        tools = AdminAITools.get_tool_definitions()
+        
+        reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1, tools=tools)
+        
+        if hasattr(reply_content, 'tool_calls') and reply_content.tool_calls:
+            # Handle tool calls
+            tool_call = reply_content.tool_calls[0]
+            function_name = tool_call.function.name
+            import json
+            try:
+                kwargs = json.loads(tool_call.function.arguments)
+            except:
+                kwargs = {}
+                
+            tool_result = await AdminAITools.execute_tool(db, admin_id, session.id, function_name, kwargs)
+            
+            # Send the tool result back to the model
+            messages.append({"role": "assistant", "content": None, "tool_calls": [tool_call]})
+            messages.append({"role": "tool", "tool_call_id": tool_call.id, "name": function_name, "content": tool_result})
+            
+            reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1)
+        
+        reply_content = AIOrchestrator.filter_output(reply_content, "admin")
         inference_time = int((time.time() - start_time) * 1000)
         
         await AdminAIService._save_message(db, session.id, AIChatRole.ASSISTANT, reply_content, model_name, inference_time)
@@ -136,15 +159,16 @@ class AdminAIService:
         messages = await AdminAIService._build_messages(db, session.id, req.message)
         
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_ADMIN
+        model_name = ai_config.LLM_MODEL_ADMIN
         
         full_reply = ""
         start_time = time.time()
         
         stream = client.chat_stream(messages=messages, model=model_name, temperature=0.1)
         async for chunk in stream:
-            full_reply += chunk
-            yield chunk
+            filtered_chunk = AIOrchestrator.filter_output(chunk, "admin")
+            full_reply += filtered_chunk
+            yield filtered_chunk
             
         inference_time = int((time.time() - start_time) * 1000)
         await AdminAIService._save_message(db, session.id, AIChatRole.ASSISTANT, full_reply, model_name, inference_time)
@@ -190,9 +214,10 @@ class AdminAIService:
         
         start_time = time.time()
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_ADMIN
+        model_name = ai_config.LLM_MODEL_ADMIN
         
         reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1)
+        reply_content = AIOrchestrator.filter_output(reply_content, "admin")
         inference_time = int((time.time() - start_time) * 1000)
         
         await AdminAIService._save_message(db, session.id, AIChatRole.ASSISTANT, reply_content, model_name, inference_time)

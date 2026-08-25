@@ -30,6 +30,8 @@ class Pharmacy(Base, UUIDMixin, TimestampMixin):
     branch_information: Mapped[str] = mapped_column(String, nullable=True)
     business_registration_number: Mapped[str] = mapped_column(String(255), nullable=True)
     description: Mapped[str] = mapped_column(String, nullable=True)
+    qr_identifier: Mapped[str] = mapped_column(String(255), unique=True, nullable=True)
+    qr_status: Mapped[str] = mapped_column(String(50), default='ACTIVE', nullable=True)
     
     user = relationship("User", back_populates="pharmacy_profile")
 

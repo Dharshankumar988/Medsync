@@ -4,9 +4,24 @@ Handles chat completion, streaming, image explanations, and structured output.
 """
 import os
 import logging
-from typing import List, Dict, Optional, AsyncGenerator
+import asyncio
+from typing import List, Dict, Optional, AsyncGenerator, Any
+
+# Ensure .env is loaded before reading env vars
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from app.ai.core.config import ai_config
-from app.ai.core.exceptions import AITimeoutException, AIRateLimitException
+from app.ai.core.exceptions import (
+    GroqMissingKeyException,
+    GroqRateLimitException,
+    GroqTimeoutException,
+    GroqNetworkException,
+    GroqProviderException
+)
 
 logger = logging.getLogger("medsync.ai.groq")
 
@@ -26,67 +41,128 @@ class GroqClient:
         self.api_key = os.getenv("GROQ_API_KEY", "")
         self.client = None
         self._healthy = False
-        if self.api_key and self.api_key != "mock_key":
+        self._active_model = ai_config.GROQ_MODEL
+        
+        if not self.api_key or self.api_key == "mock_key":
+            logger.error("GROQ_API_KEY is missing or invalid.")
+        else:
             try:
                 from groq import AsyncGroq
                 self.client = AsyncGroq(api_key=self.api_key, max_retries=3, timeout=30.0)
-                self._healthy = True
-                logger.info("Groq AsyncClient initialized successfully.")
             except Exception as e:
                 logger.warning(f"Failed to initialize AsyncGroq client: {e}")
                 self.client = None
-        else:
-            logger.warning("No GROQ_API_KEY configured. Fallback engine will be used.")
         self._init_done = True
 
     @property
     def is_healthy(self) -> bool:
         return self._healthy and self.client is not None
 
+    async def verify_health(self) -> bool:
+        if not self.client:
+            self._healthy = False
+            return False
+            
+        models_to_test = [ai_config.GROQ_MODEL, ai_config.GROQ_FALLBACK_MODEL]
+        
+        for model in models_to_test:
+            try:
+                # Test with actual chat completion
+                response = await self.client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": "ping"}],
+                    max_tokens=5,
+                    temperature=0.1
+                )
+                if response.choices and len(response.choices) > 0:
+                    self._active_model = model
+                    self._healthy = True
+                    logger.info(f"Groq is healthy using model: {model}")
+                    return True
+            except Exception as e:
+                logger.warning(f"Failed to verify Groq model {model}: {e}")
+                
+        self._healthy = False
+        logger.error("All Groq models failed verification.")
+        return False
+
+    def _check_client(self):
+        if not self.api_key or self.api_key == "mock_key":
+            raise GroqMissingKeyException()
+        if not self.client:
+            raise GroqProviderException("AI Provider is not configured (Initialization failed).")
+
     async def chat_completion(
         self,
         messages: List[Dict[str, str]],
-        model: str = "llama-3.3-70b-versatile",
+        model: Optional[str] = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
         json_mode: bool = False,
-    ) -> str:
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> Any:
         """Standard chat completion with Groq."""
-        if not self.client:
-            raise Exception("AI Provider is not configured (Missing GROQ_API_KEY).")
+        self._check_client()
+        if not self._healthy:
+            await self.verify_health()
+            if not self._healthy:
+                raise GroqProviderException("Groq models are unavailable or unauthorized.")
+
+        used_model = model or self._active_model
 
         try:
             params = {
-                "model": model,
+                "model": used_model,
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             }
             if json_mode:
                 params["response_format"] = {"type": "json_object"}
+            if tools:
+                params["tools"] = tools
+                params["tool_choice"] = "auto"
 
             response = await self.client.chat.completions.create(**params)
 
             usage = response.usage
             logger.info(
-                f"Groq Usage: model={model} prompt={usage.prompt_tokens} "
+                f"Groq Usage: model={used_model} prompt={usage.prompt_tokens} "
                 f"completion={usage.completion_tokens} total={usage.total_tokens}"
             )
 
             if response.choices and len(response.choices) > 0:
-                return response.choices[0].message.content or ""
+                message = response.choices[0].message
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    return message
+                return message.content or ""
             return ""
 
         except Exception as e:
             error_str = str(e).lower()
             if "rate limit" in error_str or "429" in error_str:
                 logger.error("Groq Rate Limit Exceeded.")
-                raise AIRateLimitException()
+                raise GroqRateLimitException()
             if "timeout" in error_str:
                 logger.error("Groq API Timeout.")
-                raise AITimeoutException()
+                raise GroqTimeoutException()
+            if "connect" in error_str or "network" in error_str:
+                logger.error("Groq Network Error.")
+                raise GroqNetworkException()
+            if "not_found" in error_str or "forbidden" in error_str:
+                if used_model == ai_config.GROQ_MODEL and self._active_model != ai_config.GROQ_FALLBACK_MODEL:
+                    logger.warning("Primary model failed with not_found/forbidden. Attempting fallback.")
+                    self._active_model = ai_config.GROQ_FALLBACK_MODEL
+                    return await self.chat_completion(
+                        messages=messages,
+                        model=ai_config.GROQ_FALLBACK_MODEL,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        json_mode=json_mode,
+                        tools=tools
+                    )
             logger.error(f"Groq API call failed: {e}")
-            raise Exception("AI Provider is temporarily unavailable.")
+            raise GroqProviderException(str(e))
 
     async def generate_standard_response(
         self,
@@ -103,7 +179,7 @@ class GroqClient:
         ]
         return await self.chat_completion(
             messages=messages,
-            model=model or ai_config.GROQ_MODEL_DOCTOR,
+            model=model,
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -126,17 +202,22 @@ class GroqClient:
     async def chat_stream(
         self,
         messages: List[Dict[str, str]],
-        model: str = "llama-3.3-70b-versatile",
+        model: Optional[str] = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
     ) -> AsyncGenerator[str, None]:
         """Streaming chat completion with Groq."""
-        if not self.client:
-            raise RuntimeError("AI Provider is not configured (Missing GROQ_API_KEY).")
+        self._check_client()
+        if not self._healthy:
+            await self.verify_health()
+            if not self._healthy:
+                raise GroqProviderException("Groq models are unavailable or unauthorized.")
+
+        used_model = model or self._active_model
 
         try:
             stream = await self.client.chat.completions.create(
-                model=model,
+                model=used_model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -147,8 +228,27 @@ class GroqClient:
                     yield chunk.choices[0].delta.content
             return
         except Exception as e:
+            error_str = str(e).lower()
+            if "rate limit" in error_str or "429" in error_str:
+                raise GroqRateLimitException()
+            if "timeout" in error_str:
+                raise GroqTimeoutException()
+            if "connect" in error_str or "network" in error_str:
+                raise GroqNetworkException()
+            if "not_found" in error_str or "forbidden" in error_str:
+                if used_model == ai_config.GROQ_MODEL and self._active_model != ai_config.GROQ_FALLBACK_MODEL:
+                    self._active_model = ai_config.GROQ_FALLBACK_MODEL
+                    async for chunk in self.chat_stream(
+                        messages=messages,
+                        model=self._active_model,
+                        temperature=temperature,
+                        max_tokens=max_tokens
+                    ):
+                        yield chunk
+                    return
             logger.error(f"Groq Streaming failed: {e}")
-            raise RuntimeError("AI Provider is temporarily unavailable.") from e
+            raise GroqProviderException(str(e))
 
 # Singleton instance
 groq_client = GroqClient()
+

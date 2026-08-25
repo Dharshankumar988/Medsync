@@ -15,7 +15,7 @@ def mock_embedding_model():
 
 @pytest.fixture
 def mock_groq_client():
-    with patch("app.services.rag_service.RAGService._get_groq_client") as mock_getter:
+    with patch("app.services.rag_service.RAGService._get_llm_client") as mock_getter:
         class MockMessage:
             content = "This is a grounded answer from the mock context."
         class MockChoice:

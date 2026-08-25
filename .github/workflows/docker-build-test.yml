@@ -1,0 +1,75 @@
+name: MedSync Production Verification
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BIOMETRIC_ENCRYPTION_KEY: ${{ secrets.BIOMETRIC_ENCRYPTION_KEY }}
+      AI_SERVICE_TOKEN: ${{ secrets.AI_SERVICE_TOKEN }}
+      JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+      MEDSYNC_AI_URL: https://dharshan8197-medsync-ai.hf.space
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Build Linux amd64 Backend Docker Image
+      run: |
+        docker build --platform linux/amd64 -t medsync-backend ./apps/backend
+
+    - name: Start Backend Container
+      run: |
+        docker run -d --name backend \
+          -p 8000:8000 \
+          -e GROQ_API_KEY="${GROQ_API_KEY}" \
+          -e SUPABASE_URL="${SUPABASE_URL}" \
+          -e SUPABASE_KEY="${SUPABASE_KEY}" \
+          -e DATABASE_URL="${DATABASE_URL}" \
+          -e BIOMETRIC_ENCRYPTION_KEY="${BIOMETRIC_ENCRYPTION_KEY}" \
+          -e AI_SERVICE_TOKEN="${AI_SERVICE_TOKEN}" \
+          -e JWT_SECRET_KEY="${JWT_SECRET_KEY}" \
+          -e MEDSYNC_AI_URL="${MEDSYNC_AI_URL}" \
+          -e CORS_ORIGINS="[]" \
+          medsync-backend
+          
+        # Wait for container to be ready
+        sleep 10
+
+    - name: Verify Backend Health (Native dependencies load)
+      run: |
+        curl -f http://localhost:8000/health
+
+    - name: Setup Node.js (for Frontend verification)
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Verify Frontend Production Build
+      run: |
+        npm install -g pnpm
+        cd apps/web
+        pnpm install
+        NEXT_PUBLIC_API_URL=http://localhost:8000 pnpm run build
+
+    - name: Run Python Smoke Tests (verify_pulse_e2e.py)
+      run: |
+        # Set up a lightweight python environment to run the verification script
+        python -m pip install httpx
+        python scripts/verify_pulse_e2e.py

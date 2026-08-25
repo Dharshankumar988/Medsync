@@ -43,4 +43,5 @@ export const getUserProfile = (user: { id: string; email?: string | null; user_m
   role: normalizeRole(user.user_metadata?.role ?? user.app_metadata?.role),
   status: String(user.user_metadata?.status ?? user.app_metadata?.status ?? 'ACTIVE').toUpperCase(),
   full_name: (user.user_metadata?.full_name as string | undefined) ?? (user.user_metadata?.name as string | undefined) ?? null,
+  profile_completion_percentage: (user.user_metadata?.profile_completion_percentage as number | undefined) ?? 0,
 });

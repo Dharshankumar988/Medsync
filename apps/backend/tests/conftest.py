@@ -16,10 +16,46 @@ sys.modules['web3.exceptions'] = MagicMock()
 sys.modules['eth_account'] = MagicMock()
 sys.modules['eth_account.messages'] = MagicMock()
 sys.modules['eth_utils'] = MagicMock()
+sys.modules['cryptography'] = MagicMock()
+sys.modules['cryptography.fernet'] = MagicMock()
+sys.modules['cryptography.hazmat'] = MagicMock()
+sys.modules['cryptography.hazmat.primitives'] = MagicMock()
+sys.modules['cryptography.hazmat.primitives.ciphers'] = MagicMock()
+sys.modules['cryptography.hazmat.backends'] = MagicMock()
 
 @pytest.fixture
-def test_db():
+def test_db(patient_user, doctor_user, admin_user):
+    from unittest.mock import AsyncMock, MagicMock
     mock_session = AsyncMock()
+    
+    class MockResult:
+        def __init__(self, user):
+            self.user = user
+        def scalar_one_or_none(self):
+            return self.user
+            
+    async def mock_execute(stmt, *args, **kwargs):
+        stmt_str = str(stmt).lower()
+        params_str = ""
+        try:
+            if hasattr(stmt, "compile"):
+                compiled = stmt.compile()
+                if hasattr(compiled, "params") and compiled.params:
+                    params_str = str(compiled.params).lower()
+        except Exception:
+            pass
+            
+        combined_str = stmt_str + " " + params_str
+        if "11111111" in combined_str:
+            return MockResult(patient_user)
+        elif "22222222" in combined_str:
+            return MockResult(doctor_user)
+        elif "33333333" in combined_str:
+            return MockResult(admin_user)
+        # default to patient to prevent privilege escalation in tests
+        return MockResult(patient_user)
+        
+    mock_session.execute.side_effect = mock_execute
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
     mock_session.refresh = AsyncMock()
@@ -37,7 +73,10 @@ def patient_user():
         email = "patient@medsync.com"
         role = MagicMock()
         role.name = "PATIENT"
-        status = "ACTIVE"
+        role.value = "PATIENT"
+        status = MagicMock()
+        status.name = "ACTIVE"
+        status.value = "ACTIVE"
     return MockUser()
 
 @pytest.fixture
@@ -47,7 +86,10 @@ def doctor_user():
         email = "doctor@medsync.com"
         role = MagicMock()
         role.name = "DOCTOR"
-        status = "ACTIVE"
+        role.value = "DOCTOR"
+        status = MagicMock()
+        status.name = "ACTIVE"
+        status.value = "ACTIVE"
     return MockUser()
 
 @pytest.fixture
@@ -57,7 +99,10 @@ def admin_user():
         email = "admin@medsync.com"
         role = MagicMock()
         role.name = "ADMIN"
-        status = "ACTIVE"
+        role.value = "ADMIN"
+        status = MagicMock()
+        status.name = "ACTIVE"
+        status.value = "ACTIVE"
     return MockUser()
 
 @pytest.fixture
@@ -87,10 +132,19 @@ def admin_token(admin_user):
 import pytest_asyncio
 
 @pytest_asyncio.fixture
-async def async_client():
+async def async_client(test_db):
     from main import app
+    from app.dependencies.db import get_db
     from httpx import AsyncClient, ASGITransport
+    
+    async def override_get_db():
+        yield test_db
+        
+    app.dependency_overrides[get_db] = override_get_db
+    
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
+        
+    app.dependency_overrides.clear()
 
 

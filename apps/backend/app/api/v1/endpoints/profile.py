@@ -78,35 +78,7 @@ class ProfileCompletionRequest(BaseModel):
 class PinSetupRequest(BaseModel):
     pin: str
 
-@router.post("/{user_id}/pin", response_model=APIResponse)
-async def setup_auth_pin(
-    user_id: uuid.UUID,
-    payload: PinSetupRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT]))
-):
-    if current_user.id != user_id:
-        from app.core.exceptions import ForbiddenException
-        raise ForbiddenException("You cannot modify another user's profile")
 
-    if len(payload.pin) != 6 or not payload.pin.isdigit():
-        raise HTTPException(status_code=400, detail="PIN must be exactly 6 digits")
-
-    import bcrypt
-    salt = bcrypt.gensalt()
-    pin_hash = bcrypt.hashpw(payload.pin.encode('utf-8'), salt).decode('utf-8')
-
-    stmt = select(Patient).where(Patient.user_id == user_id)
-    result = await db.execute(stmt)
-    patient = result.scalar_one_or_none()
-
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient profile not found")
-
-    patient.pin_hash = pin_hash
-    await db.commit()
-
-    return APIResponse(message="Authorization PIN updated successfully")
 
 @router.put("/{user_id}/completion", response_model=APIResponse[dict])
 async def update_profile_completion(

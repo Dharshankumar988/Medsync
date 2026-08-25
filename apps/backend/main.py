@@ -26,6 +26,14 @@ async def lifespan(app: FastAPI):
     # ── Startup ──
     logger.info("═══ MedSync Backend Starting ═══")
     
+    # 0. Initialize SQLite database if fallback is used
+    from app.database.session import engine, db_url
+    if "sqlite" in str(db_url):
+        from app.models import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Initialized in-memory SQLite database fallback")
+    
     # 1. Start blockchain scheduler
     start_scheduler()
     
@@ -51,7 +59,7 @@ async def lifespan(app: FastAPI):
         if groq_client.is_healthy:
             logger.info("AI Warmup: Groq LLM → healthy")
         else:
-            logger.warning("AI Warmup: Groq LLM → fallback mode (no API key)")
+            logger.warning("AI Warmup: Groq LLM → not configured (missing GROQ_API_KEY)")
         
         logger.info("═══ AI Subsystem Ready ═══")
     except Exception as e:

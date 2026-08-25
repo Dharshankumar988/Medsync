@@ -3,7 +3,7 @@ from app.api.v1.endpoints import (
     auth, users, admin, records, appointments, prescriptions,
     pharmacy, orders, payments, notifications, health, internal,
     profile, hospitals, verify, inventory, rag, fhir,
-    consultations, doctor_locations, pharmacy_locations, security,
+    consultations, doctor_locations, pharmacy_locations, security, transfers,
 )
 
 api_router = APIRouter()
@@ -43,6 +43,7 @@ api_router.include_router(consultations.router, prefix="/consultations", tags=["
 api_router.include_router(doctor_locations.router, prefix="/doctor-locations", tags=["Doctor Locations"])
 api_router.include_router(pharmacy_locations.router, prefix="/pharmacy-locations", tags=["Pharmacy Locations"])
 api_router.include_router(security.router, prefix="/security", tags=["Security"])
+api_router.include_router(transfers.router, prefix="/transfers", tags=["Transfers"])
 
 try:
     from app.api.v1.endpoints import blockchain_analytics

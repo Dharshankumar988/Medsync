@@ -120,8 +120,9 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
       setIsLoading(false);
     } catch (error: any) {
       console.error(error);
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.detail || error.message || "Pulse could not complete that request. Please retry.";
       setMessages((prev) => prev.map((m) =>
-        m.id === assistantMessageId ? { ...m, content: "Pulse could not complete that request. Please retry." } : m
+        m.id === assistantMessageId ? { ...m, content: `**Error:** ${errorMessage}` } : m
       ));
       setIsLoading(false);
     }
@@ -141,9 +142,10 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
       const explanation = role === "doctor" ? report.clinical_summary : report.patient_explanation;
       const text = `**Model finding (${report.scan_type.toUpperCase()})**: ${finding.diagnosis}\n\nConfidence: ${finding.confidence_percent}%${explanation?.summary ? `\n\n${explanation.summary}` : "\n\nThe model result is available, but the explanatory service is unavailable."}`;
       setMessages((prev) => prev.map((m) => m.id === assistantMessageId ? { ...m, content: text } : m));
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setMessages((prev) => prev.map((m) => m.id === assistantMessageId ? { ...m, content: "Image analysis failed. No result was generated; retry after checking the image and service status." } : m));
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.detail || error.message || "Image analysis failed. No result was generated; retry after checking the image and service status.";
+      setMessages((prev) => prev.map((m) => m.id === assistantMessageId ? { ...m, content: `**Error:** ${errorMessage}` } : m));
     } finally {
       setIsLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -190,13 +192,17 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
       {/* Input */}
       <div className="p-4 border-t border-border bg-background">
         <div className="relative flex items-end gap-2 bg-muted/50 p-2 rounded-xl border border-border focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
-          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => handleImage(e.target.files?.[0])} />
-          <select aria-label="Image model" value={scanType} onChange={(e) => setScanType(e.target.value)} className="hidden sm:block bg-transparent text-xs text-muted-foreground outline-none">
-            <option value="bone">Bone</option><option value="brain">Brain</option><option value="kidney">Kidney</option><option value="skin">Skin</option>
-          </select>
-          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md shrink-0 disabled:opacity-50" title="Upload image for model analysis">
-            <ImageIcon size={18} />
-          </button>
+          {role === "doctor" && (
+            <>
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => handleImage(e.target.files?.[0])} />
+              <select aria-label="Image model" value={scanType} onChange={(e) => setScanType(e.target.value)} className="hidden sm:block bg-transparent text-xs text-muted-foreground outline-none">
+                <option value="bone">Bone</option><option value="brain">Brain</option><option value="kidney">Kidney</option><option value="skin">Skin</option>
+              </select>
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md shrink-0 disabled:opacity-50" title="Upload image for model analysis">
+                <ImageIcon size={18} />
+              </button>
+            </>
+          )}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -33,9 +33,9 @@ async def main():
     try:
         await conn.execute('''
             INSERT INTO auth.identities (
-                id, user_id, identity_data, provider, created_at, updated_at
+                id, user_id, identity_data, provider, provider_id, created_at, updated_at
             ) VALUES (
-                $1, $2, $3, 'email', NOW(), NOW()
+                $1, $2, $3, 'email', $2, NOW(), NOW()
             )
         ''', str(uuid.uuid4()), user_id, f'{{"sub":"{user_id}","email":"{email}"}}')
     except Exception as e:

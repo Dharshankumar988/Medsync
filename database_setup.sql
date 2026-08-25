@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS patients (
     gender VARCHAR(50),
     blood_group VARCHAR(10),
     phone_number VARCHAR(20),
+    contact_email VARCHAR(255),
     address VARCHAR(500),
     city VARCHAR(100),
     state VARCHAR(100),
@@ -194,6 +195,7 @@ CREATE TABLE IF NOT EXISTS pharmacies (
     gst_number VARCHAR(255),
     address VARCHAR(500),
     contact_number VARCHAR(20),
+    contact_email VARCHAR(255),
     city VARCHAR(100),
     state VARCHAR(100),
     country VARCHAR(100),
@@ -211,6 +213,8 @@ CREATE TABLE IF NOT EXISTS pharmacies (
     is_24x7 BOOLEAN DEFAULT FALSE,
     blockchain_status VARCHAR(50) DEFAULT 'PENDING',
     blockchain_tx_hash VARCHAR(66),
+    qr_identifier VARCHAR(255) UNIQUE,
+    qr_status VARCHAR(50) DEFAULT 'ACTIVE',
     verification_id VARCHAR(100),
     registered_at TIMESTAMP WITHOUT TIME ZONE,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -343,6 +347,9 @@ CREATE TABLE IF NOT EXISTS prescriptions (
     notes TEXT,
     is_finalized BOOLEAN NOT NULL DEFAULT FALSE,
     is_dispensed BOOLEAN NOT NULL DEFAULT FALSE,
+    verified_by_pharmacy_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    verified_at TIMESTAMP WITHOUT TIME ZONE,
+    verification_method VARCHAR(50),
     pdf_url VARCHAR(1024),
     qr_token TEXT,
     expires_at TIMESTAMP WITHOUT TIME ZONE,
@@ -372,6 +379,99 @@ CREATE TABLE IF NOT EXISTS prescription_items (
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
+
+-- Patient Security Credentials Table
+CREATE TABLE IF NOT EXISTS patient_security_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    authorization_pin_hash VARCHAR(255) NOT NULL,
+    failed_attempts INTEGER DEFAULT 0,
+    locked_until TIMESTAMP WITHOUT TIME ZONE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- Patient Biometric Profiles Table
+CREATE TABLE IF NOT EXISTS patient_biometric_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    encrypted_template TEXT NOT NULL,
+    model_name VARCHAR(100) NOT NULL,
+    model_version VARCHAR(50),
+    embedding_version VARCHAR(50),
+    enrollment_status VARCHAR(50) DEFAULT 'COMPLETED',
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- Prescription Download Authorizations Table
+CREATE TABLE IF NOT EXISTS prescription_download_authorizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    prescription_id UUID NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
+    authorization_reference VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITHOUT TIME ZONE,
+    password_verified BOOLEAN DEFAULT FALSE,
+    pin_verified BOOLEAN DEFAULT FALSE,
+    face_verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_pda_patient_id ON prescription_download_authorizations(patient_id);
+CREATE INDEX IF NOT EXISTS ix_pda_prescription_id ON prescription_download_authorizations(prescription_id);
+
+-- Prescription Transfers Table
+CREATE TABLE IF NOT EXISTS prescription_transfers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    prescription_id UUID NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
+    patient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    pharmacy_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    transfer_request_id VARCHAR(255) NOT NULL UNIQUE,
+    status VARCHAR(50) NOT NULL DEFAULT 'CREATED',
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    authorized_at TIMESTAMP WITHOUT TIME ZONE,
+    delivered_at TIMESTAMP WITHOUT TIME ZONE,
+    expires_at TIMESTAMP WITHOUT TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS ix_prescription_transfers_patient_id ON prescription_transfers(patient_id);
+CREATE INDEX IF NOT EXISTS ix_prescription_transfers_pharmacy_id ON prescription_transfers(pharmacy_id);
+CREATE INDEX IF NOT EXISTS ix_prescription_transfers_request_id ON prescription_transfers(transfer_request_id);
+
+-- Prescription Dispensing Log Table
+CREATE TABLE IF NOT EXISTS prescription_dispensing_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    prescription_id UUID NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
+    pharmacy_id UUID NOT NULL REFERENCES users(id),
+    patient_id UUID NOT NULL REFERENCES users(id),
+    dispensed_by_name VARCHAR(255),
+    dispensed_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    medicines_prescribed JSONB NOT NULL DEFAULT '[]'::jsonb,
+    medicines_dispensed JSONB NOT NULL DEFAULT '[]'::jsonb,
+    prescribed_count INTEGER NOT NULL DEFAULT 0,
+    dispensed_count INTEGER NOT NULL DEFAULT 0,
+    count_mismatch BOOLEAN NOT NULL DEFAULT FALSE,
+    mismatch_details TEXT,
+    patient_contact VARCHAR(50),
+    pharmacy_contact VARCHAR(50),
+    verification_method VARCHAR(50) DEFAULT 'QR_OFFLINE',
+    verified_at TIMESTAMP WITHOUT TIME ZONE,
+    notes TEXT,
+    blockchain_tx_hash VARCHAR(66),
+    blockchain_status VARCHAR(50) DEFAULT 'PENDING',
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_dispensing_log_prescription ON prescription_dispensing_log(prescription_id);
+CREATE INDEX IF NOT EXISTS ix_dispensing_log_pharmacy ON prescription_dispensing_log(pharmacy_id);
+CREATE INDEX IF NOT EXISTS ix_dispensing_log_patient ON prescription_dispensing_log(patient_id);
+CREATE INDEX IF NOT EXISTS ix_dispensing_log_dispensed_at ON prescription_dispensing_log(dispensed_at);
+
+
 
 -- Consultations Table
 CREATE TABLE IF NOT EXISTS consultations (
@@ -503,6 +603,19 @@ CREATE TABLE IF NOT EXISTS ai_analyses (
     summary TEXT,
     confidence_score FLOAT,
     processing_time_ms INTEGER,
+    scan_type VARCHAR(50),
+    prediction_label VARCHAR(255),
+    findings JSONB DEFAULT '[]'::jsonb,
+    clinical_considerations JSONB DEFAULT '[]'::jsonb,
+    medication_considerations JSONB DEFAULT '[]'::jsonb,
+    procedure_considerations JSONB DEFAULT '[]'::jsonb,
+    warnings JSONB DEFAULT '[]'::jsonb,
+    patient_explanation JSONB,
+    doctor_review_status VARCHAR(50) DEFAULT 'PENDING',
+    doctor_review_notes TEXT,
+    reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMP WITHOUT TIME ZONE,
+    patient_id UUID REFERENCES users(id) ON DELETE SET NULL,
     blockchain_status VARCHAR(50) DEFAULT 'PENDING',
     blockchain_tx_hash VARCHAR(66),
     inference_hash VARCHAR(66),
@@ -511,6 +624,10 @@ CREATE TABLE IF NOT EXISTS ai_analyses (
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS ix_ai_analyses_doctor_review ON ai_analyses(doctor_review_status);
+CREATE INDEX IF NOT EXISTS ix_ai_analyses_patient_id ON ai_analyses(patient_id);
+CREATE INDEX IF NOT EXISTS ix_ai_analyses_scan_type ON ai_analyses(scan_type);
 
 -- OCR Results Table
 CREATE TABLE IF NOT EXISTS ocr_results (
@@ -912,12 +1029,34 @@ CREATE TABLE IF NOT EXISTS knowledge_documents (
     status VARCHAR(50) NOT NULL DEFAULT 'UPLOADING',
     error_message TEXT,
     metadata_json JSONB,
+    owner_type VARCHAR(50) NOT NULL DEFAULT 'system',
+    owner_id UUID,
+    visibility VARCHAR(50) NOT NULL DEFAULT 'internal',
+    classification VARCHAR(50) NOT NULL DEFAULT 'internal',
+    allowed_roles JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS ix_knowledge_documents_created_by ON knowledge_documents(created_by);
 CREATE INDEX IF NOT EXISTS ix_knowledge_documents_status ON knowledge_documents(status);
+CREATE INDEX IF NOT EXISTS ix_knowledge_documents_owner ON knowledge_documents(owner_type, owner_id);
+
+-- Admin AI Audit Logs Table
+CREATE TABLE IF NOT EXISTS admin_ai_audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_id UUID,
+    action VARCHAR(255) NOT NULL,
+    resource_type VARCHAR(100),
+    resource_id UUID,
+    fields_accessed JSONB,
+    details TEXT,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_admin_ai_audit_logs_admin_id ON admin_ai_audit_logs(admin_id);
+CREATE INDEX IF NOT EXISTS ix_admin_ai_audit_logs_action ON admin_ai_audit_logs(action);
 
 -- RAG Knowledge Chunks Table
 CREATE TABLE IF NOT EXISTS knowledge_chunks (
@@ -1133,8 +1272,18 @@ AS $$
 $$;
 
 -- ==============================================================================
--- 6. ROW LEVEL SECURITY (RLS) POLICIES
+-- 6. ROW LEVEL SECURITY (RLS) POLICIES & GRANTS
 -- ==============================================================================
+
+-- Base schema grants
+GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO postgres, anon, authenticated, service_role;
+
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
@@ -1347,5 +1496,30 @@ CREATE INDEX IF NOT EXISTS ix_ai_chat_messages_session_id ON ai_chat_messages(se
 INSERT INTO alembic_version (version_num) 
 VALUES ('ec15d6e1c21e')
 ON CONFLICT (version_num) DO NOTHING;
+
+-- ==============================================================================
+-- 9. ADDITIONAL PERFORMANCE INDEXES
+-- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON appointments(patient_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id ON appointments(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_patient_status ON appointments(patient_id, status);
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor_status ON appointments(doctor_id, status);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_patient_id ON prescriptions(patient_id);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_doctor_id ON prescriptions(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_medical_records_patient_id ON medical_records(patient_id);
+CREATE INDEX IF NOT EXISTS idx_medical_records_uploaded_by ON medical_records(uploaded_by);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_sessions_user_id ON ai_chat_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_messages_session_id ON ai_chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_blockchain_transactions_status ON blockchain_transactions(status);
+CREATE INDEX IF NOT EXISTS idx_blockchain_event_queue_status ON blockchain_event_queue(status);
+CREATE INDEX IF NOT EXISTS idx_blockchain_event_queue_status_created ON blockchain_event_queue(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_blockchain_audit_logs_entity_id ON blockchain_audit_logs(entity_id);
+CREATE INDEX IF NOT EXISTS idx_blockchain_sync_tasks_status ON blockchain_sync_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_verification_requests_status ON verification_requests(status);
+CREATE INDEX IF NOT EXISTS idx_verification_requests_user_id ON verification_requests(user_id);
 
 COMMIT;

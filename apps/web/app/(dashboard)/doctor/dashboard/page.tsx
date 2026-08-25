@@ -19,19 +19,11 @@ const fadeUp = {
 };
 const stagger = { visible: { transition: { staggerChildren: 0.03 } } };
 
+import { useQuery } from "@tanstack/react-query";
+import { dashboardService } from "@/services/dashboard.service";
+
 export default function DoctorDashboard() {
   const [userId, setUserId] = useState<string>("");
-  const [dashboardData, setDashboardData] = useState<{
-    todayAppointments: any[];
-    pendingPrescriptions: number;
-    pendingRecords: number;
-    loading: boolean;
-  }>({
-    todayAppointments: [],
-    pendingPrescriptions: 0,
-    pendingRecords: 0,
-    loading: true,
-  });
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -39,65 +31,39 @@ export default function DoctorDashboard() {
     });
   }, []);
 
-  useEffect(() => {
-    if (!userId) return;
+  const { data: dashboardData = {
+    today_appointments: 0,
+    pending_prescriptions: 0,
+    pending_records: 0
+  }, isLoading: loadingStats } = useQuery({
+    queryKey: ["doctorDashboard", userId],
+    queryFn: () => dashboardService.getDoctorDashboard(),
+    enabled: !!userId,
+  });
 
-    async function fetchDashboardData() {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        
-        const { data: apptData } = await supabase
-          .from('appointments')
-          .select('*')
-          .eq('doctor_id', userId)
-          .eq('appointment_date', today)
-          .order('start_time', { ascending: true });
+  const { data: appointments = [], isLoading: loadingAppts } = useQuery({
+    queryKey: ["doctorAppointments", userId],
+    queryFn: () => {
+      const today = new Date().toISOString().split('T')[0];
+      return dashboardService.getDoctorAppointments(today);
+    },
+    enabled: !!userId,
+  });
 
-        let apptsWithPatients: any[] = [];
-        if (apptData && apptData.length > 0) {
-          const patientIds = apptData.map(a => a.patient_id);
-          const { data: patientsData } = await supabase
-            .from('patients')
-            .select('*')
-            .in('user_id', patientIds);
-          
-          apptsWithPatients = apptData.map(appt => {
-            const patient = patientsData?.find(p => p.user_id === appt.patient_id);
-            return {
-              name: patient?.full_name || "Unknown Patient",
-              time: appt.start_time.slice(0, 5),
-              type: "Consultation",
-              status: appt.status,
-              urgent: false
-            };
-          });
-        }
+  const todayAppointments = appointments.map((appt: any) => ({
+    name: appt.patient_name || "Unknown Patient",
+    time: appt.start_time.slice(0, 5),
+    type: "Consultation",
+    status: appt.status,
+    urgent: false
+  }));
 
-        const { count: presCount } = await supabase
-          .from('prescriptions')
-          .select('*', { count: 'exact', head: true })
-          .eq('doctor_id', userId)
-          .eq('is_finalized', false);
-
-        setDashboardData({
-          todayAppointments: apptsWithPatients,
-          pendingPrescriptions: presCount || 0,
-          pendingRecords: 0,
-          loading: false
-        });
-      } catch (err) {
-        console.error("Failed to fetch dashboard data", err);
-        setDashboardData(prev => ({ ...prev, loading: false }));
-      }
-    }
-
-    fetchDashboardData();
-  }, [userId]);
+  const isLoading = loadingStats || loadingAppts;
 
   const stats = [
     {
       title: "Today's Patients",
-      value: dashboardData.todayAppointments.length.toString(),
+      value: dashboardData.today_appointments.toString(),
       subtitle: (
         <span className="flex items-center text-emerald-500 font-medium">
           Scheduled today
@@ -108,7 +74,7 @@ export default function DoctorDashboard() {
     },
     {
       title: "Pending Prescriptions",
-      value: dashboardData.pendingPrescriptions.toString(),
+      value: dashboardData.pending_prescriptions.toString(),
       subtitle: "Requires your sign-off",
       icon: Activity,
       accent: "amber",
@@ -170,7 +136,7 @@ export default function DoctorDashboard() {
       </motion.div>
 
       {/* ─── Stat Cards ─── */}
-      {!userId || dashboardData.loading ? (
+      {!userId || isLoading ? (
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           {[1,2,3,4].map(i => <Skeleton key={i} className="h-[140px] w-full rounded-2xl" />)}
         </div>
@@ -213,7 +179,7 @@ export default function DoctorDashboard() {
         variants={stagger}
       >
         <motion.div variants={fadeUp} className="col-span-full lg:col-span-4">
-          <PatientQueue queue={dashboardData.todayAppointments} />
+          <PatientQueue queue={todayAppointments} />
         </motion.div>
         <motion.div variants={fadeUp} className="col-span-full lg:col-span-3">
           <AppointmentHeatmap />

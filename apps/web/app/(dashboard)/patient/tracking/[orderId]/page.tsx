@@ -31,7 +31,8 @@ export default function PatientTrackingPage() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token || "";
-        const res = await fetch(`http://localhost:8000/api/v1/orders/${orderId}/tracking`, {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+        const res = await fetch(`${baseUrl}/orders/${orderId}/tracking`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -104,7 +105,8 @@ export default function PatientTrackingPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
-      const res = await fetch(`http://localhost:8000/api/v1/orders/${orderId}/verify-delivery`, {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const res = await fetch(`${baseUrl}/orders/${orderId}/verify-delivery`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

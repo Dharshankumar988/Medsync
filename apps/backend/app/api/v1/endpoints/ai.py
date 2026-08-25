@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Request, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 import logging
@@ -72,14 +72,18 @@ async def pulse_chat(
             
         return APIResponse(message="Success", data=result)
     except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        error_code = getattr(e, "error_code", "INTERNAL_SERVER_ERROR")
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"success": False, "error": {"code": error_code, "message": e.message}}
+        )
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        return JSONResponse(status_code=403, content={"success": False, "error": {"code": "AUTHORIZATION_ERROR", "message": str(e)}})
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(status_code=400, content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(e)}})
     except Exception as e:
         logger.error(f"PULSE chat failed for role {current_user.role.value}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal AI service error.")
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": "Internal AI service error."}})
 
 @router.post("/pulse/chat/stream")
 @limiter.limit("40/minute")
@@ -106,14 +110,18 @@ async def pulse_chat_stream(
             
         return StreamingResponse(generator, media_type="text/event-stream")
     except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        error_code = getattr(e, "error_code", "INTERNAL_SERVER_ERROR")
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"success": False, "error": {"code": error_code, "message": e.message}}
+        )
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        return JSONResponse(status_code=403, content={"success": False, "error": {"code": "AUTHORIZATION_ERROR", "message": str(e)}})
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(status_code=400, content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(e)}})
     except Exception as e:
         logger.error(f"PULSE stream failed for role {current_user.role.value}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal AI service error.")
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": "Internal AI service error."}})
 
 # ==========================================
 # SESSION MANAGEMENT
@@ -251,7 +259,7 @@ async def analyze_image(
     session_id: Optional[uuid.UUID] = Form(default=None),
     version_id: Optional[uuid.UUID] = Form(default=None),
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_doctor_or_patient)
+    current_user: AuthenticatedPrincipal = Depends(require_doctor)
 ):
     """
     Analyze a medical image using the AI pipeline:
@@ -367,12 +375,16 @@ async def analyze_image(
         return APIResponse(message="Image Analyzed", data=result)
         
     except AIException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        error_code = getattr(e, "error_code", "INTERNAL_SERVER_ERROR")
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"success": False, "error": {"code": error_code, "message": e.message}}
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Image analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal image analysis error.")
+        return JSONResponse(status_code=500, content={"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": "Internal image analysis error."}})
 
 @router.get("/health", response_model=APIResponse[AIHealthResponse])
 async def check_health(current_user: AuthenticatedPrincipal = Depends(require_any_user)):
@@ -382,3 +394,23 @@ async def check_health(current_user: AuthenticatedPrincipal = Depends(require_an
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve health status.")
+
+@router.get("/health/ai")
+async def check_health_ai(current_user: AuthenticatedPrincipal = Depends(require_any_user)):
+    status = await ai_service_manager.get_health_status()
+    return APIResponse(message="AI Health", data=status)
+
+@router.get("/health/groq")
+async def check_health_groq(current_user: AuthenticatedPrincipal = Depends(require_any_user)):
+    status = await ai_service_manager.get_health_status()
+    return APIResponse(message="Groq Health", data={"groq": status["components"].get("groq", "unknown")})
+
+@router.get("/health/rag")
+async def check_health_rag(current_user: AuthenticatedPrincipal = Depends(require_any_user)):
+    status = await ai_service_manager.get_health_status()
+    return APIResponse(message="RAG Health", data={"rag": status["components"].get("rag", "unknown")})
+
+@router.get("/health/models")
+async def check_health_models(current_user: AuthenticatedPrincipal = Depends(require_any_user)):
+    status = await ai_service_manager.get_health_status()
+    return APIResponse(message="Models Health", data={"diagnostic_models": status["components"].get("hf_spaces", {})})

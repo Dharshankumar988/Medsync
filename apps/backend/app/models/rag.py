@@ -21,6 +21,11 @@ class KnowledgeDocument(Base, TimestampMixin):
     status = Column(String(50), index=True, nullable=False, default="UPLOADING") # UPLOADING, PROCESSING, READY, FAILED
     error_message = Column(Text, nullable=True)
     metadata_json = Column(JSON, nullable=True)
+    owner_type = Column(String(50), nullable=False, default='system')
+    owner_id = Column(UUID(as_uuid=True), nullable=True)
+    visibility = Column(String(50), nullable=False, default='internal')
+    classification = Column(String(50), nullable=False, default='internal')
+    allowed_roles = Column(JSON, nullable=False, default=[])
 
     chunks = relationship("KnowledgeChunk", back_populates="document", cascade="all, delete-orphan")
     creator = relationship("User", foreign_keys=[created_by])

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Skeleton } from "@medsync/ui";
 import { supabase } from "@/lib/supabase";
+import api from "@/lib/api";
 import { profileService } from "@/services/profile.service";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";

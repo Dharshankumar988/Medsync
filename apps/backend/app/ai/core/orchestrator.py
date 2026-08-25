@@ -55,12 +55,12 @@ class AIOrchestrator:
     def get_model_for_role(role: str) -> str:
         """Return the configured Groq model for a given role."""
         model_map = {
-            "doctor": ai_config.GROQ_MODEL_DOCTOR,
-            "patient": ai_config.GROQ_MODEL_PATIENT,
-            "pharmacy": ai_config.GROQ_MODEL_PHARMACY,
-            "admin": ai_config.GROQ_MODEL_ADMIN,
+            "doctor": ai_config.LLM_MODEL_DOCTOR,
+            "patient": ai_config.LLM_MODEL_PATIENT,
+            "pharmacy": ai_config.LLM_MODEL_PHARMACY,
+            "admin": ai_config.LLM_MODEL_ADMIN,
         }
-        return model_map.get(role, ai_config.GROQ_MODEL_PATIENT)
+        return model_map.get(role, ai_config.LLM_MODEL_PATIENT)
 
     @staticmethod
     def validate_scan_type(scan_type: str) -> str:
@@ -88,3 +88,28 @@ class AIOrchestrator:
             return "RAG"
         else:
             return "RAG" # Default to RAG for general queries
+
+    @staticmethod
+    def filter_output(response: str, role: str) -> str:
+        """
+        Output Security Filter to sanitize the generated response.
+        Ensures sensitive metadata or system instructions do not leak.
+        """
+        if not response:
+            return response
+            
+        sensitive_patterns = [
+            r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}", # JWT
+            r"(?i)(password|secret|api[_-]?key)[\s:=]+[\"']?[A-Za-z0-9_*-]+[\"']?", # Keys/Passwords
+            r"(?i)<system_instructions>.*?</system_instructions>", # System prompt
+            r"(?i)<authorized_data>.*?</authorized_data>" # Raw RAG data
+        ]
+        
+        filtered_response = response
+        for pattern in sensitive_patterns:
+            import re
+            if re.search(pattern, filtered_response):
+                logger.warning(f"Sensitive information prevented from leaking in role {role}.")
+                filtered_response = re.sub(pattern, "[REDACTED BY SECURITY FILTER]", filtered_response)
+                
+        return filtered_response

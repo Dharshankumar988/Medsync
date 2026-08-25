@@ -25,6 +25,7 @@ import { ExpiringMedicines } from "@/components/pharmacy/ExpiringMedicines";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -33,9 +34,7 @@ const fadeUp = {
 const stagger = { visible: { transition: { staggerChildren: 0.03 } } };
 
 export default function PharmacyDashboardPage() {
-  const [inventory, setInventory] = useState<PharmacyInventoryItem[]>([]);
-  const [orders, setOrders] = useState<PharmacyOrder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [verificationInput, setVerificationInput] = useState("");
   const [verificationResult, setVerificationResult] = useState<{ valid: boolean; txHash?: string } | null>(null);
@@ -44,19 +43,24 @@ export default function PharmacyDashboardPage() {
   const [verifiedRxHash, setVerifiedRxHash] = useState<string | null>(null);
   const [userId, setUserId] = useState<string>("");
 
-  const loadData = async () => {
-    setLoading(true);
-    const [invData, orderData] = await Promise.all([
-      pharmacyService.getInventory(),
-      pharmacyService.getOrders()
-    ]);
-    setInventory(invData);
-    setOrders(orderData);
-    setLoading(false);
+  const { data: inventory = [], isLoading: isLoadingInventory } = useQuery({
+    queryKey: ["pharmacyInventory"],
+    queryFn: () => pharmacyService.getInventory(),
+  });
+
+  const { data: orders = [], isLoading: isLoadingOrders } = useQuery({
+    queryKey: ["pharmacyOrders"],
+    queryFn: () => pharmacyService.getOrders(),
+  });
+
+  const loading = isLoadingInventory || isLoadingOrders;
+
+  const loadData = () => {
+    queryClient.invalidateQueries({ queryKey: ["pharmacyInventory"] });
+    queryClient.invalidateQueries({ queryKey: ["pharmacyOrders"] });
   };
 
   useEffect(() => {
-    loadData();
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setUserId(data.user.id);
     });
@@ -65,7 +69,7 @@ export default function PharmacyDashboardPage() {
   const handleDispense = async (prescriptionId: string, orderId: string) => {
     if (verificationResult?.valid && verifiedRxHash === prescriptionId) {
       await pharmacyService.dispensePrescription(prescriptionId);
-      setOrders(prev => prev.map(o => o.prescription_id === prescriptionId ? { ...o, status: "DISPENSED" } : o));
+      queryClient.invalidateQueries({ queryKey: ["pharmacyOrders"] });
       setDispensingOrderId(orderId);
     } else {
       alert("SECURITY BLOCK: You must scan and verify the QR code for this prescription before dispensing medication.");
@@ -91,7 +95,7 @@ export default function PharmacyDashboardPage() {
           alert(`QR Verified! Purpose: ${res.data.purpose}\nPatient: ${res.data.data.patient_id}`);
         } else if (res.data.purpose === "DELIVERY_CONFIRMATION") {
           alert(`Delivery Confirmed via QR!\nOrder: ${res.data.resource_id}`);
-          setOrders(prev => prev.map(o => o.id === res.data.resource_id ? { ...o, status: "DELIVERED" } : o));
+          queryClient.invalidateQueries({ queryKey: ["pharmacyOrders"] });
         } else if (res.data.purpose === "IN_STORE_ORDER") {
           alert(`In-Store Order Verified!\nOrder: ${res.data.resource_id}`);
         }
@@ -112,13 +116,14 @@ export default function PharmacyDashboardPage() {
 
   const handleDispatch = async (orderId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/orders/${orderId}/dispatch`, {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const res = await fetch(`${baseUrl}/orders/${orderId}/dispatch`, {
         method: "POST",
       });
       if (res.ok) {
         const data = await res.json();
         alert(`Order dispatched! Simulation started. OTP: ${data.data.otp}`);
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "OUT_FOR_DELIVERY" } : o));
+        queryClient.invalidateQueries({ queryKey: ["pharmacyOrders"] });
       } else {
         alert("Failed to dispatch order.");
       }

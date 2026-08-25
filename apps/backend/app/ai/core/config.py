@@ -3,10 +3,12 @@ from pydantic_settings import BaseSettings
 
 class AIConfig(BaseSettings):
     # ─── Groq Models Config ───
-    GROQ_MODEL_DOCTOR: str = os.getenv("GROQ_MODEL_DOCTOR", "llama-3.3-70b-versatile")
-    GROQ_MODEL_PATIENT: str = os.getenv("GROQ_MODEL_PATIENT", "llama-3.1-8b-instant")
-    GROQ_MODEL_PHARMACY: str = os.getenv("GROQ_MODEL_PHARMACY", "llama-3.1-8b-instant")
-    GROQ_MODEL_ADMIN: str = os.getenv("GROQ_MODEL_ADMIN", "llama-3.3-70b-versatile")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen-2.5-32b")
+    GROQ_FALLBACK_MODEL: str = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+    LLM_MODEL_DOCTOR: str = os.getenv("LLM_MODEL_DOCTOR", "openai/gpt-oss-20b")
+    LLM_MODEL_PATIENT: str = os.getenv("LLM_MODEL_PATIENT", "openai/gpt-oss-20b")
+    LLM_MODEL_PHARMACY: str = os.getenv("LLM_MODEL_PHARMACY", "openai/gpt-oss-20b")
+    LLM_MODEL_ADMIN: str = os.getenv("LLM_MODEL_ADMIN", "openai/gpt-oss-20b")
 
     # ─── Hugging Face Endpoints ───
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton, Dial
 import { Pill, Download, CheckCircle2, AlertCircle, QrCode, ShoppingCart, Loader2, Store } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { PrescriptionQR } from "@medsync/ui"; 
 import { toast } from "sonner";
 import axios from "axios";
@@ -183,7 +184,13 @@ export default function PrescriptionsPage() {
                       </DialogHeader>
                       <div className="py-6 flex justify-center">
                         <div className="p-4 bg-white rounded-xl shadow-inner border">
-                          <PrescriptionQR data={`medsync://prescription/${prescription.id}`} />
+                          <PrescriptionQR 
+                            prescriptionId={prescription.id} 
+                            patientId={prescription.patient_id} 
+                            doctorId={prescription.doctor_id} 
+                            qrToken={prescription.qr_token}
+                            hash={prescription.hash}
+                          />
                         </div>
                       </div>
                       <p className="text-sm text-muted-foreground text-center">

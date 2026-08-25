@@ -1,11 +1,23 @@
 import uuid
 import bcrypt
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from cryptography.fernet import Fernet
+
+logger = logging.getLogger("medsync.security")
+
+# Lazy-load cryptography (fails to build on Windows ARM64 without Rust toolchain)
+try:
+    from cryptography.fernet import Fernet
+    _CRYPTO_AVAILABLE = True
+except ImportError:
+    Fernet = None
+    _CRYPTO_AVAILABLE = False
+    logger.warning("cryptography package not available — biometric encryption will be disabled.")
+
 from app.models.security import PatientSecurityCredential, PatientBiometricProfile, PrescriptionDownloadAuthorization
 from app.models.audit_log import AuditLog
 from fastapi import HTTPException
@@ -17,9 +29,12 @@ AUTHORIZATION_EXPIRY_MINUTES = 10
 
 # Initialize encryption key for biometric templates
 ENCRYPTION_KEY = os.getenv("BIOMETRIC_ENCRYPTION_KEY")
-if not ENCRYPTION_KEY:
-    ENCRYPTION_KEY = Fernet.generate_key().decode()
-fernet = Fernet(ENCRYPTION_KEY.encode())
+if _CRYPTO_AVAILABLE:
+    if not ENCRYPTION_KEY:
+        raise ValueError("BIOMETRIC_ENCRYPTION_KEY environment variable is not set. Biometric encryption cannot proceed safely without a persistent key.")
+    fernet = Fernet(ENCRYPTION_KEY.encode())
+else:
+    fernet = None
 
 def hash_pin(pin: str) -> str:
     salt = bcrypt.gensalt()
@@ -29,9 +44,13 @@ def verify_pin(pin: str, hashed_pin: str) -> bool:
     return bcrypt.checkpw(pin.encode('utf-8'), hashed_pin.encode('utf-8'))
 
 def encrypt_template(template: str) -> str:
+    if fernet is None:
+        raise HTTPException(status_code=503, detail="Biometric encryption is unavailable (cryptography package not installed).")
     return fernet.encrypt(template.encode('utf-8')).decode('utf-8')
 
 def decrypt_template(encrypted_template: str) -> str:
+    if fernet is None:
+        raise HTTPException(status_code=503, detail="Biometric decryption is unavailable (cryptography package not installed).")
     return fernet.decrypt(encrypted_template.encode('utf-8')).decode('utf-8')
 
 async def log_audit_event(db: AsyncSession, user_id: uuid.UUID, action: str, entity_type: str = None, entity_id: uuid.UUID = None, details: dict = None, ip_address: str = None):

@@ -11,13 +11,15 @@ interface PrescriptionQRProps {
   prescriptionId: string;
   patientId: string;
   doctorId: string;
+  qrToken?: string;
+  hash?: string;
 }
 
-export function PrescriptionQR({ prescriptionId, patientId, doctorId }: PrescriptionQRProps) {
+export function PrescriptionQR({ prescriptionId, patientId, doctorId, qrToken, hash }: PrescriptionQRProps) {
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any>(null);
 
-  const payload = JSON.stringify({
+  const payload = qrToken || hash || JSON.stringify({
     type: "PRESCRIPTION",
     id: prescriptionId,
     patient_id: patientId,

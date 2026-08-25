@@ -54,5 +54,5 @@ async def test_ai_analysis_idor_protection(async_client: AsyncClient, patient_us
     headers = {"Authorization": f"Bearer {patient_token}"}
     res = await async_client.post("/api/v1/ai/analyze-image", files=files, data=data, headers=headers)
     
-    # Must fail because fake_version_id is not found, OR because we don't own it.
-    assert res.status_code == 404 # Medical record version not found
+    # Must fail because only DOCTOR can access analyze-image.
+    assert res.status_code == 403 # Medical record version not found

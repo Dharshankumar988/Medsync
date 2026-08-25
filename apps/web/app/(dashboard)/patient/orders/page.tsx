@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton } from "@medsync/ui";
 import { ShoppingBag, Truck, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { orderService } from "@/services/order.service";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
@@ -24,31 +25,8 @@ export default function OrdersPage() {
     async function loadOrders() {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("medicine_orders")
-          .select(`*`)
-          .eq("patient_id", userId)
-          .order("created_at", { ascending: false });
-          
-        if (data) {
-          const pharmacyIds = [...new Set(data.map(o => o.pharmacy_id))];
-          const { data: pharmData } = await supabase
-            .from("pharmacies")
-            .select("*")
-            .in("user_id", pharmacyIds);
-            
-          const pharmMap = (pharmData || []).reduce((acc: any, p: any) => {
-            acc[p.user_id] = p;
-            return acc;
-          }, {});
-          
-          const mapped = data.map(o => ({
-            ...o,
-            pharmacy: pharmMap[o.pharmacy_id]
-          }));
-          
-          setOrders(mapped);
-        }
+        const data = await orderService.getOrders();
+        setOrders(data || []);
       } catch (err) {
         console.error("Error loading orders", err);
       } finally {
@@ -92,7 +70,7 @@ export default function OrdersPage() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <ShoppingBag className="h-12 w-12 text-muted-foreground/50 mb-4" />
             <p className="text-lg font-medium">No orders found</p>
-            <p className="text-sm text-muted-foreground">You haven't placed any medicine orders yet.</p>
+            <p className="text-sm text-muted-foreground">You haven&apos;t placed any medicine orders yet.</p>
           </CardContent>
         </Card>
       ) : (

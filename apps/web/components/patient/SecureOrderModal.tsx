@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@medsync/ui';
+import { Button } from '@medsync/ui';
+import { Input } from '@medsync/ui';
 import { ShieldCheck, Camera, Loader2, Store, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { FaceVerification } from '../FaceVerification';
 
 interface SecureOrderModalProps {
   prescriptionId: string | null;
@@ -22,6 +23,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
   const [address, setAddress] = useState('');
   const [pin, setPin] = useState('');
   const [faceImage, setFaceImage] = useState<File | null>(null);
+  const [faceVerified, setFaceVerified] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,6 +61,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
     if (open) {
       setPin('');
       setFaceImage(null);
+      setFaceVerified(false);
       startCamera();
     } else {
       stopCamera();
@@ -169,7 +172,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
               className="tracking-widest font-mono text-center text-xl"
               maxLength={6}
               value={pin}
-              onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPin(e.target.value.replace(/\D/g, ''))}
             />
           </div>
           
@@ -177,26 +180,39 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
             <label className="text-sm font-medium flex items-center gap-2">
               <Camera className="w-4 h-4" /> Live Face Verification
             </label>
-            {!faceImage ? (
-              <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-border">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
-                <canvas ref={canvasRef} className="hidden" />
-                <Button 
-                  type="button"
-                  size="sm" 
-                  className="absolute bottom-2 left-1/2 -translate-x-1/2"
-                  onClick={captureFace}
-                >
-                  Capture Face
-                </Button>
-              </div>
+            {!faceVerified ? (
+              <FaceVerification 
+                onVerify={async (file) => {
+                  try {
+                    const formData = new FormData();
+                    formData.append('image', file);
+                    
+                    const { data: session } = await supabase.auth.getSession();
+                    const token = session?.session?.access_token;
+                    
+                    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+                    const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+                    
+                    const res = await axios.post(`${apiUrl}/security/verify-face`, formData, {
+                      headers: { Authorization: `Bearer ${token}` }
+                    });
+                    
+                    if (res.data.verified) {
+                      setFaceVerified(true);
+                      setFaceImage(file);
+                      return true;
+                    }
+                    return false;
+                  } catch (err) {
+                    console.error("Verification error", err);
+                    return false;
+                  }
+                }}
+              />
             ) : (
-              <div className="flex flex-col items-center justify-center p-4 border border-dashed rounded-lg bg-muted/50">
+              <div className="flex flex-col items-center justify-center p-4 border border-dashed rounded-lg bg-emerald-500/10">
                 <ShieldCheck className="w-8 h-8 text-emerald-500 mb-2" />
-                <p className="text-sm font-medium">Identity Verified</p>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setFaceImage(null)} className="mt-1 text-xs">
-                  Retake
-                </Button>
+                <p className="text-sm font-medium text-emerald-700">Identity Verified Successfully</p>
               </div>
             )}
           </div>

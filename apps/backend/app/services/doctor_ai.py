@@ -12,7 +12,7 @@ from app.ai.core.service_manager import ai_service_manager
 from app.ai.core.conversation import ConversationManager
 from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.config import ai_config
-from app.ai.rag.retriever import RAGRetriever
+from app.services.rag_service import rag_service
 from app.services.permission import PermissionService
 
 logger = logging.getLogger("medsync.ai.doctor")
@@ -65,7 +65,7 @@ class DoctorAIService:
             past_history = await ConversationManager.get_patient_history_summary(db, session.user_id, session.patient_id, session.id)
             past_history = f"\n\n--- PREVIOUS CLINICAL CONVERSATIONS FOR THIS PATIENT ---\n{past_history}"
             
-        rag_context = await RAGRetriever.retrieve_context(user_message, role="doctor", db=db)
+        rag_context = await rag_service.retrieve_context(db=db, query=user_message, role="doctor")
         system_msg_content = DOCTOR_SYSTEM_PROMPT.format(history="", rag_context=f"{rag_context}{past_history}")
         
         # Get conversation history
@@ -89,13 +89,14 @@ class DoctorAIService:
         
         start_time = time.time()
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_DOCTOR
+        model_name = ai_config.LLM_MODEL_DOCTOR
         
         reply_content = await client.chat_completion(
             messages=messages,
             model=model_name,
             temperature=0.2
         )
+        reply_content = AIOrchestrator.filter_output(reply_content, "doctor")
         
         inference_time = int((time.time() - start_time) * 1000)
         
@@ -116,15 +117,16 @@ class DoctorAIService:
         messages = await DoctorAIService._build_messages(db, session, req.message)
         
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_DOCTOR
+        model_name = ai_config.LLM_MODEL_DOCTOR
         
         full_reply = ""
         start_time = time.time()
         
         stream = client.chat_stream(messages=messages, model=model_name, temperature=0.2)
         async for chunk in stream:
-            full_reply += chunk
-            yield chunk
+            filtered_chunk = AIOrchestrator.filter_output(chunk, "doctor")
+            full_reply += filtered_chunk
+            yield filtered_chunk
             
         inference_time = int((time.time() - start_time) * 1000)
         
@@ -180,7 +182,7 @@ class DoctorAIService:
         
         start_time = time.time()
         client = ai_service_manager.get_llm_client()
-        model_name = ai_config.GROQ_MODEL_DOCTOR
+        model_name = ai_config.LLM_MODEL_DOCTOR
         
         reply_content = await client.chat_completion(
             messages=messages,
@@ -188,6 +190,7 @@ class DoctorAIService:
             temperature=0.1, # Lower temperature for structured clinical tasks
             json_mode=json_mode
         )
+        reply_content = AIOrchestrator.filter_output(reply_content, "doctor")
         
         inference_time = int((time.time() - start_time) * 1000)
         await DoctorAIService._save_message(db, session.id, AIChatRole.ASSISTANT, reply_content, model_name, inference_time)

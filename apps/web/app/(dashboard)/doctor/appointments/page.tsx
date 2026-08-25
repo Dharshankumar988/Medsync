@@ -277,7 +277,7 @@ export default function DoctorAppointmentsPage() {
           <CardHeader className="border-b border-emerald-500/10">
             <CardTitle className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Today's Appointments
+              Today&apos;s Appointments
               <Badge variant="secondary" className="ml-2">{todayAppts.length}</Badge>
             </CardTitle>
           </CardHeader>

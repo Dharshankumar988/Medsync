@@ -26,5 +26,5 @@ class Patient(Base, UUIDMixin, TimestampMixin):
     allergies: Mapped[str] = mapped_column(String, nullable=True)
     chronic_diseases: Mapped[str] = mapped_column(String, nullable=True)
     primary_physician_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("doctors.id"), index=True, nullable=True)
-    
+    pin_hash: Mapped[str] = mapped_column(String(255), nullable=True)
     user = relationship("User", back_populates="patient_profile")

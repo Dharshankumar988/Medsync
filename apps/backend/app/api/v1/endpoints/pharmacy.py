@@ -15,6 +15,32 @@ import uuid
 router = APIRouter()
 require_pharmacy = RoleChecker([UserRole.PHARMACY])
 
+@router.get("/resolve-qr/{qr_identifier}")
+async def resolve_pharmacy_qr(qr_identifier: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Resolves a pharmacy QR code to its details."""
+    if not qr_identifier.startswith("QR-PHM-"):
+        raise HTTPException(status_code=400, detail="Invalid QR code format")
+        
+    stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).where(Pharmacy.qr_identifier == qr_identifier)
+    result = await db.execute(stmt)
+    row = result.first()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Pharmacy not found")
+        
+    pharmacy, user = row
+    
+    if pharmacy.qr_status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="This pharmacy QR code is inactive or revoked.")
+        
+    return APIResponse(message="Pharmacy resolved successfully", data={
+        "pharmacy_id": pharmacy.user_id,
+        "business_name": pharmacy.business_name,
+        "address": pharmacy.address,
+        "contact_number": pharmacy.contact_number,
+        "logo_url": pharmacy.logo_url
+    })
+
 @router.get("/inventory")
 async def get_inventory_stub():
     return APIResponse(message="Please use /api/v1/inventory", data=[])

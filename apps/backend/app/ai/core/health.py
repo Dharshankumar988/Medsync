@@ -22,7 +22,7 @@ class AIHealthMonitor:
             if groq_client and groq_client.is_healthy:
                 self.health_status["components"]["groq"] = "healthy"
             else:
-                self.health_status["components"]["groq"] = "degraded (fallback active)"
+                self.health_status["components"]["groq"] = "unhealthy (missing key or misconfigured)"
                 
             # 2. Check HF Spaces (via model manager -> inference service)
             hf_status = await model_manager.check_health()
@@ -34,7 +34,7 @@ class AIHealthMonitor:
             # Aggregate status
             any_degraded = any(
                 isinstance(v, dict) and "degraded" in str(v.get("status", "")) or 
-                isinstance(v, str) and ("degraded" in v or "unreachable" in v) 
+                isinstance(v, str) and ("degraded" in v or "unreachable" in v or "unhealthy" in v) 
                 for v in self.health_status["components"].values()
             )
             self.health_status["status"] = "degraded" if any_degraded else "healthy"

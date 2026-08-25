@@ -32,7 +32,7 @@ function RegistryRow({
   title,
   description,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   title: string;
   description: string;
 }) {
@@ -50,13 +50,45 @@ function RegistryRow({
 }
 
 /* ─── AI Diagnostics specialty pill ─── */
+export function StatRow({ 
+  icon: Icon, 
+  label, 
+  value,
+  accent = "blue"
+}: { 
+  icon: React.ComponentType<any>;
+  label: string; 
+  value: string | number;
+  accent?: "blue" | "emerald" | "amber" | "violet" | "purple";
+}) {
+  const accentClass = {
+    blue: "bg-blue-500/10 text-blue-500",
+    emerald: "bg-emerald-500/10 text-emerald-500",
+    amber: "bg-amber-500/10 text-amber-500",
+    violet: "bg-violet-500/10 text-violet-500",
+    purple: "bg-purple-500/10 text-purple-500"
+  }[accent];
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/30 px-4 py-3 transition-all duration-300 hover:border-blue-500/20 hover:bg-blue-500/[0.04]">
+      <div className="flex items-center gap-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${accentClass}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <span className="text-sm text-foreground font-medium">{label}</span>
+      </div>
+      <span className="text-xs font-semibold text-blue-500 tracking-wide uppercase whitespace-nowrap">{value}</span>
+    </div>
+  );
+}
+
 function DiagnosticPill({
   icon: Icon,
   label,
   specialty,
   accentClass,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   label: string;
   specialty: string;
   accentClass: string;

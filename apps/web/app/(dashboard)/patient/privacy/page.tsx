@@ -102,7 +102,7 @@ export default function PrivacyPage() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Shield className="h-12 w-12 text-muted-foreground/50 mb-4" />
               <p className="text-lg font-medium">No consent history</p>
-              <p className="text-sm text-muted-foreground">You haven't granted any data access yet.</p>
+              <p className="text-sm text-muted-foreground">You haven&apos;t granted any data access yet.</p>
             </div>
           ) : (
             <div className="relative border-l border-border/50 ml-3 md:ml-4 space-y-8 pb-4">
