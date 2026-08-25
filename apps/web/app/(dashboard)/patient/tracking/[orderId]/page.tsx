@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 
 const TrackingMap = dynamic(() => import("@/components/TrackingMap"), { ssr: false });
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
@@ -200,10 +201,13 @@ export default function PatientTrackingPage() {
           <CardContent>
             {trackingData.driver_name ? (
               <div className="flex items-center gap-4">
-                <img 
+                <Image 
                   src={trackingData.driver_avatar} 
-                  alt={trackingData.driver_name} 
-                  className="w-16 h-16 rounded-full bg-slate-100 p-1 border-2 border-primary/20"
+                  alt={trackingData.driver_name}
+                  width={64}
+                  height={64}
+                  unoptimized={true}
+                  className="w-16 h-16 rounded-full bg-slate-100 p-1 border-2 border-primary/20 object-cover"
                 />
                 <div>
                   <h3 className="font-semibold text-lg">{trackingData.driver_name}</h3>

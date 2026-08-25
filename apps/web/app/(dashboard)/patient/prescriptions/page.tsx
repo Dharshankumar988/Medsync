@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@medsync/ui";
 import { Pill, Download, CheckCircle2, AlertCircle, QrCode, ShoppingCart, Loader2, Store } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -27,7 +27,7 @@ export default function PrescriptionsPage() {
     });
   }, []);
 
-  const loadPrescriptions = async () => {
+  const loadPrescriptions = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     try {
@@ -64,11 +64,11 @@ export default function PrescriptionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     loadPrescriptions();
-  }, [userId]);
+  }, [loadPrescriptions]);
 
   return (
     <div className="relative space-y-8 pb-12">

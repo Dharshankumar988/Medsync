@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Input } from "@medsync/ui";
 import { FileText, Upload, CheckCircle2, AlertCircle, FilePlus, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -33,7 +33,7 @@ export default function MedicalRecordsPage() {
     });
   }, []);
 
-  const loadRecords = async () => {
+  const loadRecords = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     try {
@@ -55,14 +55,9 @@ export default function MedicalRecordsPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadRecords();
-    loadDoctors();
   }, [userId]);
 
-  const loadDoctors = async () => {
+  const loadDoctors = useCallback(async () => {
     if (!userId) return;
     try {
       // Get unique doctors from appointments
@@ -86,7 +81,12 @@ export default function MedicalRecordsPage() {
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    loadRecords();
+    loadDoctors();
+  }, [loadRecords, loadDoctors]);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();

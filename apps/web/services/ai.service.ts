@@ -29,13 +29,13 @@ const getAuthHeaders = async () => {
 
 export const aiService = {
   // Standard Chat
-  async chat(role: 'doctor' | 'patient' | 'pharmacy' | 'admin', message: string, sessionId?: string, patientId?: string) {
+  async chat(role: 'doctor' | 'patient' | 'pharmacy' | 'admin', message: string, sessionId?: string, patientId?: string, signal?: AbortSignal) {
     const headers = await getAuthHeaders();
     const res = await axios.post(`${API_BASE_URL}/ai/pulse/chat`, {
       message,
       session_id: sessionId || null,
       patient_id: patientId || null,
-    }, { headers });
+    }, { headers, signal });
     return res.data;
   },
 
@@ -123,7 +123,7 @@ export const aiService = {
   },
 
   // Image Analysis
-  async analyzeImage(file: File, scanType: string = 'bone', patientId?: string, sessionId?: string) {
+  async analyzeImage(file: File, scanType: string = 'bone', patientId?: string, sessionId?: string, signal?: AbortSignal) {
     const headers = await getAuthHeaders();
     const formData = new FormData();
     formData.append('file', file);
@@ -135,7 +135,8 @@ export const aiService = {
       headers: {
         ...headers,
         'Content-Type': 'multipart/form-data'
-      }
+      },
+      signal
     });
     return res.data;
   }

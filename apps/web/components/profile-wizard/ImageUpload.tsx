@@ -80,6 +80,7 @@ export function ImageUpload({ onUpload, label = "Upload Image", isCover = false 
     <div className="space-y-4">
       {previewUrl ? (
         <div className={`relative overflow-hidden ${isCover ? "h-32 w-full rounded-lg" : "h-24 w-24 rounded-full"} border border-border group`}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Genuinely correct implementation for a temporary client-side upload preview data URL */}
           <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
              <Button variant="ghost" size="icon" className="text-white" onClick={() => setPreviewUrl(null)}>
@@ -109,6 +110,7 @@ export function ImageUpload({ onUpload, label = "Upload Image", isCover = false 
                 aspect={isCover ? 16 / 9 : 1}
                 circularCrop={!isCover}
               >
+                {/* eslint-disable-next-line @next/next/no-img-element -- Genuinely correct implementation for a temporary client-side crop preview data URL */}
                 <img 
                   ref={imgRef} 
                   src={upImg} 

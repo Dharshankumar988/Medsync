@@ -22,7 +22,7 @@ MedSync leverages a hybrid AI architecture:
 ### Portable Windows Deployment
 The easiest way to run MedSync is using our standalone portable runner for Windows. It requires no Git knowledge and automatically sets up Docker and Cloudflare.
 
-→ **[See portable_runner/README.md](portable_runner/README.md) for the complete installation guide.**
+→ **[See implementation.md](implementation.md) for the complete installation guide.**
 
 ## Development
 To contribute to MedSync, clone the repository and navigate to the respective application directories (`apps/backend` or `apps/blockchain`). See the internal documentation within those folders for local development setups.

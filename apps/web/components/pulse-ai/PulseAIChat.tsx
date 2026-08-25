@@ -73,18 +73,19 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [scanType, setScanType] = useState("bone");
 
-  // Cleanup pending requests on unmount
+  // Cleanup pending requests on unmount or controller change
   useEffect(() => {
+    const controller = abortController;
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      if (controller) {
+        controller.abort();
       }
     };
-  }, []);
+  }, [abortController]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -110,8 +111,11 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
     const assistantMessageId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, { id: assistantMessageId, role: "assistant", content: "" }]);
 
+    const controller = new AbortController();
+    setAbortController(controller);
+
     try {
-      const response = await aiService.chat(role, userMessage.content, sessionId || undefined, patientId);
+      const response = await aiService.chat(role, userMessage.content, sessionId || undefined, patientId, controller.signal);
       const result = response.data;
       setSessionId(result.session_id);
       setMessages((prev) => prev.map((m) =>
@@ -134,8 +138,12 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
     const assistantMessageId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, userMessage, { id: assistantMessageId, role: "assistant", content: "" }]);
     setIsLoading(true);
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
     try {
-      const response = await aiService.analyzeImage(file, scanType, patientId, sessionId || undefined);
+      const response = await aiService.analyzeImage(file, scanType, patientId, sessionId || undefined, controller.signal);
       const report = response.data;
       if (report.session_id) setSessionId(report.session_id);
       const finding = report.prediction;
