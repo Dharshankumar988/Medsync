@@ -55,6 +55,8 @@ class ImageAnalysisService:
         logger.info(f"Starting image analysis: scan_type={scan_type}, role={user_role}")
         try:
             hf_result = await inference_service.predict(scan_type, image_bytes)
+        except DiagnosticModelException:
+            raise
         except Exception as e:
             logger.error(f"HF inference failed: {e}")
             raise DiagnosticModelException(f"Image analysis model unavailable: {str(e)}")

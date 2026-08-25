@@ -31,7 +31,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
   const [stream, setStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
     const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
     axios.get(`${apiUrl}/pharmacies/all`).then(res => {
       if(res.data?.data) setPharmacies(res.data.data);
@@ -102,7 +102,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
       formData.append('pin', pin);
       formData.append('face_image', faceImage);
       
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
       
       await axios.post(`${apiUrl}/prescriptions/${prescriptionId}/order-online`, formData, {
@@ -190,7 +190,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
                     const { data: session } = await supabase.auth.getSession();
                     const token = session?.session?.access_token;
                     
-                    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+                    const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
                     const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
                     
                     const res = await axios.post(`${apiUrl}/security/verify-face`, formData, {

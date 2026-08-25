@@ -13,6 +13,11 @@ import httpx
 
 from app.core.config import settings
 from app.ai.core.config import ai_config
+from app.ai.core.exceptions import (
+    DiagnosticTimeoutException, 
+    DiagnosticServiceUnavailableException,
+    DiagnosticInferenceException
+)
 
 logger = logging.getLogger("medsync.ai.inference")
 
@@ -72,8 +77,8 @@ class InferenceService:
         self._max_retries = ai_config.HF_MAX_RETRIES
         self._cold_start_wait = ai_config.HF_COLD_START_WAIT
         self._headers = {}
-        if settings.AI_SERVICE_TOKEN:
-            self._headers["Authorization"] = f"Bearer {settings.AI_SERVICE_TOKEN}"
+        if settings.MEDSYNC_AI_TOKEN:
+            self._headers["Authorization"] = f"Bearer {settings.MEDSYNC_AI_TOKEN}"
 
         # Persistent async client — connection pooling
         self._client = httpx.AsyncClient(
@@ -145,8 +150,14 @@ class InferenceService:
                     raise
 
         self._endpoint_healthy = False
-        logger.error(f"Inference failed after {self._max_retries} attempts")
-        raise RuntimeError(f"AI inference unavailable after {self._max_retries} retries: {last_error}")
+        logger.error(f"Inference failed after {self._max_retries} attempts: {last_error}")
+        
+        if isinstance(last_error, httpx.TimeoutException):
+            raise DiagnosticTimeoutException(f"AI inference timed out after {self._max_retries} retries.")
+        elif isinstance(last_error, httpx.ConnectError) or (isinstance(last_error, httpx.HTTPStatusError) and last_error.response.status_code >= 500):
+            raise DiagnosticServiceUnavailableException(f"AI inference unavailable after {self._max_retries} retries.")
+        else:
+            raise DiagnosticInferenceException(f"AI inference error: {last_error}")
 
     async def check_health(self) -> Dict[str, Any]:
         """Check the health of the AI microservice endpoint."""

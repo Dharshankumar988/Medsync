@@ -40,7 +40,7 @@ export default function QRProfilePage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
 
-      let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      let baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       if (!baseUrl.endsWith('/api/v1')) baseUrl = `${baseUrl}/api/v1`;
       
       const res = await fetch(`${baseUrl}/verify/qr/generate-secure`, {

@@ -281,13 +281,16 @@ async def analyze_image(
 
     # Validate file
     if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, and WebP are supported.")
+        from app.ai.core.exceptions import InvalidImageException
+        raise InvalidImageException("Invalid file type. Only JPEG, PNG, and WebP are supported.")
     
     image_bytes = await file.read()
     if len(image_bytes) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB.")
+        from app.ai.core.exceptions import InvalidImageException
+        raise InvalidImageException("File too large. Maximum size is 5MB.")
     if len(image_bytes) == 0:
-        raise HTTPException(status_code=400, detail="File is empty.")
+        from app.ai.core.exceptions import InvalidImageException
+        raise InvalidImageException("File is empty.")
         
     try:
         # Determine user role for explanation style

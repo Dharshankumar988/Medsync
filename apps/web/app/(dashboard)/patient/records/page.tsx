@@ -111,7 +111,7 @@ export default function MedicalRecordsPage() {
       formData.append("description", description || "");
       formData.append("patient_id", userId);
       
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
       
       await axios.post(`${apiUrl}/records`, formData, {

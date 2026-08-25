@@ -36,7 +36,7 @@ class GroqNetworkException(AIException):
 
 class GroqProviderException(AIException):
     def __init__(self, message: str = "Groq provider encountered an error."):
-        super().__init__(message, "GROQ_PROVIDER_ERROR", 502)
+        super().__init__(message, "GROQ_PROVIDER_UNAVAILABLE", 502)
 
 class RAGDatabaseException(AIException):
     def __init__(self, message: str = "RAG database query failed."):
@@ -46,13 +46,37 @@ class RAGPermissionException(AIException):
     def __init__(self, message: str = "Unauthorized RAG access."):
         super().__init__(message, "RAG_PERMISSION_ERROR", 403)
 
+class RAGUnavailableException(AIException):
+    def __init__(self, message: str = "RAG retrieval service unavailable."):
+        super().__init__(message, "RAG_UNAVAILABLE", 503)
+
 class DiagnosticModelException(AIException):
     def __init__(self, message: str = "Diagnostic model failed."):
         super().__init__(message, "DIAGNOSTIC_MODEL_ERROR", 500)
 
+class DiagnosticServiceUnavailableException(DiagnosticModelException):
+    def __init__(self, message: str = "Diagnostic service unavailable."):
+        super(DiagnosticModelException, self).__init__(message, "DIAGNOSTIC_SERVICE_UNAVAILABLE", 503)
+
+class DiagnosticTimeoutException(DiagnosticModelException):
+    def __init__(self, message: str = "Diagnostic service timed out."):
+        super(DiagnosticModelException, self).__init__(message, "DIAGNOSTIC_TIMEOUT", 504)
+
+class DiagnosticInferenceException(DiagnosticModelException):
+    def __init__(self, message: str = "Diagnostic inference error."):
+        super(DiagnosticModelException, self).__init__(message, "DIAGNOSTIC_INFERENCE_ERROR", 500)
+
+class InvalidImageException(AIException):
+    def __init__(self, message: str = "Invalid or unsupported image provided."):
+        super().__init__(message, "INVALID_IMAGE", 400)
+
 class AuthorizationException(AIException):
     def __init__(self, message: str = "Not authorized to perform this AI action."):
-        super().__init__(message, "AUTHORIZATION_ERROR", 403)
+        super().__init__(message, "UNAUTHORIZED", 401)
+
+class ForbiddenException(AIException):
+    def __init__(self, message: str = "Forbidden to access this resource."):
+        super().__init__(message, "FORBIDDEN", 403)
 
 class ValidationException(AIException):
     def __init__(self, message: str = "Invalid input or configuration."):

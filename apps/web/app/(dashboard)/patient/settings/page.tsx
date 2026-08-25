@@ -86,7 +86,7 @@ export default function SettingsPage() {
     setIsExporting(true);
     
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
       
       const response = await axios.get(`${apiUrl}/fhir/Patient/${userId}/$export`, {

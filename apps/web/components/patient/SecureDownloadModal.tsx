@@ -97,7 +97,7 @@ export default function SecureDownloadModal({ prescriptionId, open, onOpenChange
       const authRef = authRes.data.authorization_reference;
 
       // Now fetch the actual download URL
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
 
       const response = await axios.get(`${apiUrl}/prescriptions/download/${authRef}`);
@@ -174,7 +174,7 @@ export default function SecureDownloadModal({ prescriptionId, open, onOpenChange
                     const { data: session } = await supabase.auth.getSession();
                     const token = session?.session?.access_token;
 
-                    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+                    const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
                     const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
 
                     const res = await axios.post(`${apiUrl}/security/verify-face`, formData, {

@@ -116,7 +116,7 @@ export default function PharmacyDashboardPage() {
 
   const handleDispatch = async (orderId: string) => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const res = await fetch(`${baseUrl}/orders/${orderId}/dispatch`, {
         method: "POST",
       });
