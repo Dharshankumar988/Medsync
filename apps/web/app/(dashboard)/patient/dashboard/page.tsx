@@ -53,21 +53,21 @@ export default function PatientDashboard() {
   const stats = [
     {
       title: "Upcoming Appointments",
-      value: dashboardData.upcoming_appointments.toString(),
+      value: (dashboardData?.upcoming_appointments || 0).toString(),
       subtitle: "Scheduled consultations",
       icon: Clock,
       accent: "blue",
     },
     {
       title: "Medical Records",
-      value: dashboardData.total_records.toString(),
+      value: (dashboardData?.total_records || 0).toString(),
       subtitle: <span className="text-blue-500 font-medium">Uploaded documents</span>,
       icon: FileText,
       accent: "violet",
     },
     {
       title: "Active Prescriptions",
-      value: dashboardData.active_prescriptions.toString(),
+      value: (dashboardData?.active_prescriptions || 0).toString(),
       valueColor: "text-emerald-500",
       subtitle: "Pending dispense",
       icon: Pill,
@@ -75,7 +75,7 @@ export default function PatientDashboard() {
     },
     {
       title: "Ongoing Orders",
-      value: dashboardData.ongoing_orders.toString(),
+      value: (dashboardData?.ongoing_orders || 0).toString(),
       subtitle: "Medicine deliveries",
       icon: ShoppingBag,
       accent: "orange",

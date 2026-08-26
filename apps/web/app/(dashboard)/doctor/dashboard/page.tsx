@@ -63,7 +63,7 @@ export default function DoctorDashboard() {
   const stats = [
     {
       title: "Today's Patients",
-      value: dashboardData.today_appointments.toString(),
+      value: (dashboardData?.today_appointments || 0).toString(),
       subtitle: (
         <span className="flex items-center text-emerald-500 font-medium">
           Scheduled today
@@ -74,7 +74,7 @@ export default function DoctorDashboard() {
     },
     {
       title: "Pending Prescriptions",
-      value: dashboardData.pending_prescriptions.toString(),
+      value: (dashboardData?.pending_prescriptions || 0).toString(),
       subtitle: "Requires your sign-off",
       icon: Activity,
       accent: "amber",

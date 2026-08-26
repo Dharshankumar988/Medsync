@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, Badge, Skeleton, Input, Button } from "@medsync/ui";
 import { FileText, CheckCircle2, AlertCircle, Download, Search, ShieldCheck, Brain } from "lucide-react";
@@ -29,7 +29,7 @@ export default function DoctorMedicalRecordsPage() {
     });
   }, []);
 
-  const loadRecords = async () => {
+  const loadRecords = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     try {
@@ -88,11 +88,11 @@ export default function DoctorMedicalRecordsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, filterPatientId]);
 
   useEffect(() => {
     loadRecords();
-  }, [userId, filterPatientId]);
+  }, [loadRecords]);
 
   const filteredRecords = records.filter(r => 
     (r.title || "").toLowerCase().includes(search.toLowerCase()) ||

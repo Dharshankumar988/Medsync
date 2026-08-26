@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@medsync/ui";
 import { Pill, Download, AlertCircle, QrCode, Plus, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -21,7 +21,7 @@ export default function DoctorPrescriptionsPage() {
     });
   }, []);
 
-  const loadPrescriptions = async () => {
+  const loadPrescriptions = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     try {
@@ -55,11 +55,11 @@ export default function DoctorPrescriptionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     loadPrescriptions();
-  }, [userId]);
+  }, [loadPrescriptions]);
 
   const handleDownload = async (id: string) => {
     try {

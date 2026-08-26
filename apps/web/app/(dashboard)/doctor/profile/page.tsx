@@ -11,6 +11,7 @@ import api from "@/lib/api";
 import dynamic from "next/dynamic";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@medsync/ui";
 import { Select } from "@medsync/ui";
+import Image from "next/image";
 
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 
@@ -263,11 +264,13 @@ export default function DoctorProfilePage() {
             
             <div className="relative w-40 h-40 rounded-full overflow-hidden border-4 border-muted bg-muted/30 flex items-center justify-center mb-6">
               {previewUrl ? (
-                <img 
+                <Image 
                   src={previewUrl} 
                   alt="Profile Preview" 
                   className="w-full h-full object-cover"
-                  loading="lazy"
+                  width={160}
+                  height={160}
+                  unoptimized
                 />
               ) : (
                 <ImageIcon className="w-12 h-12 text-muted-foreground/50" />

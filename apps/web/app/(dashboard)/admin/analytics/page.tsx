@@ -5,7 +5,7 @@ import { LineChart, BarChart } from "lucide-react";
 import { dashboardService } from "@/services/dashboard.service";
 
 export default function AdminAnalytics() {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<Awaited<ReturnType<typeof dashboardService.getAdminDashboard>>>(null);
 
   useEffect(() => {
     dashboardService.getAdminDashboard().then(data => {

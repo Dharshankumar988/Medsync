@@ -43,8 +43,8 @@ export function SystemMap({ role }: { role: string }) {
   return (
     <div 
       className={cn(
-        "relative z-50 flex flex-col border-r border-border/50 bg-background/40 backdrop-blur-3xl transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)]",
-        isExpanded ? "w-[320px]" : "w-[90px]"
+        "relative z-50 flex flex-col border-r border-border/50 bg-background/40 backdrop-blur-3xl transition-all duration-500 ease-out",
+        isExpanded ? "w-64" : "w-16"
       )}
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}

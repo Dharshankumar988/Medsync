@@ -7,6 +7,7 @@ import { Brain, FileText, Activity, AlertTriangle, Info, Image as ImageIcon, Che
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
 import { toast } from "sonner";
 
 function AIAnalysisReviewCard({ version, ai }: { version: any, ai: any }) {
@@ -49,10 +50,13 @@ function AIAnalysisReviewCard({ version, ai }: { version: any, ai: any }) {
           <div className="bg-muted/30 border-r flex flex-col justify-center items-center p-6 min-h-[300px] relative">
             {['image/jpeg', 'image/png'].includes(version.file_type) || version.file_type === 'IMAGE' || version.file_type === 'X_RAY' || version.file_type === 'MRI' ? (
               <div className="relative w-full h-full flex items-center justify-center group">
-                  <img 
+                  <Image 
                     src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/medical-records/${version.ipfs_cid}`} 
-                    alt={version.record?.title} 
+                    alt={version.record?.title || "Medical record"} 
                     className="max-h-[350px] object-contain rounded-lg shadow-sm"
+                    width={500}
+                    height={350}
+                    unoptimized
                   />
               </div>
             ) : (

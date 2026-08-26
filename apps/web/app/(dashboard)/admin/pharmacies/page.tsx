@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
 import { Plus, Search, Building2, MapPin, Mail, Phone, MoreVertical, Loader2 } from "lucide-react";
@@ -39,7 +39,7 @@ export default function PharmaciesManagementPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadPharmacies = async () => {
+  const loadPharmacies = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await api.get('/api/v1/pharmacies/all'); // Need to implement this in backend
@@ -51,11 +51,11 @@ export default function PharmaciesManagementPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadPharmacies();
-  }, []);
+  }, [loadPharmacies]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

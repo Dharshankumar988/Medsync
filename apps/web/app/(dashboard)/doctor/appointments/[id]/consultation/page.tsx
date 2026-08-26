@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Badge
@@ -47,11 +47,7 @@ export default function ConsultationPage() {
     });
   }, []);
 
-  useEffect(() => {
-    if (appointmentId) fetchConsultationData();
-  }, [appointmentId]);
-
-  const fetchConsultationData = async () => {
+  const fetchConsultationData = useCallback(async () => {
     try {
       // Load appointment
       const { data: apptData, error } = await supabase
@@ -96,7 +92,11 @@ export default function ConsultationPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appointmentId]);
+
+  useEffect(() => {
+    if (appointmentId) fetchConsultationData();
+  }, [appointmentId, fetchConsultationData]);
 
   const handleSave = async () => {
     setSaving(true);
