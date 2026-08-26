@@ -8,16 +8,16 @@
     "deploy:amoy": "hardhat run scripts/deploy.ts --network amoy"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
-    "hardhat": "^2.22.2",
+    "chai": "4",
+    "hardhat": "2.22.2",
+    "solc": "0.8.20",
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@nomicfoundation/edr": "^0.14.2",
+    "@nomicfoundation/edr": "0.3.3",
     "@openzeppelin/contracts": "^5.0.2",
     "dotenv": "^16.4.5"
-  },
-  "optionalDependencies": {
-    "@nomicfoundation/edr-win32-arm64-msvc": "^0.3.3"
   }
 }

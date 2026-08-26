@@ -12,6 +12,7 @@ services:
     environment:
       # Ensure you copy apps/backend/.env.example to apps/backend/.env
       - PYTHONUNBUFFERED=1
+      - PINATA_JWT=${PINATA_JWT}
     env_file:
       - ./apps/backend/.env
     restart: unless-stopped

@@ -42,6 +42,13 @@ export default function MyHealthPage() {
           .eq("user_id", userId)
           .single();
           
+        if (error) {
+          console.error("Supabase error fetching patient profile:", error);
+          if (error.code !== 'PGRST116') {
+            toast.error("Failed to load patient information");
+          }
+        }
+          
         if (data) {
           setFormData({
             full_name: data.full_name || "",

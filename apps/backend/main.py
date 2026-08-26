@@ -35,8 +35,14 @@ async def lifespan(app: FastAPI):
         logger.info("Initialized in-memory SQLite database fallback")
     
     # 1. Start blockchain scheduler
-    start_scheduler()
-    
+    try:
+        from app.blockchain.client import blockchain_client
+        if getattr(blockchain_client, 'configured', False):
+            start_scheduler()
+        else:
+            logger.info("Blockchain not configured. Scheduler disabled.")
+    except Exception as e:
+        logger.warning(f"Failed to check blockchain configuration: {e}")
     # 2. Start QR token cleanup background task
     qr_cleanup_task = None
     try:

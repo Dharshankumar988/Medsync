@@ -24,6 +24,11 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     registered_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    
+    # IPFS Metadata
+    ipfs_cid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ipfs_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ipfs_pin_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
 class PrescriptionItem(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "prescription_items"

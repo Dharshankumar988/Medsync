@@ -61,6 +61,8 @@ class MedicalRecordVersion(Base, UUIDMixin, TimestampMixin):
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
+    ipfs_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ipfs_pin_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     
     record = relationship("MedicalRecord", back_populates="versions")
     doctor_notes = relationship("DoctorNote", back_populates="version", cascade="all, delete-orphan")

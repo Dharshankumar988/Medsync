@@ -40,12 +40,27 @@ export default function PrescriptionsPage() {
         .eq("patient_id", userId)
         .order("created_at", { ascending: false });
         
+      if (error) {
+        console.error("Supabase error fetching prescriptions:", error);
+        toast.error("Failed to load prescriptions");
+      }
+        
       if (data) {
         const doctorIds = [...new Set(data.map(p => p.doctor_id))];
-        const { data: docData } = await supabase
-          .from("doctors")
-          .select("*")
-          .in("user_id", doctorIds);
+        let docData: any[] | null = [];
+        
+        if (doctorIds.length > 0) {
+          const { data: dData, error: docError } = await supabase
+            .from("doctors")
+            .select("*")
+            .in("user_id", doctorIds);
+            
+          if (docError) {
+            console.error("Error fetching doctors for prescriptions:", docError);
+          } else {
+            docData = dData;
+          }
+        }
           
         const docsMap = (docData || []).reduce((acc: any, doc: any) => {
           acc[doc.user_id] = doc;
@@ -60,7 +75,7 @@ export default function PrescriptionsPage() {
         setPrescriptions(mapped);
       }
     } catch (err) {
-      console.error("Error loading prescriptions", err);
+      console.error("Error loading prescriptions:", err);
     } finally {
       setLoading(false);
     }

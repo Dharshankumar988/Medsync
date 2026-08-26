@@ -29,9 +29,8 @@ class GasManager:
             latest_block = blockchain_client.w3.eth.get_block('latest')
             if 'baseFeePerGas' in latest_block:
                 base_fee = latest_block['baseFeePerGas']
-                # Adding 50% buffer to base fee for priority
-                max_fee = int(base_fee * 1.5)
                 max_priority = blockchain_client.w3.eth.max_priority_fee
+                max_fee = int(base_fee * 2) + max_priority
                 
                 transaction['maxFeePerGas'] = max_fee
                 transaction['maxPriorityFeePerGas'] = max_priority

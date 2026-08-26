@@ -31,14 +31,14 @@ pip-delete-this-directory.txt
 # Database
 *.db
 *.sqlite3
-dummy_values.sql
 dummy_values_utf8.sql
 
 # Hardhat / Blockchain
-blockchain/artifacts/
-blockchain/cache/
-blockchain/typechain-types/
-blockchain/node_modules/
+apps/blockchain/artifacts/
+apps/blockchain/cache/
+apps/blockchain/typechain-types/
+apps/blockchain/node_modules/
+apps/blockchain/deployments/
 
 # OS
 .DS_Store

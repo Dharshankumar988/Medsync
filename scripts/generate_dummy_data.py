@@ -128,10 +128,10 @@ def generate_sql():
 
     sql += "COMMIT;\n"
     
-    with open('dummy_values.sql', 'w', encoding='utf-8') as f:
+    with open('database/dummy_values.sql', 'w', encoding='utf-8') as f:
         f.write(sql)
         
-    print("Successfully generated dummy_values.sql with minimal Bangalore dataset.")
+    print("Successfully generated database/dummy_values.sql with minimal Bangalore dataset.")
 
 if __name__ == "__main__":
     generate_sql()

@@ -43,7 +43,8 @@ class ContractLoader:
         if not os.path.exists(abi_file):
             raise ContractNotFound(f"ABI file not found for {contract_name}")
         with open(abi_file, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            return data.get("abi", data) if isinstance(data, dict) else data
 
     def get_contract(self, contract_name: str) -> Contract:
         if contract_name in self.contracts:

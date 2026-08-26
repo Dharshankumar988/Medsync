@@ -3,11 +3,14 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 import os
 import pytest
+import certifi
 
 # Set required environment variables for tests
 os.environ['BACKEND_PRIVATE_KEY'] = '0x1234567890123456789012345678901234567890123456789012345678901234'
 os.environ['BLOCKCHAIN_RPC_URL'] = 'http://localhost:8545'
 os.environ['BLOCKCHAIN_MODE'] = 'mock'
+os.environ['SSL_CERT_FILE'] = certifi.where()
+os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
 # Mock native packages that cannot be installed on Windows ARM64 for local dev testing
 sys.modules['web3'] = MagicMock()
@@ -16,12 +19,6 @@ sys.modules['web3.exceptions'] = MagicMock()
 sys.modules['eth_account'] = MagicMock()
 sys.modules['eth_account.messages'] = MagicMock()
 sys.modules['eth_utils'] = MagicMock()
-sys.modules['cryptography'] = MagicMock()
-sys.modules['cryptography.fernet'] = MagicMock()
-sys.modules['cryptography.hazmat'] = MagicMock()
-sys.modules['cryptography.hazmat.primitives'] = MagicMock()
-sys.modules['cryptography.hazmat.primitives.ciphers'] = MagicMock()
-sys.modules['cryptography.hazmat.backends'] = MagicMock()
 
 @pytest.fixture
 def test_db(patient_user, doctor_user, admin_user):

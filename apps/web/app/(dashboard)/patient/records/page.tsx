@@ -47,11 +47,16 @@ export default function MedicalRecordsPage() {
         .eq("is_archived", false)
         .order("created_at", { ascending: false });
         
+      if (error) {
+        console.error("Supabase error fetching medical records:", error);
+        toast.error("Failed to load medical records");
+      }
+        
       if (data) {
         setRecords(data);
       }
     } catch (err) {
-      console.error("Error loading records", err);
+      console.error("Error loading records:", err);
     } finally {
       setLoading(false);
     }

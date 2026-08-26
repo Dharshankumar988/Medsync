@@ -15,7 +15,7 @@ The audit reveals that **Phase 1 and Phase 2 workflows are largely complete and 
 
 ## 2. Phase 1 Audit (Patient/Doctor + Pharmacy + Prescription Foundation)
 ✅ **VERIFIED WORKING**
-- **Doctor/Patient Registration:** Correctly utilizes Supabase triggers (`handle_new_user` in `database_setup.sql`) to synchronize `auth.users` into `users`, `patients`, `doctors`, and `pharmacies` tables.
+- **Doctor/Patient Registration:** Correctly utilizes Supabase triggers (`handle_new_user` in `database/database_setup.sql`) to synchronize `auth.users` into `users`, `patients`, `doctors`, and `pharmacies` tables.
 - **Doctor Workflow:** XOR logic for `hospital_id` vs `clinic_name` is strictly enforced in the backend (`profile.py` line 175). 
 - **Hospital/Doctor Filtering:** Verified via `hospitals.py` `/{hospital_id}/doctors` endpoint.
 - **Appointment Booking:** Standard booking flow works and prevents overlapping via `AppointmentService`.
@@ -40,7 +40,7 @@ The audit reveals that **Phase 1 and Phase 2 workflows are largely complete and 
 
 ## 5. Security/RLS Audit
 ⚠️ **PARTIALLY IMPLEMENTED / 🔴 SECURITY ISSUE**
-- **Row Level Security (RLS):** Fully implemented in `database_setup.sql` (Lines 1136+). Policies correctly isolate patient data, doctor records, and medical records using `auth.uid()`.
+- **Row Level Security (RLS):** Fully implemented in `database/database_setup.sql` (Lines 1136+). Policies correctly isolate patient data, doctor records, and medical records using `auth.uid()`.
 - 🔴 **VULNERABILITY - Hospital Creation:** In `hospitals.py`, the `@router.post("/")` endpoint for creating hospitals is **not protected by the Admin role checker**. The comment states: `Should be protected by admin role, but relying on frontend`. This allows any authenticated (or unauthenticated) user to create verified hospitals via the API.
 - 🔴 **VULNERABILITY - Prescription Dispense Authorization:** In `prescriptions.py`, the `/{id}/dispense` route checks inventory and order status, but does not strictly re-verify the Authorization PIN on the backend at the exact moment of dispensing (it relies on the earlier `/{id}/verify` step). This is a minor race condition risk but functional.
 

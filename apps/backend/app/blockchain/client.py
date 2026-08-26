@@ -20,6 +20,9 @@ class BlockchainClient:
 
     def _initialize(self):
         import os
+        self.configured = False
+        self.w3 = None
+        
         if os.getenv("BLOCKCHAIN_MODE", "mock").lower() == "mock":
             logger.info("Mock mode enabled. Skipping RPC and wallet initialization.")
             self.wallet_address = "0x0000000000000000000000000000000000000000"
@@ -28,10 +31,10 @@ class BlockchainClient:
         try:
             blockchain_settings.validate()
         except ValueError as e:
-            logger.error(f"Blockchain configuration error: {e}")
-            raise WalletConfigurationError(str(e))
+            logger.warning(f"Blockchain configuration missing: {e}. Blockchain features disabled.")
+            return
 
-        from web3.middleware import ExtraDataToPOAMiddleware, geth_poa_middleware
+        from web3.middleware import geth_poa_middleware
         from requests.adapters import HTTPAdapter
         from urllib3.util.retry import Retry
         import requests
@@ -50,7 +53,8 @@ class BlockchainClient:
         
         if not self.w3.is_connected():
             logger.error(f"Failed to connect to RPC node: {blockchain_settings.POLYGON_RPC_URL}")
-            raise RPCConnectionError("Unable to connect to blockchain RPC")
+            # Do not raise here so app doesn't crash on boot; wait until invoked
+            return
 
         try:
             # Ensure the key has a 0x prefix if it's hex
@@ -59,18 +63,27 @@ class BlockchainClient:
                 pk = "0x" + pk
             self.account = Account.from_key(pk)
             self.wallet_address = self.account.address
+            self.configured = True
             logger.info(f"Initialized Blockchain Client with secure wallet: {self.wallet_address}")
         except Exception as e:
             logger.error("Failed to initialize wallet from private key. Ensure BACKEND_PRIVATE_KEY is correct.")
-            raise WalletConfigurationError("Invalid backend private key")
+            # Do not raise during boot
+
+    def _ensure_configured(self):
+        if not getattr(self, 'configured', False) or self.w3 is None:
+            raise WalletConfigurationError("Blockchain functionality is not configured.")
+
 
     def get_chain_id(self) -> int:
+        self._ensure_configured()
         return self.w3.eth.chain_id
 
     def get_current_block(self) -> int:
+        self._ensure_configured()
         return self.w3.eth.block_number
 
     def get_balance(self, address: str = None) -> float:
+        self._ensure_configured()
         target = address or self.wallet_address
         balance_wei = self.w3.eth.get_balance(Web3.to_checksum_address(target))
         return float(self.w3.from_wei(balance_wei, "ether"))

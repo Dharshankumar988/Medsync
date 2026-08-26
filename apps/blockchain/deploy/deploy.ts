@@ -1,6 +1,6 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { validateEnvironment } from "./utils/envValidation";
-import { saveMetadata, DeploymentRecord } from "./utils/metadata";
+import { saveMetadata, DeploymentRecord, getContractAddress } from "./utils/metadata";
 import { exportABIs } from "./utils/abiExport";
 import { verifyContract } from "./utils/verification";
 
@@ -30,6 +30,18 @@ export async function runDeployment(hre: HardhatRuntimeEnvironment) {
   const deployedContracts: { name: string; address: string }[] = [];
 
   for (const contractName of CONTRACTS_TO_DEPLOY) {
+    const existingAddress = getContractAddress(hre.network.name, contractName);
+    if (existingAddress) {
+      const code = await hre.ethers.provider.getCode(existingAddress);
+      if (code !== "0x" && code !== "") {
+        console.log(`\n--- Reusing existing deployment for ${contractName} at ${existingAddress} ---`);
+        deployedContracts.push({ name: contractName, address: existingAddress });
+        continue;
+      } else {
+        console.log(`\n--- Found address ${existingAddress} for ${contractName} but no bytecode. Redeploying... ---`);
+      }
+    }
+
     console.log(`\n--- Deploying ${contractName} ---`);
     const ContractFactory = await hre.ethers.getContractFactory(contractName);
     const contract = await ContractFactory.deploy();

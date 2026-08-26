@@ -65,4 +65,52 @@ class BlockchainGateway:
         """
         return health_service.get_health()
 
+    # --- Application-Level Blockchain Methods ---
+
+    def register_medical_record(self, record_hash: bytes, patient_hash: bytes) -> TransactionReceiptResult:
+        return self.write_contract("MedicalRecordRegistry", "registerRecord", record_hash, patient_hash)
+
+    def verify_medical_record(self, record_hash: bytes) -> TransactionReceiptResult:
+        return self.write_contract("MedicalRecordRegistry", "verifyRecord", record_hash)
+
+    def register_prescription(self, prescription_hash: bytes, patient_hash: bytes, doctor_hash: bytes) -> TransactionReceiptResult:
+        return self.write_contract("PrescriptionRegistry", "createPrescription", prescription_hash, patient_hash, doctor_hash)
+
+    def verify_prescription(self, prescription_hash: bytes) -> TransactionReceiptResult:
+        return self.write_contract("PrescriptionRegistry", "verifyPrescription", prescription_hash)
+
+    def register_patient(self, patient_hash: bytes, wallet: str) -> TransactionReceiptResult:
+        if len(patient_hash) != 32:
+            raise ValueError(f"patient_hash must be exactly 32 bytes for bytes32 ABI, got {len(patient_hash)}")
+        return self.write_contract("PatientRegistry", "registerPatient", patient_hash, wallet)
+
+    def verify_patient(self, patient_hash: bytes) -> TransactionReceiptResult:
+        if len(patient_hash) != 32:
+            raise ValueError(f"patient_hash must be exactly 32 bytes for bytes32 ABI, got {len(patient_hash)}")
+        return self.write_contract("PatientRegistry", "verifyPatient", patient_hash)
+
+    def register_doctor(self, doctor_hash: bytes, license_hash: bytes, hospital_hash: bytes, wallet: str) -> TransactionReceiptResult:
+        return self.write_contract("DoctorRegistry", "registerDoctor", doctor_hash, license_hash, hospital_hash, wallet)
+
+    def verify_doctor(self, doctor_hash: bytes) -> TransactionReceiptResult:
+        return self.write_contract("DoctorRegistry", "verifyDoctor", doctor_hash)
+
+    def register_pharmacy(self, pharmacy_hash: bytes, license_hash: bytes, owner: str) -> TransactionReceiptResult:
+        return self.write_contract("PharmacyRegistry", "registerPharmacy", pharmacy_hash, license_hash, owner)
+
+    def verify_pharmacy(self, pharmacy_hash: bytes) -> TransactionReceiptResult:
+        return self.write_contract("PharmacyRegistry", "verifyPharmacy", pharmacy_hash)
+
+    def log_audit_event(self, event_type: bytes, entity_hash: bytes) -> TransactionReceiptResult:
+        # Enforce exact 32 bytes for bytes32
+        if len(event_type) < 32:
+            event_type = event_type.ljust(32, b'\x00')
+        elif len(event_type) > 32:
+            raise ValueError(f"event_type must be <= 32 bytes to fit in bytes32 ABI, got {len(event_type)}")
+            
+        if len(entity_hash) != 32:
+            raise ValueError(f"entity_hash must be exactly 32 bytes for bytes32 ABI, got {len(entity_hash)}")
+            
+        return self.write_contract("AuditTrail", "logEvent", event_type, entity_hash)
+
 blockchain_gateway = BlockchainGateway()
