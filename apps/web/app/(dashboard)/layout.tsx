@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 
 import { PulseAIFloating } from "@/components/pulse-ai/PulseAIFloating";
-import ProfileCompletionModal from "@/components/patient/ProfileCompletionModal";
+import { ProfileCompletionBadge } from "@/components/profile-wizard/ProfileCompletionBadge";
 import SecurityEnrollmentModal from "@/components/patient/SecurityEnrollmentModal";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -22,6 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (pathname.includes('/patient') && roleValue !== 'patient') router.push('/unauthorized');
       if (pathname.includes('/doctor') && roleValue !== 'doctor') router.push('/unauthorized');
       if (pathname.includes('/admin') && roleValue !== 'admin') router.push('/unauthorized');
+      if (pathname.includes('/hospital') && roleValue !== 'hospital') router.push('/unauthorized');
       if (pathname.includes('/pharmacy') && roleValue !== 'pharmacy') router.push('/unauthorized');
     }).catch(() => {
       router.push('/login');
@@ -33,6 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (pathname.includes('/patient')) return 'patient';
     if (pathname.includes('/doctor')) return 'doctor';
     if (pathname.includes('/admin')) return 'admin';
+    if (pathname.includes('/hospital')) return 'hospital';
     if (pathname.includes('/pharmacy')) return 'pharmacy';
     return 'patient'; // Fallback
   }, [pathname]);
@@ -44,6 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     admin: '0 84% 60%',      // Red
     doctor: '142 71% 45%',   // Green
     pharmacy: '48 96% 53%',  // Yellow
+    hospital: '280 65% 60%', // Purple
     patient: '221 83% 53%',  // Default Blue
   };
   
@@ -64,7 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
       <PulseAIFloating role={displayRole as any} />
-      <ProfileCompletionModal />
+      <ProfileCompletionBadge role={displayRole as any} />
       <SecurityEnrollmentModal />
     </div>
   )

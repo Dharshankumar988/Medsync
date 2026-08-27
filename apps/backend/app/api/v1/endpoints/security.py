@@ -112,3 +112,120 @@ async def enroll_face_endpoint(
         for tmp_file in temp_files:
             if os.path.exists(tmp_file):
                 os.remove(tmp_file)
+
+@router.post("/verify-face")
+async def verify_face_endpoint(
+    image: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Verifies the patient's identity using Face ID.
+    The patient identity is derived from the authenticated token, not the frontend.
+    """
+    if current_user.role.upper() != UserRole.PATIENT.value.upper():
+        raise HTTPException(status_code=403, detail="Only patients can use Face ID verification.")
+
+    result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id))
+    profile = result.scalar_one_or_none()
+    if not profile or not profile.encrypted_template:
+        raise HTTPException(status_code=400, detail="Face ID not enrolled.")
+
+    suffix = f".{image.filename.split('.')[-1]}" if '.' in image.filename else ".jpg"
+    tmp_file = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(image.file, tmp)
+            tmp_file = tmp.name
+        
+        import asyncio
+        match_score = await asyncio.to_thread(face_auth_service.verify_patient, profile.encrypted_template, tmp_file)
+        
+        # Audit log for verification attempt
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="FACE_VERIFICATION_SUCCESS" if match_score > 0.6 else "FACE_VERIFICATION_FAILED",
+            entity_type="PatientBiometricProfile",
+            entity_id=current_user.id,
+            details={"match_score": match_score}
+        )
+        db.add(audit)
+        await db.commit()
+
+        if match_score > 0.6:  # Threshold can be adjusted
+            return {"verified": True, "match_score": match_score, "message": "Face verified successfully."}
+        else:
+            return {"verified": False, "match_score": match_score, "message": "Face verification failed."}
+            
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="An error occurred during face verification.")
+    finally:
+        if tmp_file and os.path.exists(tmp_file):
+            os.remove(tmp_file)
+
+@router.post("/change-pin-face")
+async def change_pin_face(
+    image: UploadFile = File(...),
+    new_pin: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Allows a patient to change their PIN using Face ID as authorization.
+    """
+    if current_user.role.upper() != UserRole.PATIENT.value.upper():
+        raise HTTPException(status_code=403, detail="Only patients can change their PIN.")
+        
+    result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id))
+    profile = result.scalar_one_or_none()
+    if not profile or not profile.encrypted_template:
+        raise HTTPException(status_code=400, detail="Face ID not enrolled.")
+
+    suffix = f".{image.filename.split('.')[-1]}" if '.' in image.filename else ".jpg"
+    tmp_file = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(image.file, tmp)
+            tmp_file = tmp.name
+        
+        import asyncio
+        match_score = await asyncio.to_thread(face_auth_service.verify_patient, profile.encrypted_template, tmp_file)
+        
+        if match_score <= 0.6:
+            # Audit log for failed change
+            audit = AuditLog(
+                user_id=current_user.id,
+                action="FACE_CHANGE_PIN_FAILED",
+                entity_type="PatientBiometricProfile",
+                entity_id=current_user.id,
+                details={"match_score": match_score}
+            )
+            db.add(audit)
+            await db.commit()
+            raise HTTPException(status_code=401, detail="Face verification failed.")
+            
+        # If authorized, change the PIN
+        await enroll_patient_pin(db, current_user.id, new_pin)
+        
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="FACE_CHANGE_PIN_SUCCESS",
+            entity_type="PatientBiometricProfile",
+            entity_id=current_user.id
+        )
+        db.add(audit)
+        await db.commit()
+        
+        return {"message": "PIN changed successfully using Face ID."}
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="An error occurred during PIN change.")
+    finally:
+        if tmp_file and os.path.exists(tmp_file):
+            os.remove(tmp_file)

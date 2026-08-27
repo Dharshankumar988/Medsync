@@ -6,9 +6,9 @@ import { Skeleton } from "@medsync/ui";
 import { Users, Calendar, Activity, CheckCircle2, TrendingUp, DollarSign, ArrowUpRight, MessageSquare, Stethoscope, Brain, FileText, Clock } from "lucide-react";
 import { Button } from "@medsync/ui";
 import { AuditHistory } from "@medsync/ui";
-import { ProfileCompletionCard } from "@/components/profile-wizard/ProfileCompletionCard";
 import { AppointmentHeatmap } from "@/components/doctor/AppointmentHeatmap";
 import { PatientQueue } from "@/components/doctor/PatientQueue";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -107,8 +107,6 @@ export default function DoctorDashboard() {
       {/* Ambient glow */}
       <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-emerald-500/[0.04] rounded-full blur-[100px]" />
 
-      {userId && <ProfileCompletionCard userId={userId} role="doctor" />}
-
       {/* ─── Header ─── */}
       <motion.div
         initial="hidden"
@@ -179,7 +177,15 @@ export default function DoctorDashboard() {
         variants={stagger}
       >
         <motion.div variants={fadeUp} className="col-span-full lg:col-span-4">
-          <PatientQueue queue={todayAppointments} />
+          {todayAppointments.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="No patients today"
+              description="You have no scheduled consultations for today."
+            />
+          ) : (
+            <PatientQueue queue={todayAppointments} />
+          )}
         </motion.div>
         <motion.div variants={fadeUp} className="col-span-full lg:col-span-3">
           <AppointmentHeatmap />

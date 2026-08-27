@@ -7,7 +7,6 @@ from app.schemas.response import APIResponse
 from app.schemas.pharmacy_system import MedicineOrderCreate, MedicineOrderResponse
 from app.services.pharmacy_system import PharmacyService
 from app.models.pharmacy_system import DeliveryTracking, MedicineOrder, OrderStatus
-import random
 import uuid
 from datetime import datetime, timedelta
 import hashlib
@@ -209,3 +208,42 @@ async def verify_delivery(
     await db.commit()
     
     return APIResponse(message="Delivery verified and completed successfully", data=None)
+
+@router.post("/{order_id}/generate-delivery-code", response_model=APIResponse)
+async def generate_delivery_code(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(RoleChecker([UserRole.PATIENT]))
+):
+    # Verify order ownership
+    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
+    order_res = await db.execute(order_stmt)
+    order = order_res.scalar_one_or_none()
+    
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    if order.patient_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to generate code for this order")
+        
+    stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id).with_for_update()
+    result = await db.execute(stmt)
+    tracking = result.scalar_one_or_none()
+    
+    if not tracking:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Tracking info not found")
+
+    # Generate new OTP using cryptographically secure generator
+    import secrets
+    otp = str(secrets.SystemRandom().randint(1000, 9999)) # 4-digit code requested by user
+    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+    
+    tracking.delivery_code_hash = otp_hash
+    tracking.delivery_code_expiry = datetime.utcnow() + timedelta(minutes=15)
+    
+    await db.commit()
+    
+    return APIResponse(message="Code generated successfully", data={"otp": otp})

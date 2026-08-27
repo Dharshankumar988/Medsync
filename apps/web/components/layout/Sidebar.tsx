@@ -143,6 +143,22 @@ const menuGroups = {
         { name: "Profile", href: "/admin/profile", icon: UserPlus },
       ]
     }
+  ],
+  hospital: [
+    {
+      label: "OVERVIEW",
+      items: [
+        { name: "Dashboard", href: "/hospital/dashboard", icon: LayoutDashboard },
+        { name: "Doctors", href: "/hospital/doctors", icon: Users },
+        { name: "Appointments", href: "/hospital/appointments", icon: Calendar },
+      ]
+    },
+    {
+      label: "OPERATIONS",
+      items: [
+        { name: "Settings", href: "/hospital/settings", icon: Settings },
+      ]
+    }
   ]
 };
 

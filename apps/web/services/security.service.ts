@@ -50,4 +50,29 @@ export class SecurityService {
     });
     return response.data;
   }
+
+  static async verifyFace(token: string, faceImage: File) {
+    const formData = new FormData();
+    formData.append('image', faceImage);
+    const response = await axios.post(`${API_URL}/security/verify-face`, formData, {
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  }
+
+  static async changePinWithFace(token: string, newPin: string, faceImage: File) {
+    const formData = new FormData();
+    formData.append('new_pin', newPin);
+    formData.append('image', faceImage);
+    const response = await axios.post(`${API_URL}/security/change-pin-face`, formData, {
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  }
 }

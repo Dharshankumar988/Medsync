@@ -7,6 +7,7 @@ from app.models.mixins import UUIDMixin, TimestampMixin
 class Hospital(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "hospitals"
     
+    user_id: Mapped[uuid.UUID] = mapped_column(nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=True)
@@ -26,4 +27,5 @@ class Hospital(Base, UUIDMixin, TimestampMixin):
     logo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     # Relationships
+    user = relationship("User", back_populates="hospital_profile")
     doctors = relationship("Doctor", back_populates="hospital")

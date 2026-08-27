@@ -19,10 +19,10 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Input } from "
 import { pharmacyService, PharmacyInventoryItem, PharmacyOrder } from "@/services/pharmacy.service";
 import dynamic from "next/dynamic";
 const DeliveryMap = dynamic(() => import("@/components/pharmacy/DeliveryMap").then(m => m.DeliveryMap), { ssr: false });
-import { ProfileCompletionCard } from "@/components/profile-wizard/ProfileCompletionCard";
 import { InventoryOverviewWidget } from "@/components/pharmacy/InventoryOverviewWidget";
 import { ExpiringMedicines } from "@/components/pharmacy/ExpiringMedicines";
 import { supabase } from "@/lib/supabase";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -161,8 +161,6 @@ export default function PharmacyDashboardPage() {
       {/* Ambient glow */}
       <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-amber-500/[0.04] rounded-full blur-[100px]" />
 
-      {userId && <ProfileCompletionCard userId={userId} role="pharmacy" />}
-
       {/* ─── Header Banner ─── */}
       <motion.div initial="hidden" animate="visible" variants={stagger}>
         <motion.div
@@ -298,58 +296,62 @@ export default function PharmacyDashboardPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-muted/30 text-muted-foreground uppercase text-xs border-b border-border">
-                    <tr>
-                      <th className="px-6 py-3">Order ID</th>
-                      <th className="px-6 py-3">Patient Name</th>
-                      <th className="px-6 py-3">Medication</th>
-                      <th className="px-6 py-3">Status</th>
-                      <th className="px-6 py-3 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {orders.map((order) => (
-                      <tr key={order.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-6 py-4 font-mono text-xs">{order.id.slice(0, 8)}...</td>
-                        <td className="px-6 py-4 font-medium">{order.patient_name}</td>
-                        <td className="px-6 py-4">{order.medication}</td>
-                        <td className="px-6 py-4">
-                          <Badge className={`rounded-lg ${
-                            order.status === "DISPENSED" 
-                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                              : "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                          }`}>
-                            {order.status}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          {order.status === "PENDING" ? (
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleDispense(order.prescription_id, order.id)}
-                              className="rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-medium h-8"
-                            >
-                              Dispense
-                            </Button>
-                          ) : order.status === "DISPENSED" ? (
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleDispatch(order.id)}
-                              className="rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium h-8"
-                            >
-                              Dispatch
-                            </Button>
-                          ) : order.status === "OUT_FOR_DELIVERY" ? (
-                            <span className="text-xs text-blue-500 font-semibold">Out for Delivery</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{order.status}</span>
-                          )}
-                        </td>
+                {orders.length === 0 ? (
+                  <EmptyState icon={Package} title="No Pending Orders" description="There are no prescriptions or orders in the queue." className="border-0 rounded-none bg-transparent" />
+                ) : (
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-muted/30 text-muted-foreground uppercase text-xs border-b border-border">
+                      <tr>
+                        <th className="px-6 py-3">Order ID</th>
+                        <th className="px-6 py-3">Patient Name</th>
+                        <th className="px-6 py-3">Medication</th>
+                        <th className="px-6 py-3">Status</th>
+                        <th className="px-6 py-3 text-right">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {orders.map((order) => (
+                        <tr key={order.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="px-6 py-4 font-mono text-xs">{order.id.slice(0, 8)}...</td>
+                          <td className="px-6 py-4 font-medium">{order.patient_name}</td>
+                          <td className="px-6 py-4">{order.medication}</td>
+                          <td className="px-6 py-4">
+                            <Badge className={`rounded-lg ${
+                              order.status === "DISPENSED" 
+                                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                            }`}>
+                              {order.status}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            {order.status === "PENDING" ? (
+                              <Button 
+                                size="sm" 
+                                onClick={() => handleDispense(order.prescription_id, order.id)}
+                                className="rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-medium h-8"
+                              >
+                                Dispense
+                              </Button>
+                            ) : order.status === "DISPENSED" ? (
+                              <Button 
+                                size="sm" 
+                                onClick={() => handleDispatch(order.id)}
+                                className="rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium h-8"
+                              >
+                                Dispatch
+                              </Button>
+                            ) : order.status === "OUT_FOR_DELIVERY" ? (
+                              <span className="text-xs text-blue-500 font-semibold">Out for Delivery</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">{order.status}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -374,28 +376,32 @@ export default function PharmacyDashboardPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-muted/30 text-muted-foreground uppercase text-xs border-b border-border">
-                    <tr>
-                      <th className="px-6 py-3">Medication Name</th>
-                      <th className="px-6 py-3">Dosage</th>
-                      <th className="px-6 py-3">Stock Units</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filteredInventory.slice(0, 10).map((item) => (
-                      <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-6 py-4 font-semibold">{item.medication_name}</td>
-                        <td className="px-6 py-4">{item.dosage}</td>
-                        <td className="px-6 py-4">
-                          <span className={item.stock < 100 ? "text-amber-500 font-bold" : ""}>
-                            {item.stock} units
-                          </span>
-                        </td>
+                {filteredInventory.length === 0 ? (
+                  <EmptyState icon={Package} title="Inventory Empty" description="No inventory items found matching your search." className="border-0 rounded-none bg-transparent" />
+                ) : (
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-muted/30 text-muted-foreground uppercase text-xs border-b border-border">
+                      <tr>
+                        <th className="px-6 py-3">Medication Name</th>
+                        <th className="px-6 py-3">Dosage</th>
+                        <th className="px-6 py-3">Stock Units</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredInventory.slice(0, 10).map((item) => (
+                        <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="px-6 py-4 font-semibold">{item.medication_name}</td>
+                          <td className="px-6 py-4">{item.dosage}</td>
+                          <td className="px-6 py-4">
+                            <span className={item.stock < 100 ? "text-amber-500 font-bold" : ""}>
+                              {item.stock} units
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </CardContent>
           </Card>

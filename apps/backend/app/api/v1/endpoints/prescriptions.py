@@ -295,6 +295,7 @@ async def order_prescription_online(
             prescription_id=rx.id,
             status=OrderStatus.PENDING,
             delivery_address=delivery_address,
+            order_type="ONLINE_DELIVERY",
             total_amount=0.0
         )
         db.add(order)
@@ -303,3 +304,73 @@ async def order_prescription_online(
         pass
         
     return APIResponse(message="Prescription order placed successfully", data={"prescription_id": str(rx.id)})
+
+@router.post("/{id}/physical-pickup", response_model=APIResponse)
+async def physical_pickup_prescription(
+    id: uuid.UUID,
+    pharmacy_id: uuid.UUID = Form(...),
+    pin: str = Form(None),
+    face_image: UploadFile = File(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT]))
+):
+    # Fetch prescription
+    stmt = select(Prescription).where(Prescription.id == id, Prescription.patient_id == current_user.id)
+    result = await db.execute(stmt)
+    rx = result.scalar_one_or_none()
+    
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    if rx.is_dispensed:
+        raise HTTPException(status_code=400, detail="Prescription has already been dispensed")
+
+    from app.services.security_service import validate_patient_pin
+    from app.services.face_auth_service import face_auth_service
+    from app.models.security import PatientBiometricProfile
+    import tempfile, shutil, os, asyncio
+
+    # Authorize using either PIN or Face
+    if pin:
+        pin_valid = await validate_patient_pin(db, current_user.id, pin)
+        if not pin_valid:
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN")
+    elif face_image:
+        bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id)
+        bio_res = await db.execute(bio_stmt)
+        bio_profile = bio_res.scalar_one_or_none()
+        
+        if not bio_profile:
+            raise HTTPException(status_code=400, detail="Biometric profile not enrolled.")
+            
+        suffix = f".{face_image.filename.split('.')[-1]}" if '.' in face_image.filename else ".jpg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(face_image.file, tmp)
+            tmp_path = tmp.name
+
+        try:
+            face_verified = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
+            if not face_verified:
+                raise HTTPException(status_code=401, detail="Face verification failed")
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+    else:
+        raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
+        
+    try:
+        from app.models.pharmacy_system import MedicineOrder, OrderStatus
+        order = MedicineOrder(
+            id=uuid.uuid4(),
+            pharmacy_id=pharmacy_id,
+            patient_id=current_user.id,
+            prescription_id=rx.id,
+            status=OrderStatus.PENDING,
+            order_type="PHYSICAL_PICKUP",
+            total_amount=0.0
+        )
+        db.add(order)
+        await db.commit()
+    except ImportError:
+        pass
+        
+    return APIResponse(message="Physical pickup authorized successfully", data={"prescription_id": str(rx.id)})

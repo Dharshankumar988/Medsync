@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } fro
 import { Skeleton } from "@medsync/ui";
 import { Clock, FileText, CheckCircle2, ChevronRight, AlertCircle, Syringe, Pill, Heart, Brain, Calendar, ShieldCheck, ShoppingBag, Activity } from "lucide-react";
 import { AuditHistory } from "@medsync/ui";
-import { ProfileCompletionCard } from "@/components/profile-wizard/ProfileCompletionCard";
 import { HealthStatistics } from "@/components/patient/HealthStatistics";
 import { QuickActionsMenu } from "@/components/patient/QuickActionsMenu";
 import { supabase } from "@/lib/supabase";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
@@ -20,7 +20,6 @@ const stagger = { visible: { transition: { staggerChildren: 0.03 } } };
 
 import { useQuery } from "@tanstack/react-query";
 import { dashboardService } from "@/services/dashboard.service";
-import { appointmentService } from "@/services/appointment.service";
 
 export default function PatientDashboard() {
   const [userId, setUserId] = useState<string>("");
@@ -35,20 +34,18 @@ export default function PatientDashboard() {
     upcoming_appointments: 0,
     total_records: 0,
     active_prescriptions: 0,
-    ongoing_orders: 0
-  }, isLoading } = useQuery({
+    ongoing_orders: 0,
+    recent_appointments: [] as any[],
+    recent_records: [] as any[],
+    recent_prescriptions: [] as any[],
+    recent_orders: [] as any[]
+  } as NonNullable<Awaited<ReturnType<typeof dashboardService.getPatientDashboard>>>, isLoading } = useQuery({
     queryKey: ["patientDashboard", userId],
     queryFn: () => dashboardService.getPatientDashboard(),
     enabled: !!userId,
   });
 
-  const { data: appointmentsData } = useQuery({
-    queryKey: ["patientAppointments", userId],
-    queryFn: () => appointmentService.getAppointments({ limit: 5 }),
-    enabled: !!userId,
-  });
-
-  const recentAppointments = appointmentsData?.items || [];
+  const recentAppointments = dashboardData?.recent_appointments || [];
 
   const stats = [
     {
@@ -93,8 +90,6 @@ export default function PatientDashboard() {
     <div className="relative space-y-8 pb-12">
       {/* Ambient glow */}
       <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-blue-500/[0.04] rounded-full blur-[100px]" />
-
-      {userId && <ProfileCompletionCard userId={userId} role="patient" />}
 
       {/* ─── Header ─── */}
       <motion.div initial="hidden" animate="visible" variants={stagger} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -186,14 +181,18 @@ export default function PatientDashboard() {
             <CardContent>
               <div className="space-y-5">
                 {recentAppointments.length === 0 ? (
-                  <div className="text-sm text-muted-foreground text-center py-4">No recent events.</div>
+                  <EmptyState 
+                    icon={Calendar} 
+                    title="No recent events" 
+                    description="You have no upcoming or recent appointments."
+                  />
                 ) : (
                   recentAppointments.map((appt: any) => (
                     <div key={appt.id} className="flex items-start gap-3 border-b border-border/40 pb-3 last:border-0 last:pb-0">
                       <div className="h-2 w-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                       <div>
-                        <p className="text-sm font-medium">Appointment with Dr. {appt.doctor?.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{new Date(appt.appointment_date).toLocaleDateString()} at {appt.start_time}</p>
+                        <p className="text-sm font-medium">Appointment with Dr. {appt.doctor?.full_name || 'Assigned Doctor'}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(appt.appointment_date).toLocaleDateString()} at {appt.start_time?.slice(0,5)}</p>
                         <span className={`text-[10px] font-semibold mt-1 px-2 py-0.5 rounded-full inline-block ${appt.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
                           {appt.status}
                         </span>

@@ -11,6 +11,7 @@ class UserRole(str, enum.Enum):
     PATIENT = "PATIENT"
     DOCTOR = "DOCTOR"
     PHARMACY = "PHARMACY"
+    HOSPITAL = "HOSPITAL"
     ADMIN = "ADMIN"
 
 class UserStatus(str, enum.Enum):
@@ -38,4 +39,5 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     patient_profile = relationship("Patient", back_populates="user", uselist=False)
     doctor_profile = relationship("Doctor", foreign_keys="[Doctor.user_id]", back_populates="user", uselist=False)
     pharmacy_profile = relationship("Pharmacy", back_populates="user", uselist=False)
+    hospital_profile = relationship("Hospital", back_populates="user", uselist=False)
     admin_profile = relationship("Admin", back_populates="user", uselist=False)

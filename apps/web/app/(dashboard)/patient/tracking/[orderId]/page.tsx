@@ -1,275 +1,224 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
-import Image from "next/image";
-
-const TrackingMap = dynamic(() => import("@/components/TrackingMap"), { ssr: false });
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
-import { Button } from "@medsync/ui";
-import { Input } from "@medsync/ui";
-import { Skeleton } from "@medsync/ui";
-import { CheckCircle2, Navigation, Package, Clock, ShieldCheck, MapPin } from "lucide-react";
+import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from "@medsync/ui";
+import { MapPin, Truck, Package, CheckCircle2, Navigation, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
+import dynamic from "next/dynamic";
 
+const DeliveryMap = dynamic(() => import("@/components/pharmacy/DeliveryMap").then(m => m.DeliveryMap), { ssr: false });
+import { orderService } from "@/services/order.service";
 
-
-export default function PatientTrackingPage() {
-  const params = useParams();
+export default function DeliveryTrackingPage({ params }: { params: Promise<{ orderId: string }> }) {
   const router = useRouter();
-  const orderId = params.orderId as string;
-
-  const [loading, setLoading] = useState(true);
-  const [trackingData, setTrackingData] = useState<any>(null);
-  const [currentPos, setCurrentPos] = useState<[number, number] | null>(null);
-  const [otp, setOtp] = useState("");
-  const [isVerifying, setIsVerifying] = useState(false);
-  const animationRef = useRef<number>();
+  const { orderId } = use(params);
+  const [order, setOrder] = useState<any>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<"processing" | "out_for_delivery" | "arrived" | "delivered">("processing");
+  const [progress, setProgress] = useState(0);
+  const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
 
   useEffect(() => {
-    const fetchTracking = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token || "";
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-        const res = await fetch(`${baseUrl}/orders/${orderId}/tracking`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const data = await (res.json() as Promise<any>);
-        
-        if (data.data) {
-          setTrackingData(data.data);
-          if (data.data.current_lat && data.data.current_lng) {
-             setCurrentPos([data.data.current_lat, data.data.current_lng]);
-          }
-        }
-      } catch (error) {
-        alert("Failed to fetch tracking data");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTracking();
+    fetchOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
-  // Simulation Loop
-  useEffect(() => {
-    if (!trackingData || trackingData.status === "DELIVERED" || trackingData.status === "PREPARING") return;
-
-    let lastTime = performance.now();
-    const speed = trackingData.speed || 40; // km/h
-    const speedPerMs = (speed / 3600) / 1000; // km per ms
-    
-    // Very naive distance to degrees approximation (1 degree approx 111 km)
-    const kmToDeg = 1 / 111;
-
-    const animate = (time: number) => {
-      const dt = time - lastTime;
-      lastTime = time;
-
-      setCurrentPos((prev) => {
-        if (!prev) return null;
-        
-        const [lat, lng] = prev;
-        const [endLat, endLng] = [trackingData.end_lat, trackingData.end_lng];
-        
-        const distLat = endLat - lat;
-        const distLng = endLng - lng;
-        const distSq = distLat * distLat + distLng * distLng;
-        
-        if (distSq < 0.000001) return [endLat, endLng]; // Reached
-
-        const dist = Math.sqrt(distSq);
-        const ratio = Math.min((speedPerMs * dt * kmToDeg) / dist, 1);
-        
-        // Add some random pause/slowdown for realism
-        if (Math.random() > 0.98) return prev; // Traffic light simulation
-
-        return [lat + distLat * ratio, lng + distLng * ratio];
-      });
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    animationRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    };
-  }, [trackingData]);
-
-  const handleVerifyOTP = async () => {
-    setIsVerifying(true);
+  const fetchOrder = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || "";
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-      const res = await fetch(`${baseUrl}/orders/${orderId}/verify-delivery`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ otp }),
-      });
-      const data = await res.json();
-      
-      if (res.ok) {
-        alert("Delivery confirmed successfully!");
-        setTrackingData((prev: any) => ({ ...prev, status: "DELIVERED", progress: 100 }));
-      } else {
-        alert(data.message || "Invalid OTP");
+      const { data } = await supabase.from('medicine_orders').select('*, pharmacies:pharmacy_id(full_name)').eq('id', orderId).single();
+      if (data) {
+        setOrder(data);
+        if (data.status === "SHIPPED" || data.status === "OUT_FOR_DELIVERY") {
+          setDeliveryStatus("out_for_delivery");
+          startTrackingAnimation();
+        } else if (data.status === "DELIVERED") {
+          setDeliveryStatus("delivered");
+          setProgress(100);
+        }
       }
-    } catch (error) {
-      alert("An error occurred verifying delivery");
-    } finally {
-      setIsVerifying(false);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6 max-w-4xl mx-auto p-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-[400px] w-full rounded-xl" />
-        <Skeleton className="h-[200px] w-full rounded-xl" />
-      </div>
-    );
-  }
+  const startTrackingAnimation = () => {
+    // 10-minute slow-moving delivery animation (simulated here faster for demo, say 2 minutes)
+    const durationMs = 120000;
+    const intervalMs = 1000;
+    const steps = durationMs / intervalMs;
+    let currentStep = 0;
 
-  if (!trackingData) {
-    return (
-      <div className="p-8 text-center max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold">Order Not Found</h2>
-        <p className="text-muted-foreground mt-2">Could not track this order.</p>
-        <Button className="mt-4" onClick={() => router.push("/patient/dashboard")}>Back to Dashboard</Button>
-      </div>
-    );
-  }
+    const interval = setInterval(() => {
+      currentStep++;
+      const newProgress = Math.min((currentStep / steps) * 100, 100);
+      setProgress(newProgress);
+      if (newProgress >= 100) {
+        setDeliveryStatus("arrived");
+        clearInterval(interval);
+      }
+    }, intervalMs);
+    
+    return () => clearInterval(interval);
+  };
 
-  const isDelivered = trackingData.status === "DELIVERED";
+  const handleOrderDelivered = async () => {
+    setGeneratingCode(true);
+    try {
+      const res = await orderService.generateDeliveryCode(orderId as string);
+      
+      setDeliveryCode(res.data.otp);
+      setDeliveryStatus("arrived");
+      
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate code.");
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
+  // Poll for delivery completion by driver
+  useEffect(() => {
+    if (deliveryCode && deliveryStatus === "arrived") {
+      const interval = setInterval(async () => {
+        const { data } = await supabase.from('medicine_orders').select('status').eq('id', orderId).single();
+        if (data && data.status === "DELIVERED") {
+          setDeliveryStatus("delivered");
+          clearInterval(interval);
+        }
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [deliveryCode, deliveryStatus, orderId]);
+
+  if (!order) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center">
-            Live Tracking
-            <span className="ml-3 inline-flex items-center rounded-full bg-orange-100 dark:bg-orange-900/30 px-2.5 py-0.5 text-xs font-semibold text-orange-800 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
-              Simulation Mode
-            </span>
-          </h1>
-          <p className="text-muted-foreground mt-1">Order #{orderId.slice(0, 8).toUpperCase()}</p>
-        </div>
-        <div className="text-right">
-          <div className="text-sm text-muted-foreground">Status</div>
-          <div className="font-semibold text-lg text-primary">{trackingData.status.replace(/_/g, " ")}</div>
-        </div>
+    <div className="max-w-4xl mx-auto space-y-6 pt-4 pb-12">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">Live Tracking</h1>
+        <p className="text-muted-foreground">
+          Order #{order.id.slice(0, 8).toUpperCase()} from {order.pharmacies?.full_name || "Pharmacy"}
+        </p>
       </div>
 
-      {/* Map Card */}
-      <Card className="overflow-hidden shadow-lg border-primary/10">
-        <div className="h-[450px] w-full bg-slate-100 dark:bg-slate-800 relative">
-          {typeof window !== "undefined" && currentPos && (
-            <div className="mt-8">
-              <TrackingMap 
-                currentPos={currentPos} 
-                startPos={[trackingData.start_lat, trackingData.start_lng]} 
-                endPos={[trackingData.end_lat, trackingData.end_lng]} 
-              />
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2 rounded-2xl border border-border/60 overflow-hidden shadow-sm flex flex-col h-[600px]">
+          <div className="bg-muted/20 p-4 border-b border-border/40 flex justify-between items-center">
+            <div className="flex items-center gap-2 font-medium">
+              <Navigation className="h-4 w-4 text-blue-500" />
+              Delivery Progress
             </div>
-          )}
-          {!currentPos && (
-             <div className="flex items-center justify-center h-full">
-               <span className="text-muted-foreground animate-pulse">Initializing simulation...</span>
-             </div>
-          )}
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Driver Details */}
-        <Card className="shadow-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Navigation className="w-5 h-5 text-primary" /> Delivery Executive
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {trackingData.driver_name ? (
-              <div className="flex items-center gap-4">
-                <Image 
-                  src={trackingData.driver_avatar} 
-                  alt={trackingData.driver_name}
-                  width={64}
-                  height={64}
-                  unoptimized={true}
-                  className="w-16 h-16 rounded-full bg-slate-100 p-1 border-2 border-primary/20 object-cover"
+            <div className="text-sm text-muted-foreground">Estimated arrival: ~10 mins</div>
+          </div>
+          
+          <div className="flex-1 relative">
+            <DeliveryMap 
+              orderId={orderId as string}
+              patientAddress="Patient Delivery Address"
+              patientName={order?.patient_name || "Patient"}
+              pharmacyAddress={order?.pharmacies?.full_name || "Pharmacy"}
+              onClose={() => router.push("/patient/dashboard")}
+            />
+            {/* Overlay progress bar */}
+            <div className="absolute top-4 left-4 right-4 bg-background/90 backdrop-blur border border-border/60 rounded-xl p-4 shadow-lg z-[1000]">
+              <div className="flex justify-between text-sm font-semibold mb-2">
+                <span className={deliveryStatus === "processing" ? "text-blue-500" : "text-emerald-500"}>Processing</span>
+                <span className={deliveryStatus === "out_for_delivery" ? "text-blue-500" : (progress === 100 ? "text-emerald-500" : "text-muted-foreground")}>Out for Delivery</span>
+                <span className={deliveryStatus === "delivered" ? "text-emerald-500" : "text-muted-foreground"}>Delivered</span>
+              </div>
+              <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                <motion.div 
+                  className="h-full bg-blue-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ ease: "linear", duration: 1 }}
                 />
-                <div>
-                  <h3 className="font-semibold text-lg">{trackingData.driver_name}</h3>
-                  <p className="text-sm text-muted-foreground">{trackingData.vehicle_type} • {trackingData.vehicle_number}</p>
-                  {!isDelivered && (
-                    <div className="flex items-center gap-2 mt-2 text-sm">
-                      <Clock className="w-4 h-4 text-orange-500" /> 
-                      ETA: {new Date(trackingData.eta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <div className="space-y-6">
+          <Card className="rounded-2xl border border-border/60">
+            <CardHeader>
+              <CardTitle>Delivery Action</CardTitle>
+              <CardDescription>Confirm receipt with driver</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {deliveryStatus !== "delivered" ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-500/10 text-blue-600 rounded-xl border border-blue-500/20 text-sm">
+                    When the driver arrives, press the button below to generate a secure confirmation code.
+                  </div>
+                  {!deliveryCode ? (
+                    <Button 
+                      className="w-full h-12 bg-blue-600 hover:bg-blue-500"
+                      onClick={handleOrderDelivered}
+                      disabled={generatingCode || deliveryStatus === 'processing'}
+                    >
+                      {generatingCode ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Package className="h-4 w-4 mr-2" />}
+                      Driver has arrived
+                    </Button>
+                  ) : (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="space-y-4 text-center"
+                    >
+                      <h3 className="font-bold text-lg">Provide this code to driver</h3>
+                      <p className="text-sm text-muted-foreground">The driver needs this code to validate the delivery in their app.</p>
+                      
+                      <div className="bg-muted p-6 rounded-2xl mt-4 border border-border/50">
+                        <div className="text-4xl font-mono font-bold tracking-[0.25em] text-foreground">
+                          {deliveryCode}
+                        </div>
+                      </div>
+                      
+                      <p className="text-xs text-amber-500 font-medium flex items-center justify-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Waiting for driver validation
+                      </p>
+                    </motion.div>
                   )}
                 </div>
-              </div>
-            ) : (
-              <div className="text-muted-foreground py-4 text-center border border-dashed rounded-lg bg-slate-50 dark:bg-slate-900/50">
-                <Package className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                Driver not assigned yet
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              ) : (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="space-y-4 text-center"
+                >
+                  <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-emerald-500/10 mb-2">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+                  </div>
+                  <h3 className="font-bold text-lg text-emerald-600">Delivery Completed</h3>
+                  <p className="text-sm text-muted-foreground">Thank you for using MedSync network pharmacies.</p>
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Verification Card */}
-        <Card className="shadow-md border-t-4 border-t-primary">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-green-500" /> Secure Delivery
-            </CardTitle>
-            <CardDescription>Share OTP with executive at the door</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isDelivered ? (
-              <div className="flex flex-col items-center justify-center py-4 text-green-500 animate-in fade-in zoom-in duration-500">
-                <CheckCircle2 className="w-16 h-16 mb-2" />
-                <h3 className="font-semibold text-xl">Delivered Successfully</h3>
+          <Card className="rounded-2xl border border-border/60">
+            <CardHeader>
+              <CardTitle>Order Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div className="flex justify-between py-2 border-b border-border/40">
+                <span className="text-muted-foreground">Pharmacy</span>
+                <span className="font-medium">{order.pharmacies?.full_name}</span>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-6 text-center border border-slate-200 dark:border-slate-800">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Your Secret OTP</p>
-                  <p className="text-4xl font-mono tracking-[0.5em] font-bold text-primary">
-                    {trackingData.has_otp ? "******" : "---"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-3">Check your SMS or email for the actual code.</p>
-                </div>
-                
-                <div className="flex gap-2">
-                  <Input 
-                    placeholder="Enter 6-digit OTP (Simulation test)" 
-                    value={otp} 
-                    onChange={(e) => setOtp(e.target.value)} 
-                    maxLength={6}
-                    disabled={isVerifying}
-                    className="text-center tracking-widest font-mono"
-                  />
-                  <Button onClick={handleVerifyOTP} disabled={isVerifying || otp.length !== 6}>
-                    {isVerifying ? "Verifying..." : "Verify"}
-                  </Button>
-                </div>
+              <div className="flex justify-between py-2 border-b border-border/40">
+                <span className="text-muted-foreground">Items</span>
+                <span className="font-medium">{order.medication}</span>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <div className="flex justify-between py-2">
+                <span className="text-muted-foreground">Total Paid</span>
+                <span className="font-medium">${order.total_amount}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

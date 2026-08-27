@@ -71,6 +71,7 @@ class MedicineOrder(Base, UUIDMixin, TimestampMixin):
     pharmacy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     prescription_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("prescriptions.id"), index=True, nullable=True)
     status: Mapped[OrderStatus] = mapped_column(String(50), default=OrderStatus.PENDING, index=True)
+    order_type: Mapped[str] = mapped_column(String(50), default="ONLINE_DELIVERY")
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 

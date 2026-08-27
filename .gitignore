@@ -70,3 +70,4 @@ apps/backend/app/api/v1/endpoints/admin_stats.py
 
 # Portable Runner
 medsync.env
+node_modules_old/
