@@ -105,7 +105,11 @@ if ($PLATFORM) {
     docker run -d --name $CONTAINER_NAME -p "${PORT}:8000" -v medsync-model-cache:/models --env-file $ENV_FILE $IMAGE_NAME
 }
 
-# 9. Wait for local health check
+# 9. Open Logs in a separate window
+Write-Host "Opening backend logs in a separate window..." -ForegroundColor Cyan
+Start-Process cmd -ArgumentList "/c title MedSync Backend Logs & docker logs -f $CONTAINER_NAME"
+
+# 10. Wait for local health check
 Write-Host "Waiting for backend to become healthy (HTTP 200)..."
 Write-Host "NOTE: First startup may take 2-5 minutes to download AI model caches." -ForegroundColor Yellow
 $healthy = $false
