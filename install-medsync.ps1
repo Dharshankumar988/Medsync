@@ -52,13 +52,11 @@ $zipPath = Join-Path $installPath "medsync-portable-runner.zip"
 
 Write-Host "Downloading portable runner..."
 try {
-    # Using curl.exe natively
-    & curl.exe -L --fail --retry 3 -o "$zipPath" "$zipUrl"
-    if ($LASTEXITCODE -ne 0) {
-        throw "curl exited with code $LASTEXITCODE"
-    }
+    # Using Invoke-WebRequest for better Windows SSL/TLS compatibility
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
 } catch {
-    Write-Host "ERROR: curl.exe failed to download the archive." -ForegroundColor Red
+    Write-Host "ERROR: Invoke-WebRequest failed to download the archive. Please check your internet connection and network proxies." -ForegroundColor Red
     exit 1
 }
 
