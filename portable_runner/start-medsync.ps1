@@ -100,7 +100,7 @@ Write-Host "Starting container $CONTAINER_NAME on port $PORT..."
 docker volume create medsync-model-cache > $null
 
 if ($PLATFORM) {
-    docker run -d $PLATFORM --name $CONTAINER_NAME -p "${PORT}:8000" -v medsync-model-cache:/models --env-file $ENV_FILE $IMAGE_NAME
+    docker run -d --platform linux/amd64 --name $CONTAINER_NAME -p "${PORT}:8000" -v medsync-model-cache:/models --env-file $ENV_FILE $IMAGE_NAME
 } else {
     docker run -d --name $CONTAINER_NAME -p "${PORT}:8000" -v medsync-model-cache:/models --env-file $ENV_FILE $IMAGE_NAME
 }
@@ -110,6 +110,9 @@ Write-Host "Waiting for backend to become healthy (HTTP 200)..."
 Write-Host "NOTE: First startup may take 2-5 minutes to download AI model caches." -ForegroundColor Yellow
 $healthy = $false
 for ($i = 0; $i -lt 150; $i++) {
+    $percent = [math]::min(100, [math]::round(($i / 150) * 100))
+    Write-Progress -Activity "Starting MedSync Backend" -Status "Downloading AI models & starting services... ($percent%)" -PercentComplete $percent
+    
     Start-Sleep -Seconds 2
     try {
         $response = Invoke-WebRequest -Uri "http://localhost:${PORT}/health" -UseBasicParsing -ErrorAction SilentlyContinue
@@ -121,9 +124,10 @@ for ($i = 0; $i -lt 150; $i++) {
         # ignore errors while waiting
     }
 }
+Write-Progress -Activity "Starting MedSync Backend" -Completed
 
 if (-not $healthy) {
-    Write-Host "`nWARNING: Backend did not report healthy within 60 seconds." -ForegroundColor Red
+    Write-Host "`nWARNING: Backend did not report healthy within 5 minutes." -ForegroundColor Red
     Write-Host "Docker container status:"
     docker ps -f "name=^/${CONTAINER_NAME}$"
     Write-Host "`nRecent logs:"

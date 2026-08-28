@@ -65,6 +65,8 @@ Never:
 
 Only .env.example should be committed to GitHub.
 
+Make sure that your `.env` contains a valid `BIOMETRIC_ENCRYPTION_KEY` (a secure 32-byte base64 encoded string) for the backend to successfully start.
+
 ---
 
 ## ▶️ Start MedSync
@@ -89,7 +91,7 @@ Docker will:
 4. Check the backend health.
 5. Start the Tailscale Funnel if configured.
 
-**Note:** The first startup can take longer.
+**Note:** The first startup can take 2-5 minutes to download AI model caches. The start script displays a live progress bar while waiting.
 Later startups are faster because the AI model cache is stored in a persistent Docker volume.
 
 ---
