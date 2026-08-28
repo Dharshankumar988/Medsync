@@ -20,9 +20,15 @@ MedSync leverages a hybrid AI architecture:
 ## Deployment
 
 ### Portable Windows Deployment
-The easiest way to run MedSync is using our standalone portable runner for Windows. It requires no Git knowledge and automatically sets up Docker and Cloudflare.
+The easiest way to run MedSync is using our standalone portable runner for Windows. It requires no Git knowledge and automatically sets up Docker, your environment, and caches AI models.
 
-→ **[See implementation.md](implementation.md) for the complete installation guide.**
+**Quick Install:**
+Open PowerShell and run the following command to download and extract the runner:
+```powershell
+curl.exe -L --fail --retry 3 -o "$env:TEMP\install-medsync.ps1" "https://raw.githubusercontent.com/dharshankumar988/Medsync/main/install-medsync.ps1"; powershell.exe -ExecutionPolicy Bypass -File "$env:TEMP\install-medsync.ps1"
+```
+
+For the detailed, step-by-step setup (including configuring your environment variables and starting the server), please refer to the actual **[IMPLEMENTATION.md](IMPLEMENTATION.md)** file!
 
 ## Development
 To contribute to MedSync, clone the repository and navigate to the respective application directories (`apps/backend` or `apps/blockchain`). See the internal documentation within those folders for local development setups.
