@@ -110,8 +110,8 @@ Write-Host "Waiting for backend to become healthy (HTTP 200)..."
 Write-Host "NOTE: First startup may take 2-5 minutes to download AI model caches." -ForegroundColor Yellow
 $healthy = $false
 for ($i = 0; $i -lt 150; $i++) {
-    $percent = [math]::min(100, [math]::round(($i / 150) * 100))
-    Write-Progress -Activity "Starting MedSync Backend" -Status "Downloading AI models & starting services... ($percent%)" -PercentComplete $percent
+    # Use an indeterminate progress bar since we cannot parse the Docker logs for exact byte percentage
+    Write-Progress -Activity "Starting MedSync Backend" -Status "Waiting for AI models to download and server to start..." -PercentComplete -1
     
     Start-Sleep -Seconds 2
     try {
