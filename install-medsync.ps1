@@ -47,16 +47,18 @@ try {
 Write-Host "Using installation directory: $installPath" -ForegroundColor Green
 
 # 2. Download ZIP using curl.exe
-$zipUrl = "https://github.com/dharshankumar988/Medsync/archive/refs/heads/main.zip"
+$zipUrl = "https://raw.githubusercontent.com/dharshankumar988/Medsync/main/portable_runner.zip"
 $zipPath = Join-Path $installPath "medsync-portable-runner.zip"
 
 Write-Host "Downloading portable runner..."
 try {
-    # Using Invoke-WebRequest for better Windows SSL/TLS compatibility
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+    # Using curl.exe natively as it works perfectly with raw.githubusercontent.com
+    & curl.exe -L --fail --retry 3 -o "$zipPath" "$zipUrl"
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl exited with code $LASTEXITCODE"
+    }
 } catch {
-    Write-Host "ERROR: Invoke-WebRequest failed to download the archive. Please check your internet connection and network proxies." -ForegroundColor Red
+    Write-Host "ERROR: curl.exe failed to download the archive." -ForegroundColor Red
     exit 1
 }
 
@@ -81,27 +83,11 @@ try {
     exit 1
 }
 
-# 4. Handle ZIP directory structure robustly
+# 4. Verify extraction
 $portableRunnerPath = Join-Path $installPath "portable_runner"
 if (-not (Test-Path $portableRunnerPath)) {
-    # Check if it was nested
-    $nestedDirs = Get-ChildItem -Path $installPath -Directory -Recurse | Where-Object { $_.Name -eq "portable_runner" }
-    
-    if ($nestedDirs.Count -eq 0) {
-        Write-Host "ERROR: portable_runner was not found in the downloaded archive." -ForegroundColor Red
-        exit 1
-    } elseif ($nestedDirs.Count -gt 1) {
-        Write-Host "ERROR: Multiple portable_runner directories found. Cannot determine the correct one." -ForegroundColor Red
-        exit 1
-    } else {
-        # Move the nested portable_runner out
-        Move-Item -Path $nestedDirs[0].FullName -Destination $installPath -Force
-        $portableRunnerPath = Join-Path $installPath "portable_runner"
-        
-        # Cleanup the rest of the extracted repository
-        $nestedParent = $nestedDirs[0].Parent.FullName
-        Remove-Item -Path $nestedParent -Force -Recurse
-    }
+    Write-Host "ERROR: portable_runner was not found in the downloaded archive." -ForegroundColor Red
+    exit 1
 }
 
 # 5. Clean up ZIP
