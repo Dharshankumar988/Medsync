@@ -47,7 +47,7 @@ try {
 Write-Host "Using installation directory: $installPath" -ForegroundColor Green
 
 # 2. Download ZIP using curl.exe
-$zipUrl = "https://github.com/dharshankumar988/Medsync/releases/latest/download/portable_runner.zip"
+$zipUrl = "https://github.com/dharshankumar988/Medsync/archive/refs/heads/main.zip"
 $zipPath = Join-Path $installPath "medsync-portable-runner.zip"
 
 Write-Host "Downloading portable runner..."
@@ -100,11 +100,9 @@ if (-not (Test-Path $portableRunnerPath)) {
         Move-Item -Path $nestedDirs[0].FullName -Destination $installPath -Force
         $portableRunnerPath = Join-Path $installPath "portable_runner"
         
-        # Cleanup the nested parent if empty
+        # Cleanup the rest of the extracted repository
         $nestedParent = $nestedDirs[0].Parent.FullName
-        if ((Get-ChildItem -Path $nestedParent).Count -eq 0) {
-            Remove-Item -Path $nestedParent -Force -Recurse
-        }
+        Remove-Item -Path $nestedParent -Force -Recurse
     }
 }
 
