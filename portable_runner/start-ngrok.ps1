@@ -17,7 +17,7 @@ if (-not (Test-Path -LiteralPath $NgrokPath)) {
 # 2. Check for .env variables
 $EnvPath = Join-Path $ScriptPath ".env"
 $AuthToken = ""
-$Domain = ""
+$Url = ""
 
 if (Test-Path -LiteralPath $EnvPath) {
     $envContent = Get-Content $EnvPath
@@ -25,21 +25,21 @@ if (Test-Path -LiteralPath $EnvPath) {
         if ($line -match "^NGROK_AUTHTOKEN=(.*)") {
             $AuthToken = $matches[1].Trim()
         }
-        if ($line -match "^NGROK_DOMAIN=(.*)") {
-            $Domain = $matches[1].Trim()
+        if ($line -match "^NGROK_URL=(.*)") {
+            $Url = $matches[1].Trim()
         }
     }
 }
 
-if (-not $AuthToken -or -not $Domain) {
+if (-not $AuthToken -or -not $Url) {
     Write-Host "`nWARNING: Missing Ngrok configuration in .env!" -ForegroundColor Yellow
-    Write-Host "You must provide NGROK_AUTHTOKEN and NGROK_DOMAIN."
+    Write-Host "You must provide NGROK_AUTHTOKEN and NGROK_URL."
     Write-Host "You can get these from your Ngrok Dashboard (https://dashboard.ngrok.com/)"
     Write-Host ""
     $AuthToken = Read-Host "Please enter your NGROK_AUTHTOKEN (or press Ctrl+C to abort)"
-    $Domain = Read-Host "Please enter your NGROK_DOMAIN (e.g., your-domain.ngrok-free.app)"
+    $Url = Read-Host "Please enter your NGROK_URL (e.g., https://your-domain.ngrok-free.dev)"
     
-    if (-not $AuthToken -or -not $Domain) {
+    if (-not $AuthToken -or -not $Url) {
         Write-Host "Aborting. Missing credentials." -ForegroundColor Red
         exit 1
     }
@@ -55,13 +55,13 @@ try {
 }
 
 # 4. Start Tunnel
-Write-Host "Routing traffic to local port 8000 using static domain: $Domain ..." -ForegroundColor Cyan
+Write-Host "Routing traffic to local port 8000 using static URL: $Url ..." -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop the tunnel." -ForegroundColor Yellow
 
 try {
-    & $NgrokPath http --domain=$Domain 8000
+    & $NgrokPath http --url=$Url 8000
 } catch {
     Write-Host "`nERROR: Ngrok failed to start or crashed." -ForegroundColor Red
-    Write-Host "Make sure the domain ($Domain) is correct and belongs to your account." -ForegroundColor Yellow
+    Write-Host "Make sure the URL ($Url) is correct and belongs to your account." -ForegroundColor Yellow
     exit 1
 }
