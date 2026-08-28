@@ -140,9 +140,9 @@ if (-not $healthy) {
 
 Write-Host "Backend: HEALTHY" -ForegroundColor Green
 
-# 10. Start Tailscale Funnel if present
-if (Test-Path ".\start-tailscale-funnel.ps1") {
-    .\start-tailscale-funnel.ps1
+# 10. Start Ngrok Tunnel if present
+if (Test-Path ".\start-ngrok.ps1") {
+    .\start-ngrok.ps1
 } else {
     Write-Host "`n=== STATUS ===" -ForegroundColor Green
     Write-Host "Docker: READY"

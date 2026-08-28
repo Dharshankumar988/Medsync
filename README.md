@@ -10,7 +10,7 @@ MedSync is a comprehensive, AI-powered healthcare management platform designed t
 - **Portable Deployment**: Run the entire backend stack locally on any Windows machine with zero configuration.
 
 ## Architecture
-Vercel Frontend → Tailscale Funnel → Local MedSync Backend (Docker) → Supabase + AI Services
+Vercel Frontend → Ngrok Tunnel → Local MedSync Backend (Docker) → Supabase + AI Services
 
 ## AI Capabilities
 MedSync leverages a hybrid AI architecture:

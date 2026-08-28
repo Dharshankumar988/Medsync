@@ -75,10 +75,10 @@ for ($i = 0; $i -lt 150; $i++) {
 if ($healthy) {
     Write-Host "Update successful! Backend is HEALTHY." -ForegroundColor Green
     
-    # Check Tailscale Funnel
-    if (Test-Path ".\start-tailscale-funnel.ps1") {
-        Write-Host "Checking Tailscale Funnel..."
-        .\start-tailscale-funnel.ps1
+    # Check Ngrok Tunnel
+    if (Test-Path ".\start-ngrok.ps1") {
+        Write-Host "Checking Ngrok Tunnel..."
+        .\start-ngrok.ps1
     }
 } else {
     Write-Host "WARNING: Backend failed health check after update." -ForegroundColor Red

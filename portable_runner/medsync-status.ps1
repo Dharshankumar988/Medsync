@@ -53,14 +53,13 @@ try {
     Write-Host "Local API: UNREACHABLE" -ForegroundColor Red
 }
 
-# Tailscale Status
-$tsProcess = Get-Process "tailscale" -ErrorAction SilentlyContinue
-$tsService = Get-Service "Tailscale" -ErrorAction SilentlyContinue
+# Ngrok Status
+$ngrokProcess = Get-Process "ngrok" -ErrorAction SilentlyContinue
 
-if ($tsProcess -or ($tsService -and $tsService.Status -eq "Running")) {
-    Write-Host "Tailscale: CONNECTED" -ForegroundColor Green
+if ($ngrokProcess) {
+    Write-Host "Ngrok Tunnel: CONNECTED" -ForegroundColor Green
 } else {
-    Write-Host "Tailscale: NOT RUNNING" -ForegroundColor Yellow
+    Write-Host "Ngrok Tunnel: NOT RUNNING" -ForegroundColor Yellow
 }
 
 # Public API Health

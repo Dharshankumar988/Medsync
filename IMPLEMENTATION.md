@@ -89,7 +89,7 @@ Docker will:
 2. Start the backend.
 3. Load/cache the AI models.
 4. Check the backend health.
-5. Start the Tailscale Funnel if configured.
+5. Start the Ngrok Tunnel if configured.
 
 **Note:** The first startup can take 2-5 minutes to download AI model caches. The start script displays a live progress bar while waiting.
 Later startups are faster because the AI model cache is stored in a persistent Docker volume.
@@ -106,19 +106,21 @@ The image is publicly accessible, so normal users do not need a GitHub login or 
 
 ---
 
-## 🌐 Tailscale Funnel (Constant Public URL)
+## 🌐 Ngrok Tunnel (Constant Public URL)
 
-To expose your backend securely to the internet for free (so Vercel can connect to it):
+To expose your backend securely to the internet for free (so Vercel can connect to it securely):
 
-1. **Install Tailscale**: Download and install [Tailscale for Windows](https://tailscale.com/download/windows).
-2. **Enable Funnel**: Go to your [Tailscale Admin Console](https://login.tailscale.com/admin/acls/funnel) and ensure "Funnel" is enabled for your node.
-3. **Start the Funnel**: Open PowerShell in your `portable_runner` folder and run:
+1. **Create an Account**: Go to [Ngrok.com](https://ngrok.com) and make a free account.
+2. **Claim Domain**: Go to your Dashboard -> Cloud Edge -> Domains to claim your 1 free static domain (e.g., `https://your-domain.ngrok-free.app`).
+3. **Configure**: Open `.env` and fill in `NGROK_DOMAIN` and `NGROK_AUTHTOKEN`.
+4. **Download Ngrok**: Download the Windows ZIP from Ngrok, extract `ngrok.exe`, and drop it directly into the `portable_runner` folder.
+5. **Start the Tunnel**: Open PowerShell in your `portable_runner` folder and run:
    ```powershell
-   .\start-tailscale-funnel.ps1
+   .\start-ngrok.ps1
    ```
-   *(Or double-click `start-tailscale-funnel.bat`)*
+   *(Or double-click `start-ngrok.bat`)*
 
-Tailscale will give you a constant public URL (e.g., `https://your-laptop-name.tailnet-name.ts.net`). 
+Ngrok will give you a constant public URL.
 Use this URL in your Vercel `NEXT_PUBLIC_API_URL` environment variable!
 
 ---
@@ -174,7 +176,7 @@ unless you intentionally want to remove your configuration or cached AI models.
 | Backend is not healthy | Run `docker logs medsync-backend` |
 | `.env` is missing | Copy `.env.example` to `.env` and configure it |
 | Port 8000 is already in use | Follow the project's actual port troubleshooting |
-| Tailscale Funnel fails | Make sure you installed Tailscale and enabled Funnel in your admin console |
+| Ngrok Tunnel fails | Make sure your auth token is added and domain is correct |
 | Docker image cannot be downloaded | Check your internet connection and confirm Docker is running |
 | AI model startup takes a long time | Wait for the first model download to finish |
 | Something else fails | Contact the project owners |
@@ -248,7 +250,7 @@ Keep cached models
 ```text
 Vercel Frontend
       ↓
-Tailscale Funnel
+Ngrok Tunnel
       ↓
 Local MedSync Backend
       ↓
