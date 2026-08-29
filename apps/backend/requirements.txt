@@ -34,5 +34,5 @@ tensorflow-cpu==2.17.0
 tf-keras==2.17.0
 deepface==0.0.92
 cryptography==42.0.8
-aiosqlite; sys_platform == 'win32'
+aiosqlite
 mediapipe==0.10.14
