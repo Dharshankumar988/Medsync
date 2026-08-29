@@ -15,7 +15,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      BIOMETRIC_ENCRYPTION_KEY: ${{ secrets.BIOMETRIC_ENCRYPTION_KEY }}
+      BIOMETRIC_ENCRYPTION_KEY: ${{ secrets.BIOMETRIC_ENCRYPTION_KEY || 'cw3rX9z4-JvP8Z4A0E1K2_7N9-XyR7Q2V5_7L2N5U9c=' }}
       MEDSYNC_AI_TOKEN: ${{ secrets.MEDSYNC_AI_TOKEN }}
       JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
       MEDSYNC_AI_URL: https://dharshan8197-medsync-ai.hf.space
