@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL as string;
+const RAW_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const BASE_URL = RAW_BASE_URL.replace(/\/api\/v1\/?$/, '');
 const API_URL = `${BASE_URL}/api/v1`;
 
 export class SecurityService {

@@ -1,8 +1,11 @@
 import axios, { InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { supabase } from './supabase';
 
+const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+const baseUrl = rawBaseUrl.replace(/\/api\/v1\/?$/, '');
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL as string,
+  baseURL: baseUrl,
   headers: {
     'Content-Type': 'application/json',
   },

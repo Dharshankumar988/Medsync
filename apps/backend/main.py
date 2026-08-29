@@ -111,6 +111,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(APILoggingMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+if not cors_origins:
+    cors_origins = ["*"]  # Fallback to allow all if misconfigured in .env
 
 app.add_middleware(
     CORSMiddleware,
