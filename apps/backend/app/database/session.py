@@ -4,7 +4,10 @@ from app.core.config import settings
 import importlib.util
 
 db_url = settings.DATABASE_URL
-if "postgresql+asyncpg" in db_url and importlib.util.find_spec("asyncpg") is None:
+if not db_url or db_url.strip() == "":
+    # No database configured – use in-memory SQLite fallback
+    db_url = "sqlite+aiosqlite:///:memory:"
+elif "postgresql+asyncpg" in db_url and importlib.util.find_spec("asyncpg") is None:
     # Fallback for Windows ARM local dev without asyncpg
     db_url = "sqlite+aiosqlite:///:memory:"
 

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
     
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://supabase_user:supabase_password@supabase-host.supabase.co:5432/postgres?ssl=require"
+    DATABASE_URL: str = ""
     SUPABASE_URL: str = ""
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
