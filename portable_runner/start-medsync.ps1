@@ -111,11 +111,12 @@ Start-Process cmd -ArgumentList "/c title MedSync Backend Logs & docker logs -f 
 
 # 10. Wait for local health check
 Write-Host "Waiting for backend to become healthy (HTTP 200)..."
-Write-Host "NOTE: First startup may take 2-5 minutes to download AI model caches." -ForegroundColor Yellow
+Write-Host "NOTE: First startup may take around 4 minutes to download AI model caches." -ForegroundColor Yellow
 $healthy = $false
-for ($i = 0; $i -lt 150; $i++) {
-    # Use an indeterminate progress bar since we cannot parse the Docker logs for exact byte percentage
-    Write-Progress -Activity "Starting MedSync Backend" -Status "Waiting for AI models to download and server to start..." -PercentComplete -1
+$maxSteps = 120 # 4 minutes with 2-second sleeps
+for ($i = 0; $i -lt $maxSteps; $i++) {
+    $percent = [math]::min(100, [math]::round(($i / $maxSteps) * 100))
+    Write-Progress -Activity "Downloading AI Model Cache & Starting Backend" -Status "Please wait, this will take about 4 minutes... ($percent%)" -PercentComplete $percent
     
     Start-Sleep -Seconds 2
     try {
