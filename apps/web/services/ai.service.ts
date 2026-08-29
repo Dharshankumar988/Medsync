@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
 
-const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
 const API_BASE_URL = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
 
 let _aiTokenCache: string | null = null;
