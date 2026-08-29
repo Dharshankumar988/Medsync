@@ -50,12 +50,22 @@ jobs:
           -e CORS_ORIGINS="[]" \
           medsync-backend
           
-        # Wait for container to be ready
-        sleep 10
+        # Give it a small initial wait
+        sleep 5
 
     - name: Verify Backend Health (Native dependencies load)
       run: |
-        curl -f http://localhost:7860/health
+        for i in {1..60}; do
+          if curl -s -f http://localhost:7860/health > /dev/null; then
+            echo "Backend is healthy!"
+            exit 0
+          fi
+          echo "Waiting for backend to download AI models and start... ($i/60)"
+          sleep 5
+        done
+        echo "Backend failed to start within 5 minutes. Logs:"
+        docker logs backend
+        exit 1
 
     - name: Setup Node.js (for Frontend verification)
       uses: actions/setup-node@v4
