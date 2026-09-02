@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app.blockchain.client import w3_client
+from app.blockchain.client import blockchain_client as w3_client
 from app.blockchain.config import blockchain_settings
 from app.schemas.response import APIResponse
 

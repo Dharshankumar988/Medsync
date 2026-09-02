@@ -56,7 +56,7 @@ async def pulse_chat(
     current_user: AuthenticatedPrincipal = Depends(require_any_user)
 ):
     try:
-        role = current_user.role.value.lower()
+        role = str(current_user.role).lower()
         AIOrchestrator.validate_request(req.message, role)
         
         if role == "doctor":
@@ -82,7 +82,7 @@ async def pulse_chat(
     except ValueError as e:
         return JSONResponse(status_code=400, content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(e)}})
     except Exception as e:
-        logger.error(f"PULSE chat failed for role {current_user.role.value}: {e}", exc_info=True)
+        logger.error(f"PULSE chat failed for role {current_user.role}: {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": "Internal AI service error."}})
 
 @router.post("/pulse/chat/stream")
@@ -94,7 +94,7 @@ async def pulse_chat_stream(
     current_user: AuthenticatedPrincipal = Depends(require_any_user)
 ):
     try:
-        role = current_user.role.value.lower()
+        role = str(current_user.role).lower()
         AIOrchestrator.validate_request(req.message, role)
         
         if role == "doctor":
@@ -120,7 +120,7 @@ async def pulse_chat_stream(
     except ValueError as e:
         return JSONResponse(status_code=400, content={"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(e)}})
     except Exception as e:
-        logger.error(f"PULSE stream failed for role {current_user.role.value}: {e}", exc_info=True)
+        logger.error(f"PULSE stream failed for role {current_user.role}: {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": "Internal AI service error."}})
 
 # ==========================================

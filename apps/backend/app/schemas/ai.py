@@ -13,7 +13,7 @@ class AIChatMessageResponse(AIChatMessageBase):
     created_at: datetime
     model_used: Optional[str] = None
     
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 class AIChatSessionCreate(BaseModel):
     title: Optional[str] = "New Conversation"
@@ -73,6 +73,8 @@ class GroqClinicalSummary(BaseModel):
     questions_for_clinician: List[str] = []
     urgency: str = "routine"
     disclaimer: str = "For educational purposes only."
+    
+    model_config = {"protected_namespaces": ()}
 
 class GroqPatientExplanation(BaseModel):
     summary: str = "Your scan has been analyzed."
@@ -84,6 +86,8 @@ class GroqPatientExplanation(BaseModel):
     questions_for_clinician: List[str] = []
     urgency: str = "routine"
     disclaimer: str = "This information is for educational purposes only and does not constitute medical advice."
+    
+    model_config = {"protected_namespaces": ()}
 
 class HFInferenceOutput(BaseModel):
     success: bool = True

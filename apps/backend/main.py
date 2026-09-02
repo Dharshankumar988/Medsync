@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(inference_service.warmup())
         
         # Verify Groq is configured
+        await groq_client.verify_health()
         if groq_client.is_healthy:
             logger.info("AI Warmup: Groq LLM → healthy")
         else:
@@ -77,8 +78,12 @@ async def lifespan(app: FastAPI):
             # SentenceTransformers
             rag_service._get_embedding_model()
             
-            # DeepFace ArcFace
-            DeepFace.build_model("ArcFace")
+            # DeepFace ArcFace (Use safe getter to avoid raw build_model crashing on KerasHistory)
+            try:
+                from app.services.face_auth_service import get_arcface_model
+                get_arcface_model()
+            except Exception as e:
+                logger.warning(f"DeepFace ArcFace warmup skipped/failed: {e}")
             
         await asyncio.to_thread(_load_local_models)
         logger.info("AI Warmup: Local models downloaded and cached successfully.")

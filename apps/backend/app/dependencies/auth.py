@@ -60,6 +60,9 @@ def _get_signing_key(token: str) -> tuple[dict, str]:
     token_kid = header.get("kid")
     token_alg = header.get("alg", "RS256")
 
+    if token_alg == "HS256" and settings.SUPABASE_JWT_SECRET:
+        return settings.SUPABASE_JWT_SECRET, "HS256"
+
     jwks = _get_jwks()
 
     for key in jwks.get("keys", []):

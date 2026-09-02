@@ -5,7 +5,8 @@
   "scripts": {
     "test": "hardhat test",
     "compile": "hardhat compile",
-    "deploy:amoy": "hardhat run scripts/deploy.ts --network amoy"
+    "deploy:amoy": "hardhat run scripts/deploy.ts --network amoy",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
@@ -13,11 +14,12 @@
     "chai": "4",
     "hardhat": "2.22.2",
     "solc": "0.8.20",
-    "typescript": "^5.4.5"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@nomicfoundation/edr": "0.3.3",
     "@openzeppelin/contracts": "^5.0.2",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "ts-node": "^10.9.2"
   }
 }
