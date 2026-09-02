@@ -119,9 +119,7 @@ export default function MedicalRecordsPage() {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
       
-      await axios.post(`${apiUrl}/records`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      await axios.post(`${apiUrl}/records`, formData);
       
       toast.success("Record uploaded successfully");
       setIsDialogOpen(false);

@@ -131,11 +131,10 @@ export const aiService = {
     if (patientId) formData.append('patient_id', patientId);
     if (sessionId) formData.append('session_id', sessionId);
     
+    const reqHeaders = { ...headers };
+    delete reqHeaders['Content-Type'];
     const res = await axios.post(`${API_BASE_URL}/ai/analyze-image`, formData, {
-      headers: {
-        ...headers,
-        'Content-Type': 'multipart/form-data'
-      },
+      headers: reqHeaders,
       signal
     });
     return res.data;

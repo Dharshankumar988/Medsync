@@ -107,8 +107,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
       
       await axios.post(`${apiUrl}/prescriptions/${prescriptionId}/order-online`, formData, {
         headers: { 
-          Authorization: `Bearer ${session.session.access_token}`,
-          'Content-Type': 'multipart/form-data'
+          Authorization: `Bearer ${session.session.access_token}`
         }
       });
       

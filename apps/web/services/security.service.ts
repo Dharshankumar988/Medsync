@@ -17,8 +17,7 @@ export class SecurityService {
     formData.append('pin', pin);
     const response = await axios.post(`${API_URL}/security/enroll-pin`, formData, {
       headers: { 
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data'
+        Authorization: `Bearer ${token}`
       }
     });
     return response.data;
@@ -31,8 +30,7 @@ export class SecurityService {
     });
     const response = await axios.post(`${API_URL}/security/enroll-face`, formData, {
       headers: { 
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data'
+        Authorization: `Bearer ${token}`
       }
     });
     return response.data;
@@ -45,8 +43,7 @@ export class SecurityService {
     formData.append('face_image', faceImage);
     const response = await axios.post(`${API_URL}/prescriptions/${prescriptionId}/authorize-download`, formData, {
       headers: { 
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data'
+        Authorization: `Bearer ${token}`
       }
     });
     return response.data;
@@ -57,8 +54,7 @@ export class SecurityService {
     formData.append('image', faceImage);
     const response = await axios.post(`${API_URL}/security/verify-face`, formData, {
       headers: { 
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data'
+        Authorization: `Bearer ${token}`
       }
     });
     return response.data;
@@ -70,8 +66,7 @@ export class SecurityService {
     formData.append('image', faceImage);
     const response = await axios.post(`${API_URL}/security/change-pin-face`, formData, {
       headers: { 
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data'
+        Authorization: `Bearer ${token}`
       }
     });
     return response.data;
