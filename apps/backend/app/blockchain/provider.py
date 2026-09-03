@@ -28,14 +28,23 @@ def _can_import_web3() -> bool:
 
 def _resolve_mode() -> str:
     """Return 'production' or 'mock'."""
-    if _BLOCKCHAIN_MODE == "production":
+    mode = _BLOCKCHAIN_MODE
+    if mode == "production" or mode == "real":
+        if not _can_import_web3():
+            raise ImportError(
+                "BLOCKCHAIN_MODE is set to 'production'/'real', but web3 is not installed. "
+                "Failing startup instead of silently falling back to mock mode."
+            )
         return "production"
-    if _BLOCKCHAIN_MODE == "mock":
+    elif mode == "mock":
         return "mock"
-    # auto — probe for web3
-    if _can_import_web3():
-        return "production"
-    return "mock"
+    elif mode == "auto":
+        # auto — probe for web3
+        if _can_import_web3():
+            return "production"
+        return "mock"
+    else:
+        raise ValueError(f"Invalid BLOCKCHAIN_MODE: {mode}. Must be 'production', 'real', 'mock', or 'auto'.")
 
 
 def get_gateway():

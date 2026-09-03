@@ -11,9 +11,50 @@ from app.models.pharmacy import Pharmacy
 from app.schemas.response import APIResponse
 from typing import List
 import uuid
+import hmac
+import hashlib
+import os
 
 router = APIRouter()
 require_pharmacy = RoleChecker([UserRole.PHARMACY])
+
+def _generate_qr_identifier(pharmacy_id: uuid.UUID) -> str:
+    """Generate a persistent, HMAC-signed opaque QR identifier for a pharmacy."""
+    secret = os.getenv("JWT_SECRET_KEY", "medsync-default-qr-key")
+    payload = str(pharmacy_id)
+    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    return f"QR-PHM-{signature}"
+
+@router.get("/my-qr")
+async def get_my_qr(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_pharmacy)
+):
+    """
+    Returns the pharmacy's persistent QR identifier.
+    Generates one on first access and stores it in the database.
+    The QR contains only an opaque, signed pharmacy identifier.
+    """
+    stmt = select(Pharmacy).where(Pharmacy.user_id == current_user.id)
+    result = await db.execute(stmt)
+    pharmacy = result.scalar_one_or_none()
+    
+    if not pharmacy:
+        raise HTTPException(status_code=404, detail="Pharmacy profile not found.")
+    
+    # Generate and persist QR identifier if not already set
+    if not pharmacy.qr_identifier:
+        pharmacy.qr_identifier = _generate_qr_identifier(current_user.id)
+        pharmacy.qr_status = "ACTIVE"
+        await db.commit()
+        await db.refresh(pharmacy)
+    
+    return APIResponse(message="Pharmacy QR retrieved", data={
+        "qr_identifier": pharmacy.qr_identifier,
+        "qr_status": pharmacy.qr_status,
+        "business_name": pharmacy.business_name,
+    })
+
 
 @router.get("/resolve-qr/{qr_identifier}")
 async def resolve_pharmacy_qr(qr_identifier: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

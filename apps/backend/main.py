@@ -117,7 +117,8 @@ app.add_middleware(APILoggingMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
 if not cors_origins:
-    cors_origins = ["*"]  # Fallback to allow all if misconfigured in .env
+    logger.warning("CORS_ORIGINS is empty! No cross-origin requests will be allowed.")
+    cors_origins = ["http://localhost:3000"]  # Minimal safe fallback for local dev
 
 app.add_middleware(
     CORSMiddleware,

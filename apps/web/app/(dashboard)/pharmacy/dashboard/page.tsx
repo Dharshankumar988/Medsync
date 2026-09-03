@@ -229,54 +229,24 @@ export default function PharmacyDashboardPage() {
         </motion.div>
       </motion.div>
 
-      {/* ─── Blockchain Verification ─── */}
-      <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }} variants={fadeUp}>
-        <Card className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.03]">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold flex items-center gap-2 text-amber-500">
-              <ShieldCheck className="h-5 w-5" /> Blockchain Prescription Integrity Verifier
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Input 
-                placeholder="Scan Dynamic QR Code or enter Blockchain Hash..."
-                value={verificationInput}
-                onChange={(e) => setVerificationInput(e.target.value)}
-                className="flex-1 bg-background rounded-xl"
-              />
-              <Button 
-                onClick={handleVerifyPrescription} 
-                disabled={verifying}
-                className="rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-semibold"
-              >
-                {verifying ? "Verifying On-Chain..." : "Verify Smart Contract Hash"}
-              </Button>
-            </div>
 
-            {verificationResult && (
-              <div className={`p-4 rounded-xl border flex items-center justify-between ${
-                verificationResult.valid ? 'bg-emerald-500/[0.06] border-emerald-500/30 text-emerald-500' : 'bg-red-500/[0.06] border-red-500/30 text-red-500'
-              }`}>
-                <div className="flex items-center gap-3">
-                  <FileCheck className="h-6 w-6" />
-                  <div>
-                    <div className="font-semibold text-sm">
-                      {verificationResult.valid ? "Prescription Authenticated & Valid On Polygon Blockchain" : "Invalid or Tampered Prescription Hash"}
-                    </div>
-                    {verificationResult.txHash && (
-                      <div className="text-xs opacity-80">TxHash: {verificationResult.txHash}</div>
-                    )}
-                  </div>
-                </div>
-                <Badge variant="outline" className={`rounded-lg ${verificationResult.valid ? 'border-emerald-500 text-emerald-500' : 'border-red-500 text-red-500'}`}>
-                  {verificationResult.valid ? "VERIFIED" : "UNVERIFIED"}
-                </Badge>
+      {/* ─── Verification Link ─── */}
+      <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }} variants={fadeUp}>
+        <Link href="/pharmacy/qr-scanner">
+          <Card className="group rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] transition-all duration-300 hover:-translate-y-1 hover:shadow-lg cursor-pointer">
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 transition-transform duration-300 group-hover:scale-110">
+                <ShieldCheck className="h-5 w-5 text-amber-500" />
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <div>
+                <p className="font-semibold text-sm text-foreground">Prescription Verification</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Scan QR codes, verify blockchain hashes, and dispense prescriptions</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </motion.div>
+
 
       {/* ─── Orders + Inventory ─── */}
       <motion.div

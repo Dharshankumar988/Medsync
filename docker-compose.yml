@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   backend:
-    build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
+    image: ghcr.io/dharshankumar988/medsync-backend:latest
     container_name: medsync_backend
     platform: linux/amd64
     ports:
@@ -13,12 +11,25 @@ services:
       # Ensure you copy apps/backend/.env.example to apps/backend/.env
       - PYTHONUNBUFFERED=1
       - PINATA_JWT=${PINATA_JWT}
+      # Override RPC to reach Hardhat on Windows host from inside the container
+      - BLOCKCHAIN_RPC_URL=http://host.docker.internal:8545
+      # Contract addresses path inside the container (mounted below)
+      - CONTRACT_ADDRESSES_DIR=/blockchain/deployments
     env_file:
       - ./apps/backend/.env
+    volumes:
+      # Mount deployment artifacts read-only so the container can load contract addresses
+      - ./apps/blockchain/deployments:/blockchain/deployments:ro
+      - ./apps/blockchain/abis:/blockchain/abis:ro
+      # Mount source code to override the prebuilt image with our latest changes
+      - ./apps/backend/app:/app/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 120s
+

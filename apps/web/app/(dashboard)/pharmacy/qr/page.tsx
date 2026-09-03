@@ -8,34 +8,48 @@ import { MapPin, ShieldCheck, Download, Printer } from "lucide-react";
 import { Skeleton } from "@medsync/ui";
 
 export default function PharmacyQRPage() {
-  const [pharmacyId, setPharmacyId] = useState<string | null>(null);
+  const [qrIdentifier, setQrIdentifier] = useState<string | null>(null);
   const [pharmacyName, setPharmacyName] = useState<string>("Loading Pharmacy...");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadPharmacy() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setPharmacyId(user.id);
-        const { data } = await supabase.from('users').select('full_name, email').eq('id', user.id).single();
-        if (data) {
-          setPharmacyName(data.full_name || data.email || "MedSync Pharmacy");
-        }
+    async function loadPharmacyQR() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      try {
+        const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+        const res = await fetch(`${baseUrl}/api/v1/pharmacy/my-qr`, {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        
+        if (!res.ok) throw new Error("Failed to fetch pharmacy QR");
+        
+        const json = await res.json();
+        setQrIdentifier(json.data.qr_identifier);
+        setPharmacyName(json.data.business_name || "MedSync Pharmacy");
+      } catch (e: any) {
+        setError(e.message);
       }
     }
-    loadPharmacy();
+    loadPharmacyQR();
   }, []);
 
-  if (!pharmacyId) {
+  if (error) {
+    return (
+      <div className="max-w-md mx-auto mt-10 p-6 text-center">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
+
+  if (!qrIdentifier) {
     return (
       <div className="max-w-md mx-auto mt-10">
         <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
     );
   }
-
-  // The QR strictly contains the backend identifier, no sensitive info.
-  // Using a scheme like medsync:pharmacy:{id}
-  const qrData = `medsync:pharmacy:${pharmacyId}`;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pt-4">
@@ -60,13 +74,12 @@ export default function PharmacyQRPage() {
         <CardContent className="flex flex-col items-center p-10 bg-white">
           <div className="relative p-4 bg-white rounded-2xl shadow-sm border border-border/40">
             <QRCodeSVG 
-              value={qrData}
+              value={qrIdentifier}
               size={256}
               level={"H"}
               includeMargin={true}
               className="rounded-xl"
             />
-            {/* MedSync Logo Overlay could go here */}
           </div>
           
           <div className="mt-8 text-center space-y-3">
@@ -97,3 +110,4 @@ export default function PharmacyQRPage() {
 function Badge({ children, className }: { children: React.ReactNode, className?: string }) {
   return <span className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold ${className}`}>{children}</span>
 }
+

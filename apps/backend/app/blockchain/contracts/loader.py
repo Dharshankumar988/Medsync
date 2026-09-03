@@ -9,19 +9,34 @@ from app.blockchain.exceptions import ContractNotFound
 
 logger = logging.getLogger("blockchain.contracts")
 
+def _resolve_paths() -> tuple[str, str]:
+    """
+    Resolve deployment and ABI directories.
+    Priority: CONTRACT_ADDRESSES_DIR env var > relative path from source tree.
+    """
+    env_dir = os.getenv("CONTRACT_ADDRESSES_DIR")
+    if env_dir and os.path.isdir(env_dir):
+        deployments_dir = os.path.join(env_dir, blockchain_settings.NETWORK_NAME)
+        # ABIs: check sibling 'abis' dir or /blockchain/abis (Docker mount)
+        abis_dir = os.getenv("CONTRACT_ABIS_DIR", os.path.join(os.path.dirname(env_dir), "abis"))
+        if not os.path.isdir(abis_dir):
+            abis_dir = "/blockchain/abis"
+        return deployments_dir, abis_dir
+
+    # Fallback: resolve relative to source tree (local dev without Docker)
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    workspace_dir = os.path.dirname(os.path.dirname(backend_dir))
+    deployments_dir = os.path.join(workspace_dir, "blockchain", "deployments", blockchain_settings.NETWORK_NAME)
+    abis_dir = os.path.join(workspace_dir, "blockchain", "abis")
+    return deployments_dir, abis_dir
+
 class ContractLoader:
     """
     Dynamically loads smart contracts from deployment artifacts.
     """
     def __init__(self):
         self.contracts: Dict[str, Contract] = {}
-        # Path relative to the backend app running location or using absolute resolving
-        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        workspace_dir = os.path.dirname(os.path.dirname(backend_dir)) # Up from backend/app/blockchain
-        
-        # Paths point to the apps/blockchain project
-        self.deployments_dir = os.path.join(workspace_dir, "blockchain", "deployments", blockchain_settings.NETWORK_NAME)
-        self.abis_dir = os.path.join(workspace_dir, "blockchain", "abis")
+        self.deployments_dir, self.abis_dir = _resolve_paths()
         
         self.addresses: Dict[str, str] = {}
         self._load_addresses()
@@ -64,3 +79,4 @@ class ContractLoader:
         return contract
 
 contract_loader = ContractLoader()
+

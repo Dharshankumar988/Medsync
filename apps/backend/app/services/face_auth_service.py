@@ -1,4 +1,19 @@
 import os
+# CRITICAL: Must be set BEFORE importing tensorflow, keras, deepface, or mediapipe.
+# TF 2.17+ defaults to Keras 3 which is incompatible with DeepFace ArcFace weights.
+# tf-keras==2.17.0 (Keras 2 compat layer) must be installed in requirements.txt.
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
+# Verify tf-keras is actually installed before proceeding
+try:
+    import importlib
+    importlib.import_module("tf_keras")
+except ImportError:
+    raise ImportError(
+        "tf-keras package is required for DeepFace ArcFace compatibility. "
+        "Install it with: pip install tf-keras==2.17.0"
+    )
+
 import json
 import numpy as np
 import logging

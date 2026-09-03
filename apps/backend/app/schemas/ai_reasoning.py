@@ -11,3 +11,6 @@ class ClinicalReasoning(BaseModel):
     questions_for_clinician: List[str] = Field(description="Questions or areas the clinician should investigate further.")
     urgency: str = Field(description="Urgency of the findings (e.g., routine, soon, urgent).")
     disclaimer: str = Field(description="Standard medical disclaimer.")
+
+    model_config = {"protected_namespaces": ()}
+

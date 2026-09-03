@@ -1,6 +1,12 @@
 """
 Groq Client — Central LLM reasoning engine for MedSync.
 Handles chat completion, streaming, image explanations, and structured output.
+
+PHI/HIPAA COMPLIANCE NOTICE:
+  groq/compound and groq/compound-mini are NOT currently HIPAA-compliant.
+  If this system processes Protected Health Information (PHI), ensure data is
+  de-identified or routed through a BAA-covered pipeline before production use.
+  See: https://groq.com/trust-center/
 """
 import os
 import logging

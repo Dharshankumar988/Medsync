@@ -28,29 +28,43 @@ export default function PatientQRScanPage() {
   };
 
   useEffect(() => {
-    if (scanResult && scanResult.startsWith("medsync:pharmacy:")) {
-      const id = scanResult.split(":")[2];
-      setPharmacyId(id);
-      resolvePharmacy(id);
+    if (scanResult) {
+      if (scanResult.startsWith("QR-PHM-")) {
+        // New signed pharmacy QR format — pass directly to backend resolve-qr
+        setPharmacyId(scanResult);
+        resolvePharmacy(scanResult);
+      } else if (scanResult.startsWith("medsync:pharmacy:")) {
+        // Legacy format — extract ID (backward compatibility)
+        const id = scanResult.split(":")[2];
+        setPharmacyId(id);
+        resolvePharmacy(id);
+      }
     }
   }, [scanResult]);
 
-  const resolvePharmacy = async (id: string) => {
+  const resolvePharmacy = async (qrData: string) => {
     setLoading(true);
-    // In production, this would hit /api/v1/pharmacies/{id}
     try {
-      // Mock lookup for demonstration if no DB record found
-      let name = "MedSync Network Pharmacy";
-      
-      const { data, error } = await supabase.from('users').select('full_name, email').eq('id', id).single();
-      if (data) {
-        name = data.full_name || data.email || name;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+      const res = await fetch(`${baseUrl}/api/v1/pharmacy/resolve-qr/${encodeURIComponent(qrData)}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Pharmacy not found");
       }
-      
-      setPharmacy({ id, name, address: "Verified Network Location" });
+
+      const json = await res.json();
+      const d = json.data;
+      setPharmacy({ id: d.pharmacy_id, name: d.business_name, address: d.address || "Verified Network Location" });
       setStep("confirm_pharmacy");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert(e.message || "Failed to resolve pharmacy QR");
     } finally {
       setLoading(false);
     }

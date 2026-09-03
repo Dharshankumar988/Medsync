@@ -412,7 +412,7 @@ async def get_blockchain_status(
 ):
     """Get overall health and status of the Blockchain Gateway."""
     try:
-        health = await asyncio.to_thread(blockchain_gateway.get_health)
+        health = await asyncio.to_thread(blockchain_gateway.get_health_status)
         
         status = StatusResponse(
             network=health.get("network", "unknown"),

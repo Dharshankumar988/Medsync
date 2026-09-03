@@ -46,13 +46,13 @@ class BlockchainClient:
         session.mount('http://', adapter)
         session.mount('https://', adapter)
 
-        self.w3 = Web3(Web3.HTTPProvider(blockchain_settings.POLYGON_RPC_URL, session=session))
+        self.w3 = Web3(Web3.HTTPProvider(blockchain_settings.BLOCKCHAIN_RPC_URL, session=session))
         
         # Inject POA middleware for Polygon compatibility
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         
         if not self.w3.is_connected():
-            logger.error(f"Failed to connect to RPC node: {blockchain_settings.POLYGON_RPC_URL}")
+            logger.error(f"Failed to connect to RPC node: {blockchain_settings.BLOCKCHAIN_RPC_URL}")
             # Do not raise here so app doesn't crash on boot; wait until invoked
             return
 
