@@ -36,9 +36,17 @@ class ContractLoader:
     """
     def __init__(self):
         self.contracts: Dict[str, Contract] = {}
-        self.deployments_dir, self.abis_dir = _resolve_paths()
-        
         self.addresses: Dict[str, str] = {}
+
+        # In mock mode, skip all filesystem/RPC work — there are no contracts.
+        from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
+        if RESOLVED_BLOCKCHAIN_MODE not in ("production", "real"):
+            logger.info("Contract loader: mock mode — skipping contract address loading.")
+            self.deployments_dir = ""
+            self.abis_dir = ""
+            return
+
+        self.deployments_dir, self.abis_dir = _resolve_paths()
         self._load_addresses()
 
     def _load_addresses(self):
@@ -79,4 +87,5 @@ class ContractLoader:
         return contract
 
 contract_loader = ContractLoader()
+
 

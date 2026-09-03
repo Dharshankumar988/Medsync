@@ -86,10 +86,20 @@ class GroqClient:
                     logger.info(f"Groq is healthy using model: {model}")
                     return True
             except Exception as e:
+                error_str = str(e).lower()
+                # 401 / invalid API key → stop immediately, one concise message
+                if "401" in error_str or "invalid_api_key" in error_str or "invalid api key" in error_str:
+                    self._healthy = False
+                    logger.warning(
+                        "Groq API key rejected or invalid; PULSE AI is unavailable "
+                        "until the key is corrected."
+                    )
+                    return False
+                # Other errors (rate limit, network, etc.) — log per-model and try next
                 logger.warning(f"Failed to verify Groq model {model}: {e}")
                 
         self._healthy = False
-        logger.error("All Groq models failed verification.")
+        logger.warning("All Groq models failed health verification. PULSE AI is unavailable.")
         return False
 
     def _check_client(self):

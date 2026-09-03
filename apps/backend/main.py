@@ -66,24 +66,33 @@ async def lifespan(app: FastAPI):
         if groq_client.is_healthy:
             logger.info("AI Warmup: Groq LLM → healthy")
         else:
-            logger.warning("AI Warmup: Groq LLM → not configured (missing GROQ_API_KEY)")
+            logger.warning("AI Warmup: Groq LLM → unavailable (check GROQ_API_KEY)")
             
         # 4. Warm up Local Models (Downloading weights if necessary)
         logger.info("AI Warmup: Initializing local models (may take time on first run)...")
         
         def _load_local_models():
             from app.services.rag_service import rag_service
-            from deepface import DeepFace
             
             # SentenceTransformers
             rag_service._get_embedding_model()
             
-            # DeepFace ArcFace (Use safe getter to avoid raw build_model crashing on KerasHistory)
+            # DeepFace ArcFace — attempt eager initialization
             try:
                 from app.services.face_auth_service import get_arcface_model
-                get_arcface_model()
+                model = get_arcface_model()
+                if model is not None:
+                    logger.info("AI Warmup: DeepFace ArcFace → ready (face authentication available)")
+                else:
+                    logger.warning(
+                        "AI Warmup: DeepFace ArcFace → model returned None; "
+                        "face authentication will attempt lazy initialization on first use."
+                    )
             except Exception as e:
-                logger.warning(f"DeepFace ArcFace warmup skipped/failed: {e}")
+                logger.warning(
+                    f"AI Warmup: DeepFace ArcFace → initialization failed ({e}); "
+                    f"face authentication unavailable until resolved."
+                )
             
         await asyncio.to_thread(_load_local_models)
         logger.info("AI Warmup: Local models downloaded and cached successfully.")

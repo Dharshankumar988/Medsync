@@ -27,7 +27,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/models/huggingface \
     DEEPFACE_HOME=/models \
-    PATH="/opt/venv/bin:$PATH"
+    PATH="/opt/venv/bin:$PATH" \
+    TF_CPP_MIN_LOG_LEVEL=2 \
+    TF_ENABLE_ONEDNN_OPTS=0 \
+    CUDA_VISIBLE_DEVICES=-1
 
 # Install ONLY runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

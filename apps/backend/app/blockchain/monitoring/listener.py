@@ -56,8 +56,9 @@ async def fetch_and_enqueue_events(contract_name: str, from_block: int, to_block
 import os
 
 async def block_listener_loop():
-    if os.getenv("BLOCKCHAIN_MODE", "auto").strip().lower() == "mock":
-        logger.info("Mock mode enabled. Skipping blockchain event listener loop.")
+    from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
+    if RESOLVED_BLOCKCHAIN_MODE not in ("production", "real"):
+        logger.info("Mock mode — blockchain event listener loop skipped.")
         return
         
     logger.info("Starting blockchain event listener loop...")

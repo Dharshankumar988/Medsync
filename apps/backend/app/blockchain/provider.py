@@ -1,9 +1,9 @@
 """
 Provider factory for the Blockchain Gateway.
 
-Resolution order:
-1. BLOCKCHAIN_MODE env var  ("production" | "mock")
-2. Auto-detect: try importing web3; if it fails, fall back to mock.
+Resolution:
+  "production" or "real"  → real Web3 provider (fails loudly if web3 missing or RPC unreachable)
+  "mock" or empty/missing → mock provider (no RPC, no contracts)
 
 This module is the ONLY place where the decision is made.
 Every other module imports `blockchain_gateway` from here.
@@ -13,7 +13,9 @@ import logging
 
 logger = logging.getLogger("blockchain.provider")
 
-_BLOCKCHAIN_MODE = os.getenv("BLOCKCHAIN_MODE", "auto").strip().lower()
+_raw = os.getenv("BLOCKCHAIN_MODE", "").strip().lower()
+# Empty / missing / unrecognised → mock.  Only explicit "production"/"real" activates web3.
+RESOLVED_BLOCKCHAIN_MODE = _raw if _raw in ("production", "real", "mock") else "mock"
 
 
 def _can_import_web3() -> bool:
@@ -27,24 +29,17 @@ def _can_import_web3() -> bool:
 
 
 def _resolve_mode() -> str:
-    """Return 'production' or 'mock'."""
-    mode = _BLOCKCHAIN_MODE
-    if mode == "production" or mode == "real":
+    """Return 'production' or 'mock'.  Never silently falls back."""
+    mode = RESOLVED_BLOCKCHAIN_MODE
+    if mode in ("production", "real"):
         if not _can_import_web3():
             raise ImportError(
                 "BLOCKCHAIN_MODE is set to 'production'/'real', but web3 is not installed. "
                 "Failing startup instead of silently falling back to mock mode."
             )
         return "production"
-    elif mode == "mock":
-        return "mock"
-    elif mode == "auto":
-        # auto — probe for web3
-        if _can_import_web3():
-            return "production"
-        return "mock"
-    else:
-        raise ValueError(f"Invalid BLOCKCHAIN_MODE: {mode}. Must be 'production', 'real', 'mock', or 'auto'.")
+    # anything else (including empty) → mock
+    return "mock"
 
 
 def get_gateway():
@@ -55,7 +50,7 @@ def get_gateway():
         from app.blockchain.gateway import BlockchainGateway
         return BlockchainGateway()
     else:
-        logger.warning(
+        logger.info(
             "Blockchain mode: MOCK — blockchain writes are simulated. "
             "Set BLOCKCHAIN_MODE=production for real transactions."
         )

@@ -19,15 +19,18 @@ class BlockchainClient:
         return cls._instance
 
     def _initialize(self):
-        import os
+        from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
+
         self.configured = False
         self.w3 = None
+        self.wallet_address = "0x0000000000000000000000000000000000000000"
         
-        if os.getenv("BLOCKCHAIN_MODE", "mock").lower() == "mock":
-            logger.info("Mock mode enabled. Skipping RPC and wallet initialization.")
-            self.wallet_address = "0x0000000000000000000000000000000000000000"
+        if RESOLVED_BLOCKCHAIN_MODE not in ("production", "real"):
+            # Mock mode — no RPC, no wallet.  Nothing to do.
+            logger.info("Blockchain client: mock mode — RPC and wallet initialization skipped.")
             return
             
+        # ── Production mode: validate config, connect to RPC, init wallet ──
         try:
             blockchain_settings.validate()
         except ValueError as e:
@@ -52,7 +55,11 @@ class BlockchainClient:
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
         
         if not self.w3.is_connected():
-            logger.error(f"Failed to connect to RPC node: {blockchain_settings.BLOCKCHAIN_RPC_URL}")
+            logger.error(
+                f"BLOCKCHAIN_MODE=production but RPC node is unreachable: "
+                f"{blockchain_settings.BLOCKCHAIN_RPC_URL}  — "
+                f"blockchain features will be unavailable until the node is reachable."
+            )
             # Do not raise here so app doesn't crash on boot; wait until invoked
             return
 
@@ -92,3 +99,4 @@ class BlockchainClient:
         return self.w3.is_connected()
 
 blockchain_client = BlockchainClient()
+
