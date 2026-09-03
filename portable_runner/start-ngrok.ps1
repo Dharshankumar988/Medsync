@@ -5,13 +5,22 @@ Set-Location -LiteralPath $ScriptPath
 
 Write-Host "Starting Ngrok Tunnel for MedSync..." -ForegroundColor Cyan
 
-# 1. Check if ngrok.exe exists
-$NgrokPath = Join-Path $ScriptPath "ngrok.exe"
-if (-not (Test-Path -LiteralPath $NgrokPath)) {
-    Write-Host "ERROR: ngrok.exe is missing from this folder!" -ForegroundColor Red
-    Write-Host "Please download the Ngrok Windows ZIP from https://ngrok.com/download" -ForegroundColor Yellow
-    Write-Host "Extract ngrok.exe and place it in this folder ($ScriptPath)." -ForegroundColor Yellow
-    exit 1
+# 1. Check if ngrok is available
+$NgrokPath = ""
+if (Get-Command "ngrok" -ErrorAction SilentlyContinue) {
+    $NgrokPath = "ngrok"
+} else {
+    $LocalNgrokPath = Join-Path $ScriptPath "ngrok.exe"
+    if (Test-Path -LiteralPath $LocalNgrokPath) {
+        $NgrokPath = $LocalNgrokPath
+    } else {
+        Write-Host "ERROR: ngrok is not installed globally, and ngrok.exe is missing from this folder!" -ForegroundColor Red
+        Write-Host "Please either:" -ForegroundColor Yellow
+        Write-Host "1. Install ngrok globally (e.g., winget install ngrok or npm install -g ngrok)" -ForegroundColor Yellow
+        Write-Host "2. Download the Ngrok Windows ZIP from https://ngrok.com/download" -ForegroundColor Yellow
+        Write-Host "   Extract ngrok.exe and place it in this folder ($ScriptPath)." -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 # 2. Check for .env variables

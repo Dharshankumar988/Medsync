@@ -105,7 +105,7 @@ To expose your backend securely to the internet for free (so Vercel can connect 
 1. Create an Account: Go to Ngrok.com and make a free account.
 2. Claim Domain: Go to your Dashboard -> Cloud Edge -> Domains to claim your 1 free static domain (e.g., https://your-domain.ngrok-free.app).
 3. Configure: Open .env and fill in NGROK_DOMAIN and NGROK_AUTHTOKEN.
-4. Download Ngrok: Download the Windows ZIP from Ngrok, extract ngrok.exe, and drop it directly into the portable_runner folder.
+4. Install Ngrok: Install ngrok globally (e.g., `winget install ngrok` or `npm install -g ngrok`), OR download the Windows ZIP, extract ngrok.exe, and drop it directly into the portable_runner folder.
 5. Start the Tunnel: Open PowerShell in your portable_runner folder and run:
    
    .\start-ngrok.ps1
