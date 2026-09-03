@@ -3,12 +3,12 @@ from pydantic_settings import BaseSettings
 
 class AIConfig(BaseSettings):
     # ─── Groq Models Config ───
-    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "groq/compound")
-    GROQ_FALLBACK_MODEL: str = os.getenv("GROQ_FALLBACK_MODEL", "groq/compound-mini")
-    LLM_MODEL_DOCTOR: str = os.getenv("LLM_MODEL_DOCTOR", "groq/compound")
-    LLM_MODEL_PATIENT: str = os.getenv("LLM_MODEL_PATIENT", "groq/compound-mini")
-    LLM_MODEL_PHARMACY: str = os.getenv("LLM_MODEL_PHARMACY", "groq/compound-mini")
-    LLM_MODEL_ADMIN: str = os.getenv("LLM_MODEL_ADMIN", "groq/compound-mini")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    GROQ_FALLBACK_MODEL: str = os.getenv("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant")
+    LLM_MODEL_DOCTOR: str = os.getenv("LLM_MODEL_DOCTOR", "llama-3.3-70b-versatile")
+    LLM_MODEL_PATIENT: str = os.getenv("LLM_MODEL_PATIENT", "llama-3.1-8b-instant")
+    LLM_MODEL_PHARMACY: str = os.getenv("LLM_MODEL_PHARMACY", "llama-3.1-8b-instant")
+    LLM_MODEL_ADMIN: str = os.getenv("LLM_MODEL_ADMIN", "llama-3.1-8b-instant")
 
     # ─── Hugging Face Endpoints ───
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")
