@@ -47,7 +47,9 @@ try {
 Write-Host "Using installation directory: $installPath" -ForegroundColor Green
 
 # 2. Download ZIP using curl.exe
-$zipUrl = "https://raw.githubusercontent.com/dharshankumar988/Medsync/main/portable_runner.zip"
+# We append a random GUID to bypass GitHub's aggressive 5-minute raw content cache
+$cacheBuster = [guid]::NewGuid().ToString()
+$zipUrl = "https://raw.githubusercontent.com/dharshankumar988/Medsync/main/portable_runner.zip?v=$cacheBuster"
 $zipPath = Join-Path $installPath "medsync-portable-runner.zip"
 
 Write-Host "Downloading portable runner..."
