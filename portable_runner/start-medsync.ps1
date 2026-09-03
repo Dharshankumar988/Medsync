@@ -86,11 +86,11 @@ try {
     exit 1
 }
 
-# 7. Stop existing container if running
-$existing = docker ps -a -q -f "name=^/${CONTAINER_NAME}$"
+# 7. Stop existing containers if running
+$existing = docker ps -a -q -f "name=^/medsync-backend$" -f "name=^/medsync_backend$"
 if ($existing) {
-    Write-Host "Stopping and removing existing container..."
-    docker rm -f $CONTAINER_NAME > $null
+    Write-Host "Stopping and removing existing container(s)..."
+    $existing | ForEach-Object { docker rm -f $_ > $null }
 }
 
 # 8. Start container
@@ -134,7 +134,7 @@ Write-Progress -Activity "Starting MedSync Backend" -Completed
 if (-not $healthy) {
     Write-Host "`nWARNING: Backend did not report healthy within 5 minutes." -ForegroundColor Red
     Write-Host "Docker container status:"
-    docker ps -f "name=^/${CONTAINER_NAME}$"
+    docker ps -f "name=^/medsync-backend$" -f "name=^/medsync_backend$"
     Write-Host "`nRecent logs:"
     docker logs --tail 20 $CONTAINER_NAME
     Write-Host "`nTroubleshooting:"
