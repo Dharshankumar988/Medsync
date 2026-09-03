@@ -85,8 +85,8 @@ DB_CONTEXT_QUERIES = {
         "query": """
             SELECT
                 COUNT(*) as total_prescriptions,
-                COUNT(CASE WHEN status = 'ACTIVE' THEN 1 END) as active,
-                COUNT(CASE WHEN status = 'DISPENSED' THEN 1 END) as dispensed,
+                COUNT(CASE WHEN is_finalized = true AND is_dispensed = false THEN 1 END) as active,
+                COUNT(CASE WHEN is_dispensed = true THEN 1 END) as dispensed,
                 COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as last_7_days
             FROM prescriptions
         """
@@ -106,10 +106,11 @@ DB_CONTEXT_QUERIES = {
         "source": "MedSync Database",
         "query": """
             SELECT
-                COUNT(*) as total_doctors,
-                COUNT(CASE WHEN is_verified = true THEN 1 END) as verified,
-                COUNT(CASE WHEN is_verified = false THEN 1 END) as unverified
-            FROM doctors
+                COUNT(d.id) as total_doctors,
+                COUNT(CASE WHEN u.is_verified = true THEN 1 END) as verified,
+                COUNT(CASE WHEN u.is_verified = false THEN 1 END) as unverified
+            FROM doctors d
+            JOIN users u ON d.user_id = u.id
         """
     },
 }

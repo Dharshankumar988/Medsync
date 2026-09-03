@@ -21,6 +21,51 @@ except ImportError:
 
 logger = logging.getLogger("medsync.startup")
 
+class AppState:
+    def __init__(self):
+        self.models_ready = False
+        self.groq_ready = False
+        self.blockchain_ready = False
+
+app_state = AppState()
+
+async def _init_ai_background():
+    try:
+        from app.ai.core.inference_service import inference_service
+        from app.ai.services.groq_client import groq_client
+        
+        # Verify Groq is configured
+        await groq_client.verify_health()
+        if groq_client.is_healthy:
+            logger.info("AI Warmup: Groq LLM → healthy")
+            app_state.groq_ready = True
+        else:
+            logger.warning("AI Warmup: Groq LLM → unavailable (check GROQ_API_KEY)")
+            app_state.groq_ready = False
+            
+        # Warm up Local Models
+        logger.info("AI Warmup: Initializing local models (may take time on first run)...")
+        
+        def _load_local_models():
+            from app.services.rag_service import rag_service
+            rag_service._get_embedding_model()
+            try:
+                from app.services.face_auth_service import get_arcface_model
+                model = get_arcface_model()
+                if model is not None:
+                    logger.info("AI Warmup: DeepFace ArcFace → ready")
+                else:
+                    logger.warning("AI Warmup: DeepFace ArcFace → model returned None (lazy init fallback)")
+            except Exception as e:
+                logger.warning(f"AI Warmup: DeepFace ArcFace → failed ({e})")
+
+        await asyncio.to_thread(_load_local_models)
+        logger.info("AI Warmup: Local models downloaded and cached successfully.")
+        app_state.models_ready = True
+        logger.info("═══ AI Subsystem Ready ═══")
+    except Exception as e:
+        logger.warning(f"AI warmup skipped or failed (non-critical): {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ──
@@ -39,10 +84,13 @@ async def lifespan(app: FastAPI):
         from app.blockchain.client import blockchain_client
         if getattr(blockchain_client, 'configured', False):
             start_scheduler()
+            app_state.blockchain_ready = True
         else:
             logger.info("Blockchain not configured. Scheduler disabled.")
+            app_state.blockchain_ready = False
     except Exception as e:
         logger.warning(f"Failed to check blockchain configuration: {e}")
+        app_state.blockchain_ready = False
     # 2. Start QR token cleanup background task
     qr_cleanup_task = None
     try:
@@ -51,55 +99,13 @@ async def lifespan(app: FastAPI):
         logger.info("QR cleanup background task registered")
     except Exception as e:
         logger.warning(f"QR cleanup task registration failed (non-critical): {e}")
+    # 3. Warm up AI subsystem (non-blocking background task)
+    from app.ai.core.inference_service import inference_service
+    logger.info("AI Warmup: Pinging HF Space in background...")
+    asyncio.create_task(inference_service.warmup())
     
-    # 3. Warm up AI subsystem (non-blocking)
-    try:
-        from app.ai.core.inference_service import inference_service
-        from app.ai.services.groq_client import groq_client
-        
-        # Ping HF Space to wake it up in the background so it doesn't block startup
-        logger.info("AI Warmup: Pinging HF Space in background...")
-        asyncio.create_task(inference_service.warmup())
-        
-        # Verify Groq is configured
-        await groq_client.verify_health()
-        if groq_client.is_healthy:
-            logger.info("AI Warmup: Groq LLM → healthy")
-        else:
-            logger.warning("AI Warmup: Groq LLM → unavailable (check GROQ_API_KEY)")
-            
-        # 4. Warm up Local Models (Downloading weights if necessary)
-        logger.info("AI Warmup: Initializing local models (may take time on first run)...")
-        
-        def _load_local_models():
-            from app.services.rag_service import rag_service
-            
-            # SentenceTransformers
-            rag_service._get_embedding_model()
-            
-            # DeepFace ArcFace — attempt eager initialization
-            try:
-                from app.services.face_auth_service import get_arcface_model
-                model = get_arcface_model()
-                if model is not None:
-                    logger.info("AI Warmup: DeepFace ArcFace → ready (face authentication available)")
-                else:
-                    logger.warning(
-                        "AI Warmup: DeepFace ArcFace → model returned None; "
-                        "face authentication will attempt lazy initialization on first use."
-                    )
-            except Exception as e:
-                logger.warning(
-                    f"AI Warmup: DeepFace ArcFace → initialization failed ({e}); "
-                    f"face authentication unavailable until resolved."
-                )
-            
-        await asyncio.to_thread(_load_local_models)
-        logger.info("AI Warmup: Local models downloaded and cached successfully.")
-        
-        logger.info("═══ AI Subsystem Ready ═══")
-    except Exception as e:
-        logger.warning(f"AI warmup skipped or failed (non-critical): {e}")
+    # Run heavy AI / local model initialization completely in the background
+    asyncio.create_task(_init_ai_background())
     
     yield
     
@@ -161,4 +167,16 @@ async def root():
 
 @app.get("/health", tags=["System"])
 async def health_check():
+    # Health checks LIVENESS: is the FastAPI server running and responding?
     return {"status": "ok", "version": settings.VERSION}
+
+@app.get("/readiness", tags=["System"])
+async def readiness_check():
+    # Readiness checks DEPENDENCIES: are optional services ready?
+    return {
+        "status": "ready",
+        "database": True,  # DB connection check could be added here
+        "models": app_state.models_ready,
+        "groq": app_state.groq_ready,
+        "blockchain": app_state.blockchain_ready
+    }

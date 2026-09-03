@@ -11,6 +11,12 @@ logger = logging.getLogger("blockchain.scheduler")
 scheduler = AsyncIOScheduler()
 
 def start_scheduler():
+    from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
+    
+    if RESOLVED_BLOCKCHAIN_MODE == "mock":
+        logger.info("Blockchain mode: mock — blockchain scheduler disabled.")
+        return
+
     logger.info("Starting Blockchain Synchronization Workers...")
     
     # Process retry queue every 30 seconds
@@ -34,7 +40,8 @@ def start_scheduler():
         sync_events,
         trigger=IntervalTrigger(seconds=5),
         id="event_worker",
-        replace_existing=True
+        replace_existing=True,
+        max_instances=1
     )
     
     # Start the background long-running block listener

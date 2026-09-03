@@ -25,6 +25,14 @@ def _resolve_paths() -> tuple[str, str]:
 
     # Fallback: resolve relative to source tree (local dev without Docker)
     backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
+    # Check if artifacts are bundled inside the app (Docker approach)
+    bundled_deployments = os.path.join(backend_dir, "blockchain", "artifacts", "deployments", blockchain_settings.NETWORK_NAME)
+    bundled_abis = os.path.join(backend_dir, "blockchain", "artifacts", "abis")
+    
+    if os.path.isdir(bundled_deployments):
+        return bundled_deployments, bundled_abis
+        
     workspace_dir = os.path.dirname(os.path.dirname(backend_dir))
     deployments_dir = os.path.join(workspace_dir, "blockchain", "deployments", blockchain_settings.NETWORK_NAME)
     abis_dir = os.path.join(workspace_dir, "blockchain", "abis")
@@ -40,7 +48,7 @@ class ContractLoader:
 
         # In mock mode, skip all filesystem/RPC work — there are no contracts.
         from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
-        if RESOLVED_BLOCKCHAIN_MODE not in ("production", "real"):
+        if RESOLVED_BLOCKCHAIN_MODE == "mock":
             logger.info("Contract loader: mock mode — skipping contract address loading.")
             self.deployments_dir = ""
             self.abis_dir = ""

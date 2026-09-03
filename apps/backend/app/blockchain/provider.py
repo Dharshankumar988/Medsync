@@ -10,6 +10,10 @@ Every other module imports `blockchain_gateway` from here.
 """
 import os
 import logging
+from dotenv import load_dotenv
+
+# Ensure local .env is loaded before checking BLOCKCHAIN_MODE
+load_dotenv()
 
 logger = logging.getLogger("blockchain.provider")
 

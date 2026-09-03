@@ -69,22 +69,7 @@ $CONTAINER_NAME = "medsync-backend"
 $PORT = 8000
 
 # 6. Pull image
-Write-Host "Pulling image: $IMAGE_NAME..."
-try {
-    if ($PLATFORM) {
-        docker pull --platform linux/amd64 $IMAGE_NAME
-    } else {
-        docker pull $IMAGE_NAME
-    }
-} catch {
-    Write-Host "`nERROR: Failed to pull image $IMAGE_NAME" -ForegroundColor Red
-    Write-Host "Possible causes:"
-    Write-Host "- The image does not exist yet."
-    Write-Host "- The repository/package is private and you need to log in."
-    Write-Host "  If private, run: docker login ghcr.io -u <your-github-username>"
-    Write-Host "- Network problem."
-    exit 1
-}
+Write-Host "Skipping image pull to use locally built image..." -ForegroundColor Yellow
 
 # 7. Stop existing containers if running
 $existing = docker ps -a -q -f "name=^/medsync-backend$" -f "name=^/medsync_backend$"
@@ -111,14 +96,22 @@ Start-Process cmd -ArgumentList "/c title MedSync Backend Logs & docker logs -f 
 
 # 10. Wait for local health check
 Write-Host "Waiting for backend to become healthy (HTTP 200)..."
-Write-Host "NOTE: First startup may take around 4 minutes to download AI model caches." -ForegroundColor Yellow
+Write-Host "NOTE: First startup may take a few minutes to download AI models in the background." -ForegroundColor Yellow
 $healthy = $false
-$maxSteps = 120 # 4 minutes with 2-second sleeps
+$maxSteps = 150 # 5 minutes with 2-second sleeps
 for ($i = 0; $i -lt $maxSteps; $i++) {
     $percent = [math]::min(100, [math]::round(($i / $maxSteps) * 100))
-    Write-Progress -Activity "Downloading AI Model Cache & Starting Backend" -Status "Please wait, this will take about 4 minutes... ($percent%)" -PercentComplete $percent
+    Write-Progress -Activity "Starting Backend & AI Services" -Status "Please wait... ($percent%)" -PercentComplete $percent
     
     Start-Sleep -Seconds 2
+    
+    # Check if container crashed
+    $status = docker inspect -f '{{.State.Status}}' $CONTAINER_NAME 2>$null
+    if ($status -eq "exited" -or $status -eq "dead") {
+        Write-Host "`nERROR: The container crashed during startup." -ForegroundColor Red
+        break
+    }
+    
     try {
         $response = Invoke-WebRequest -Uri "http://localhost:${PORT}/health" -UseBasicParsing -ErrorAction SilentlyContinue
         if ($response.StatusCode -eq 200) {
@@ -132,11 +125,15 @@ for ($i = 0; $i -lt $maxSteps; $i++) {
 Write-Progress -Activity "Starting MedSync Backend" -Completed
 
 if (-not $healthy) {
-    Write-Host "`nWARNING: Backend did not report healthy within 5 minutes." -ForegroundColor Red
-    Write-Host "Docker container status:"
-    docker ps -f "name=^/medsync-backend$" -f "name=^/medsync_backend$"
-    Write-Host "`nRecent logs:"
-    docker logs --tail 20 $CONTAINER_NAME
+    if ($status -eq "exited" -or $status -eq "dead") {
+        Write-Host "`nDocker container crashed. Recent logs:" -ForegroundColor Red
+    } else {
+        Write-Host "`nWARNING: Backend did not report healthy within 5 minutes." -ForegroundColor Red
+        Write-Host "Docker container status:"
+        docker ps -f "name=^/medsync-backend$" -f "name=^/medsync_backend$"
+        Write-Host "`nRecent logs:"
+    }
+    docker logs --tail 30 $CONTAINER_NAME
     Write-Host "`nTroubleshooting:"
     Write-Host "- Verify your .env variables (especially Database connection)."
     Write-Host "- Ensure port 8000 is not blocked or in use by another app."
