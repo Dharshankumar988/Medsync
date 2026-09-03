@@ -8,18 +8,51 @@ Write-Host "Starting Ngrok Tunnel for MedSync..." -ForegroundColor Cyan
 # 1. Check if ngrok is available
 $NgrokPath = ""
 if (Get-Command "ngrok" -ErrorAction SilentlyContinue) {
-    $NgrokPath = "ngrok"
+    $NgrokPath = (Get-Command "ngrok").Source
+    if (-not $NgrokPath) { $NgrokPath = "ngrok" }
 } else {
     $LocalNgrokPath = Join-Path $ScriptPath "ngrok.exe"
     if (Test-Path -LiteralPath $LocalNgrokPath) {
         $NgrokPath = $LocalNgrokPath
     } else {
-        Write-Host "ERROR: ngrok is not installed globally, and ngrok.exe is missing from this folder!" -ForegroundColor Red
-        Write-Host "Please either:" -ForegroundColor Yellow
-        Write-Host "1. Install ngrok globally (e.g., winget install ngrok or npm install -g ngrok)" -ForegroundColor Yellow
-        Write-Host "2. Download the Ngrok Windows ZIP from https://ngrok.com/download" -ForegroundColor Yellow
-        Write-Host "   Extract ngrok.exe and place it in this folder ($ScriptPath)." -ForegroundColor Yellow
-        exit 1
+        # Check common system locations in case it's installed but not in PATH
+        $CommonLocations = @(
+            "$env:LOCALAPPDATA\Microsoft\WindowsApps\ngrok.exe", # Microsoft Store version
+            "$env:ProgramFiles\ngrok\ngrok.exe",
+            "${env:ProgramFiles(x86)}\ngrok\ngrok.exe",
+            "$env:LOCALAPPDATA\ngrok\ngrok.exe",
+            "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ngrok.exe",
+            "$env:ProgramData\chocolatey\bin\ngrok.exe",
+            "$env:USERPROFILE\scoop\shims\ngrok.exe",
+            "$env:USERPROFILE\Downloads\ngrok.exe"
+        )
+        
+        foreach ($loc in $CommonLocations) {
+            if (Test-Path -LiteralPath $loc) {
+                $NgrokPath = $loc
+                break
+            }
+        }
+
+        if (-not $NgrokPath) {
+            Write-Host "ngrok not found on the system. Automatically downloading portable ngrok..." -ForegroundColor Yellow
+            $ZipPath = Join-Path $ScriptPath "ngrok.zip"
+            try {
+                Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile $ZipPath -UseBasicParsing
+                Write-Host "Extracting ngrok..." -ForegroundColor Cyan
+                Expand-Archive -Path $ZipPath -DestinationPath $ScriptPath -Force
+                Remove-Item -Path $ZipPath -Force
+                $NgrokPath = Join-Path $ScriptPath "ngrok.exe"
+                Write-Host "ngrok successfully downloaded and extracted." -ForegroundColor Green
+            } catch {
+                Write-Host "ERROR: Failed to automatically download ngrok." -ForegroundColor Red
+                Write-Host "Please either:" -ForegroundColor Yellow
+                Write-Host "1. Install ngrok globally (e.g., winget install ngrok)" -ForegroundColor Yellow
+                Write-Host "2. Download the Ngrok Windows ZIP manually from https://ngrok.com/download" -ForegroundColor Yellow
+                Write-Host "   Extract ngrok.exe and place it in this folder ($ScriptPath)." -ForegroundColor Yellow
+                exit 1
+            }
+        }
     }
 }
 
