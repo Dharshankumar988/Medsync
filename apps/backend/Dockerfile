@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY apps/backend/requirements.txt .
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -28,9 +28,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/models/huggingface \
     DEEPFACE_HOME=/models \
     PATH="/opt/venv/bin:$PATH" \
-    TF_CPP_MIN_LOG_LEVEL=2 \
+    TF_CPP_MIN_LOG_LEVEL=3 \
     TF_ENABLE_ONEDNN_OPTS=0 \
-    CUDA_VISIBLE_DEVICES=-1
+    CUDA_VISIBLE_DEVICES=-1 \
+    MPLCONFIGDIR=/tmp/matplotlib
 
 # Install ONLY runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -48,21 +49,30 @@ WORKDIR /app
 # Copy the virtual environment from the builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy only the necessary application files (exclude .git, tests, etc.)
-COPY alembic.ini .
-COPY alembic/ alembic/
-COPY app/ app/
-COPY main.py .
+# Prewarm matplotlib font cache
+RUN python -c "import matplotlib.pyplot"
+
+# Copy backend files
+COPY apps/backend/alembic.ini .
+COPY apps/backend/alembic/ alembic/
+COPY apps/backend/app/ app/
+COPY apps/backend/main.py .
+
+# Copy blockchain artifacts if they exist
+# Using a wildcard copy so it doesn't fail if the folders don't exist yet
+COPY apps/blockchain/deployment[s] /app/app/blockchain/artifacts/deployments
+COPY apps/blockchain/abi[s] /app/app/blockchain/artifacts/abis
 
 EXPOSE 8000
 
 # Create a non-root user and switch to it
 RUN adduser --disabled-password --gecos "" medsyncuser && \
     mkdir -p /models && chown -R medsyncuser:medsyncuser /models && \
+    mkdir -p /tmp/matplotlib && chown -R medsyncuser:medsyncuser /tmp/matplotlib && \
     chown -R medsyncuser:medsyncuser /app
 USER medsyncuser
 
-# Health check
+# Health check (Liveness)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
