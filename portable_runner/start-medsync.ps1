@@ -70,10 +70,17 @@ $FACE_PORT = 8080
 function Start-FaceService {
     Write-Host "`n--- Starting Face Service ---" -ForegroundColor Cyan
     
-    # Check if image exists
-    $imageExists = docker images -q $FACE_IMAGE
-    if (-not $imageExists) {
-        Write-Host "ERROR: Docker image $FACE_IMAGE not found locally." -ForegroundColor Red
+    # Build face service image from source
+    $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
+    $FaceDockerfile = Join-Path $RepoRoot "apps" "face-service" "Dockerfile"
+    if (-not (Test-Path $FaceDockerfile)) {
+        Write-Host "ERROR: Face Service Dockerfile not found at $FaceDockerfile" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "Building Face Service Docker Image from source..." -ForegroundColor Cyan
+    docker build -t $FACE_IMAGE -f "$FaceDockerfile" "$RepoRoot\apps\face-service"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Failed to build face service image." -ForegroundColor Red
         exit 1
     }
 
