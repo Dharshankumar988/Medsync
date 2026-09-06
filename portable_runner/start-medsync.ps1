@@ -75,7 +75,7 @@ function Start-FaceService {
     # Try pulling pre-built image from GHCR first
     $FACE_IMAGE = $null
     Write-Host "Pulling Face Service image from registry..." -ForegroundColor Cyan
-    docker pull $FACE_REGISTRY_IMAGE 2>$null
+    cmd /c "docker pull $FACE_REGISTRY_IMAGE" 2>&1
     if ($LASTEXITCODE -eq 0) {
         $FACE_IMAGE = $FACE_REGISTRY_IMAGE
         Write-Host "Using registry image: $FACE_IMAGE" -ForegroundColor Green
@@ -132,7 +132,7 @@ function Start-Backend {
     # Try pulling pre-built image from GHCR first
     $BACKEND_IMAGE = $null
     Write-Host "Pulling Backend image from registry..." -ForegroundColor Cyan
-    docker pull $BACKEND_REGISTRY_IMAGE 2>$null
+    cmd /c "docker pull $BACKEND_REGISTRY_IMAGE" 2>&1
     if ($LASTEXITCODE -eq 0) {
         $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
         Write-Host "Using registry image: $BACKEND_IMAGE" -ForegroundColor Green
