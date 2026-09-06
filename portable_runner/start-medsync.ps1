@@ -59,29 +59,41 @@ if (-not (Test-Path -LiteralPath $ENV_FILE)) {
 }
 
 # Configuration
-$BACKEND_IMAGE = "medsync-backend:local"
+$BACKEND_REGISTRY_IMAGE = "ghcr.io/dharshankumar988/medsync-backend:latest"
+$BACKEND_LOCAL_IMAGE = "medsync-backend:local"
 $BACKEND_CONTAINER = "medsync-backend"
 $BACKEND_PORT = 8000
 
-$FACE_IMAGE = "medsync-face-service:latest"
+$FACE_REGISTRY_IMAGE = "ghcr.io/dharshankumar988/medsync-face-service:latest"
+$FACE_LOCAL_IMAGE = "medsync-face-service:local"
 $FACE_CONTAINER = "medsync-face-service"
 $FACE_PORT = 8080
 
 function Start-FaceService {
     Write-Host "`n--- Starting Face Service ---" -ForegroundColor Cyan
     
-    # Build face service image from source
-    $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
-    $FaceDockerfile = Join-Path $RepoRoot "apps" "face-service" "Dockerfile"
-    if (-not (Test-Path $FaceDockerfile)) {
-        Write-Host "ERROR: Face Service Dockerfile not found at $FaceDockerfile" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "Building Face Service Docker Image from source..." -ForegroundColor Cyan
-    docker build -t $FACE_IMAGE -f "$FaceDockerfile" "$RepoRoot\apps\face-service"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Failed to build face service image." -ForegroundColor Red
-        exit 1
+    # Try pulling pre-built image from GHCR first
+    $FACE_IMAGE = $null
+    Write-Host "Pulling Face Service image from registry..." -ForegroundColor Cyan
+    docker pull $FACE_REGISTRY_IMAGE 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $FACE_IMAGE = $FACE_REGISTRY_IMAGE
+        Write-Host "Using registry image: $FACE_IMAGE" -ForegroundColor Green
+    } else {
+        Write-Host "Registry pull failed. Building from source..." -ForegroundColor Yellow
+        $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
+        $FaceDockerfile = Join-Path $RepoRoot "apps" "face-service" "Dockerfile"
+        if (-not (Test-Path $FaceDockerfile)) {
+            Write-Host "ERROR: Face Service Dockerfile not found and registry image unavailable." -ForegroundColor Red
+            exit 1
+        }
+        docker build -t $FACE_LOCAL_IMAGE -f "$FaceDockerfile" "$RepoRoot\apps\face-service"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to build face service image." -ForegroundColor Red
+            exit 1
+        }
+        $FACE_IMAGE = $FACE_LOCAL_IMAGE
+        Write-Host "Using locally built image: $FACE_IMAGE" -ForegroundColor Green
     }
 
     $existing = docker ps -a -q -f "name=^/${FACE_CONTAINER}$"
@@ -117,12 +129,23 @@ function Start-Backend {
     param ([string]$EnvOverride = "")
     Write-Host "`n--- Starting Backend ---" -ForegroundColor Cyan
     
-    $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
-    Write-Host "Building Backend Docker Image from source..." -ForegroundColor Cyan
-    docker build -t $BACKEND_IMAGE -f "$RepoRoot\apps\backend\Dockerfile" "$RepoRoot"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Failed to build backend image." -ForegroundColor Red
-        exit 1
+    # Try pulling pre-built image from GHCR first
+    $BACKEND_IMAGE = $null
+    Write-Host "Pulling Backend image from registry..." -ForegroundColor Cyan
+    docker pull $BACKEND_REGISTRY_IMAGE 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
+        Write-Host "Using registry image: $BACKEND_IMAGE" -ForegroundColor Green
+    } else {
+        Write-Host "Registry pull failed. Building from source..." -ForegroundColor Yellow
+        $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
+        docker build -t $BACKEND_LOCAL_IMAGE -f "$RepoRoot\apps\backend\Dockerfile" "$RepoRoot"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to build backend image." -ForegroundColor Red
+            exit 1
+        }
+        $BACKEND_IMAGE = $BACKEND_LOCAL_IMAGE
+        Write-Host "Using locally built image: $BACKEND_IMAGE" -ForegroundColor Green
     }
 
     $existing = docker ps -a -q -f "name=^/${BACKEND_CONTAINER}$"
