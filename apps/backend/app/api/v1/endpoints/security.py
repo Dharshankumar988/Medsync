@@ -16,8 +16,11 @@ from app.models.audit_log import AuditLog
 
 router = APIRouter()
 
+from fastapi import Response
+
 @router.get("/status")
 async def get_status(
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -28,8 +31,9 @@ async def get_status(
     if current_user.role.upper() != UserRole.PATIENT.value.upper():
         raise HTTPException(status_code=403, detail="Only patients require security enrollment.")
         
-    status = await get_security_status(db, current_user.id)
-    return {"status": status}
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    status_val = await get_security_status(db, current_user.id)
+    return {"status": status_val}
 
 @router.post("/enroll-pin")
 async def enroll_pin(

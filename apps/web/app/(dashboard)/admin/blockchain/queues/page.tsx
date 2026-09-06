@@ -27,7 +27,15 @@ export default function QueuesDashboard() {
   }, [fetchMetrics]);
 
   if (loading) {
-    return <div className="animate-pulse h-96 bg-muted rounded-xl"></div>;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Layers className="w-6 h-6 text-primary" /> Queues & Workers</h1>
+          <p className="text-muted-foreground mt-1">Monitor the state of background event processing queues.</p>
+        </div>
+        <div className="animate-pulse h-96 bg-muted rounded-xl"></div>
+      </div>
+    );
   }
 
   return (

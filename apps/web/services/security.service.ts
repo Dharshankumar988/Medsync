@@ -6,7 +6,7 @@ const API_URL = `${BASE_URL}/api/v1`;
 
 export class SecurityService {
   static async getStatus(token: string) {
-    const response = await axios.get(`${API_URL}/security/status`, {
+    const response = await axios.get(`${API_URL}/security/status?_t=${Date.now()}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     return response.data;
