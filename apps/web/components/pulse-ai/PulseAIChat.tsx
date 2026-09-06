@@ -167,7 +167,7 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
   }, []);
 
   return (
-    <div className={cn("flex flex-col bg-card overflow-hidden", fullPage ? "h-full rounded-none" : "h-[600px] w-[400px] rounded-2xl shadow-2xl border border-border")}>
+    <div className={cn("flex flex-col bg-card overflow-hidden", fullPage ? "h-full rounded-none" : "w-full h-full rounded-2xl shadow-2xl border border-border")}>
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border p-4 bg-muted/30">
         <PulseAIIcon size={32} animate={isLoading} />

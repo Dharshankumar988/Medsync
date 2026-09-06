@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from "react";
-import { BrowserProvider, JsonRpcSigner } from "ethers";
+import { BrowserProvider, JsonRpcProvider, JsonRpcSigner, Provider } from "ethers";
 
 interface Web3ContextState {
   address: string | null;
@@ -9,7 +9,7 @@ interface Web3ContextState {
   isConnecting: boolean;
   error: string | null;
   signer: JsonRpcSigner | null;
-  provider: BrowserProvider | null;
+  provider: Provider | null;
   connect: () => Promise<void>;
   disconnect: () => void;
   switchToPolygonAmoy: () => Promise<void>;
@@ -26,7 +26,7 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const [provider, setProvider] = useState<Provider | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && (window as any).ethereum) {
@@ -65,6 +65,13 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
           (window as any).ethereum.removeListener("chainChanged", handleChainChanged);
         }
       };
+    } else {
+      // Fallback to read-only JsonRpcProvider if MetaMask is not installed
+      // This allows the UI to fetch data from Alchemy/Polygon directly
+      const rpcUrl = process.env.NEXT_PUBLIC_POLYGON_RPC_URL || "https://rpc-amoy.polygon.technology/";
+      const p = new JsonRpcProvider(rpcUrl);
+      setProvider(p);
+      setChainId(POLYGON_AMOY_CHAIN_ID);
     }
   }, []);
 
@@ -117,15 +124,17 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
       const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
       if (accounts && accounts.length > 0) {
         setAddress(accounts[0]);
-        if (provider) {
-          const s = await provider.getSigner();
-          setSigner(s);
-          const network = await provider.getNetwork();
-          setChainId(Number(network.chainId));
-          
-          if (Number(network.chainId) !== POLYGON_AMOY_CHAIN_ID) {
+        // Re-initialize BrowserProvider for signing if it was a JsonRpcProvider
+        const browserProvider = new BrowserProvider((window as any).ethereum);
+        setProvider(browserProvider);
+        
+        const s = await browserProvider.getSigner();
+        setSigner(s);
+        const network = await browserProvider.getNetwork();
+        setChainId(Number(network.chainId));
+        
+        if (Number(network.chainId) !== POLYGON_AMOY_CHAIN_ID) {
              await switchToPolygonAmoy();
-          }
         }
       }
     } catch (err: any) {
