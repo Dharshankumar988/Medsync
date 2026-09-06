@@ -41,6 +41,23 @@ export default function PharmacyOrdersPage() {
     }
   };
 
+  const handleVerifyDelivery = async (orderId: string) => {
+    const otp = window.prompt("Enter the 4-digit delivery verification code provided by the patient:");
+    if (!otp) return;
+    if (otp.length !== 4 || isNaN(Number(otp))) {
+      alert("Invalid code format. Must be 4 digits.");
+      return;
+    }
+
+    const success = await pharmacyService.verifyDelivery(orderId, otp);
+    if (success) {
+      alert("Delivery verified successfully!");
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "DELIVERED" } : o));
+    } else {
+      alert("Failed to verify delivery. Incorrect code.");
+    }
+  };
+
   const filteredOrders = useMemo(() => {
     let filtered = orders;
     if (activeTab !== "ALL") {
@@ -155,9 +172,14 @@ export default function PharmacyOrdersPage() {
                       </Button>
                     )}
                     {order.status === "OUT_FOR_DELIVERY" && (
-                      <Button variant="outline" className="w-full border-purple-500/30 text-purple-600 hover:bg-purple-500/10" onClick={() => setDispensingOrderId(order.id)}>
-                        <Truck className="h-4 w-4 mr-2" /> Track Delivery Map
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1 border-purple-500/30 text-purple-600 hover:bg-purple-500/10" onClick={() => setDispensingOrderId(order.id)}>
+                          <Truck className="h-4 w-4 mr-2" /> Track Map
+                        </Button>
+                        <Button className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white" onClick={() => handleVerifyDelivery(order.id)}>
+                          Verify Delivery
+                        </Button>
+                      </div>
                     )}
                     {order.status === "DELIVERED" && (
                       <Button variant="outline" className="w-full border-emerald-500/30 text-emerald-600 bg-emerald-500/5 cursor-default pointer-events-none">

@@ -6,9 +6,9 @@ from app.models.mixins import UUIDMixin, TimestampMixin
 
 class Prescription(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "prescriptions"
-    appointment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("appointments.id"), index=True, unique=True, nullable=False)
+    appointment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("appointments.id"), index=True, unique=True, nullable=True)
     patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
-    doctor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    doctor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     diagnosis: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False)

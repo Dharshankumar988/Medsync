@@ -28,8 +28,8 @@ async def create_prescription(
 @router.post("/{id}/authorize-download", response_model=APIResponse)
 async def authorize_prescription_download(
     id: uuid.UUID,
-    pin: str = Form(...),
-    face_image: UploadFile = File(...),
+    pin: str = Form(None),
+    face_image: UploadFile = File(None),
     challenge_type: str = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user)
@@ -60,33 +60,68 @@ async def authorize_prescription_download(
         import asyncio
         import tempfile, shutil, os
 
-        pin_valid = await validate_patient_pin(db, current_user.id, pin)
-        if not pin_valid:
-            raise HTTPException(status_code=401, detail="Invalid Authorization PIN")
+        # If both are missing, raise error
+        if not pin and not face_image:
+            raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
 
-        bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id)
-        bio_res = await db.execute(bio_stmt)
-        bio_profile = bio_res.scalar_one_or_none()
+        # Track what verified
+        pin_verified = False
+        face_verified = False
+        
+        # Check lockout status first
+        from app.models.security import PatientSecurityCredential
+        cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
+        cred_res = await db.execute(cred_stmt)
+        cred = cred_res.scalar_one_or_none()
+        
+        is_locked_out = cred and cred.locked_until and cred.locked_until > datetime.utcnow()
 
-        if not bio_profile:
-            raise HTTPException(status_code=400, detail="Biometric profile not enrolled.")
+        if pin and not face_image:
+            if is_locked_out:
+                raise HTTPException(status_code=403, detail="PIN is locked. Face Verification is strictly required.")
+            
+            pin_valid = await validate_patient_pin(db, current_user.id, pin)
+            if not pin_valid:
+                # Security service handles the increment/lockout. But rule says if it fails once, session locked.
+                # Let's ensure it locks out immediately.
+                if cred:
+                    cred.failed_attempts += 1
+                    cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
+                    await db.commit()
+                raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
+            pin_verified = True
 
-        # Save face image temporarily to verify
-        suffix = f".{face_image.filename.split('.')[-1]}" if '.' in face_image.filename else ".jpg"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            shutil.copyfileobj(face_image.file, tmp)
-            tmp_path = tmp.name
+        if face_image:
+            bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id)
+            bio_res = await db.execute(bio_stmt)
+            bio_profile = bio_res.scalar_one_or_none()
 
-        try:
-            challenge_data = {"type": challenge_type} if challenge_type else None
-            face_verified = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path, challenge_data)
-            if not face_verified:
-                raise HTTPException(status_code=401, detail="Face verification failed")
-        finally:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+            if not bio_profile:
+                raise HTTPException(status_code=400, detail="Biometric profile not enrolled.")
 
-        auth_ref = await create_download_authorization(db, current_user.id, rx.id, password_verified=False, pin_verified=True, face_verified=True)
+            # Save face image temporarily to verify
+            suffix = f".{face_image.filename.split('.')[-1]}" if '.' in face_image.filename else ".jpg"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                shutil.copyfileobj(face_image.file, tmp)
+                tmp_path = tmp.name
+
+            try:
+                challenge_data = {"type": challenge_type} if challenge_type else None
+                fv = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path, challenge_data)
+                if not fv:
+                    raise HTTPException(status_code=401, detail="Face verification failed")
+                
+                # Face auth resets PIN lockout
+                if cred:
+                    cred.failed_attempts = 0
+                    cred.locked_until = None
+                    await db.commit()
+                face_verified = True
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+
+        auth_ref = await create_download_authorization(db, current_user.id, rx.id, password_verified=False, pin_verified=pin_verified, face_verified=face_verified)
         return APIResponse(message="Authorization successful", data={"authorization_reference": auth_ref})
     
     # For doctors/admins, just return a direct short-lived auth reference bypassing MFA for now (or a different flow)
@@ -186,14 +221,11 @@ async def dispense_prescription(
     await db.commit()
     return APIResponse(message="Prescription dispensed successfully", data={"prescription_id": str(rx.id)})
 
-from pydantic import BaseModel
-class VerifyPrescriptionRequest(BaseModel):
-    pin: str
-
 @router.post("/{id}/verify", response_model=APIResponse)
-async def verify_prescription_with_pin(
+async def verify_prescription_auth(
     id: uuid.UUID,
-    req: VerifyPrescriptionRequest,
+    pin: str = Form(None),
+    face_image: UploadFile = File(None),
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PHARMACY]))
 ):
@@ -208,9 +240,57 @@ async def verify_prescription_with_pin(
         raise HTTPException(status_code=400, detail="Prescription has already been dispensed")
 
     from app.services.security_service import validate_patient_pin
-    pin_valid = await validate_patient_pin(db, rx.patient_id, req.pin)
-    if not pin_valid:
-        raise HTTPException(status_code=401, detail="Invalid Authorization PIN")
+    from app.services.face_auth_service import face_auth_service
+    from app.models.security import PatientBiometricProfile
+    import tempfile, shutil, os, asyncio
+
+    if not pin and not face_image:
+        raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
+
+    from app.models.security import PatientSecurityCredential
+    cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == rx.patient_id)
+    cred_res = await db.execute(cred_stmt)
+    cred = cred_res.scalar_one_or_none()
+    is_locked_out = cred and cred.locked_until and cred.locked_until > datetime.utcnow()
+
+    # Authorize using either PIN or Face
+    if pin and not face_image:
+        if is_locked_out:
+            raise HTTPException(status_code=403, detail="PIN is locked. Face Verification is strictly required.")
+            
+        pin_valid = await validate_patient_pin(db, rx.patient_id, pin)
+        if not pin_valid:
+            if cred:
+                cred.failed_attempts += 1
+                cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
+                await db.commit()
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
+            
+    if face_image:
+        bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == rx.patient_id)
+        bio_res = await db.execute(bio_stmt)
+        bio_profile = bio_res.scalar_one_or_none()
+        
+        if not bio_profile:
+            raise HTTPException(status_code=400, detail="Biometric profile not enrolled.")
+            
+        suffix = f".{face_image.filename.split('.')[-1]}" if '.' in face_image.filename else ".jpg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(face_image.file, tmp)
+            tmp_path = tmp.name
+
+        try:
+            fv = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
+            if not fv:
+                raise HTTPException(status_code=401, detail="Face verification failed")
+                
+            if cred:
+                cred.failed_attempts = 0
+                cred.locked_until = None
+                await db.commit()
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
         
     # Enqueue Blockchain Sync for Verification (Status Update)
     try:
@@ -240,8 +320,8 @@ async def order_prescription_online(
     id: uuid.UUID,
     pharmacy_id: uuid.UUID = Form(...),
     delivery_address: str = Form(...),
-    pin: str = Form(...),
-    face_image: UploadFile = File(...),
+    pin: str = Form(None),
+    face_image: UploadFile = File(None),
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT]))
 ):
@@ -254,37 +334,74 @@ async def order_prescription_online(
         raise HTTPException(status_code=404, detail="Prescription not found")
     if rx.is_dispensed:
         raise HTTPException(status_code=400, detail="Prescription has already been dispensed")
+    if not rx.is_finalized:
+        raise HTTPException(status_code=400, detail="Prescription is not finalized")
+    if rx.is_revoked:
+        raise HTTPException(status_code=400, detail="Prescription has been revoked")
+    if rx.expires_at:
+        try:
+            from datetime import datetime, timezone
+            exp = datetime.fromisoformat(str(rx.expires_at).replace("Z", "+00:00")) if isinstance(rx.expires_at, str) else rx.expires_at
+            if hasattr(exp, 'replace'):
+                exp = exp.replace(tzinfo=timezone.utc) if exp.tzinfo is None else exp
+            if exp < datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="Prescription has expired")
+        except (ValueError, TypeError):
+            pass
 
     from app.services.security_service import validate_patient_pin
     from app.services.face_auth_service import face_auth_service
     from app.models.security import PatientBiometricProfile
     import tempfile, shutil, os, asyncio
 
+    if not pin and not face_image:
+        raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
+
+    from app.models.security import PatientSecurityCredential
+    cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
+    cred_res = await db.execute(cred_stmt)
+    cred = cred_res.scalar_one_or_none()
+    is_locked_out = cred and cred.locked_until and cred.locked_until > datetime.utcnow()
+
     # Validate PIN
-    pin_valid = await validate_patient_pin(db, current_user.id, pin)
-    if not pin_valid:
-        raise HTTPException(status_code=401, detail="Invalid Authorization PIN")
+    if pin and not face_image:
+        if is_locked_out:
+            raise HTTPException(status_code=403, detail="PIN is locked. Face Verification is strictly required.")
+            
+        pin_valid = await validate_patient_pin(db, current_user.id, pin)
+        if not pin_valid:
+            if cred:
+                cred.failed_attempts += 1
+                cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
+                await db.commit()
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
 
     # Validate Face
-    bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id)
-    bio_res = await db.execute(bio_stmt)
-    bio_profile = bio_res.scalar_one_or_none()
-    
-    if not bio_profile:
-        raise HTTPException(status_code=400, detail="Biometric profile not enrolled.")
+    if face_image:
+        bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id)
+        bio_res = await db.execute(bio_stmt)
+        bio_profile = bio_res.scalar_one_or_none()
         
-    suffix = f".{face_image.filename.split('.')[-1]}" if '.' in face_image.filename else ".jpg"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        shutil.copyfileobj(face_image.file, tmp)
-        tmp_path = tmp.name
+        if not bio_profile:
+            raise HTTPException(status_code=400, detail="Biometric profile not enrolled.")
+            
+        suffix = f".{face_image.filename.split('.')[-1]}" if '.' in face_image.filename else ".jpg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(face_image.file, tmp)
+            tmp_path = tmp.name
 
-    try:
-        face_verified = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
-        if not face_verified:
-            raise HTTPException(status_code=401, detail="Face verification failed")
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        try:
+            fv = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
+            if not fv:
+                raise HTTPException(status_code=401, detail="Face verification failed")
+                
+            if cred:
+                cred.failed_attempts = 0
+                cred.locked_until = None
+                await db.commit()
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
         
     try:
         from app.models.pharmacy_system import MedicineOrder, OrderStatus
@@ -323,18 +440,49 @@ async def physical_pickup_prescription(
         raise HTTPException(status_code=404, detail="Prescription not found")
     if rx.is_dispensed:
         raise HTTPException(status_code=400, detail="Prescription has already been dispensed")
+    if not rx.is_finalized:
+        raise HTTPException(status_code=400, detail="Prescription is not finalized")
+    if rx.is_revoked:
+        raise HTTPException(status_code=400, detail="Prescription has been revoked")
+    if rx.expires_at:
+        try:
+            from datetime import datetime, timezone
+            exp = datetime.fromisoformat(str(rx.expires_at).replace("Z", "+00:00")) if isinstance(rx.expires_at, str) else rx.expires_at
+            if hasattr(exp, 'replace'):
+                exp = exp.replace(tzinfo=timezone.utc) if exp.tzinfo is None else exp
+            if exp < datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="Prescription has expired")
+        except (ValueError, TypeError):
+            pass
 
     from app.services.security_service import validate_patient_pin
     from app.services.face_auth_service import face_auth_service
     from app.models.security import PatientBiometricProfile
     import tempfile, shutil, os, asyncio
 
+    if not pin and not face_image:
+        raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
+
+    from app.models.security import PatientSecurityCredential
+    cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
+    cred_res = await db.execute(cred_stmt)
+    cred = cred_res.scalar_one_or_none()
+    is_locked_out = cred and cred.locked_until and cred.locked_until > datetime.utcnow()
+
     # Authorize using either PIN or Face
-    if pin:
+    if pin and not face_image:
+        if is_locked_out:
+            raise HTTPException(status_code=403, detail="PIN is locked. Face Verification is strictly required.")
+            
         pin_valid = await validate_patient_pin(db, current_user.id, pin)
         if not pin_valid:
-            raise HTTPException(status_code=401, detail="Invalid Authorization PIN")
-    elif face_image:
+            if cred:
+                cred.failed_attempts += 1
+                cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
+                await db.commit()
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
+            
+    if face_image:
         bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id)
         bio_res = await db.execute(bio_stmt)
         bio_profile = bio_res.scalar_one_or_none()
@@ -348,14 +496,17 @@ async def physical_pickup_prescription(
             tmp_path = tmp.name
 
         try:
-            face_verified = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
-            if not face_verified:
+            fv = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
+            if not fv:
                 raise HTTPException(status_code=401, detail="Face verification failed")
+                
+            if cred:
+                cred.failed_attempts = 0
+                cred.locked_until = None
+                await db.commit()
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-    else:
-        raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
         
     try:
         from app.models.pharmacy_system import MedicineOrder, OrderStatus
@@ -374,3 +525,108 @@ async def physical_pickup_prescription(
         pass
         
     return APIResponse(message="Physical pickup authorized successfully", data={"prescription_id": str(rx.id)})
+
+@router.post("/offline", response_model=APIResponse)
+async def upload_offline_prescription(
+    file: UploadFile = File(...),
+    notes: str = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT]))
+):
+    import uuid
+    from app.services.storage import StorageService
+    from app.models.prescription import Prescription
+    
+    prescription_id = uuid.uuid4()
+    
+    # Upload file
+    file_bytes = await file.read()
+    filename = f"offline_prescription_{prescription_id}_{file.filename}"
+    
+    object_path, _, _, _ = await StorageService.upload_bytes(
+        file_bytes=file_bytes,
+        filename=filename,
+        content_type=file.content_type,
+        patient_id=str(current_user.id),
+        record_id=str(prescription_id),
+        version_number=1
+    )
+    
+    rx = Prescription(
+        id=prescription_id,
+        patient_id=current_user.id,
+        doctor_id=None,
+        appointment_id=None,
+        is_finalized=False,
+        is_dispensed=False,
+        is_revoked=False,
+        pdf_url=object_path,
+        notes=notes
+    )
+    db.add(rx)
+    await db.commit()
+    
+    return APIResponse(message="Offline prescription uploaded successfully", data={"prescription_id": str(prescription_id)})
+
+@router.post("/{id}/verify-offline", response_model=APIResponse)
+async def verify_offline_prescription(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_doctor)
+):
+    from sqlalchemy import select
+    from app.models.prescription import Prescription
+    from app.services.qr_pdf_service import QRPdfService
+    
+    stmt = select(Prescription).where(Prescription.id == id).with_for_update()
+    result = await db.execute(stmt)
+    rx = result.scalar_one_or_none()
+    
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+        
+    if rx.is_finalized:
+        raise HTTPException(status_code=400, detail="Prescription is already finalized")
+        
+    if rx.is_revoked:
+        raise HTTPException(status_code=400, detail="Prescription is revoked")
+        
+    rx.is_finalized = True
+    rx.doctor_id = current_user.id
+    
+    qr_token = QRPdfService.generate_dynamic_token(
+        resource_id=rx.id, 
+        user_id=current_user.id, 
+        purpose="PRESCRIPTION_ACCESS", 
+        expires_in_minutes=15
+    )
+    rx.qr_token = qr_token
+    
+    await db.commit()
+    
+    return APIResponse(message="Offline prescription verified successfully")
+
+@router.post("/{id}/reject-offline", response_model=APIResponse)
+async def reject_offline_prescription(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_doctor)
+):
+    from sqlalchemy import select
+    from app.models.prescription import Prescription
+    
+    stmt = select(Prescription).where(Prescription.id == id).with_for_update()
+    result = await db.execute(stmt)
+    rx = result.scalar_one_or_none()
+    
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+        
+    if rx.is_revoked:
+        raise HTTPException(status_code=400, detail="Prescription is already revoked")
+        
+    rx.is_revoked = True
+    rx.doctor_id = current_user.id
+    await db.commit()
+    
+    return APIResponse(message="Offline prescription rejected successfully")

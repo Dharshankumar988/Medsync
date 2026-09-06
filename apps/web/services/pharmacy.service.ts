@@ -88,5 +88,14 @@ export const pharmacyService = {
     } catch {
       return null;
     }
+  },
+
+  verifyDelivery: async (orderId: string, otp: string): Promise<boolean> => {
+    try {
+      await api.post(`/api/v1/orders/${orderId}/verify-delivery`, { otp });
+      return true;
+    } catch {
+      return false;
+    }
   }
 };

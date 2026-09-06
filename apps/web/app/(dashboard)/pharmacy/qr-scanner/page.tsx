@@ -37,21 +37,25 @@ export default function QRScannerPage() {
     }
   };
 
+  const [faceImage, setFaceImage] = useState<File | null>(null);
+
   const handleVerifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pin || !prescriptionData?.prescription?.id) return;
+    if ((!pin && !faceImage) || !prescriptionData?.prescription?.id) return;
 
     setIsLoading(true);
     setError(null);
     try {
-      // In a real app, the backend verifies the PIN against the patient's hash
+      const formData = new FormData();
+      if (pin) formData.append("pin", pin);
+      if (faceImage) formData.append("face_image", faceImage);
+
       const res = await fetch(`/api/v1/prescriptions/${prescriptionData.prescription.id}/verify`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}` // Ensure auth
         },
-        body: JSON.stringify({ pin })
+        body: formData
       });
       
       const data = await res.json();
@@ -168,25 +172,53 @@ export default function QRScannerPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Authorization PIN</label>
-                  <Input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="••••••"
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="text-center text-2xl tracking-widest h-14"
-                    autoFocus
-                  />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Authorization PIN</label>
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="••••••"
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+                      className="text-center text-2xl tracking-widest h-14"
+                      disabled={!!faceImage}
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">Or</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Face Verification (Required if PIN locked)</label>
+                    <Input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="user"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setFaceImage(e.target.files[0]);
+                          setPin("");
+                        } else {
+                          setFaceImage(null);
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
                 
                 <div className="flex space-x-3">
                   <Button type="button" variant="outline" className="flex-1" onClick={() => setStep("SCAN")}>
                     Cancel
                   </Button>
-                  <Button type="submit" className="flex-1" disabled={pin.length !== 6 || isLoading}>
+                  <Button type="submit" className="flex-1" disabled={(!pin && !faceImage) || (pin.length > 0 && pin.length !== 6) || isLoading}>
                     {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Authorize"}
                   </Button>
                 </div>

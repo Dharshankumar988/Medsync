@@ -247,3 +247,32 @@ async def generate_delivery_code(
     await db.commit()
     
     return APIResponse(message="Code generated successfully", data={"otp": otp})
+
+@router.post("/{order_id}/pay", response_model=APIResponse)
+async def pay_order(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(RoleChecker([UserRole.PATIENT]))
+):
+    # Verify order ownership
+    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id).with_for_update()
+    order_res = await db.execute(order_stmt)
+    order = order_res.scalar_one_or_none()
+    
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    if order.patient_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to pay for this order")
+        
+    if order.status != OrderStatus.PENDING:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Cannot pay for order in state {order.status}")
+
+    # Dummy payment logic: Just set it to PROCESSING
+    order.status = OrderStatus.PROCESSING
+    await db.commit()
+    
+    return APIResponse(message="Payment successful", data={"order_id": str(order_id)})

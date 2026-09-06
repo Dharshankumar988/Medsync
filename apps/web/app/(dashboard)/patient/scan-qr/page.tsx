@@ -17,6 +17,7 @@ export default function PatientQRScanPage() {
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [selectedPrescription, setSelectedPrescription] = useState<string | null>(null);
   const [authPin, setAuthPin] = useState("");
+  const [faceImage, setFaceImage] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
   // In a real app, you would use a library like react-qr-reader. 
@@ -84,7 +85,7 @@ export default function PatientQRScanPage() {
   };
 
   const handleAuthorize = async () => {
-    if (!authPin) return;
+    if (!authPin && !faceImage) return;
     setLoading(true);
     
     try {
@@ -93,9 +94,11 @@ export default function PatientQRScanPage() {
 
       const formData = new FormData();
       formData.append('pharmacy_id', pharmacyId as string);
-      formData.append('pin', authPin);
+      if (authPin) formData.append('pin', authPin);
+      if (faceImage) formData.append('face_image', faceImage);
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/prescriptions/${selectedPrescription}/physical-pickup`, {
+      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+      const res = await fetch(`${baseUrl}/api/v1/prescriptions/${selectedPrescription}/physical-pickup`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
@@ -243,18 +246,33 @@ export default function PatientQRScanPage() {
                     onChange={(e) => setAuthPin(e.target.value)}
                     className="text-center text-xl tracking-widest h-12 rounded-xl"
                     maxLength={6}
+                    disabled={!!faceImage}
                   />
                   <div className="text-xs text-muted-foreground">OR</div>
-                  <Button variant="outline" className="w-full h-12 rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10">
-                    Use Face ID
-                  </Button>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-muted-foreground block text-left">Face Verification (Required if PIN locked)</label>
+                    <Input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="user"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setFaceImage(e.target.files[0]);
+                          setAuthPin("");
+                        } else {
+                          setFaceImage(null);
+                        }
+                      }}
+                      className="rounded-xl"
+                    />
+                  </div>
                 </div>
                 
                 <div className="flex justify-center gap-3 pt-4">
                   <Button variant="ghost" onClick={() => setStep("select_prescription")} disabled={loading}>Cancel</Button>
                   <Button 
                     onClick={handleAuthorize} 
-                    disabled={!authPin || loading}
+                    disabled={(!authPin && !faceImage) || (authPin.length > 0 && authPin.length !== 6) || loading}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white min-w-[140px] rounded-xl"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Authorize & Send"}

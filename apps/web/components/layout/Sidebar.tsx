@@ -33,6 +33,7 @@ const menuGroups = {
     {
       label: "SERVICES",
       items: [
+        { name: "Scan Pharmacy QR", href: "/patient/scan-qr", icon: ShieldCheck },
         { name: "Orders & Delivery", href: "/patient/orders", icon: ShoppingBag },
         { name: "Pulse AI", href: "/patient/pulse-ai", icon: Brain, badge: "AI" },
         { name: "Privacy & Security", href: "/patient/privacy", icon: Shield },
@@ -84,7 +85,7 @@ const menuGroups = {
       label: "OVERVIEW",
       items: [
         { name: "Dashboard", href: "/pharmacy/dashboard", icon: LayoutDashboard },
-        { name: "QR & Verification", href: "/pharmacy/dashboard", icon: Shield },
+        { name: "QR & Verification", href: "/pharmacy/qr-scanner", icon: Shield },
         { name: "Pulse AI", href: "/pharmacy/pulse-ai", icon: Brain, badge: "AI" },
       ]
     },

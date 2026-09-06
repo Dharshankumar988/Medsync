@@ -47,6 +47,22 @@ export default function OrdersPage() {
     }
   };
 
+  const handlePayment = async (orderId: string) => {
+    // Dummy payment walkthrough
+    const confirmed = window.confirm("This is a dummy payment walkthrough. Proceed with payment?");
+    if (!confirmed) return;
+
+    try {
+      await orderService.payOrder(orderId);
+      alert("Payment successful!");
+      // Reload orders
+      const data = await orderService.getOrders();
+      setOrders(data || []);
+    } catch (err: any) {
+      alert("Payment failed: " + err.message);
+    }
+  };
+
   return (
     <div className="relative space-y-8 pb-12">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -97,7 +113,12 @@ export default function OrdersPage() {
                     </div>
                   </div>
                   
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between gap-3">
+                  <div className="flex flex-col items-end gap-3">
+                    {order.status === 'PENDING' && (
+                      <Button onClick={() => handlePayment(order.id)} className="w-full sm:w-auto bg-green-600 hover:bg-green-500 text-white">
+                        Pay Now
+                      </Button>
+                    )}
                     <Button asChild variant="outline" className="w-full sm:w-auto">
                       <Link href={`/patient/tracking/${order.id}`}>
                         <Truck className="mr-2 h-4 w-4" /> Track Order
