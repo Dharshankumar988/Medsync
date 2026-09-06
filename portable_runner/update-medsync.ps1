@@ -22,20 +22,12 @@ $IMAGE_NAME = "ghcr.io/dharshankumar988/medsync-backend:latest"
 $CONTAINER_NAME = "medsync-backend"
 $PORT = 8000
 
-# ARM Check
-$PLATFORM = ""
-$ARCHITECTURE = (Get-CimInstance Win32_OperatingSystem).OSArchitecture
-if ($ARCHITECTURE -match "ARM") {
-    $PLATFORM = "--platform linux/amd64"
-}
+# (Deprecated) ARM Check - No longer needed as image is multi-arch
+# Docker automatically pulls the correct architecture
 
 # Pull latest image
 Write-Host "Pulling latest image: $IMAGE_NAME..."
-if ($PLATFORM) {
-    docker pull --platform linux/amd64 $IMAGE_NAME
-} else {
-    docker pull $IMAGE_NAME
-}
+docker pull $IMAGE_NAME
 
 # Stop and remove existing container
 $existing = docker ps -a -q -f "name=^/${CONTAINER_NAME}$"
@@ -50,11 +42,7 @@ Write-Host "Starting container $CONTAINER_NAME on port $PORT..."
 # Ensure volume exists
 docker volume create medsync-model-cache > $null
 
-if ($PLATFORM) {
-    docker run -d $PLATFORM --name $CONTAINER_NAME -p "${PORT}:8000" -v medsync-model-cache:/models --env-file $ENV_FILE $IMAGE_NAME
-} else {
-    docker run -d --name $CONTAINER_NAME -p "${PORT}:8000" -v medsync-model-cache:/models --env-file $ENV_FILE $IMAGE_NAME
-}
+docker run -d --name $CONTAINER_NAME -p "${PORT}:8000" -v medsync-model-cache:/models --env-file $ENV_FILE $IMAGE_NAME
 
 # Wait for health check
 Write-Host "Waiting for backend to become healthy..."

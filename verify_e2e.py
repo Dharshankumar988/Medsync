@@ -2,29 +2,20 @@ import asyncio
 import os
 import sys
 import uuid
+import json
 from typing import Dict, Any, List
 
 import numpy as np
 
 # Mocking external dependencies before importing app modules
 import sys
-from unittest.mock import MagicMock
-
-# Mock DeepFace
-sys.modules["deepface"] = MagicMock()
-sys.modules["deepface.DeepFace"] = MagicMock()
-
-# Mock MediaPipe
-mp_mock = MagicMock()
-sys.modules["mediapipe"] = mp_mock
-
-# Mock cv2
-cv2_mock = MagicMock()
-sys.modules["cv2"] = cv2_mock
+from unittest.mock import MagicMock, patch
 
 # Set required environment variables
 os.environ["BIOMETRIC_ENCRYPTION_KEY"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 os.environ["FACE_MATCH_THRESHOLD"] = "0.60"
+os.environ["FACE_VERIFICATION_URL"] = "http://localhost:8080"
+os.environ["FACE_VERIFICATION_AUTH_TOKEN"] = "dummy_token"
 
 # Now import the services
 sys.path.append(os.path.join(os.path.dirname(__file__), "apps", "backend"))
@@ -33,109 +24,55 @@ from app.services.security_service import validate_patient_pin, SecurityService
 from app.models.security import PatientSecurityCredential
 from passlib.context import CryptContext
 
-# 1. FACE AUTH TEST & 3. ARCface VERIFICATION
+# 1. FACE AUTH TEST & 3. Remote VERIFICATION
 def test_face_auth():
-    print("\n--- Testing Face Auth & ArcFace ---")
+    print("\n--- Testing Face Auth via Remote Client ---")
     service = FaceAuthenticationService()
     
-    # Mock the MediaPipe face mesh
-    mock_results = MagicMock()
-    mock_landmarks = MagicMock()
-    
-    # Create fake landmarks for SMILE and OPEN_MOUTH
-    class LM:
-        def __init__(self, x, y):
-            self.x = x
-            self.y = y
+    with patch("app.services.face_auth_service.httpx.Client") as mock_client_class:
+        mock_client = mock_client_class.return_value.__enter__.return_value
+        
+        # Test Enrollment
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"embedding": np.random.rand(512).tolist()}
+        mock_client.post.return_value = mock_response
+        
+        # Write dummy file
+        with open("dummy.jpg", "wb") as f:
+            f.write(b"dummy image data")
             
-    # Default neutral face landmarks
-    def create_lms(smile=False, open_mouth=False):
-        lms = [LM(0.5, 0.5) for _ in range(478)]
-        # width
-        lms[234] = LM(0.1, 0.5)
-        lms[454] = LM(0.9, 0.5) # width = 0.8
-        # height
-        lms[10] = LM(0.5, 0.1)
-        lms[152] = LM(0.5, 0.9) # height = 0.8
-        
-        # mouth width
-        if smile:
-            lms[61] = LM(0.2, 0.7)
-            lms[291] = LM(0.8, 0.7) # mouth width = 0.6 (ratio 0.6/0.8 = 0.75 > 0.40)
-        else:
-            lms[61] = LM(0.4, 0.7)
-            lms[291] = LM(0.6, 0.7) # mouth width = 0.2 (ratio 0.25 < 0.40)
+        try:
+            enc_template = service.enroll_patient(["dummy.jpg"])
+            print("Enrollment PASS. Template generated.")
+        except Exception as e:
+            print(f"Enrollment FAILED: {e}")
             
-        # mouth height
-        if open_mouth:
-            lms[13] = LM(0.5, 0.6)
-            lms[14] = LM(0.5, 0.7) # height = 0.1 (ratio 0.1/0.8 = 0.125 > 0.05)
-        else:
-            lms[13] = LM(0.5, 0.65)
-            lms[14] = LM(0.5, 0.66) # height = 0.01
-            
-        return lms
+        # Test Verification (Same Face)
+        mock_response.json.return_value = {"verified": True, "score": 0.99, "threshold": 0.45}
+        res = service.verify_patient(enc_template, "dummy.jpg")
+        print(f"Verification (Same Face) PASS? {res}")
         
-    mock_landmarks.landmark = create_lms()
-    mock_results.multi_face_landmarks = [mock_landmarks]
-    service.face_mesh.process.return_value = mock_results
-    
-    # Mock image reading
-    cv2_mock.imread.return_value = np.zeros((1000, 1000, 3), dtype=np.uint8)
-    
-    # Mock DeepFace model
-    mock_model = MagicMock()
-    # Enrolled embedding
-    mock_model.predict.return_value = [np.random.rand(512).tolist()]
-    service._insightface_model = mock_model
-    
-    # Test Enrollment
-    enc_template = service.enroll_patient(["dummy.jpg"])
-    print("Enrollment PASS. Template generated.")
-    
-    # Test Verification (Same Face)
-    res = service.verify_patient(enc_template, "dummy.jpg")
-    print(f"Verification (Same Face) PASS? {res}")
-    
-    # Test Verification (Different Face)
-    mock_model.predict.return_value = [np.random.rand(512).tolist()] # different embedding
-    res = service.verify_patient(enc_template, "dummy.jpg")
-    print(f"Verification (Different Face) REJECTED? {not res}")
-    
-    # Test Multiple Faces
-    mock_results.multi_face_landmarks = [mock_landmarks, mock_landmarks]
-    try:
-        service.verify_patient(enc_template, "dummy.jpg")
-        print("Multiple faces test FAILED (did not raise).")
-    except ValueError as e:
-        print(f"Multiple faces test PASS. Raised: {e}")
+        # Test Verification (Different Face)
+        mock_response.json.return_value = {"verified": False, "score": 0.20, "threshold": 0.45}
+        res = service.verify_patient(enc_template, "dummy.jpg")
+        print(f"Verification (Different Face) REJECTED? {not res}")
         
-    # Test No Face
-    mock_results.multi_face_landmarks = None
-    try:
-        service.verify_patient(enc_template, "dummy.jpg")
-        print("No face test FAILED (did not raise).")
-    except ValueError as e:
-        print(f"No face test PASS. Raised: {e}")
+        # Test Fail-Closed (Service 500 Error)
+        mock_response.status_code = 500
+        mock_response.json.return_value = {"error": "INTERNAL_SERVER_ERROR"}
+        res = service.verify_patient(enc_template, "dummy.jpg")
+        print(f"Verification (Service 500) REJECTED (Fail Closed)? {not res}")
         
-    # Test Smile Liveness
-    mock_results.multi_face_landmarks = [mock_landmarks]
-    mock_landmarks.landmark = create_lms(smile=False)
-    try:
-        service.verify_patient(enc_template, "dummy.jpg", {"type": "SMILE"})
-        print("Smile Liveness test FAILED (accepted neutral).")
-    except ValueError as e:
-        print(f"Smile Liveness test PASS (rejected neutral). Raised: {e}")
+        # Test Fail-Closed (Multiple Faces)
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"error": "MULTIPLE_FACES"}
+        res = service.verify_patient(enc_template, "dummy.jpg")
+        print(f"Verification (Multiple Faces) REJECTED (Fail Closed)? {not res}")
         
-    mock_landmarks.landmark = create_lms(smile=True)
-    mock_model.predict.return_value = [np.random.rand(512).tolist()] # prevent distance match failure if possible, or just catch it
-    # We only care if it passes the liveness check part
-    try:
-        service.verify_patient(enc_template, "dummy.jpg", {"type": "SMILE"})
-        print("Smile Liveness test PASS (accepted smile).")
-    except ValueError as e:
-        if "LIVENESS_FAILED" in str(e):
-            print(f"Smile Liveness test FAILED. Raised: {e}")
+        # Clean up
+        if os.path.exists("dummy.jpg"):
+            os.remove("dummy.jpg")
             
 # 4. PIN TEST
 def test_pin():

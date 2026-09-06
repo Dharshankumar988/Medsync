@@ -1,9 +1,13 @@
-# Start Ngrok Tunnel to securely expose MedSync to the internet
+[CmdletBinding()]
+param (
+    [string]$Mode = "Backend"
+)
+
 $ErrorActionPreference = "Stop"
 $ScriptPath = $PSScriptRoot
 Set-Location -LiteralPath $ScriptPath
 
-Write-Host "Starting Ngrok Tunnel for MedSync..." -ForegroundColor Cyan
+Write-Host "Starting Ngrok Tunnel for $Mode..." -ForegroundColor Cyan
 
 # 1. Check if ngrok is available
 $NgrokPath = ""
@@ -15,9 +19,8 @@ if (Get-Command "ngrok" -ErrorAction SilentlyContinue) {
     if (Test-Path -LiteralPath $LocalNgrokPath) {
         $NgrokPath = $LocalNgrokPath
     } else {
-        # Check common system locations in case it's installed but not in PATH
         $CommonLocations = @(
-            "$env:LOCALAPPDATA\Microsoft\WindowsApps\ngrok.exe", # Microsoft Store version
+            "$env:LOCALAPPDATA\Microsoft\WindowsApps\ngrok.exe",
             "$env:ProgramFiles\ngrok\ngrok.exe",
             "${env:ProgramFiles(x86)}\ngrok\ngrok.exe",
             "$env:LOCALAPPDATA\ngrok\ngrok.exe",
@@ -35,75 +38,92 @@ if (Get-Command "ngrok" -ErrorAction SilentlyContinue) {
         }
 
         if (-not $NgrokPath) {
-            Write-Host "ngrok not found on the system. Automatically downloading portable ngrok..." -ForegroundColor Yellow
-            $ZipPath = Join-Path $ScriptPath "ngrok.zip"
-            try {
-                Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile $ZipPath -UseBasicParsing
-                Write-Host "Extracting ngrok..." -ForegroundColor Cyan
-                Expand-Archive -Path $ZipPath -DestinationPath $ScriptPath -Force
-                Remove-Item -Path $ZipPath -Force
-                $NgrokPath = Join-Path $ScriptPath "ngrok.exe"
-                Write-Host "ngrok successfully downloaded and extracted." -ForegroundColor Green
-            } catch {
-                Write-Host "ERROR: Failed to automatically download ngrok." -ForegroundColor Red
-                Write-Host "Please either:" -ForegroundColor Yellow
-                Write-Host "1. Install ngrok globally (e.g., winget install ngrok)" -ForegroundColor Yellow
-                Write-Host "2. Download the Ngrok Windows ZIP manually from https://ngrok.com/download" -ForegroundColor Yellow
-                Write-Host "   Extract ngrok.exe and place it in this folder ($ScriptPath)." -ForegroundColor Yellow
-                exit 1
-            }
+            Write-Host "ngrok not found. Please install ngrok or place ngrok.exe in the portable_runner folder." -ForegroundColor Red
+            exit 1
         }
     }
 }
 
-# 2. Check for .env variables
+# 2. Check for .env variables based on Mode
 $EnvPath = Join-Path $ScriptPath ".env"
 $AuthToken = ""
 $Url = ""
+$TargetPort = 8000
+
+if ($Mode -eq "FaceService") {
+    $TokenVar = "^FACE_SERVICE_NGROK_AUTHTOKEN=(.*)"
+    $UrlVar = "^FACE_SERVICE_NGROK_URL=(.*)"
+    $TargetPort = 8080
+} else {
+    $TokenVar = "^BACKEND_NGROK_AUTHTOKEN=(.*)"
+    $UrlVar = "^BACKEND_NGROK_URL=(.*)"
+    $TargetPort = 8000
+}
 
 if (Test-Path -LiteralPath $EnvPath) {
     $envContent = Get-Content $EnvPath
     foreach ($line in $envContent) {
-        if ($line -match "^NGROK_AUTHTOKEN=(.*)") {
-            $AuthToken = $matches[1].Trim()
-        }
-        if ($line -match "^NGROK_URL=(.*)") {
-            $Url = $matches[1].Trim()
-        }
+        if ($line -match $TokenVar) { $AuthToken = $matches[1].Trim() }
+        if ($line -match $UrlVar) { $Url = $matches[1].Trim() }
     }
 }
 
-if (-not $AuthToken -or -not $Url) {
-    Write-Host "`nWARNING: Missing Ngrok configuration in .env!" -ForegroundColor Yellow
-    Write-Host "You must provide NGROK_AUTHTOKEN and NGROK_URL."
-    Write-Host "You can get these from your Ngrok Dashboard (https://dashboard.ngrok.com/)"
-    Write-Host ""
-    $AuthToken = Read-Host "Please enter your NGROK_AUTHTOKEN (or press Ctrl+C to abort)"
-    $Url = Read-Host "Please enter your NGROK_URL (e.g., https://your-domain.ngrok-free.dev)"
-    
-    if (-not $AuthToken -or -not $Url) {
+if (-not $AuthToken) {
+    Write-Host "`nWARNING: Missing Ngrok Auth Token in .env for $Mode!" -ForegroundColor Yellow
+    $AuthToken = Read-Host "Please enter your Ngrok Authtoken"
+    if (-not $AuthToken) {
         Write-Host "Aborting. Missing credentials." -ForegroundColor Red
         exit 1
     }
 }
 
 # 3. Authenticate
-Write-Host "Authenticating Ngrok..."
 try {
-    & $NgrokPath config add-authtoken $AuthToken
+    & $NgrokPath config add-authtoken $AuthToken *>&1 | Out-Null
 } catch {
     Write-Host "ERROR: Failed to add Ngrok authtoken." -ForegroundColor Red
     exit 1
 }
 
 # 4. Start Tunnel
-Write-Host "Routing traffic to local port 8000 using static URL: $Url ..." -ForegroundColor Cyan
-Write-Host "Press Ctrl+C to stop the tunnel." -ForegroundColor Yellow
+$ngrokArgs = @("http")
+if ($Url) {
+    $ngrokArgs += "--url=$Url"
+    Write-Host "Routing traffic to local port $TargetPort using static URL: $Url ..." -ForegroundColor Cyan
+} else {
+    Write-Host "Routing traffic to local port $TargetPort using dynamically generated URL ..." -ForegroundColor Cyan
+}
+$ngrokArgs += "$TargetPort"
 
+# We must start ngrok in a separate process so we can track its PID and query its API for dynamic URLs
+$process = Start-Process -FilePath $NgrokPath -ArgumentList $ngrokArgs -PassThru -WindowStyle Minimized
+
+$PidFile = Join-Path $ScriptPath ".runner_pids.txt"
+$process.Id | Out-File -FilePath $PidFile -Append -Encoding utf8
+
+# 5. Query active URL
+Write-Host "Waiting for ngrok to initialize..."
+Start-Sleep -Seconds 3
+
+$ActiveUrl = ""
 try {
-    & $NgrokPath http --url=$Url 8000
+    $response = Invoke-WebRequest -Uri "http://127.0.0.1:4040/api/tunnels" -UseBasicParsing -ErrorAction Stop
+    $data = $response.Content | ConvertFrom-Json
+    if ($data.tunnels.Count -gt 0) {
+        $ActiveUrl = $data.tunnels[0].public_url
+    }
 } catch {
-    Write-Host "`nERROR: Ngrok failed to start or crashed." -ForegroundColor Red
-    Write-Host "Make sure the URL ($Url) is correct and belongs to your account." -ForegroundColor Yellow
-    exit 1
+    # If API fails, fallback to user provided url if exists
+    if ($Url) {
+        $ActiveUrl = $Url
+    }
+}
+
+if ($ActiveUrl) {
+    Write-Host "`n=== NGROK STATUS ===" -ForegroundColor Green
+    Write-Host "Active $Mode Public URL: " -NoNewline
+    Write-Host $ActiveUrl -ForegroundColor Cyan
+    Write-Host "====================`n" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: Could not retrieve active tunnel URL. Tunnel may not be running correctly." -ForegroundColor Yellow
 }

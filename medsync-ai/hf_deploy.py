@@ -3,8 +3,8 @@ import hashlib
 from huggingface_hub import HfApi, hf_hub_download
 
 repo_id = "Dharshan8197/medsync-ai-weights"
-local_dir = r"C:\IMP PROJECTS\medsync-models"
-verify_dir = r"C:\IMP PROJECTS\medsync-models-verification"
+local_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+verify_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models-verification")
 
 expected_hashes = {
     "bone.pt": "332156CB32317B650528438B984C043D11DA848DC6B680AE46AF74373F347113".lower(),

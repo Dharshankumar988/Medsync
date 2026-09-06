@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-Set-Location -Path "c:\IMP PROJECTS\Medsync\medsync-ai"
+Set-Location -Path $PSScriptRoot
 
 if (!(Test-Path venv)) {
     Write-Host "Creating virtual environment..."

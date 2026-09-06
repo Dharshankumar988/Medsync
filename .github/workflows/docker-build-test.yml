@@ -32,13 +32,13 @@ jobs:
 
     - name: Build Linux amd64 Backend Docker Image
       run: |
-        docker build --platform linux/amd64 -t medsync-backend ./apps/backend
+        docker build --platform linux/amd64 -f apps/backend/Dockerfile -t medsync-backend .
 
     - name: Start Backend Container
       run: |
         docker run -d --name backend \
-          -p 7860:7860 \
-          -e PORT=7860 \
+          -p 8000:8000 \
+          -e PORT=8000 \
           -e GROQ_API_KEY="${GROQ_API_KEY}" \
           -e SUPABASE_URL="${SUPABASE_URL}" \
           -e SUPABASE_KEY="${SUPABASE_KEY}" \
@@ -58,7 +58,7 @@ jobs:
     - name: Verify Backend Health (Native dependencies load)
       run: |
         for i in {1..60}; do
-          if curl -s -f http://localhost:7860/health > /dev/null; then
+          if curl -s -f http://localhost:8000/health > /dev/null; then
             echo "Backend is healthy!"
             exit 0
           fi
@@ -80,7 +80,7 @@ jobs:
         npm install -g pnpm@9.15.4
         cd apps/web
         pnpm install
-        NEXT_PUBLIC_API_URL=http://localhost:7860 pnpm run build
+        NEXT_PUBLIC_API_URL=http://localhost:8000 pnpm run build
 
     - name: Run Backend Pytest Suite
       continue-on-error: true

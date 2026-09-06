@@ -30,9 +30,5 @@ pgvector==0.2.1
 PyPDF2==3.0.1
 python-docx==1.1.0
 
-tensorflow-cpu==2.17.0
-tf-keras==2.17.0
-deepface==0.0.92
 cryptography==42.0.8
 aiosqlite
-mediapipe==0.10.14

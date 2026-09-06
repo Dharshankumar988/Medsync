@@ -1,5 +1,5 @@
 # ─── Stage 1: Builder ───
-FROM --platform=linux/amd64 python:3.11-slim as builder
+FROM python:3.11-slim as builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -15,25 +15,27 @@ COPY apps/backend/requirements.txt .
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+ARG TARGETARCH
+
+# Use --extra-index-url so x86_64 gets CPU wheels (avoiding CUDA bloat),
+# while ARM64 gracefully falls back to standard PyPI (which has aarch64 CPU wheels).
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
+
 # ─── Stage 2: Runtime ───
-FROM --platform=linux/amd64 python:3.11-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/models/huggingface \
-    DEEPFACE_HOME=/models \
     PATH="/opt/venv/bin:$PATH" \
-    TF_CPP_MIN_LOG_LEVEL=3 \
-    TF_ENABLE_ONEDNN_OPTS=0 \
-    CUDA_VISIBLE_DEVICES=-1 \
     MPLCONFIGDIR=/tmp/matplotlib
 
 # Install ONLY runtime dependencies
+# OpenCV (headless) and OCR still need some basic libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \

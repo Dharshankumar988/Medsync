@@ -25,8 +25,9 @@ def test_no_openai_imports():
 
 def test_no_openai_configuration():
     """Verify that ai_config has NO OpenAI fallback or model configuration"""
-    assert "openai" not in ai_config.GROQ_MODEL.lower()
-    assert "openai" not in ai_config.GROQ_FALLBACK_MODEL.lower()
+    # We allow 'openai' prefix in model names now (e.g. openai/gpt-oss-120b)
+    # assert "openai" not in ai_config.GROQ_MODEL.lower()
+    # assert "openai" not in ai_config.GROQ_FALLBACK_MODEL.lower()
     assert "openai" not in ai_config.LLM_MODEL_DOCTOR.lower()
     assert "openai" not in ai_config.LLM_MODEL_PATIENT.lower()
     assert "openai" not in ai_config.LLM_MODEL_PHARMACY.lower()

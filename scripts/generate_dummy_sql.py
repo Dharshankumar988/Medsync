@@ -200,7 +200,8 @@ COMMIT;
 """
 sql_lines.append(footer)
 
-with open(r'c:\IMP PROJECTS\Medsync\database\dummy_values.sql', 'w', encoding='utf-8') as f:
+output_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'dummy_values.sql')
+with open(output_path, 'w', encoding='utf-8') as f:
     f.writelines(sql_lines)
 
 print("Generated database/dummy_values.sql successfully!")

@@ -50,14 +50,9 @@ async def _init_ai_background():
             from app.services.rag_service import rag_service
             rag_service._get_embedding_model()
             try:
-                from app.services.face_auth_service import get_arcface_model
-                model = get_arcface_model()
-                if model is not None:
-                    logger.info("AI Warmup: DeepFace ArcFace → ready")
-                else:
-                    logger.warning("AI Warmup: DeepFace ArcFace → model returned None (lazy init fallback)")
+                pass
             except Exception as e:
-                logger.warning(f"AI Warmup: DeepFace ArcFace → failed ({e})")
+                pass
 
         await asyncio.to_thread(_load_local_models)
         logger.info("AI Warmup: Local models downloaded and cached successfully.")

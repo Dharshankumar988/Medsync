@@ -8,7 +8,7 @@ from PIL import Image
 import numpy as np
 import cv2
 
-base_dir = r"C:\IMP PROJECTS\cgip Mini project\CGIP project\PULSE-PROTOTYPE"
+base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
 
 models = {
     "bone": {

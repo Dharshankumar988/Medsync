@@ -1,0 +1,17 @@
+**/.venv
+**/venv
+**/venv_wsl
+**/venv_dev
+**/venv_test
+**/node_modules
+**/.git
+**/.next
+**/dist
+**/build
+**/.pytest_cache
+**/__pycache__
+**/*.pyc
+*.log
+.env
+.env.*
+**/node_modules_old

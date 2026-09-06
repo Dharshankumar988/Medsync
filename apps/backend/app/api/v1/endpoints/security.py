@@ -82,13 +82,13 @@ async def enroll_face_endpoint(
         
         if existing_profile:
             existing_profile.encrypted_template = encrypted_template
-            existing_profile.model_name = "ArcFace"
+            existing_profile.model_name = "buffalo_l"
             existing_profile.enrollment_status = "COMPLETED"
         else:
             profile = PatientBiometricProfile(
                 patient_id=current_user.id,
                 encrypted_template=encrypted_template,
-                model_name="ArcFace"
+                model_name="buffalo_l"
             )
             db.add(profile)
             
@@ -139,25 +139,30 @@ async def verify_face_endpoint(
             tmp_file = tmp.name
         
         import asyncio
-        match_score = await asyncio.to_thread(face_auth_service.verify_patient, profile.encrypted_template, tmp_file)
+        verification_result = await asyncio.to_thread(face_auth_service.verify_patient, profile.encrypted_template, tmp_file)
+        
+        is_verified = verification_result.get("verified", False)
+        match_score = verification_result.get("score", 0.0)
         
         # Audit log for verification attempt
         audit = AuditLog(
             user_id=current_user.id,
-            action="FACE_VERIFICATION_SUCCESS" if match_score > 0.6 else "FACE_VERIFICATION_FAILED",
+            action="FACE_VERIFICATION_SUCCESS" if is_verified else "FACE_VERIFICATION_FAILED",
             entity_type="PatientBiometricProfile",
             entity_id=current_user.id,
-            details={"match_score": match_score}
+            details={"match_score": match_score, "source": verification_result.get("source", "unknown")}
         )
         db.add(audit)
         await db.commit()
 
-        if match_score > 0.6:  # Threshold can be adjusted
+        if is_verified:
             return {"verified": True, "match_score": match_score, "message": "Face verified successfully."}
         else:
             return {"verified": False, "match_score": match_score, "message": "Face verification failed."}
             
     except ValueError as e:
+        if str(e) == "FACE_SERVICE_UNAVAILABLE":
+            raise HTTPException(status_code=503, detail="Face Verification Service is currently unavailable. Please try again later.")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail="An error occurred during face verification.")
@@ -191,16 +196,19 @@ async def change_pin_face(
             tmp_file = tmp.name
         
         import asyncio
-        match_score = await asyncio.to_thread(face_auth_service.verify_patient, profile.encrypted_template, tmp_file)
+        verification_result = await asyncio.to_thread(face_auth_service.verify_patient, profile.encrypted_template, tmp_file)
         
-        if match_score <= 0.6:
+        is_verified = verification_result.get("verified", False)
+        match_score = verification_result.get("score", 0.0)
+        
+        if not is_verified:
             # Audit log for failed change
             audit = AuditLog(
                 user_id=current_user.id,
                 action="FACE_CHANGE_PIN_FAILED",
                 entity_type="PatientBiometricProfile",
                 entity_id=current_user.id,
-                details={"match_score": match_score}
+                details={"match_score": match_score, "source": verification_result.get("source", "unknown")}
             )
             db.add(audit)
             await db.commit()
@@ -221,6 +229,8 @@ async def change_pin_face(
         return {"message": "PIN changed successfully using Face ID."}
         
     except ValueError as e:
+        if str(e) == "FACE_SERVICE_UNAVAILABLE":
+            raise HTTPException(status_code=503, detail="Face Verification Service is currently unavailable. Please try again later.")
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise

@@ -1,15 +1,41 @@
-# Stop MedSync Backend Script (PowerShell)
+# Stop MedSync Backend and Face Service (PowerShell)
 $ErrorActionPreference = "Stop"
+$ScriptPath = $PSScriptRoot
+Set-Location -LiteralPath $ScriptPath
 
-Write-Host "Stopping MedSync backend..." -ForegroundColor Cyan
+Write-Host "Stopping MedSync services..." -ForegroundColor Cyan
 
-$CONTAINER_NAME = "medsync-backend"
-
-$existing = docker ps -a -q -f "name=^/${CONTAINER_NAME}$"
-if ($existing) {
-    Write-Host "Stopping and removing container $CONTAINER_NAME..."
-    docker rm -f $CONTAINER_NAME > $null
-    Write-Host "MedSync backend stopped cleanly." -ForegroundColor Green
+$ContainersFile = Join-Path $ScriptPath ".runner_containers.txt"
+if (Test-Path $ContainersFile) {
+    $containers = Get-Content $ContainersFile | Where-Object { $_ -match "\S" } | Select-Object -Unique
+    foreach ($c in $containers) {
+        $existing = docker ps -a -q -f "name=^/${c}$"
+        if ($existing) {
+            Write-Host "Stopping and removing container $c..."
+            docker rm -f $c > $null
+        }
+    }
+    Remove-Item -Path $ContainersFile -Force
 } else {
-    Write-Host "MedSync backend is not running." -ForegroundColor Yellow
+    Write-Host "No containers were tracked for this session." -ForegroundColor Yellow
 }
+
+$PidsFile = Join-Path $ScriptPath ".runner_pids.txt"
+if (Test-Path $PidsFile) {
+    $pids = Get-Content $PidsFile | Where-Object { $_ -match "\S" } | Select-Object -Unique
+    foreach ($p in $pids) {
+        try {
+            $process = Get-Process -Id $p -ErrorAction SilentlyContinue
+            if ($process) {
+                Write-Host "Stopping tracked process (PID $p)..."
+                Stop-Process -Id $p -Force
+            }
+        } catch {}
+    }
+    Remove-Item -Path $PidsFile -Force
+} else {
+    Write-Host "No extra processes were tracked for this session." -ForegroundColor Yellow
+}
+
+Write-Host "Clean shutdown complete." -ForegroundColor Green
+

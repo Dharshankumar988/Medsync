@@ -14,7 +14,9 @@ Vercel Frontend → Ngrok Tunnel → Local MedSync Backend (Docker) → Supabase
 
 ## AI Capabilities
 MedSync leverages a hybrid AI architecture:
-- **Local AI**: DeepFace (for Face Authentication) and SentenceTransformers (for RAG embeddings) run directly within the backend container.
+- **Local AI**: SentenceTransformers (for RAG embeddings) run directly within the backend container.
+- **External AI Services**: Face Authentication is hosted on a separate microservice using **InsightFace** and **ONNX Runtime**. 
+  > **Note on Face Recognition Licensing**: The MedSync Face Verification Service uses the InsightFace `buffalo_l` pretrained model. While the InsightFace codebase is MIT licensed, the pretrained models are strictly for **non-commercial research purposes**. Commercial deployment requires a separate license from the InsightFace authors.
 - **Remote Diagnostics**: Heavy medical imaging models (YOLO/EfficientNet) are offloaded to an external Hugging Face AI Microservice to ensure the core backend remains fast and lightweight.
 
 ## Deployment
@@ -29,6 +31,12 @@ curl.exe -L --fail --retry 3 -o "$env:TEMP\install-medsync.ps1" "https://raw.git
 ```
 
 For the detailed, step-by-step setup (including configuring your environment variables and starting the server), please refer to the actual **[IMPLEMENTATION.md](IMPLEMENTATION.md)** file!
+
+### Testing the Backend
+Once the Portable Runner has started the backend successfully, you can verify it is running by executing:
+```bash
+curl http://localhost:8000/health
+```
 
 ## Development
 To contribute to MedSync, clone the repository and navigate to the respective application directories (`apps/backend` or `apps/blockchain`). See the internal documentation within those folders for local development setups.

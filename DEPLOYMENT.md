@@ -16,7 +16,10 @@ Ensure that your GitHub account is permitted to publish packages.
 You will need API keys and URLs for the following services:
 - **Supabase**: `SUPABASE_URL`, `SUPABASE_KEY` (anon), and `DATABASE_URL` (for pgvector/Postgres).
 - **Groq**: `GROQ_API_KEY` (MedSync uses `groq/compound` and `groq/compound-mini` exclusively).
+- **Face Verification Service**: `FACE_VERIFICATION_URL` and `FACE_VERIFICATION_AUTH_TOKEN`. This service is a lightweight deployment handling InsightFace + ONNX Runtime biometric authentication.
+  - **Licensing Note**: The face service currently uses the `buffalo_l` model. The InsightFace pretrained models are restricted to **non-commercial research use**. You must obtain a commercial license for production deployment.
 - **Hugging Face Space #2**: `MEDSYNC_AI_URL` and `MEDSYNC_AI_TOKEN` (for the four diagnostic models).
+
 
 ### 3. Install Docker Desktop
 - Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop).
