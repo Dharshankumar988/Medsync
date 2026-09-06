@@ -31,8 +31,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/models/huggingface \
-    PATH="/opt/venv/bin:$PATH" \
-    MPLCONFIGDIR=/tmp/matplotlib
+    PATH="/opt/venv/bin:$PATH"
 
 # Install ONLY runtime dependencies
 # OpenCV (headless) and OCR still need some basic libraries
@@ -51,7 +50,6 @@ WORKDIR /app
 # Copy the virtual environment from the builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Prewarm font cache removed because matplotlib is not installed
 
 # Copy backend files
 COPY apps/backend/alembic.ini .
@@ -69,7 +67,6 @@ EXPOSE 8000
 # Create a non-root user and switch to it
 RUN adduser --disabled-password --gecos "" medsyncuser && \
     mkdir -p /models && chown -R medsyncuser:medsyncuser /models && \
-    mkdir -p /tmp/matplotlib && chown -R medsyncuser:medsyncuser /tmp/matplotlib && \
     chown -R medsyncuser:medsyncuser /app
 USER medsyncuser
 

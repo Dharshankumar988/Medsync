@@ -22,8 +22,8 @@ env/
 venv/
 venv_wsl/
 venv_test/
+.venv*/
 .env/
-.venv/
 pip-log.txt
 pip-delete-this-directory.txt
 *.egg-info/
