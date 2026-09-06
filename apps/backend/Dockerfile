@@ -51,8 +51,7 @@ WORKDIR /app
 # Copy the virtual environment from the builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Prewarm matplotlib font cache
-RUN python -c "import matplotlib.pyplot"
+# Prewarm font cache removed because matplotlib is not installed
 
 # Copy backend files
 COPY apps/backend/alembic.ini .
