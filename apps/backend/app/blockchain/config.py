@@ -15,7 +15,11 @@ class BlockchainSettings(BaseSettings):
     # Backward compat alias — existing code references POLYGON_RPC_URL
     POLYGON_RPC_URL: str = _resolve_rpc_url()
     BACKEND_PRIVATE_KEY: str = _clean(os.getenv("BACKEND_PRIVATE_KEY", ""))
-    NETWORK_NAME: str = _clean(os.getenv("BLOCKCHAIN_NETWORK", "amoy"))
+    BLOCKCHAIN_NETWORK: str = "amoy"
+    
+    @property
+    def NETWORK_NAME(self) -> str:
+        return self.BLOCKCHAIN_NETWORK
     
     # Gas & Transactions
     GAS_MULTIPLIER: float = float(os.getenv("GAS_MULTIPLIER", "1.2"))

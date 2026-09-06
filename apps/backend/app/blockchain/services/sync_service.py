@@ -3,7 +3,8 @@ import hashlib
 import json
 from uuid import UUID
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.models.blockchain import (
     BlockchainSyncTask, SyncEntityType, SyncActionType, SyncStatus,
@@ -19,7 +20,7 @@ class BlockchainSyncService:
     Follows the 8-step synchronization principle.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
 
     def _generate_hash(self, payload: dict) -> str:
@@ -27,7 +28,7 @@ class BlockchainSyncService:
         payload_str = json.dumps(payload, sort_keys=True)
         return hashlib.sha256(payload_str.encode("utf-8")).hexdigest()
 
-    def create_sync_task(self, entity_type: SyncEntityType, entity_id: UUID, action_type: SyncActionType, payload: dict) -> BlockchainSyncTask:
+    async def create_sync_task(self, entity_type: SyncEntityType, entity_id: UUID, action_type: SyncActionType, payload: dict) -> BlockchainSyncTask:
         """
         Step 1, 2, 3: Validates and creates the initial sync task.
         """
@@ -39,16 +40,17 @@ class BlockchainSyncService:
             status=SyncStatus.PENDING
         )
         self.db.add(task)
-        self.db.commit()
-        self.db.refresh(task)
+        await self.db.commit()
+        await self.db.refresh(task)
         return task
 
-    def execute_sync_task(self, task_id: UUID):
+    async def execute_sync_task(self, task_id: UUID):
         """
         Step 4: Submits the transaction to the blockchain.
         Normally executed by a background worker or immediately if synchronous.
         """
-        task = self.db.query(BlockchainSyncTask).filter_by(id=task_id).first()
+        result = await self.db.execute(select(BlockchainSyncTask).filter_by(id=task_id))
+        task = result.scalar_one_or_none()
         if not task:
             logger.error(f"Task {task_id} not found.")
             return
@@ -58,7 +60,7 @@ class BlockchainSyncService:
             return
 
         task.status = SyncStatus.SUBMITTED
-        self.db.commit()
+        await self.db.commit()
 
         try:
             # Generate the deterministic hash from the payload
@@ -107,22 +109,23 @@ class BlockchainSyncService:
                 raise ValueError(f"Unsupported Sync Action: {task.entity_type} {task.action_type}")
 
             if receipt:
-                self._handle_successful_receipt(task, receipt)
+                await self._handle_successful_receipt(task, receipt)
             else:
-                self._handle_failure(task, "No receipt generated (unknown action)")
+                await self._handle_failure(task, "No receipt generated (unknown action)")
 
         except Exception as e:
             logger.error(f"Failed to execute sync task {task.id}: {e}")
-            self._handle_failure(task, str(e))
+            await self._handle_failure(task, str(e))
 
-    def _handle_successful_receipt(self, task: BlockchainSyncTask, receipt: dict):
+    async def _handle_successful_receipt(self, task: BlockchainSyncTask, receipt: dict):
         """
         Step 6 & 7: Captures metadata and updates database.
         """
         tx_hash = receipt.get("transactionHash")
         
         # Save Transaction Metadata
-        tx = self.db.query(BlockchainTransaction).filter_by(transaction_hash=tx_hash).first()
+        result = await self.db.execute(select(BlockchainTransaction).filter_by(transaction_hash=tx_hash))
+        tx = result.scalar_one_or_none()
         if not tx:
             tx = BlockchainTransaction(
                 transaction_hash=tx_hash,
@@ -141,41 +144,41 @@ class BlockchainSyncService:
         
         # Phase 10: Update Entity Tables and trigger Notifications
         if task.status == SyncStatus.CONFIRMED:
-            self._update_entity_blockchain_status(task, tx_hash, receipt.get("blockNumber"))
+            await self._update_entity_blockchain_status(task, tx_hash, receipt.get("blockNumber"))
             
-        self.db.commit()
+        await self.db.commit()
 
-    def _update_entity_blockchain_status(self, task: BlockchainSyncTask, tx_hash: str, block_number: int):
+    async def _update_entity_blockchain_status(self, task: BlockchainSyncTask, tx_hash: str, block_number: int):
         from app.models.patient import Patient
         from app.models.doctor import Doctor
         from app.models.pharmacy import Pharmacy
         from app.models.prescription import Prescription
         from app.models.record import MedicalRecordVersion, AIAnalysis
-        from app.services.notification import NotificationService
-        
-        # Async notification wrapper hack since we are in sync or maybe async context?
-        # Actually sync_service seems to be synchronous right now since it uses self.db.commit() not await self.db.commit().
         
         if task.entity_type == SyncEntityType.PATIENT:
-            entity = self.db.query(Patient).filter(Patient.user_id == task.entity_id).first()
+            result = await self.db.execute(select(Patient).filter(Patient.user_id == task.entity_id))
+            entity = result.scalar_one_or_none()
             if entity:
                 entity.blockchain_status = "SYNCED"
                 entity.blockchain_tx_hash = tx_hash
                 
         elif task.entity_type == SyncEntityType.DOCTOR:
-            entity = self.db.query(Doctor).filter(Doctor.user_id == task.entity_id).first()
+            result = await self.db.execute(select(Doctor).filter(Doctor.user_id == task.entity_id))
+            entity = result.scalar_one_or_none()
             if entity:
                 entity.blockchain_status = "SYNCED"
                 entity.blockchain_tx_hash = tx_hash
                 
         elif task.entity_type == SyncEntityType.PHARMACY:
-            entity = self.db.query(Pharmacy).filter(Pharmacy.user_id == task.entity_id).first()
+            result = await self.db.execute(select(Pharmacy).filter(Pharmacy.user_id == task.entity_id))
+            entity = result.scalar_one_or_none()
             if entity:
                 entity.blockchain_status = "SYNCED"
                 entity.blockchain_tx_hash = tx_hash
                 
         elif task.entity_type == SyncEntityType.PRESCRIPTION:
-            entity = self.db.query(Prescription).filter(Prescription.id == task.entity_id).first()
+            result = await self.db.execute(select(Prescription).filter(Prescription.id == task.entity_id))
+            entity = result.scalar_one_or_none()
             if entity:
                 entity.blockchain_status = "SYNCED"
                 entity.blockchain_tx_hash = tx_hash
@@ -183,21 +186,23 @@ class BlockchainSyncService:
                 
         elif task.entity_type == SyncEntityType.MEDICAL_RECORD:
             # We used version.id for medical record
-            version = self.db.query(MedicalRecordVersion).filter(MedicalRecordVersion.id == task.entity_id).first()
+            result = await self.db.execute(select(MedicalRecordVersion).filter(MedicalRecordVersion.id == task.entity_id))
+            version = result.scalar_one_or_none()
             if version:
                 version.blockchain_status = "SYNCED"
                 version.blockchain_tx_hash = tx_hash
                 version.block_number = block_number
             else:
                 # Could be AI Analysis
-                ai = self.db.query(AIAnalysis).filter(AIAnalysis.version_id == task.entity_id).first()
+                result = await self.db.execute(select(AIAnalysis).filter(AIAnalysis.version_id == task.entity_id))
+                ai = result.scalar_one_or_none()
                 if ai:
                     ai.blockchain_status = "SYNCED"
                     ai.blockchain_tx_hash = tx_hash
                     ai.block_number = block_number
 
 
-    def _handle_failure(self, task: BlockchainSyncTask, error_msg: str):
+    async def _handle_failure(self, task: BlockchainSyncTask, error_msg: str):
         """
         Handles retry logic and exponential backoff.
         """
@@ -208,8 +213,5 @@ class BlockchainSyncService:
             task.status = SyncStatus.FAILED
         else:
             task.status = SyncStatus.RETRYING
-            # Simple exponential backoff in seconds (2^retry * 10) - just illustrative
-            # In a real worker, next_retry_time would be evaluated
-            # task.next_retry_time = datetime.utcnow() + timedelta(seconds=(2 ** task.retry_count) * 10)
 
-        self.db.commit()
+        await self.db.commit()
