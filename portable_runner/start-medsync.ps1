@@ -75,12 +75,13 @@ function Start-FaceService {
     # Try pulling pre-built image from GHCR first
     $FACE_IMAGE = $null
     Write-Host "Pulling Face Service image from registry..." -ForegroundColor Cyan
-    cmd /c "docker pull $FACE_REGISTRY_IMAGE" 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    $pullArgs = "pull $FACE_REGISTRY_IMAGE"
+    $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
+    if ($pullProcess.ExitCode -eq 0) {
         $FACE_IMAGE = $FACE_REGISTRY_IMAGE
-        Write-Host "Using registry image: $FACE_IMAGE" -ForegroundColor Green
+        Write-Host "`nUsing registry image: $FACE_IMAGE" -ForegroundColor Green
     } else {
-        Write-Host "Registry pull failed. Building from source..." -ForegroundColor Yellow
+        Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
         $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
         $FaceDockerfile = Join-Path $RepoRoot "apps" "face-service" "Dockerfile"
         if (-not (Test-Path $FaceDockerfile)) {
@@ -123,6 +124,9 @@ function Start-FaceService {
         exit 1
     }
     Write-Host "Face Service: HEALTHY" -ForegroundColor Green
+    
+    # Open logs in a new PowerShell window
+    Start-Process -FilePath "powershell" -ArgumentList "-NoProfile -Command `"& { Write-Host '--- Face Service Logs ---' -ForegroundColor Cyan; docker logs -f $FACE_CONTAINER }`""
 }
 
 function Start-Backend {
@@ -132,12 +136,13 @@ function Start-Backend {
     # Try pulling pre-built image from GHCR first
     $BACKEND_IMAGE = $null
     Write-Host "Pulling Backend image from registry..." -ForegroundColor Cyan
-    cmd /c "docker pull $BACKEND_REGISTRY_IMAGE" 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    $pullArgs = "pull $BACKEND_REGISTRY_IMAGE"
+    $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
+    if ($pullProcess.ExitCode -eq 0) {
         $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
-        Write-Host "Using registry image: $BACKEND_IMAGE" -ForegroundColor Green
+        Write-Host "`nUsing registry image: $BACKEND_IMAGE" -ForegroundColor Green
     } else {
-        Write-Host "Registry pull failed. Building from source..." -ForegroundColor Yellow
+        Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
         $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
         docker build -t $BACKEND_LOCAL_IMAGE -f "$RepoRoot\apps\backend\Dockerfile" "$RepoRoot"
         if ($LASTEXITCODE -ne 0) {
@@ -183,6 +188,9 @@ function Start-Backend {
         exit 1
     }
     Write-Host "Backend: HEALTHY" -ForegroundColor Green
+    
+    # Open logs in a new PowerShell window
+    Start-Process -FilePath "powershell" -ArgumentList "-NoProfile -Command `"& { Write-Host '--- Backend Logs ---' -ForegroundColor Cyan; docker logs -f $BACKEND_CONTAINER }`""
 }
 
 function Verify-Docker-Networking {
@@ -204,6 +212,7 @@ if ($choice -eq "1") {
     Start-Backend
     
     if (Test-Path ".\start-ngrok.ps1") {
+        .\start-ngrok.ps1 -Mode FaceService
         .\start-ngrok.ps1 -Mode Backend
     }
     

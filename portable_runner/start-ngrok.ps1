@@ -95,8 +95,7 @@ if ($Url) {
 }
 $ngrokArgs += "$TargetPort"
 
-# We must start ngrok in a separate process so we can track its PID and query its API for dynamic URLs
-$process = Start-Process -FilePath $NgrokPath -ArgumentList $ngrokArgs -PassThru -WindowStyle Minimized
+$process = Start-Process -FilePath $NgrokPath -ArgumentList $ngrokArgs -PassThru -WindowStyle Normal
 
 $PidFile = Join-Path $ScriptPath ".runner_pids.txt"
 $process.Id | Out-File -FilePath $PidFile -Append -Encoding utf8
