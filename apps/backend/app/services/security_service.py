@@ -115,10 +115,12 @@ async def validate_patient_pin(db: AsyncSession, patient_id: uuid.UUID, pin: str
 
 async def get_security_status(db: AsyncSession, patient_id: uuid.UUID) -> str:
     pin_result = await db.execute(select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == patient_id))
-    has_pin = pin_result.scalar_one_or_none() is not None
+    pin_obj = pin_result.scalars().first()
+    has_pin = pin_obj is not None and getattr(pin_obj, 'is_active', True)
     
     face_result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == patient_id))
-    has_face = face_result.scalar_one_or_none() is not None
+    face_obj = face_result.scalars().first()
+    has_face = face_obj is not None and getattr(face_obj, 'enrollment_status', 'COMPLETED') == 'COMPLETED'
     
     if has_pin and has_face:
         return "COMPLETED"

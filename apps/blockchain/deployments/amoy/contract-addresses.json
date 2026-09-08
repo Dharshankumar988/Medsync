@@ -1,0 +1,8 @@
+{
+  "AuditTrail": "0xba3A98a1bE6E395908F1a84B5a473941be55fa17",
+  "PatientRegistry": "0x582a8781C310DbDF03bd4C3dFf5F4cBdc48de1F3",
+  "DoctorRegistry": "0x047D689FBea8d4C351A366cAAe3dB3836B2bE190",
+  "PharmacyRegistry": "0x58553480bEfa6438AA81827854Ab5eEe43631c78",
+  "MedicalRecordRegistry": "0x83Bf7a9E1e14bb1f876a5994c65179705b90FaA5",
+  "PrescriptionRegistry": "0x8acEd4E33d6570735a326aa17de49CE8B6B8E84F"
+}

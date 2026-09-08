@@ -1,0 +1,11 @@
+{
+  "contractName": "PrescriptionRegistry",
+  "address": "0x8acEd4E33d6570735a326aa17de49CE8B6B8E84F",
+  "version": 1,
+  "timestamp": "2026-08-26T14:20:53.772Z",
+  "transactionHash": "0x6efdfe920e98ee44d7801f0d24bf3e33dda80d872e8c22e2ee719294072aaae9",
+  "blockNumber": 45935610,
+  "deployer": "0x6EC559064e5BfAE4a98d1879c717139aceE49822",
+  "network": "amoy",
+  "chainId": 80002
+}

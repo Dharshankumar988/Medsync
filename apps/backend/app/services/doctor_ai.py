@@ -12,6 +12,7 @@ from app.ai.core.service_manager import ai_service_manager
 from app.ai.core.conversation import ConversationManager
 from app.ai.core.prompt_manager import PromptManager
 from app.ai.core.config import ai_config
+from app.ai.core.orchestrator import AIOrchestrator
 from app.services.rag_service import rag_service
 from app.services.permission import PermissionService
 

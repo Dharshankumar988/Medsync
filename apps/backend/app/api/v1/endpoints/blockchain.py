@@ -20,7 +20,7 @@ from app.models.record import MedicalRecord
 from app.models.pharmacy import Pharmacy
 from app.blockchain.services.sync_service import BlockchainSyncService
 from app.blockchain.provider import blockchain_gateway
-from app.utils.hash import generate_prescription_hash
+from app.utils.hash import generate_canonical_hash
 from typing import List, Optional
 import uuid
 import asyncio
@@ -188,7 +188,7 @@ async def verify_prescription(
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
         
-    data_hash = generate_prescription_hash({
+    data_hash = generate_canonical_hash({
         "prescription_id": str(prescription.id),
         "patient_id": str(prescription.patient_id),
         "doctor_id": str(prescription.doctor_id),

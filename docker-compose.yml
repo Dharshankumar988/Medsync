@@ -1,6 +1,25 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: medsync_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medsync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medsync_dev_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-medsync}
+    ports:
+      - "5432:5432"
+    volumes:
+      - medsync-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medsync}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   backend:
     image: ghcr.io/dharshankumar988/medsync-backend:latest
     container_name: medsync_backend
@@ -8,23 +27,22 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Ensure you copy apps/backend/.env.example to apps/backend/.env
       - PYTHONUNBUFFERED=1
       - PINATA_JWT=${PINATA_JWT}
-      # Override RPC to reach Hardhat on Windows host from inside the container
-      - BLOCKCHAIN_RPC_URL=http://host.docker.internal:8545
-      # Contract addresses path inside the container (mounted below)
       - CONTRACT_ADDRESSES_DIR=/blockchain/deployments
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-medsync}:${POSTGRES_PASSWORD:-medsync_dev_pass}@db:5432/${POSTGRES_DB:-medsync}
     env_file:
       - ./apps/backend/.env
     volumes:
-      # Mount deployment artifacts read-only so the container can load contract addresses
       - ./apps/blockchain/deployments:/blockchain/deployments:ro
       - ./apps/blockchain/abis:/blockchain/abis:ro
-      # Mount source code to override the prebuilt image with our latest changes
       - ./apps/backend/app:/app/app
+      - medsync-model-cache:/models
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -33,3 +51,26 @@ services:
       retries: 3
       start_period: 120s
 
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: medsync_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  medsync-db-data:
+  medsync-model-cache:

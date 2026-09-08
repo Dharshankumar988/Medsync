@@ -1,0 +1,11 @@
+{
+  "contractName": "PatientRegistry",
+  "address": "0x582a8781C310DbDF03bd4C3dFf5F4cBdc48de1F3",
+  "version": 1,
+  "timestamp": "2026-08-26T10:37:48.672Z",
+  "transactionHash": "0xf57914a198dc5e19f190272a9c5e99a6902021d86c25c8183f6dc0a89b9963fd",
+  "blockNumber": 45922225,
+  "deployer": "0x6EC559064e5BfAE4a98d1879c717139aceE49822",
+  "network": "amoy",
+  "chainId": 80002
+}

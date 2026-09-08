@@ -1,0 +1,11 @@
+{
+  "contractName": "PharmacyRegistry",
+  "address": "0x58553480bEfa6438AA81827854Ab5eEe43631c78",
+  "version": 1,
+  "timestamp": "2026-08-26T14:01:40.349Z",
+  "transactionHash": "0x29f78d73478d1d081ad6bead765dd4bc0082680f5eb0631ca4805c1b44fce95b",
+  "blockNumber": 45934457,
+  "deployer": "0x6EC559064e5BfAE4a98d1879c717139aceE49822",
+  "network": "amoy",
+  "chainId": 80002
+}

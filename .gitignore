@@ -38,7 +38,8 @@ apps/blockchain/artifacts/
 apps/blockchain/cache/
 apps/blockchain/typechain-types/
 apps/blockchain/node_modules/
-apps/blockchain/deployments/
+apps/blockchain/deployments/*
+!apps/blockchain/deployments/amoy/
 
 # OS
 .DS_Store

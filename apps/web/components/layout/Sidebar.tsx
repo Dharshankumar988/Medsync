@@ -69,6 +69,7 @@ const menuGroups = {
       label: "NETWORK & SECURITY",
       items: [
         { name: "Pharmacies", href: "/doctor/pharmacies", icon: Building2 },
+        { name: "QR Scanner", href: "/doctor/qr-scanner", icon: ShieldCheck },
         { name: "Consent & Security", href: "/doctor/consent", icon: Shield },
       ]
     },

@@ -1,0 +1,11 @@
+{
+  "contractName": "AuditTrail",
+  "address": "0xba3A98a1bE6E395908F1a84B5a473941be55fa17",
+  "version": 1,
+  "timestamp": "2026-08-26T10:37:13.384Z",
+  "transactionHash": "0x3a9fd398d8179ecbbee1b76c8b50ce2b1f189bb8c0a7a2bc7753a5193bc39abc",
+  "blockNumber": 45922190,
+  "deployer": "0x6EC559064e5BfAE4a98d1879c717139aceE49822",
+  "network": "amoy",
+  "chainId": 80002
+}

@@ -1,0 +1,11 @@
+{
+  "contractName": "MedicalRecordRegistry",
+  "address": "0x83Bf7a9E1e14bb1f876a5994c65179705b90FaA5",
+  "version": 1,
+  "timestamp": "2026-08-26T14:02:15.487Z",
+  "transactionHash": "0x079889ea3b6f0dd7a1ea6c1e2dda1a8b30021d84dc9935f410379825fac73f0f",
+  "blockNumber": 45934492,
+  "deployer": "0x6EC559064e5BfAE4a98d1879c717139aceE49822",
+  "network": "amoy",
+  "chainId": 80002
+}

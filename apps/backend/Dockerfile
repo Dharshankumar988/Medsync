@@ -64,6 +64,9 @@ COPY apps/blockchain/abi[s] /app/app/blockchain/artifacts/abis
 
 EXPOSE 8000
 
+# Copy start script
+COPY apps/backend/start.sh /app/start.sh
+
 # Create a non-root user and switch to it
 RUN adduser --disabled-password --gecos "" medsyncuser && \
     mkdir -p /models && chown -R medsyncuser:medsyncuser /models && \
@@ -75,4 +78,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Start FastAPI
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh", "/app/start.sh"]

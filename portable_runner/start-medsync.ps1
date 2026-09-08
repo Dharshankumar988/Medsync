@@ -23,10 +23,11 @@ Write-Host "What would you like to run?"
 Write-Host "1. Backend only"
 Write-Host "2. Backend + Face Service"
 Write-Host "3. Face Service only"
+Write-Host "4. Full Stack (DB + Backend + Frontend + Face Service via docker-compose)"
 Write-Host ""
 $choice = Read-Host "Enter your choice"
 
-if ($choice -notmatch "^[1-3]$") {
+if ($choice -notmatch "^[1-4]$") {
     Write-Host "Invalid choice. Exiting." -ForegroundColor Red
     exit 1
 }
@@ -261,7 +262,52 @@ elseif ($choice -eq "3") {
     Write-Host "`nBackend:"
     Write-Host "NOT RUNNING"
 }
+elseif ($choice -eq "4") {
+    Write-Host "`n--- Full Stack Mode (docker-compose) ---" -ForegroundColor Cyan
+
+    $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
+
+    # Copy .env to apps/backend/.env so docker-compose env_file works
+    $backendEnvDest = Join-Path $RepoRoot "apps" "backend" ".env"
+    Copy-Item -LiteralPath $ENV_FILE -Destination $backendEnvDest -Force
+    Write-Host "Copied .env to apps/backend/.env" -ForegroundColor Gray
+
+    Write-Host "Building and starting all services with docker-compose..." -ForegroundColor Cyan
+    docker compose -f "$RepoRoot\docker-compose.yml" -f "$RepoRoot\docker-compose.override.yml" up -d --build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: docker-compose up failed." -ForegroundColor Red
+        exit 1
+    }
+
+    # Wait for backend health
+    Write-Host "Waiting for backend to become healthy..."
+    $healthy = $false
+    for ($i = 0; $i -lt 60; $i++) {
+        Start-Sleep -Seconds 2
+        try {
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing -ErrorAction SilentlyContinue
+            if ($response.StatusCode -eq 200) {
+                $healthy = $true
+                break
+            }
+        } catch {}
+    }
+    if (-not $healthy) {
+        Write-Host "ERROR: Backend failed health check." -ForegroundColor Red
+        docker compose -f "$RepoRoot\docker-compose.yml" logs --tail 30 backend
+        exit 1
+    }
+    Write-Host "Backend: HEALTHY" -ForegroundColor Green
+
+    Write-Host "`n========================================" -ForegroundColor Magenta
+    Write-Host " FULL STACK RUNNING" -ForegroundColor Magenta
+    Write-Host "========================================" -ForegroundColor Magenta
+    Write-Host "Database:     postgresql://localhost:5432"
+    Write-Host "Backend:      http://127.0.0.1:8000"
+    Write-Host "Frontend:     http://127.0.0.1:3000"
+    Write-Host "Face Service: http://127.0.0.1:8080"
+    Write-Host "`nTo stop:  docker compose -f `"$RepoRoot\docker-compose.yml`" down"
+}
 
 Write-Host "`nPress Ctrl+C to stop services or run .\stop-medsync.ps1 in another terminal." -ForegroundColor Yellow
 while ($true) { Start-Sleep -Seconds 3600 }
-
