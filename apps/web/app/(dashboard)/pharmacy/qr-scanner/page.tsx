@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@medsync/ui";
-import { QrCode, ScanLine, Key, Loader2, CheckCircle2, ShieldCheck, FileText } from "lucide-react";
+import { QrCode, ScanLine, Key, Loader2, CheckCircle2, ShieldCheck, FileText, AlertTriangle } from "lucide-react";
 import { pharmacyService } from "@/services/pharmacy.service";
 
 export default function QRScannerPage() {
@@ -14,7 +14,8 @@ export default function QRScannerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const [prescriptionData, setPrescriptionData] = useState<any>(null);
+  const [basicData, setBasicData] = useState<any>(null);
+  const [fullPrescriptionData, setFullPrescriptionData] = useState<any>(null);
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,11 +25,14 @@ export default function QRScannerPage() {
     setError(null);
     try {
       const res = await pharmacyService.verifyQR(token);
-      if (res.success && res.data) {
-        setPrescriptionData(res.data);
+      if (res.data?.is_valid) {
+        setBasicData(res.data.data);
+        if (res.data.data.status === "TAMPERED") {
+          setError("WARNING: This prescription has been TAMPERED with. The data does not match the blockchain.");
+        }
         setStep("VERIFY_PIN");
       } else {
-        setError(res.message || "Invalid or expired QR token.");
+        setError(res.message || "Invalid or tampered QR token.");
       }
     } catch (err: any) {
       setError(err.message || "Failed to decode prescription token.");
@@ -41,7 +45,7 @@ export default function QRScannerPage() {
 
   const handleVerifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!pin && !faceImage) || !prescriptionData?.prescription?.id) return;
+    if ((!pin && !faceImage) || !basicData?.prescription_id) return;
 
     setIsLoading(true);
     setError(null);
@@ -50,7 +54,7 @@ export default function QRScannerPage() {
       if (pin) formData.append("pin", pin);
       if (faceImage) formData.append("face_image", faceImage);
 
-      const res = await fetch(`/api/v1/prescriptions/${prescriptionData.prescription.id}/verify`, {
+      const res = await fetch(`/api/v1/prescriptions/${basicData.prescription_id}/verify`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}` // Ensure auth
@@ -61,6 +65,7 @@ export default function QRScannerPage() {
       const data = await res.json();
       
       if (res.ok && data.success) {
+        setFullPrescriptionData(data.data);
         setStep("SUCCESS");
       } else {
         setError(data.detail || data.message || "Invalid Authorization PIN.");
@@ -73,16 +78,17 @@ export default function QRScannerPage() {
   };
   
   const handleDispense = async () => {
-    if (!prescriptionData?.prescription?.id) return;
+    if (!basicData?.prescription_id) return;
     setIsLoading(true);
     try {
-      await pharmacyService.dispensePrescription(prescriptionData.prescription.id);
+      await pharmacyService.dispensePrescription(basicData.prescription_id);
       alert("Prescription marked as dispensed successfully!");
       // Reset
       setStep("SCAN");
       setToken("");
       setPin("");
-      setPrescriptionData(null);
+      setBasicData(null);
+      setFullPrescriptionData(null);
     } catch (err) {
       alert("Failed to dispense prescription.");
     } finally {
@@ -112,16 +118,16 @@ export default function QRScannerPage() {
               {step === "SUCCESS" && "Verification Complete"}
             </CardTitle>
             <CardDescription>
-              {step === "SCAN" && "Scan the patient's prescription QR code or enter the secure token manually."}
-              {step === "VERIFY_PIN" && "Ask the patient to enter their 6-digit authorization PIN."}
-              {step === "SUCCESS" && "The prescription has been cryptographically verified."}
+              {step === "SCAN" && "Scan the patient's prescription QR code or enter the secure MS- token manually."}
+              {step === "VERIFY_PIN" && "Ask the patient to enter their 6-digit authorization PIN to unlock prescription details."}
+              {step === "SUCCESS" && "The prescription is fully authorized and ready for dispensing."}
             </CardDescription>
           </CardHeader>
           
           <CardContent className="pt-6">
             {error && (
               <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm mb-6 border border-red-100 flex items-start">
-                <ShieldCheck className="h-5 w-5 mr-2 shrink-0" />
+                <AlertTriangle className="h-5 w-5 mr-2 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
@@ -130,7 +136,7 @@ export default function QRScannerPage() {
               <form onSubmit={handleScan} className="space-y-4">
                 <div className="space-y-2">
                   <Input
-                    placeholder="Paste secure token here..."
+                    placeholder="Enter MS- token here..."
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     className="font-mono text-center"
@@ -147,28 +153,25 @@ export default function QRScannerPage() {
               </form>
             )}
 
-            {step === "VERIFY_PIN" && prescriptionData && (
+            {step === "VERIFY_PIN" && basicData && (
               <form onSubmit={handleVerifyPin} className="space-y-6">
                 <div className="bg-muted p-4 rounded-lg space-y-2">
                   <div className="flex items-center text-sm">
                     <FileText className="h-4 w-4 mr-2 text-primary" />
                     <span className="font-medium">Prescription ID:</span>
-                    <span className="ml-2 font-mono text-xs">{prescriptionData.prescription.id.split('-')[0]}...</span>
+                    <span className="ml-2 font-mono text-xs">{basicData.prescription_id.split('-')[0]}...</span>
                   </div>
                   <div className="text-sm">
-                    <span className="font-medium text-muted-foreground">Patient:</span> {prescriptionData.patient.name}
+                    <span className="font-medium text-muted-foreground">Patient:</span> {basicData.patient_name}
                   </div>
                   <div className="text-sm">
-                    <span className="font-medium text-muted-foreground">Doctor:</span> {prescriptionData.doctor.name}
+                    <span className="font-medium text-muted-foreground">Doctor:</span> {basicData.doctor_name}
                   </div>
-                  <div className="mt-2 border-t pt-2">
-                    <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">Medications</p>
-                    {prescriptionData.prescription.items?.map((item: any, i: number) => (
-                      <div key={i} className="text-sm flex justify-between">
-                        <span>{item.medicine_name}</span>
-                        <span className="text-muted-foreground">{item.dosage} ({item.duration_days} days)</span>
-                      </div>
-                    ))}
+                  <div className="mt-2 text-sm font-semibold flex items-center">
+                     Status: 
+                     {basicData.status === "VERIFIED" && <span className="ml-2 text-emerald-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1" /> Blockchain Verified</span>}
+                     {basicData.status === "PENDING" && <span className="ml-2 text-amber-600">Pending Anchoring</span>}
+                     {basicData.status === "TAMPERED" && <span className="ml-2 text-red-600 flex items-center"><AlertTriangle className="w-4 h-4 mr-1" /> TAMPERED</span>}
                   </div>
                 </div>
 
@@ -183,7 +186,7 @@ export default function QRScannerPage() {
                       value={pin}
                       onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
                       className="text-center text-2xl tracking-widest h-14"
-                      disabled={!!faceImage}
+                      disabled={!!faceImage || basicData.status === "TAMPERED"}
                     />
                   </div>
                   
@@ -210,6 +213,7 @@ export default function QRScannerPage() {
                           setFaceImage(null);
                         }
                       }}
+                      disabled={basicData.status === "TAMPERED"}
                     />
                   </div>
                 </div>
@@ -218,23 +222,44 @@ export default function QRScannerPage() {
                   <Button type="button" variant="outline" className="flex-1" onClick={() => setStep("SCAN")}>
                     Cancel
                   </Button>
-                  <Button type="submit" className="flex-1" disabled={(!pin && !faceImage) || (pin.length > 0 && pin.length !== 6) || isLoading}>
+                  <Button type="submit" className="flex-1" disabled={(!pin && !faceImage) || (pin.length > 0 && pin.length !== 6) || isLoading || basicData.status === "TAMPERED"}>
                     {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Authorize"}
                   </Button>
                 </div>
               </form>
             )}
 
-            {step === "SUCCESS" && prescriptionData && (
+            {step === "SUCCESS" && fullPrescriptionData && (
               <div className="space-y-6">
                 <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-lg">
                   <h4 className="font-semibold text-emerald-800 flex items-center mb-2">
                     <ShieldCheck className="h-5 w-5 mr-2" />
-                    Blockchain Verified
+                    Authentication Successful
                   </h4>
                   <p className="text-sm text-emerald-700">
-                    This prescription has been cryptographically verified against the MedSync Blockchain Registry.
+                    Patient has authorized access to this prescription.
                   </p>
+                </div>
+
+                <div className="bg-muted p-4 rounded-lg border mt-4">
+                  <h4 className="font-medium mb-3 border-b pb-2">Prescription Details</h4>
+                  {fullPrescriptionData.diagnosis && (
+                    <div className="mb-4">
+                      <span className="text-xs text-muted-foreground block">Diagnosis</span>
+                      <span className="text-sm font-medium">{fullPrescriptionData.diagnosis}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-xs text-muted-foreground block mb-2">Medications</span>
+                    <ul className="space-y-2">
+                    {fullPrescriptionData.items?.map((item: any, i: number) => (
+                      <li key={i} className="text-sm flex justify-between items-center bg-background p-2 rounded border">
+                        <span className="font-medium">{item.medicine_name}</span>
+                        <span className="text-muted-foreground">{item.dosage} ({item.duration_days} days)</span>
+                      </li>
+                    ))}
+                    </ul>
+                  </div>
                 </div>
                 
                 <Button onClick={handleDispense} className="w-full" size="lg" disabled={isLoading}>

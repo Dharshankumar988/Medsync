@@ -20,14 +20,10 @@ class PrescriptionService:
         doctor_data = {"name": f"{doctor.first_name} {doctor.last_name}" if doctor else "Unknown"}
         patient_data = {"name": f"{patient.first_name} {patient.last_name}" if patient else "Unknown", "id": str(patient.id) if patient else ""}
 
-        # 2. Pre-generate ID to sign JWT
+        # 2. Pre-generate ID and secure Verification Token
+        import secrets
         prescription_id = uuid.uuid4()
-        qr_token = QRPdfService.generate_dynamic_token(
-            resource_id=prescription_id, 
-            user_id=doctor_id, 
-            purpose="PRESCRIPTION_ACCESS", 
-            expires_in_minutes=15
-        )
+        qr_token = f"MS-{secrets.token_hex(8).upper()}"
         
         # 3. Generate QR Image and PDF
         qr_image_bytes = QRPdfService.generate_qr_code(qr_token)
@@ -35,7 +31,7 @@ class PrescriptionService:
         items_list = [item.model_dump() for item in req.items]
         
         pdf_bytes = QRPdfService.generate_prescription_pdf(
-            rx_data, patient_data, doctor_data, items_list, qr_image_bytes
+            rx_data, patient_data, doctor_data, items_list, qr_image_bytes, qr_token=qr_token
         )
         
         # 4. Upload PDF
@@ -48,23 +44,17 @@ class PrescriptionService:
             record_id=str(prescription_id),
             version_number=1
         )
-        
-        # Generate signed url valid for a long time or just store object path and generate it on read?
-        # Better to store object path in pdf_url and resolve it on frontend/backend API.
         pdf_url = object_path
 
         # 5. Generate canonical hash
-        import hashlib
-        import json
-        items_to_hash = [{"medicine_name": i.medicine_name, "dosage": i.dosage, "frequency": i.frequency, "duration_days": i.duration_days} for i in req.items]
-        payload = {
-            "doctor_id": str(doctor_id),
-            "patient_id": str(req.patient_id),
-            "diagnosis": req.diagnosis,
-            "items": items_to_hash
-        }
-        payload_str = json.dumps(payload, sort_keys=True)
-        canonical_hash = hashlib.sha256(payload_str.encode('utf-8')).hexdigest()
+        from app.utils.hash import build_prescription_payload, generate_canonical_hash
+        payload = build_prescription_payload(
+            doctor_id=str(doctor_id),
+            patient_id=str(req.patient_id),
+            diagnosis=req.diagnosis,
+            items=items_list
+        )
+        canonical_hash = generate_canonical_hash(payload)
 
         rx_in = {
             "id": prescription_id,
@@ -95,10 +85,7 @@ class PrescriptionService:
                 entity_type=SyncEntityType.PRESCRIPTION,
                 entity_id=prescription.id,
                 action_type=SyncActionType.CREATE,
-                payload={
-                    "patient_id": str(req.patient_id),
-                    "doctor_id": str(doctor_id)
-                }
+                payload=payload
             )
             await db.commit()
         except Exception:

@@ -24,9 +24,9 @@ class BlockchainSyncService:
         self.db = db
 
     def _generate_hash(self, payload: dict) -> str:
-        """Generates a deterministic SHA-256 hash for a dictionary payload."""
-        payload_str = json.dumps(payload, sort_keys=True)
-        return hashlib.sha256(payload_str.encode("utf-8")).hexdigest()
+        """Generates a deterministic SHA-256 hash for a dictionary payload using the shared utility."""
+        from app.utils.hash import generate_canonical_hash
+        return generate_canonical_hash(payload)
 
     async def create_sync_task(self, entity_type: SyncEntityType, entity_id: UUID, action_type: SyncActionType, payload: dict) -> BlockchainSyncTask:
         """

@@ -64,6 +64,7 @@ class QRPdfService:
         doctor_data: dict, 
         items: list, 
         qr_image_bytes: io.BytesIO,
+        qr_token: str = None,
         blockchain_tx: str = None
     ) -> io.BytesIO:
         """Generates the secure PDF for the prescription"""
@@ -87,6 +88,9 @@ class QRPdfService:
         # Draw QR Code
         qr_image = ImageReader(qr_image_bytes)
         c.drawImage(qr_image, width - 150, height - 200, width=100, height=100)
+        if qr_token:
+            c.setFont("Helvetica", 8)
+            c.drawString(width - 150, height - 210, f"Token: {qr_token}")
         
         # Doctor Info
         c.setFont("Helvetica-Bold", 12)
@@ -133,3 +137,44 @@ class QRPdfService:
         c.save()
         buffer.seek(0)
         return buffer
+
+    @staticmethod
+    def stamp_qr_on_pdf(original_pdf_bytes: bytes, qr_image_bytes: io.BytesIO, qr_token: str) -> bytes:
+        import PyPDF2
+        import io
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.utils import ImageReader
+        
+        # Create a new PDF with Reportlab that contains just the QR code
+        packet = io.BytesIO()
+        c = canvas.Canvas(packet, pagesize=A4)
+        width, height = A4
+        
+        # We stamp it at the bottom right
+        qr_image = ImageReader(qr_image_bytes)
+        c.drawImage(qr_image, width - 150, 50, width=100, height=100)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(width - 150, 40, f"Verification Token: {qr_token}")
+        c.drawString(width - 150, 30, "Verify at medsync.com/verify")
+        
+        c.save()
+        packet.seek(0)
+        
+        # Merge the stamped QR PDF with the original
+        new_pdf = PyPDF2.PdfReader(packet)
+        existing_pdf = PyPDF2.PdfReader(io.BytesIO(original_pdf_bytes))
+        output = PyPDF2.PdfWriter()
+        
+        for i in range(len(existing_pdf.pages)):
+            page = existing_pdf.pages[i]
+            # Only stamp the first page
+            if i == 0:
+                # Merge the watermark into the page
+                page.merge_page(new_pdf.pages[0])
+            output.add_page(page)
+            
+        output_stream = io.BytesIO()
+        output.write(output_stream)
+        output_stream.seek(0)
+        return output_stream.read()

@@ -22,6 +22,7 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
     block_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    original_file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     registered_at: Mapped[str | None] = mapped_column(String, nullable=True)
     

@@ -160,78 +160,109 @@ async def verify_qr(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user),
 ):
-    """Verify a QR token — uses server-side QRAuthorizationService for full verification."""
-    # Try server-side verification first
-    verification = await QRAuthorizationService.verify_token(
-        db=db,
-        jwt_token=token,
-        verifier_id=current_user.id,
-        verifier_role=current_user.role,
-    )
-
-    if not verification.get("valid"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=verification.get("error", "Invalid or expired QR token"),
-        )
-
-    # Role enforcement based on purpose
-    purpose = verification.get("purpose", "PRESCRIPTION_ACCESS")
-    if purpose in ["PRESCRIPTION_ACCESS", "IN_STORE_ORDER"]:
-        if current_user.role.upper() not in ["PHARMACY"]:
-            raise HTTPException(status_code=403, detail="Unauthorized role for this QR purpose")
-    elif purpose == "DELIVERY_CONFIRMATION":
-        if current_user.role.upper() not in ["PHARMACY"]:
-            raise HTTPException(status_code=403, detail="Unauthorized role for delivery confirmation")
-
-    resource_id = verification.get("resource_id", "")
-    response_data = verification.get("data", {})
-
-    # Handle delivery confirmation side-effects
-    if purpose == "DELIVERY_CONFIRMATION":
-        resource_uuid = uuid.UUID(resource_id)
-        stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == resource_uuid)
-        result = await db.execute(stmt)
-        tracking = result.scalar_one_or_none()
-
-        if tracking and tracking.current_status != "DELIVERED":
-            tracking.current_status = "DELIVERED"
-            tracking.delivery_completed_at = datetime.now(timezone.utc)
-            tracking.delivery_code_hash = None
-            tracking.delivery_progress = 100
-
-            order_stmt = select(MedicineOrder).where(MedicineOrder.id == resource_uuid)
-            order_res = await db.execute(order_stmt)
-            order = order_res.scalar_one_or_none()
-            if order:
-                order.status = OrderStatus.DELIVERED
-
-            await db.commit()
-            response_data = {"order_id": str(resource_uuid), "status": "DELIVERED"}
-
-    # Log verification audit
-    try:
-        from app.services.audit_service import AuditService
-        await AuditService.log_action(
+    """Verify a QR token — supports both legacy JWT and new permanent MS- tokens."""
+    if not token.startswith("MS-"):
+        # Legacy JWT Flow
+        verification = await QRAuthorizationService.verify_token(
             db=db,
-            action=f"QR_VERIFY_{purpose}",
-            user_id=current_user.id,
-            entity_type="qr_verification",
-            entity_id=uuid.UUID(resource_id) if resource_id else None,
-            details={"purpose": purpose, "verified_at": datetime.now(timezone.utc).isoformat()},
+            jwt_token=token,
+            verifier_id=current_user.id,
+            verifier_role=current_user.role,
         )
-    except Exception:
-        pass  # Audit logging is best-effort
+        if not verification.get("valid"):
+            raise HTTPException(status_code=403, detail=verification.get("error", "Invalid or expired QR token"))
+        purpose = verification.get("purpose", "PRESCRIPTION_ACCESS")
+        if purpose in ["PRESCRIPTION_ACCESS", "IN_STORE_ORDER"] and current_user.role.upper() not in ["PHARMACY"]:
+            raise HTTPException(status_code=403, detail="Unauthorized role for this QR purpose")
+        elif purpose == "DELIVERY_CONFIRMATION" and current_user.role.upper() not in ["PHARMACY"]:
+            raise HTTPException(status_code=403, detail="Unauthorized role for delivery confirmation")
+        return APIResponse(
+            message="Verification Successful",
+            data=VerifyResponse(
+                is_valid=True, purpose=purpose, resource_id=str(verification.get("resource_id", "")),
+                message="Verified", data=verification.get("data", {})
+            )
+        )
+        
+    # --- Permanent MS- Token Flow ---
+    stmt = select(Prescription).where(Prescription.qr_token == token)
+    result = await db.execute(stmt)
+    rx = result.scalar_one_or_none()
+    
+    if not rx:
+        return APIResponse(message="Verification Failed", data=VerifyResponse(
+            is_valid=False, purpose="PRESCRIPTION_ACCESS", resource_id="", message="INVALID", data={}
+        ))
+        
+    if rx.is_revoked:
+        return APIResponse(message="Verification Failed", data=VerifyResponse(
+            is_valid=False, purpose="PRESCRIPTION_ACCESS", resource_id=str(rx.id), message="INVALID", data={"error": "Prescription revoked"}
+        ))
+        
+    # Integrity Check
+    from app.utils.hash import build_prescription_payload, build_offline_prescription_payload, generate_canonical_hash
+    if rx.original_file_hash:
+        payload = build_offline_prescription_payload(str(rx.doctor_id), str(rx.patient_id), str(rx.original_file_hash))
+    else:
+        from app.models.prescription import PrescriptionItem
+        items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == rx.id)
+        items_res = await db.execute(items_stmt)
+        items = [{"medicine_name": i.medicine_name, "dosage": i.dosage, "frequency": i.frequency, "duration_days": i.duration_days} for i in items_res.scalars().all()]
+        payload = build_prescription_payload(str(rx.doctor_id), str(rx.patient_id), str(rx.diagnosis), items)
+        
+    current_hash = generate_canonical_hash(payload)
+    
+    if current_hash != rx.hash:
+        status_msg = "TAMPERED"
+    elif rx.blockchain_status != "CONFIRMED":
+        status_msg = "PENDING"
+    else:
+        status_msg = "VERIFIED"
+        
+    # Authorization Rules
+    authorized_for_details = False
+    if current_user.role.upper() == "DOCTOR":
+        if str(rx.doctor_id) == str(current_user.id):
+            authorized_for_details = True
+        else:
+            from app.services.permission import PermissionService
+            has_permission = await PermissionService.can_access_patient(db, current_user.id, rx.patient_id)
+            if has_permission:
+                authorized_for_details = True
 
+    # Build Response Data
+    doc_stmt = select(User).where(User.id == rx.doctor_id)
+    pat_stmt = select(User).where(User.id == rx.patient_id)
+    doc_res = await db.execute(doc_stmt)
+    pat_res = await db.execute(pat_stmt)
+    doc = doc_res.scalar_one_or_none()
+    pat = pat_res.scalar_one_or_none()
+    
+    response_data = {
+        "prescription_id": str(rx.id),
+        "patient_name": f"{pat.first_name} {pat.last_name}" if pat else "Unknown",
+        "doctor_name": f"{doc.first_name} {doc.last_name}" if doc else "Unknown",
+        "blockchain_status": rx.blockchain_status or "PENDING",
+        "is_dispensed": rx.is_dispensed,
+        "is_finalized": rx.is_finalized,
+        "created_at": rx.created_at.isoformat() if rx.created_at else None,
+        "status": status_msg
+    }
+    
+    if authorized_for_details:
+        response_data["diagnosis"] = rx.diagnosis
+        if not rx.original_file_hash:
+            response_data["items"] = items
+            
     return APIResponse(
-        message="Verification Successful",
+        message=f"Verification Status: {status_msg}",
         data=VerifyResponse(
-            is_valid=True,
-            purpose=purpose,
-            resource_id=str(resource_id),
-            message="Verified",
-            data=response_data,
-        ),
+            is_valid=(status_msg in ["VERIFIED", "PENDING"]),
+            purpose="PRESCRIPTION_ACCESS",
+            resource_id=str(rx.id),
+            message=status_msg,
+            data=response_data
+        )
     )
 
 

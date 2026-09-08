@@ -311,7 +311,17 @@ async def verify_prescription_auth(
     except Exception:
         pass
         
-    return APIResponse(message="Prescription verified successfully", data={"prescription_id": str(rx.id), "hash": getattr(rx, 'hash', None)})
+    from app.models.prescription import PrescriptionItem
+    items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == rx.id)
+    items_res = await db.execute(items_stmt)
+    items = [{"medicine_name": i.medicine_name, "dosage": i.dosage, "frequency": i.frequency, "duration_days": i.duration_days} for i in items_res.scalars().all()]
+    
+    return APIResponse(message="Prescription verified successfully", data={
+        "prescription_id": str(rx.id),
+        "diagnosis": rx.diagnosis,
+        "items": items,
+        "notes": rx.notes
+    })
 
 from fastapi import Form, UploadFile, File
 
@@ -543,7 +553,7 @@ async def upload_offline_prescription(
     file_bytes = await file.read()
     filename = f"offline_prescription_{prescription_id}_{file.filename}"
     
-    object_path, _, _, _ = await StorageService.upload_bytes(
+    object_path, _, _, file_hash = await StorageService.upload_bytes(
         file_bytes=file_bytes,
         filename=filename,
         content_type=file.content_type,
@@ -561,6 +571,7 @@ async def upload_offline_prescription(
         is_dispensed=False,
         is_revoked=False,
         pdf_url=object_path,
+        original_file_hash=file_hash,
         notes=notes
     )
     db.add(rx)
@@ -594,15 +605,63 @@ async def verify_offline_prescription(
     rx.is_finalized = True
     rx.doctor_id = current_user.id
     
-    qr_token = QRPdfService.generate_dynamic_token(
-        resource_id=rx.id, 
-        user_id=current_user.id, 
-        purpose="PRESCRIPTION_ACCESS", 
-        expires_in_minutes=15
-    )
+    import secrets
+    from app.services.storage import StorageService
+    
+    qr_token = f"MS-{secrets.token_hex(8).upper()}"
     rx.qr_token = qr_token
     
+    # Process PDF stamping
+    try:
+        # Download original PDF
+        original_pdf_bytes = await StorageService.download_record_file(rx.pdf_url)
+        
+        # Stamp PDF
+        qr_image_bytes = QRPdfService.generate_qr_code(qr_token)
+        stamped_pdf_bytes = QRPdfService.stamp_qr_on_pdf(original_pdf_bytes, qr_image_bytes, qr_token)
+        
+        # Upload stamped PDF as version 2
+        new_filename = f"stamped_prescription_{rx.id}.pdf"
+        new_object_path, _, _, _ = await StorageService.upload_bytes(
+            file_bytes=stamped_pdf_bytes,
+            filename=new_filename,
+            content_type="application/pdf",
+            patient_id=str(rx.patient_id),
+            record_id=str(rx.id),
+            version_number=2
+        )
+        rx.pdf_url = new_object_path
+    except Exception as e:
+        # If stamping fails for any reason (e.g. encrypted or malformed PDF),
+        # we log the error but still finalize the prescription with the token.
+        import logging
+        logging.getLogger(__name__).error(f"Failed to stamp PDF for {rx.id}: {e}")
+
+    from app.utils.hash import build_offline_prescription_payload, generate_canonical_hash
+    payload = build_offline_prescription_payload(
+        doctor_id=str(current_user.id),
+        patient_id=str(rx.patient_id),
+        original_file_hash=str(rx.original_file_hash)
+    )
+    
+    rx.hash = generate_canonical_hash(payload)
+    
     await db.commit()
+    
+    # Enqueue blockchain task
+    try:
+        from app.services.blockchain_sync import BlockchainSyncService
+        from app.models.blockchain import SyncEntityType, SyncActionType
+        await BlockchainSyncService.enqueue_sync_task(
+            db=db,
+            entity_type=SyncEntityType.PRESCRIPTION,
+            entity_id=rx.id,
+            action_type=SyncActionType.CREATE,
+            payload=payload
+        )
+        await db.commit()
+    except Exception:
+        pass
     
     return APIResponse(message="Offline prescription verified successfully")
 
