@@ -78,4 +78,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Start FastAPI
-CMD ["sh", "/app/start.sh"]
+CMD ["bash", "/app/start.sh"]
