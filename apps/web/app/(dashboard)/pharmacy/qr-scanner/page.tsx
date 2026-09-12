@@ -4,11 +4,13 @@ import { useState } from "react";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@medsync/ui";
-import { QrCode, ScanLine, Key, Loader2, CheckCircle2, ShieldCheck, FileText, AlertTriangle } from "lucide-react";
+import { QrCode, ScanLine, Key, Loader2, CheckCircle2, ShieldCheck, FileText, AlertTriangle, Camera } from "lucide-react";
 import { pharmacyService } from "@/services/pharmacy.service";
+import { QRScanner } from "@/components/ui/QRScanner";
 
 export default function QRScannerPage() {
   const [token, setToken] = useState("");
+  const [showCamera, setShowCamera] = useState(false);
   const [pin, setPin] = useState("");
   const [step, setStep] = useState<"SCAN" | "VERIFY_PIN" | "SUCCESS">("SCAN");
   const [isLoading, setIsLoading] = useState(false);
@@ -133,24 +135,57 @@ export default function QRScannerPage() {
             )}
             
             {step === "SCAN" && (
-              <form onSubmit={handleScan} className="space-y-4">
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Enter MS- token here..."
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    className="font-mono text-center"
-                    autoFocus
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={!token || isLoading} size="lg">
-                  {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <QrCode className="mr-2 h-5 w-5" />}
-                  Verify Token
-                </Button>
+              <div className="space-y-4">
+                {showCamera ? (
+                  <div className="rounded-xl overflow-hidden shadow-inner border bg-black/5">
+                    <QRScanner 
+                      onScan={(decodedText) => {
+                        setToken(decodedText);
+                        setShowCamera(false);
+                      }} 
+                      onClose={() => setShowCamera(false)} 
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      className="w-full h-32 flex flex-col items-center justify-center gap-3 border-2 border-dashed hover:border-primary hover:bg-primary/5 transition-colors"
+                      onClick={() => setShowCamera(true)}
+                    >
+                      <div className="p-3 bg-primary/10 rounded-full text-primary">
+                        <Camera className="h-6 w-6" />
+                      </div>
+                      <span className="font-medium">Open Camera Scanner</span>
+                    </Button>
+                    
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center"><span className="w-full border-t"></span></div>
+                      <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Or</span></div>
+                    </div>
+                    
+                    <form onSubmit={handleScan} className="space-y-4">
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Enter MS- token manually..."
+                          value={token}
+                          onChange={(e) => setToken(e.target.value)}
+                          className="font-mono text-center"
+                          autoFocus
+                        />
+                      </div>
+                      <Button type="submit" className="w-full" disabled={!token || isLoading} size="lg">
+                        {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <QrCode className="mr-2 h-5 w-5" />}
+                        Verify Token
+                      </Button>
+                    </form>
+                  </div>
+                )}
                 <p className="text-xs text-center text-muted-foreground mt-4">
                   Powered by MedSync Secure Hash Protocol
                 </p>
-              </form>
+              </div>
             )}
 
             {step === "VERIFY_PIN" && basicData && (

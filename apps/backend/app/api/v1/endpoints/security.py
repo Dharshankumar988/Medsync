@@ -243,3 +243,85 @@ async def change_pin_face(
     finally:
         if tmp_file and os.path.exists(tmp_file):
             os.remove(tmp_file)
+
+@router.post("/change-face-pin")
+async def change_face_pin(
+    pin: str = Form(...),
+    images: List[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Allows a patient to re-enroll their Face using their PIN as authorization.
+    """
+    if current_user.role.upper() != UserRole.PATIENT.value.upper():
+        raise HTTPException(status_code=403, detail="Only patients can change their Face ID.")
+        
+    # Verify PIN first
+    is_valid = await validate_patient_pin(db, current_user.id, pin)
+    if not is_valid:
+        # Audit log for failed change
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="PIN_CHANGE_FACE_FAILED",
+            entity_type="PatientBiometricProfile",
+            entity_id=current_user.id
+        )
+        db.add(audit)
+        await db.commit()
+        raise HTTPException(status_code=401, detail="Invalid PIN.")
+        
+    if len(images) < 1 or len(images) > 3:
+        raise HTTPException(status_code=400, detail="Please provide 1 to 3 face samples.")
+        
+    temp_files = []
+    try:
+        import tempfile
+        import shutil
+        import os
+        for img in images:
+            suffix = f".{img.filename.split('.')[-1]}" if '.' in img.filename else ".jpg"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                shutil.copyfileobj(img.file, tmp)
+                temp_files.append(tmp.name)
+                
+        # Running face enrollment
+        import asyncio
+        encrypted_template = await asyncio.to_thread(face_auth_service.enroll_patient, temp_files)
+        
+        # Save to DB
+        result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id))
+        existing_profile = result.scalar_one_or_none()
+        
+        if existing_profile:
+            existing_profile.encrypted_template = encrypted_template
+            existing_profile.enrollment_status = "COMPLETED"
+        else:
+            profile = PatientBiometricProfile(
+                patient_id=current_user.id,
+                encrypted_template=encrypted_template,
+                model_name="buffalo_l",
+                enrollment_status="COMPLETED"
+            )
+            db.add(profile)
+            
+        audit = AuditLog(
+            user_id=current_user.id,
+            action="PIN_CHANGE_FACE_SUCCESS",
+            entity_type="PatientBiometricProfile",
+            entity_id=current_user.id
+        )
+        db.add(audit)
+        await db.commit()
+        
+        return {"message": "Face ID changed successfully using PIN."}
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="An error occurred during Face ID change.")
+    finally:
+        import os
+        for tmp_file in temp_files:
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)

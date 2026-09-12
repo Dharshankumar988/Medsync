@@ -209,6 +209,9 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
           ref={canvasRef} 
           className="absolute inset-0 w-full h-full object-cover z-10 transform scale-x-[-1]"
         />
+        <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center overflow-hidden">
+          <div className="w-[60%] h-[80%] rounded-[50%] border-4 border-dashed border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"></div>
+        </div>
       </div>
       
       <div className={`p-3 rounded-lg text-sm font-medium w-full text-center ${

@@ -110,3 +110,11 @@ class DeliveryTracking(Base, UUIDMixin, TimestampMixin):
     start_longitude: Mapped[float | None] = mapped_column(Numeric(11, 8), nullable=True)
     end_latitude: Mapped[float | None] = mapped_column(Numeric(10, 8), nullable=True)
     end_longitude: Mapped[float | None] = mapped_column(Numeric(11, 8), nullable=True)
+
+class PharmacyRestockOrder(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "pharmacy_restock_orders"
+    pharmacy_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    medicine_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicines.id"), index=True, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)
+    expected_delivery: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)

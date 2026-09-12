@@ -17,6 +17,25 @@ from sqlalchemy import select
 router = APIRouter()
 require_patient = RoleChecker([UserRole.PATIENT])
 
+@router.get("/", response_model=APIResponse[list[MedicineOrderResponse]])
+@router.get("", response_model=APIResponse[list[MedicineOrderResponse]])
+async def list_orders(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role == UserRole.PATIENT:
+        stmt = select(MedicineOrder).where(MedicineOrder.patient_id == current_user.id).order_by(MedicineOrder.created_at.desc())
+    elif current_user.role == UserRole.PHARMACY:
+        stmt = select(MedicineOrder).where(MedicineOrder.pharmacy_id == current_user.id).order_by(MedicineOrder.created_at.desc())
+    else:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to view orders")
+        
+    result = await db.execute(stmt)
+    orders = result.scalars().all()
+    
+    return APIResponse(message="Orders retrieved successfully", data=orders)
+
 @router.post("/", response_model=APIResponse[MedicineOrderResponse], status_code=status.HTTP_201_CREATED)
 async def place_order(
     req: MedicineOrderCreate,

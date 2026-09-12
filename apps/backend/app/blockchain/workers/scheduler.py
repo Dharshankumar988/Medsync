@@ -5,6 +5,7 @@ from app.blockchain.workers.retry_worker import process_retry_queue
 from app.blockchain.workers.confirmation_worker import poll_confirmations
 from app.blockchain.workers.event_worker import sync_events
 from app.blockchain.monitoring.listener import start_event_listener
+from app.blockchain.workers.inventory_worker import process_restock_orders
 
 logger = logging.getLogger("blockchain.scheduler")
 
@@ -46,6 +47,14 @@ def start_scheduler():
     
     # Start the background long-running block listener
     start_event_listener()
+    
+    # Process inventory restock orders every 15 seconds
+    scheduler.add_job(
+        process_restock_orders,
+        trigger=IntervalTrigger(seconds=15),
+        id="restock_worker",
+        replace_existing=True
+    )
     
     scheduler.start()
 

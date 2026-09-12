@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Badge } from "@medsync/ui";
-import { ArrowLeft, Save, Loader2, Pill, Plus, Trash2, ShieldCheck, User } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Pill, Plus, Trash2, ShieldCheck, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { toast } from "sonner";
 import axios from "axios";
+import api from "@/lib/api";
 
 export default function CreatePrescriptionPage() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function CreatePrescriptionPage() {
 
   const [userId, setUserId] = useState<string>("");
   const [patients, setPatients] = useState<any[]>([]);
+  const [catalog, setCatalog] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -28,11 +30,29 @@ export default function CreatePrescriptionPage() {
     { medicine_name: "", dosage: "", frequency: "1-0-1", duration_days: 5, instructions: "" }
   ]);
 
+  // Add Medicine Modal State
+  const [isAddMedModalOpen, setIsAddMedModalOpen] = useState(false);
+  const [newMedName, setNewMedName] = useState("");
+  const [newMedBrand, setNewMedBrand] = useState("");
+  const [addingMed, setAddingMed] = useState(false);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setUserId(data.user.id);
     });
+    fetchCatalog();
   }, []);
+
+  const fetchCatalog = async () => {
+    try {
+      const res = await api.get('/api/v1/medicines/');
+      if (res.data && res.data.data) {
+        setCatalog(res.data.data.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+      }
+    } catch (err) {
+      console.error("Failed to load medicines catalog");
+    }
+  };
 
   useEffect(() => {
     if (!userId) return;
@@ -44,8 +64,8 @@ export default function CreatePrescriptionPage() {
         const { data: pres } = await supabase.from('prescriptions').select('patient_id').eq('doctor_id', userId);
         
         const ids = Array.from(new Set([
-          ...(appts?.map(a => a.patient_id) || []),
-          ...(pres?.map(p => p.patient_id) || []),
+          ...(appts?.map((a: any) => a.patient_id) || []),
+          ...(pres?.map((p: any) => p.patient_id) || []),
           preselectedPatientId
         ].filter(Boolean)));
 
@@ -72,9 +92,48 @@ export default function CreatePrescriptionPage() {
   };
 
   const handleItemChange = (index: number, field: string, value: any) => {
+    if (field === "medicine_name" && value === "__ADD_NEW__") {
+      setIsAddMedModalOpen(true);
+      return;
+    }
     const newItems = [...items];
     newItems[index][field] = value;
     setItems(newItems);
+  };
+
+  const handleAddNewMedicine = async () => {
+    if (!newMedName) {
+      toast.error("Medicine name is required");
+      return;
+    }
+    setAddingMed(true);
+    try {
+      const res = await api.post('/api/v1/medicines/', {
+        name: newMedName,
+        brand_name: newMedBrand || null
+      });
+      const newMed = res.data.data;
+      const updatedCatalog = [...catalog, newMed].sort((a: any, b: any) => a.name.localeCompare(b.name));
+      setCatalog(updatedCatalog);
+      
+      // Auto-select the newly added medicine for the last item with an empty medicine_name
+      const emptyIndex = items.findIndex(item => !item.medicine_name);
+      if (emptyIndex !== -1) {
+        const newItems = [...items];
+        newItems[emptyIndex].medicine_name = newMed.name;
+        setItems(newItems);
+      }
+      
+      toast.success("Medicine added to global database");
+      setIsAddMedModalOpen(false);
+      setNewMedName("");
+      setNewMedBrand("");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to add medicine");
+    } finally {
+      setAddingMed(false);
+    }
   };
 
   const handleSave = async () => {
@@ -95,27 +154,6 @@ export default function CreatePrescriptionPage() {
 
     setSaving(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
-
-      const payload = {
-        patient_id: patientId,
-        diagnosis,
-        notes,
-        appointment_id: apptId || null,
-        items: validItems.map(item => ({
-          medicine_name: item.medicine_name,
-          dosage: item.dosage,
-          frequency: item.frequency,
-          duration_days: parseInt(item.duration_days),
-          instructions: item.instructions || "Take as directed"
-        }))
-      };
-
-      // Since we don't know the exact endpoint payload, we will try to insert directly into Supabase,
-      // but creating a prescription often involves blockchain in the backend. Let's hit the backend API.
-      // Wait, in this stack, if there's no explicit post endpoint, inserting directly to supabase works.
-      
       // 1. Insert Prescription
       const { data: presData, error: presErr } = await supabase
         .from('prescriptions')
@@ -213,16 +251,16 @@ export default function CreatePrescriptionPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg">Medicines</CardTitle>
-              <CardDescription>Add medicines to the prescription schema.</CardDescription>
+              <CardDescription>Search and add medicines from the global database.</CardDescription>
             </div>
             <Button size="sm" variant="outline" onClick={handleAddItem}>
-              <Plus className="w-4 h-4 mr-1" /> Add Medicine
+              <Plus className="w-4 h-4 mr-1" /> Add Item
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             {items.map((item, index) => (
               <div key={index} className="p-4 bg-muted/40 border border-border/50 rounded-xl relative group">
-                <div className="absolute -top-3 -left-3 w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-bold">
+                <div className="absolute -top-3 -left-3 w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-bold shadow-sm">
                   {index + 1}
                 </div>
                 {items.length > 1 && (
@@ -240,13 +278,17 @@ export default function CreatePrescriptionPage() {
                   <div className="md:col-span-4 space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Medicine Name</label>
                     <div className="relative">
-                      <Pill className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input 
-                        placeholder="e.g. Amoxicillin 500mg" 
-                        className="pl-9 bg-background"
+                      <select 
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         value={item.medicine_name}
                         onChange={(e) => handleItemChange(index, "medicine_name", e.target.value)}
-                      />
+                      >
+                        <option value="">Select or search...</option>
+                        {catalog.map(c => (
+                          <option key={c.id} value={c.name}>{c.name} {c.brand_name ? `(${c.brand_name})` : ''}</option>
+                        ))}
+                        <option value="__ADD_NEW__" className="text-primary font-bold bg-primary/5">+ Add New Medicine...</option>
+                      </select>
                     </div>
                   </div>
                   <div className="md:col-span-3 space-y-1.5">
@@ -285,6 +327,45 @@ export default function CreatePrescriptionPage() {
           </Button>
         </div>
       </div>
+
+      {isAddMedModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-card w-full max-w-md p-6 rounded-2xl shadow-xl relative border border-border/50">
+            <Button variant="ghost" size="icon" className="absolute right-4 top-4" onClick={() => setIsAddMedModalOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+            <h2 className="text-xl font-bold mb-1 flex items-center gap-2"><Pill className="w-5 h-5"/> Add Global Medicine</h2>
+            <p className="text-sm text-muted-foreground mb-6">This medicine will be added to the global catalog for all users.</p>
+            
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Medicine Name *</label>
+                <Input 
+                  placeholder="e.g. Paracetamol 500mg" 
+                  value={newMedName} 
+                  onChange={(e) => setNewMedName(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Brand Name (Optional)</label>
+                <Input 
+                  placeholder="e.g. Tylenol" 
+                  value={newMedBrand} 
+                  onChange={(e) => setNewMedBrand(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+              
+              <Button className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground" disabled={addingMed || !newMedName} onClick={handleAddNewMedicine}>
+                {addingMed ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />} 
+                Add Medicine
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

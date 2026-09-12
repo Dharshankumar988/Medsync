@@ -29,6 +29,7 @@ export default function SecurityEnrollmentModal() {
   
   const [faceImages, setFaceImages] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [enrollmentSuccess, setEnrollmentSuccess] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -66,7 +67,7 @@ export default function SecurityEnrollmentModal() {
     return () => { stopCamera(); };
   }, [step, stopCamera, stream]);
 
-  const { isEnrollmentModalOpen, closeEnrollmentModal } = useSecurityStore();
+  const { isEnrollmentModalOpen, closeEnrollmentModal, setStatus } = useSecurityStore();
 
   if (!isEnrollmentModalOpen || role !== 'patient' || isStatusLoading || status === 'COMPLETED') {
     return null;
@@ -122,7 +123,12 @@ export default function SecurityEnrollmentModal() {
       const { data: session } = await supabase.auth.getSession();
       if (session?.session?.access_token) {
         await SecurityService.enrollFace(session.session.access_token, faceImages);
-        closeEnrollmentModal();
+        stopCamera();
+        setEnrollmentSuccess(true);
+        setTimeout(() => {
+          setStatus('COMPLETED');
+          closeEnrollmentModal();
+        }, 2000);
       }
     } catch (err: any) {
       console.error(err);
@@ -159,10 +165,17 @@ export default function SecurityEnrollmentModal() {
         <div className="flex gap-2 mb-6">
           <div className={`h-1.5 flex-1 rounded-full ${step >= 1 ? 'bg-primary' : 'bg-muted'}`} />
           <div className={`h-1.5 flex-1 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
-          <div className={`h-1.5 flex-1 rounded-full ${step >= 3 ? 'bg-primary' : 'bg-muted'}`} />
         </div>
 
-        {step === 1 && (
+        {enrollmentSuccess ? (
+          <div className="flex flex-col items-center justify-center py-12 animate-in zoom-in duration-500 fade-in">
+            <div className="w-24 h-24 bg-emerald-500/10 dark:bg-emerald-500/20 rounded-full flex items-center justify-center mb-6 ring-4 ring-emerald-500/20">
+              <CheckCircle2 className="w-12 h-12 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <h3 className="text-2xl font-bold text-center">Security PIN and Face ID Enrolled</h3>
+            <p className="text-muted-foreground mt-2 text-center">Your secure authentication is now active.</p>
+          </div>
+        ) : step === 1 ? (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
             <h3 className="font-semibold text-lg flex items-center gap-2">
               <Lock className="w-5 h-5 text-primary" /> Create 6-Digit Authorization PIN
@@ -215,7 +228,7 @@ export default function SecurityEnrollmentModal() {
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
             </Button>
           </div>
-        )}
+        ) : null}
 
         {step === 2 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
@@ -229,6 +242,7 @@ export default function SecurityEnrollmentModal() {
               <p className="text-xs font-semibold text-primary mb-2 uppercase tracking-wider">Registration Guide</p>
               <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
                 <li>Capture <strong className="text-foreground">3 samples</strong> of your face.</li>
+                <li>Keep your face <strong className="text-foreground">1-2 feet away</strong> from the camera.</li>
                 <li>Sample 1: Keep a <strong className="text-foreground">neutral expression</strong> looking straight.</li>
                 <li>Sample 2: Tilt your head at a <strong className="text-foreground">slight angle</strong>.</li>
                 <li>Sample 3: Provide a <strong className="text-foreground">different expression</strong> (e.g. smile).</li>
@@ -239,6 +253,10 @@ export default function SecurityEnrollmentModal() {
             <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-border">
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
               <canvas ref={canvasRef} className="hidden" />
+              
+              <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center overflow-hidden">
+                <div className="w-[60%] h-[80%] rounded-[50%] border-4 border-dashed border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"></div>
+              </div>
               
               <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
                 {[1, 2, 3].map((_, i) => (

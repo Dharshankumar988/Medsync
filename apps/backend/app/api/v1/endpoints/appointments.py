@@ -29,7 +29,7 @@ async def book_appointment(
     return APIResponse(message="Appointment booked", data=appointment)
 
 
-@router.get("/", response_model=APIResponse[AppointmentListResponse])
+@router.get("", response_model=APIResponse[AppointmentListResponse])
 async def list_appointments(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user),

@@ -564,7 +564,15 @@ async def get_network_details(
         }
         return APIResponse(message="Network details retrieved", data=data)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        data = {
+            "network": "unknown",
+            "chain_id": 0,
+            "status": "degraded",
+            "latest_block": None,
+            "gas_price_gwei": 0.0,
+            "rpc_provider": "Unknown"
+        }
+        return APIResponse(message=f"Network details degraded: {str(e)}", data=data)
 
 @router.get("/wallet", response_model=APIResponse)
 @limiter.limit("20/minute")

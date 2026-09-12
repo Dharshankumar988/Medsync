@@ -80,6 +80,99 @@ class PinSetupRequest(BaseModel):
 
 
 
+@router.get("/{user_id}", response_model=APIResponse[dict])
+async def get_profile(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.DOCTOR, UserRole.PATIENT, UserRole.PHARMACY, UserRole.ADMIN]))
+):
+    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("You cannot view another user's profile")
+
+    user = await db.execute(select(User).where(User.id == user_id))
+    user = user.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    profile_data = {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": user.role,
+        "profile_completion_percentage": user.profile_completion_percentage,
+        "cover_image_url": user.cover_image_url,
+        "bio": user.bio,
+        "social_links": user.social_links,
+        "languages_spoken": user.languages_spoken
+    }
+
+    if user.role == UserRole.PATIENT:
+        profile = await db.execute(select(Patient).where(Patient.user_id == user_id))
+        profile = profile.scalar_one_or_none()
+        if profile:
+            profile_data.update({
+                "date_of_birth": str(profile.date_of_birth) if profile.date_of_birth else None,
+                "gender": profile.gender,
+                "blood_group": profile.blood_group,
+                "phone_number": profile.phone_number,
+                "address": profile.address,
+                "city": profile.city,
+                "state": profile.state,
+                "country": profile.country,
+                "pincode": profile.pincode,
+                "emergency_contact_name": profile.emergency_contact_name,
+                "emergency_contact_number": profile.emergency_contact_number,
+                "medical_alerts": profile.medical_alerts,
+                "allergies": profile.allergies,
+                "chronic_diseases": profile.chronic_diseases
+            })
+    elif user.role == UserRole.DOCTOR:
+        profile = await db.execute(select(Doctor).where(Doctor.user_id == user_id))
+        profile = profile.scalar_one_or_none()
+        if profile:
+            profile_data.update({
+                "qualifications": profile.qualifications,
+                "clinic_name": profile.clinic_name,
+                "clinic_address": profile.clinic_address,
+                "clinic_phone": profile.clinic_phone,
+                "clinic_email": profile.clinic_email,
+                "languages": profile.languages,
+                "consultation_hours": profile.consultation_hours,
+                "consultation_timings": profile.consultation_timings,
+                "hospital_id": str(profile.hospital_id) if profile.hospital_id else None,
+                "medical_council_reg_number": profile.medical_council_reg_number,
+                "license_number": profile.license_number,
+                "experience_years": profile.experience_years,
+                "consultation_fee": profile.consultation_fee,
+                "profile_image": profile.profile_image,
+                "thumbnail": profile.thumbnail
+            })
+    elif user.role == UserRole.PHARMACY:
+        profile = await db.execute(select(Pharmacy).where(Pharmacy.user_id == user_id))
+        profile = profile.scalar_one_or_none()
+        if profile:
+            profile_data.update({
+                "license_number": profile.license_number,
+                "gst_number": profile.gst_number,
+                "address": profile.address,
+                "city": profile.city,
+                "state": profile.state,
+                "country": profile.country,
+                "pincode": profile.pincode,
+                "operating_hours": profile.operating_hours,
+                "owner_details": profile.owner_details,
+                "branch_information": profile.branch_information,
+                "business_registration_number": profile.business_registration_number,
+                "contact_number": profile.contact_number,
+                "working_days": profile.working_days,
+                "location": profile.location,
+                "is_24x7": profile.is_24x7
+            })
+
+    return APIResponse(message="Profile retrieved successfully", data=profile_data)
+
 @router.put("/{user_id}/completion", response_model=APIResponse[dict])
 async def update_profile_completion(
     user_id: uuid.UUID, 

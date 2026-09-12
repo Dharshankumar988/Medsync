@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
-import { Users, Trash2, CheckCircle, XCircle } from "lucide-react";
+import { Users, Trash2, CheckCircle, XCircle, ShieldOff } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@medsync/ui";
 import { Button } from "@medsync/ui";
 import { Badge, Skeleton } from "@medsync/ui";
 import api from "@/lib/api";
+import { toast } from "sonner";
 
 export default function AdminUsers() {
   const [verifications, setVerifications] = useState<any[]>([]);
@@ -60,6 +61,17 @@ export default function AdminUsers() {
       fetchData();
     } catch (err) {
       console.error("Failed to delete patient", err);
+    }
+  };
+
+  const handleResetSecurity = async (id: string) => {
+    if (!confirm("Are you sure you want to reset this user's security credentials? They will need to set up their PIN and Face ID again.")) return;
+    try {
+      await api.post(`/api/v1/admin/users/${id}/reset-security`);
+      toast.success("Security credentials reset successfully");
+    } catch (err) {
+      console.error("Failed to reset security", err);
+      toast.error("Failed to reset security");
     }
   };
 
@@ -135,9 +147,14 @@ export default function AdminUsers() {
                         <p className="font-medium">{p.full_name}</p>
                         <p className="text-sm text-muted-foreground">{p.email}</p>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
                         <Badge variant="outline">{p.status}</Badge>
-                        <Button variant="ghost" className="text-red-500" onClick={() => handleDeletePatient(p.user_id)}><Trash2 className="h-4 w-4"/></Button>
+                        <Button variant="ghost" title="Reset Security Credentials" onClick={() => handleResetSecurity(p.user_id)}>
+                          <ShieldOff className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" title="Delete Patient" className="text-red-500" onClick={() => handleDeletePatient(p.user_id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}

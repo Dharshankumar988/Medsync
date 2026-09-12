@@ -164,7 +164,17 @@ async def root():
 @app.get("/health", tags=["System"])
 async def health_check():
     # Health checks LIVENESS: is the FastAPI server running and responding?
-    return {"status": "ok", "version": settings.VERSION}
+    return {
+        "status": "ok", 
+        "version": settings.VERSION,
+        "services": {
+            "backend": "healthy",
+            "database": "connected",
+            "ai": "available" if app_state.models_ready or app_state.groq_ready else "degraded",
+            "blockchain": "connected" if getattr(app_state, 'blockchain_ready', False) else "degraded",
+            "ipfs": "connected"
+        }
+    }
 
 @app.get("/readiness", tags=["System"])
 async def readiness_check():

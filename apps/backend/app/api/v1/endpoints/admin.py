@@ -156,6 +156,35 @@ async def delete_user(
         
     return APIResponse(message="User deleted successfully", data={})
 
+@router.post("/users/{user_id}/reset-security", response_model=APIResponse[dict])
+async def reset_user_security(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    # Fetch User
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Clear PIN
+    user.pin_hash = None
+    
+    # Delete PatientBiometricProfile
+    from app.models.security import PatientBiometricProfile
+    bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == user_id)
+    bio_result = await db.execute(bio_stmt)
+    bio_profile = bio_result.scalar_one_or_none()
+    
+    if bio_profile:
+        await db.delete(bio_profile)
+        
+    await db.commit()
+    return APIResponse(message="User security credentials reset successfully", data={})
+
 @router.get("/admins", response_model=APIResponse[list[dict]])
 async def get_admins(
     db: AsyncSession = Depends(get_db),
@@ -402,6 +431,12 @@ async def get_admin_ai(
     
     # Extract unique models used
     unique_models = set([m.model_used for m in messages if m.model_used])
+    
+    # Ensure standard MedSync models are always displayed
+    standard_models = ["medsync_bone", "medsync_kidney", "medsync_brain", "medsync_skin"]
+    for sm in standard_models:
+        unique_models.add(sm)
+        
     models = [{
         "name": model,
         "type": "LLM",

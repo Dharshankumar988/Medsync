@@ -99,5 +99,42 @@ export const pharmacyService = {
     } catch {
       return false;
     }
+  },
+
+  discardExpired: async (inventoryId: string): Promise<boolean> => {
+    try {
+      await api.post(`/api/v1/inventory/${inventoryId}/discard`);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  getMedicinesCatalog: async (search?: string): Promise<any[]> => {
+    try {
+      const url = search ? `/api/v1/medicines/?search=${encodeURIComponent(search)}` : `/api/v1/medicines/`;
+      const res = await api.get(url);
+      return res.data.data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  placeRestockOrder: async (medicineId: string, quantity: number): Promise<boolean> => {
+    try {
+      await api.post(`/api/v1/inventory/restock`, { medicine_id: medicineId, quantity });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  getRestockOrders: async (): Promise<any[]> => {
+    try {
+      const res = await api.get(`/api/v1/inventory/restock`);
+      return res.data.data || [];
+    } catch {
+      return [];
+    }
   }
 };

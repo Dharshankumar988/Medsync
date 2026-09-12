@@ -71,4 +71,18 @@ export class SecurityService {
     });
     return response.data;
   }
+
+  static async changeFaceWithPin(token: string, pin: string, faceImages: File[]) {
+    const formData = new FormData();
+    formData.append('pin', pin);
+    faceImages.forEach(img => {
+      formData.append('images', img);
+    });
+    const response = await axios.post(`${API_URL}/security/change-face-pin`, formData, {
+      headers: { 
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  }
 }

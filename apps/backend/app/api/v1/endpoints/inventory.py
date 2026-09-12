@@ -118,15 +118,63 @@ async def get_inventory_alerts(
 
 from pydantic import BaseModel
 import uuid
+import datetime
 
-class StockAdjustmentRequest(BaseModel):
-    quantity_change: int
-    reason: str
+class RestockRequest(BaseModel):
+    medicine_id: uuid.UUID
+    quantity: int
 
-@router.post("/{inventory_id}/adjust-stock", response_model=APIResponse)
-async def adjust_stock(
+@router.post("/restock", response_model=APIResponse)
+async def place_restock_order(
+    req: RestockRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_pharmacy)
+):
+    from app.models.pharmacy_system import PharmacyRestockOrder
+    
+    if req.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be positive")
+        
+    order = PharmacyRestockOrder(
+        pharmacy_id=current_user.id,
+        medicine_id=req.medicine_id,
+        quantity=req.quantity,
+        status="PENDING",
+        expected_delivery=datetime.datetime.now() + datetime.timedelta(minutes=2)
+    )
+    
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+    
+    return APIResponse(message="Restock order placed successfully. Estimated delivery in 2 minutes.", data={"order_id": str(order.id)})
+
+@router.get("/restock", response_model=APIResponse)
+async def get_restock_orders(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_pharmacy)
+):
+    from app.models.pharmacy_system import PharmacyRestockOrder, Medicine
+    query = select(PharmacyRestockOrder, Medicine).join(Medicine).filter(PharmacyRestockOrder.pharmacy_id == current_user.id).order_by(desc(PharmacyRestockOrder.created_at))
+    result = await db.execute(query)
+    rows = result.all()
+    
+    data = []
+    for order, med in rows:
+        data.append({
+            "id": str(order.id),
+            "medicine_name": med.name,
+            "quantity": order.quantity,
+            "status": order.status,
+            "expected_delivery": str(order.expected_delivery),
+            "created_at": str(order.created_at)
+        })
+        
+    return APIResponse(message="Restock orders retrieved", data=data)
+
+@router.post("/{inventory_id}/discard", response_model=APIResponse)
+async def discard_expired_stock(
     inventory_id: uuid.UUID,
-    req: StockAdjustmentRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_pharmacy)
 ):
@@ -141,11 +189,11 @@ async def adjust_stock(
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException("Unauthorized to adjust this stock")
         
-    new_stock = inv.stock_quantity + req.quantity_change
-    if new_stock < 0:
-        raise HTTPException(status_code=400, detail="Stock quantity cannot be negative")
+    if inv.expiry_date >= datetime.date.today():
+        raise HTTPException(status_code=400, detail="Cannot discard medicine that is not yet expired")
         
-    inv.stock_quantity = new_stock
+    inv.stock_quantity = 0
     await db.commit()
     
-    return APIResponse(message="Stock adjusted successfully", data={"new_quantity": inv.stock_quantity})
+    return APIResponse(message="Expired stock discarded successfully", data={"new_quantity": 0})
+

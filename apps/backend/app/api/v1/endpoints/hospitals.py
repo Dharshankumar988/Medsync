@@ -43,7 +43,7 @@ class HospitalResponse(HospitalCreate):
     
     model_config = {"from_attributes": True}
 
-@router.get("/", response_model=APIResponse[List[HospitalResponse]])
+@router.get("", response_model=APIResponse[List[HospitalResponse]])
 @async_ttl_cache(ttl_seconds=60)
 async def list_hospitals(
     db: AsyncSession = Depends(get_db),
@@ -53,7 +53,7 @@ async def list_hospitals(
     now = time_module.time()
     if _hospitals_cache["data"] is not None and now < _hospitals_cache["expires"]:
         cached_data = _hospitals_cache["data"]
-        return APIResponse(data=cached_data[skip:skip+limit])
+        return APIResponse(message="Hospitals fetched from cache", data=cached_data[skip:skip+limit])
 
     result = await db.execute(select(Hospital).where(Hospital.is_active == True))
     hospitals = result.scalars().all()
@@ -61,9 +61,9 @@ async def list_hospitals(
     _hospitals_cache["data"] = hospitals
     _hospitals_cache["expires"] = now + 300
     
-    return APIResponse(data=hospitals[skip:skip+limit])
+    return APIResponse(message="Hospitals fetched successfully", data=hospitals[skip:skip+limit])
 
-@router.post("/", response_model=APIResponse[HospitalResponse])
+@router.post("", response_model=APIResponse[HospitalResponse])
 async def create_hospital(
     payload: HospitalCreate, 
     db: AsyncSession = Depends(get_db),
@@ -75,7 +75,7 @@ async def create_hospital(
     db.add(new_hospital)
     await db.commit()
     await db.refresh(new_hospital)
-    return APIResponse(data=new_hospital)
+    return APIResponse(message="Hospital created successfully", data=new_hospital)
 
 @router.put("/{hospital_id}", response_model=APIResponse[HospitalResponse])
 async def update_hospital(
@@ -95,7 +95,7 @@ async def update_hospital(
         
     await db.commit()
     await db.refresh(hospital)
-    return APIResponse(data=hospital)
+    return APIResponse(message="Hospital updated successfully", data=hospital)
 
 @router.delete("/{hospital_id}", response_model=APIResponse[dict])
 async def deactivate_hospital(
@@ -140,7 +140,7 @@ async def get_doctors_at_hospital(
     # Get unique doctor profiles
     doctor_ids = list(set(loc.doctor_id for loc in locations))
     if not doctor_ids:
-        return APIResponse(data=[])
+        return APIResponse(message="No doctors found", data=[])
 
     doc_stmt = select(Doctor).where(Doctor.id.in_(doctor_ids))
     doc_result = await db.execute(doc_stmt)
@@ -169,4 +169,4 @@ async def get_doctors_at_hospital(
             ],
         })
 
-    return APIResponse(data=doctors_list)
+    return APIResponse(message="Doctors fetched successfully", data=doctors_list)

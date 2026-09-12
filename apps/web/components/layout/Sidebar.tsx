@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, ShieldCheck, Activity, LogOut, ChevronLeft, ChevronRight, Settings, Moon, Sun, Building2, ShoppingBag, Package, AlertTriangle, Bell, Users, LineChart, Server, UserPlus, RefreshCw } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, ShieldCheck, Activity, LogOut, ChevronLeft, ChevronRight, Settings, Moon, Sun, Building2, ShoppingBag, Package, AlertTriangle, Bell, Users, LineChart, Server, UserPlus, RefreshCw, QrCode } from "lucide-react";
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase";
 import {
@@ -102,6 +102,7 @@ const menuGroups = {
       label: "NETWORK",
       items: [
         { name: "Patients", href: "/pharmacy/patients", icon: Users },
+        { name: "Pharmacy QR", href: "/pharmacy/qr", icon: QrCode },
       ]
     },
     {
