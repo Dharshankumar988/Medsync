@@ -169,24 +169,43 @@ export default function SecurityEnrollmentModal() {
             </h3>
             <p className="text-sm text-muted-foreground">This PIN is used to authorize downloading prescriptions and offline pharmacy dispensing.</p>
             
-            <div>
-              <Input 
-                type="password" 
-                placeholder="Enter 6-digit PIN" 
+            <div className="relative group">
+              <div className="flex justify-center gap-2">
+                {[0, 1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all ${pin.length === i ? 'border-primary ring-4 ring-primary/20' : pin.length > i ? 'border-primary bg-primary/5 text-primary' : 'border-border/60 bg-muted/30'}`}>
+                    {pin[i] ? '•' : ''}
+                  </div>
+                ))}
+              </div>
+              <input 
+                type="text" 
+                inputMode="numeric"
+                pattern="[0-9]*"
                 maxLength={6}
                 value={pin}
                 onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-                className="text-center text-xl tracking-widest"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+                autoFocus
               />
             </div>
-            <div>
-              <Input 
-                type="password" 
-                placeholder="Confirm 6-digit PIN" 
+            
+            <p className="text-sm font-medium mt-4">Confirm PIN</p>
+            <div className="relative group">
+              <div className="flex justify-center gap-2">
+                {[0, 1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all ${confirmPin.length === i ? 'border-primary ring-4 ring-primary/20' : confirmPin.length > i ? 'border-primary bg-primary/5 text-primary' : 'border-border/60 bg-muted/30'}`}>
+                    {confirmPin[i] ? '•' : ''}
+                  </div>
+                ))}
+              </div>
+              <input 
+                type="text" 
+                inputMode="numeric"
+                pattern="[0-9]*"
                 maxLength={6}
                 value={confirmPin}
                 onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                className="text-center text-xl tracking-widest"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-text"
               />
             </div>
             
@@ -203,10 +222,19 @@ export default function SecurityEnrollmentModal() {
             <h3 className="font-semibold text-lg flex items-center gap-2">
               <Camera className="w-5 h-5 text-primary" /> Face Verification Enrollment
             </h3>
-            <p className="text-sm text-muted-foreground">
-              Please capture 3 samples (e.g., neutral, slight angle, different expression).
+            <p className="text-sm text-muted-foreground mb-2">
               This protects you from unauthorized online pharmacy orders.
             </p>
+            <div className="bg-primary/5 border border-primary/20 p-3 rounded-xl mb-4">
+              <p className="text-xs font-semibold text-primary mb-2 uppercase tracking-wider">Registration Guide</p>
+              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+                <li>Capture <strong className="text-foreground">3 samples</strong> of your face.</li>
+                <li>Sample 1: Keep a <strong className="text-foreground">neutral expression</strong> looking straight.</li>
+                <li>Sample 2: Tilt your head at a <strong className="text-foreground">slight angle</strong>.</li>
+                <li>Sample 3: Provide a <strong className="text-foreground">different expression</strong> (e.g. smile).</li>
+                <li>Ensure you are in a <strong className="text-foreground">well-lit area</strong>.</li>
+              </ul>
+            </div>
             
             <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-border">
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />

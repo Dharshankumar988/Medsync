@@ -207,13 +207,13 @@ export default function DoctorDashboard() {
               <CardDescription>Critical updates from monitored patients.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col items-center justify-center py-10 text-center bg-emerald-500/[0.04] rounded-xl border border-emerald-500/10">
-                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
-                  <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+              <div className="flex flex-col items-center justify-center py-10 text-center bg-muted/10 rounded-xl border border-border/50">
+                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/30">
+                  <CheckCircle2 className="h-7 w-7 text-muted-foreground/50" />
                 </div>
-                <p className="font-semibold text-lg text-emerald-600 dark:text-emerald-400">All patients stable</p>
+                <p className="font-semibold text-lg text-foreground">No Active Alerts</p>
                 <p className="text-sm text-muted-foreground mt-2 max-w-[280px] leading-relaxed">
-                  No abnormal vitals reported in the last 24 hours.
+                  You have no pending critical alerts from your patients.
                 </p>
               </div>
             </CardContent>

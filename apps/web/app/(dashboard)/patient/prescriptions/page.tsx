@@ -105,12 +105,6 @@ export default function PrescriptionsPage() {
             Manage your medicines and active prescriptions.
           </p>
         </div>
-        
-        <Button asChild className="shrink-0">
-          <Link href="/patient/qr">
-            <QrCode className="mr-2 h-4 w-4" /> View My QR
-          </Link>
-        </Button>
       </motion.div>
 
       {loading ? (

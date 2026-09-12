@@ -10,6 +10,7 @@ from app.models.pharmacy_system import DeliveryTracking, MedicineOrder, OrderSta
 import uuid
 from datetime import datetime, timedelta
 import hashlib
+import random
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -271,8 +272,27 @@ async def pay_order(
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=f"Cannot pay for order in state {order.status}")
 
-    # Dummy payment logic: Just set it to PROCESSING
-    order.status = OrderStatus.PROCESSING
+    # Deduct stock here for confirmed online order
+    from app.models.pharmacy_system import MedicineOrderItem, MedicineInventory
+    items_stmt = select(MedicineOrderItem, MedicineInventory).join(
+        MedicineInventory, MedicineOrderItem.inventory_id == MedicineInventory.id
+    ).where(MedicineOrderItem.order_id == order.id)
+    
+    items_res = await db.execute(items_stmt)
+    items = items_res.all()
+    
+    # Verify enough stock first
+    for item, inv in items:
+        if inv.stock_quantity < item.quantity:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for inventory batch {inv.batch_number}")
+            
+    # Deduct stock
+    for item, inv in items:
+        inv.stock_quantity -= item.quantity
+
+    # Payment successful: Just set it to ACCEPTED
+    order.status = OrderStatus.ACCEPTED
     await db.commit()
     
     return APIResponse(message="Payment successful", data={"order_id": str(order_id)})

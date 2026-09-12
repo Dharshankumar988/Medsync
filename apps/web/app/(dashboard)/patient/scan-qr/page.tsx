@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Inpu
 import { Camera, Store, FileText, CheckCircle2, ChevronRight, Lock, Loader2, ArrowRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
+import { Html5QrcodeScanner } from "html5-qrcode";
 
 export default function PatientQRScanPage() {
   const router = useRouter();
@@ -23,9 +24,8 @@ export default function PatientQRScanPage() {
   // In a real app, you would use a library like react-qr-reader. 
   // For this implementation, we simulate the camera or allow manual input for testing if camera fails.
   const handleSimulateScan = () => {
-    // We expect "medsync:pharmacy:{id}"
-    // Assuming a test pharmacy id exists or we can just mock the ID format
-    setScanResult("medsync:pharmacy:test-pharmacy-123");
+    // Use the real seeded pharmacy QR for local testing
+    setScanResult("QR-PHM-1-ABC");
   };
 
   useEffect(() => {
@@ -42,6 +42,25 @@ export default function PatientQRScanPage() {
       }
     }
   }, [scanResult]);
+
+  useEffect(() => {
+    if (step === "scan") {
+      const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+      scanner.render(
+        (decodedText) => {
+          setScanResult(decodedText);
+          scanner.clear();
+        },
+        (error) => {
+          // ignore scan errors (they happen every frame when no QR is in sight)
+        }
+      );
+      
+      return () => {
+        scanner.clear().catch(console.error);
+      };
+    }
+  }, [step]);
 
   const resolvePharmacy = async (qrData: string) => {
     setLoading(true);
@@ -134,11 +153,8 @@ export default function PatientQRScanPage() {
           <motion.div key="scan" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <Card className="rounded-2xl border border-border/60 overflow-hidden">
               <div className="bg-muted/30 p-16 flex flex-col items-center justify-center min-h-[400px]">
-                <div className="relative w-64 h-64 border-4 border-blue-500/30 rounded-3xl flex items-center justify-center mb-6 overflow-hidden">
-                  <div className="absolute inset-0 bg-blue-500/5 animate-pulse" />
-                  <Camera className="h-12 w-12 text-blue-500/50" />
-                  {/* Scanner line animation */}
-                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)] animate-[scan_2s_ease-in-out_infinite]" />
+                <div className="w-full max-w-sm mb-6">
+                  <div id="reader" className="w-full rounded-2xl overflow-hidden shadow-lg border border-border/50"></div>
                 </div>
                 <p className="font-medium mb-4">Point your camera at the pharmacy QR</p>
                 <div className="flex gap-2 w-full max-w-sm">

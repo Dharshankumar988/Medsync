@@ -44,7 +44,7 @@ export default function AdminAnalytics() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* User Growth (Mocked as Distribution since we don't have time series) */}
+        {/* User Distribution */}
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><LineChart className="h-5 w-5"/> User Distribution</CardTitle></CardHeader>
           <CardContent className="h-64 flex flex-col justify-center gap-4 text-sm px-8">

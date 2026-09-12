@@ -217,7 +217,7 @@ export default function PatientDashboard() {
         {[
           { icon: Brain, title: "Ask Pulse AI", desc: "Get health questions answered", href: "/patient/pulse-ai", color: "text-blue-500", bg: "bg-blue-500/10" },
           { icon: Heart, title: "Health Education", desc: "Learn about your conditions", href: "/patient/pulse-ai", color: "text-rose-500", bg: "bg-rose-500/10" },
-          { icon: ShieldCheck, title: "Prescription QR Code", desc: "View & verify prescriptions", href: "/patient/qr", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+          { icon: Camera, title: "Scan Pharmacy QR", desc: "Visit pharmacy for physical pickup", href: "/patient/scan-qr", color: "text-emerald-500", bg: "bg-emerald-500/10" },
         ].map((item, i) => (
           <motion.div key={i} variants={fadeUp}>
             <Link href={item.href}>

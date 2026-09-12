@@ -33,6 +33,7 @@
     "clsx": "^2.1.1",
     "ethers": "^6.17.0",
     "framer-motion": "^11.2.12",
+    "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.400.0",

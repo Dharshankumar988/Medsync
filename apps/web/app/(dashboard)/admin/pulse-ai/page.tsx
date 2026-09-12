@@ -15,18 +15,7 @@ export default function AdminAIPage() {
           <p className="text-sm text-muted-foreground">Platform Analytics & Security</p>
         </div>
 
-        <div className="space-y-4">
-          <h3 className="text-xs font-semibold text-muted-foreground tracking-wider">QUICK ACTIONS</h3>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            System Health Report
-          </button>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            Analyze Blockchain Stats
-          </button>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            Detect Fraud Patterns
-          </button>
-        </div>
+
       </div>
 
       <div className="flex-1 h-full">

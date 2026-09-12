@@ -15,18 +15,7 @@ export default function PatientAIPage() {
           <p className="text-sm text-muted-foreground">Your personal health assistant</p>
         </div>
 
-        <div className="space-y-4">
-          <h3 className="text-xs font-semibold text-muted-foreground tracking-wider">I WANT TO...</h3>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            Check my symptoms
-          </button>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            Explain my lab results
-          </button>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            Medication reminders
-          </button>
-        </div>
+
       </div>
 
       <div className="flex-1 h-full">

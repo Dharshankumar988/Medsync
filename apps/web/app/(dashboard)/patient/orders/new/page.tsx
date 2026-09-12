@@ -28,9 +28,25 @@ export default function NewOnlineOrderPage() {
   const fetchPharmacies = async () => {
     setLoading(true);
     try {
-      // Only active MedSync Network Pharmacies
-      const { data } = await supabase.from('users').select('id, full_name, email, is_verified').eq('role', 'PHARMACY').eq('is_verified', true);
-      setPharmacies(data || []);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      
+      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+      const res = await fetch(`${baseUrl}/api/v1/pharmacy/network`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        // The API returns pharmacy_id as the user ID for the pharmacy
+        const mapped = json.data.map((p: any) => ({
+            id: p.pharmacy_id,
+            full_name: p.business_name,
+            address: p.address
+        }));
+        setPharmacies(mapped || []);
+      }
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }

@@ -8,6 +8,8 @@ from app.models.user import User, UserRole
 from app.models.pharmacy_system import MedicineOrder, MedicineOrderItem, MedicineInventory, OrderStatus
 from app.models.prescription import Prescription
 from app.models.pharmacy import Pharmacy
+from app.models.patient import Patient
+from app.models.user import UserStatus
 from app.schemas.response import APIResponse
 from typing import List
 import uuid
@@ -71,6 +73,9 @@ async def resolve_pharmacy_qr(qr_identifier: str, db: AsyncSession = Depends(get
         
     pharmacy, user = row
     
+    if not user.is_verified or user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=403, detail="Pharmacy account is not verified or active.")
+        
     if pharmacy.qr_status != "ACTIVE":
         raise HTTPException(status_code=403, detail="This pharmacy QR code is inactive or revoked.")
         
@@ -89,7 +94,7 @@ async def get_inventory_stub():
 @router.get("/orders")
 async def get_orders(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_pharmacy)):
     # Fetch orders for this pharmacy
-    stmt = select(MedicineOrder, User).join(User, MedicineOrder.patient_id == User.id).where(MedicineOrder.pharmacy_id == current_user.id)
+    stmt = select(MedicineOrder, Patient).join(Patient, MedicineOrder.patient_id == Patient.user_id).where(MedicineOrder.pharmacy_id == current_user.id)
     result = await db.execute(stmt)
     rows = result.all()
     
@@ -110,7 +115,7 @@ async def get_orders(db: AsyncSession = Depends(get_db), current_user: User = De
         data.append({
             "id": str(order.id),
             "prescription_id": str(order.prescription_id) if order.prescription_id else None,
-            "patient_name": f"{patient.first_name} {patient.last_name}",
+            "patient_name": patient.full_name,
             "patient_address": order.delivery_address,
             "medication": medication_str,
             "status": order.status,
@@ -161,3 +166,36 @@ async def get_profile(db: AsyncSession = Depends(get_db), current_user: User = D
         "contact_number": pharmacy.contact_number,
         "operating_hours": pharmacy.operating_hours
     })
+
+@router.get("/network")
+async def get_pharmacy_network(db: AsyncSession = Depends(get_db)):
+    """Returns a list of verified and active pharmacies with their locations for the map."""
+    from app.models.pharmacy_location import PharmacyLocation
+    stmt = select(Pharmacy, User, PharmacyLocation).join(
+        User, Pharmacy.user_id == User.id
+    ).join(
+        PharmacyLocation, PharmacyLocation.pharmacy_id == Pharmacy.user_id
+    ).where(
+        User.is_verified == True,
+        User.status == UserStatus.ACTIVE,
+        PharmacyLocation.is_active == True,
+        PharmacyLocation.verification_status == "APPROVED"
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    
+    data = []
+    for pharmacy, user, location in rows:
+        data.append({
+            "pharmacy_id": str(pharmacy.user_id),
+            "business_name": pharmacy.business_name,
+            "address": location.address,
+            "contact_number": pharmacy.contact_number,
+            "latitude": float(location.latitude) if location.latitude else None,
+            "longitude": float(location.longitude) if location.longitude else None,
+            "is_24x7": pharmacy.is_24x7,
+            "qr_identifier": pharmacy.qr_identifier
+        })
+        
+    return APIResponse(message="Pharmacy network retrieved successfully", data=data)
+

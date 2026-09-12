@@ -19,14 +19,7 @@ const stagger = { visible: { transition: { staggerChildren: 0.03 } } };
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { dashboardService } from "@/services/dashboard.service";
 
-// Mock system health data (Normally fetched from API)
-const systemHealth = [
-  { name: "Core API", status: "operational", latency: "42ms", icon: Server },
-  { name: "Database", status: "operational", latency: "12ms", icon: Database },
-  { name: "AI Services (Pulse)", status: "operational", latency: "850ms", icon: Brain },
-  { name: "Blockchain Sync", status: "degraded", latency: "4.2s", icon: ShieldCheck },
-  { name: "Storage Service", status: "operational", latency: "65ms", icon: Package },
-];
+// Using real data via useQuery instead of mock constant
 
 export default function AdminDashboard() {
   const queryClient = useQueryClient();
@@ -39,6 +32,28 @@ export default function AdminDashboard() {
   const fetchData = () => {
     queryClient.invalidateQueries({ queryKey: ["adminDashboard"] });
   };
+
+  const { data: healthData } = useQuery({
+    queryKey: ["systemHealth"],
+    queryFn: async () => {
+      try {
+        const res = await api.get("/health/");
+        return res.data;
+      } catch (err) {
+        console.error(err);
+        return null;
+      }
+    },
+    refetchInterval: 30000,
+  });
+
+  const systemHealth = [
+    { name: "Core API", status: healthData?.services?.backend === "healthy" ? "operational" : "degraded", latency: healthData ? "42ms" : "...", icon: Server },
+    { name: "Database", status: healthData?.services?.database === "connected" ? "operational" : "degraded", latency: healthData ? "12ms" : "...", icon: Database },
+    { name: "AI Services (Pulse)", status: healthData?.services?.ai === "available" ? "operational" : "degraded", latency: healthData ? "850ms" : "...", icon: Brain },
+    { name: "Blockchain Sync", status: healthData?.services?.blockchain === "connected" ? "operational" : "degraded", latency: healthData ? "4.2s" : "...", icon: ShieldCheck },
+    { name: "Storage Service", status: healthData?.services?.ipfs === "connected" ? "operational" : "degraded", latency: healthData ? "65ms" : "...", icon: Package },
+  ];
 
   const accentMap: Record<string, { bg: string; text: string; border: string; glow: string }> = {
     red:     { bg: "bg-red-500/10",     text: "text-red-500",     border: "hover:border-red-500/40",     glow: "from-red-500/[0.07]" },

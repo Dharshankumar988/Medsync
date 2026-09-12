@@ -222,10 +222,10 @@ export default function PharmacyDashboardPage() {
         variants={stagger}
       >
         <motion.div variants={fadeUp} className="col-span-full lg:col-span-4">
-          <InventoryOverviewWidget />
+          <InventoryOverviewWidget inventory={inventory} />
         </motion.div>
         <motion.div variants={fadeUp} className="col-span-full lg:col-span-3">
-          <ExpiringMedicines />
+          <ExpiringMedicines inventory={inventory} />
         </motion.div>
       </motion.div>
 

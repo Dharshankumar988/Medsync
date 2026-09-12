@@ -15,18 +15,7 @@ export default function PharmacyAIPage() {
           <p className="text-sm text-muted-foreground">Pharmacological & Inventory Intelligence</p>
         </div>
 
-        <div className="space-y-4">
-          <h3 className="text-xs font-semibold text-muted-foreground tracking-wider">QUICK ACTIONS</h3>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            Check Drug Interactions
-          </button>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            Find Alternatives
-          </button>
-          <button className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-colors text-sm font-medium">
-            Inventory Forecast
-          </button>
-        </div>
+
       </div>
 
       <div className="flex-1 h-full">
