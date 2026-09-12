@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from "@medsync/ui";
 import { Skeleton } from "@medsync/ui";
-import { Clock, FileText, CheckCircle2, ChevronRight, AlertCircle, Syringe, Pill, Heart, Brain, Calendar, ShieldCheck, ShoppingBag, Activity } from "lucide-react";
+import { Clock, FileText, CheckCircle2, ChevronRight, AlertCircle, Syringe, Pill, Heart, Brain, Calendar, ShieldCheck, ShoppingBag, Activity, Camera } from "lucide-react";
 import { AuditHistory } from "@medsync/ui";
 import { HealthStatistics } from "@/components/patient/HealthStatistics";
 import { QuickActionsMenu } from "@/components/patient/QuickActionsMenu";
