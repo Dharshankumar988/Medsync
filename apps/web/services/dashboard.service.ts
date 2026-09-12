@@ -157,41 +157,8 @@ export const dashboardService = {
 
   getAdminDashboard: async () => {
     try {
-      const [
-        { count: total_users },
-        { count: total_patients },
-        { count: total_doctors },
-        { count: total_pharmacies },
-        { count: pending_verification, data: pending_users_data },
-        { count: total_appointments },
-        { count: total_prescriptions },
-        { count: total_orders }
-      ] = await Promise.all([
-        supabase.from('users').select('*', { count: 'exact', head: true }),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'PATIENT'),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'DOCTOR'),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'PHARMACY'),
-        supabase.from('users').select('*', { count: 'exact' }).eq('is_verified', false).in('role', ['DOCTOR', 'PHARMACY']).limit(5),
-        supabase.from('appointments').select('*', { count: 'exact', head: true }),
-        supabase.from('prescriptions').select('*', { count: 'exact', head: true }),
-        supabase.from('medicine_orders').select('*', { count: 'exact', head: true })
-      ]);
-
-      return {
-        users: {
-          total: total_users || 0,
-          patients: total_patients || 0,
-          doctors: total_doctors || 0,
-          pharmacies: total_pharmacies || 0,
-          pending_verification: pending_verification || 0
-        },
-        operations: {
-          appointments: total_appointments || 0,
-          prescriptions: total_prescriptions || 0,
-          orders: total_orders || 0
-        },
-        recent_pending_verifications: pending_users_data || []
-      };
+      const res = await api.get('/api/v1/admin/dashboard');
+      return res.data.data;
     } catch (err) {
       console.error("Failed to fetch admin dashboard:", err);
       return null;

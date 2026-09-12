@@ -184,7 +184,7 @@ export default function SecurityEnrollmentModal() {
                 maxLength={6}
                 value={pin}
                 onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-text z-10"
                 autoFocus
               />
             </div>
@@ -205,7 +205,7 @@ export default function SecurityEnrollmentModal() {
                 maxLength={6}
                 value={confirmPin}
                 onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-text z-10"
               />
             </div>
             

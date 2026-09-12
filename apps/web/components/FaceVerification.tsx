@@ -201,13 +201,13 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
         )}
         <video 
           ref={videoRef} 
-          className="absolute inset-0 w-full h-full object-cover" 
+          className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" 
           playsInline 
           muted 
         />
         <canvas 
           ref={canvasRef} 
-          className="absolute inset-0 w-full h-full object-cover z-10"
+          className="absolute inset-0 w-full h-full object-cover z-10 transform scale-x-[-1]"
         />
       </div>
       

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
 import { ShieldAlert, ShieldCheck } from "lucide-react";
-import { Skeleton, Badge } from "@medsync/ui";
+import { Skeleton, Badge, Button } from "@medsync/ui";
 import api from "@/lib/api";
 
 export default function AdminSecurity() {
@@ -32,19 +32,24 @@ export default function AdminSecurity() {
         <p className="text-muted-foreground mt-2">Monitor authentication events, authorization failures, and system audit logs.</p>
       </div>
 
-      {loading || !data ? <Skeleton className="h-96 w-full" /> : (
+      {loading ? <Skeleton className="h-96 w-full" /> : !data ? (
+        <div className="flex flex-col items-center justify-center h-96 border border-dashed rounded-xl bg-muted/20">
+          <p className="text-muted-foreground font-medium">Failed to load security logs.</p>
+          <Button variant="outline" className="mt-4" onClick={fetchData}>Retry</Button>
+        </div>
+      ) : (
         <div className="space-y-6">
           <Card>
             <CardHeader><CardTitle className="text-red-500 flex items-center gap-2"><ShieldAlert className="h-5 w-5"/> Security Alerts</CardTitle></CardHeader>
             <CardContent>
-              {data.alerts.length === 0 ? (
+              {data.alerts?.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground border border-dashed rounded-xl bg-muted/10">
                   <ShieldCheck className="h-10 w-10 mx-auto text-emerald-500 mb-2 opacity-50" />
                   No active security alerts
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {data.alerts.map((a: any, i: number) => (
+                  {data.alerts?.map((a: any, i: number) => (
                     <div key={i} className="p-3 border rounded-lg bg-red-500/10 text-red-600">
                       {a.message}
                     </div>
@@ -64,18 +69,22 @@ export default function AdminSecurity() {
                   <div>Method</div>
                   <div>Status</div>
                 </div>
-                {data.logs.map((log: any) => (
-                  <div key={log.id} className="grid grid-cols-4 p-3 text-sm hover:bg-muted/10">
-                    <div className="text-muted-foreground">{new Date(log.created_at).toLocaleString()}</div>
-                    <div className="truncate pr-4 font-mono text-xs">{log.endpoint}</div>
-                    <div><Badge variant="outline">{log.method}</Badge></div>
-                    <div>
-                      <Badge className={log.status_code >= 400 ? "bg-red-500" : "bg-emerald-500"}>
-                        {log.status_code}
-                      </Badge>
+                {data.logs?.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground">No audit logs available.</div>
+                ) : (
+                  data.logs?.map((log: any) => (
+                    <div key={log.id} className="grid grid-cols-4 p-3 text-sm hover:bg-muted/10">
+                      <div className="text-muted-foreground">{new Date(log.created_at).toLocaleString()}</div>
+                      <div className="truncate pr-4 font-mono text-xs">{log.endpoint}</div>
+                      <div><Badge variant="outline">{log.method}</Badge></div>
+                      <div>
+                        <Badge className={log.status_code >= 400 ? "bg-red-500" : "bg-emerald-500"}>
+                          {log.status_code}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

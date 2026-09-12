@@ -39,30 +39,7 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     }
   }
 
-  // Deduplication and caching logic (only for GET requests)
-  if (config.method?.toLowerCase() === 'get' && config.url) {
-    const cacheKey = `${config.url}?${new URLSearchParams(config.params || {}).toString()}`;
-    
-    // 1. Check Cache
-    const cached = responseCache.get(cacheKey);
-    if (cached && now - cached.timestamp < CACHE_TTL) {
-      config.adapter = () => Promise.resolve({
-        data: cached.data,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config,
-        request: {}
-      });
-      return config;
-    }
-
-    // 2. Check Pending Requests (Deduplication)
-    if (pendingRequests.has(cacheKey)) {
-      config.adapter = () => pendingRequests.get(cacheKey) as Promise<AxiosResponse>;
-      return config;
-    }
-  }
+  // We only keep the token logic here. Deduplication is handled entirely by the api.get wrapper.
 
   return config;
 });
@@ -90,19 +67,38 @@ api.interceptors.response.use(
   }
 );
 
-// Helper to wrap axios get to actually populate pendingRequests
+// Helper to wrap axios get to actually populate pendingRequests and handle caching
 const originalGet = api.get;
 // @ts-ignore
 api.get = async function(url: string, config?: any) {
   const cacheKey = `${url}?${new URLSearchParams(config?.params || {}).toString()}`;
+  
+  // 1. Check Cache
+  const now = Date.now();
+  const cached = responseCache.get(cacheKey);
+  if (cached && now - cached.timestamp < CACHE_TTL) {
+    return Promise.resolve({
+      data: cached.data,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: config || {},
+      request: {}
+    });
+  }
+
+  // 2. Check Pending Requests (Deduplication)
   if (!pendingRequests.has(cacheKey)) {
     const reqPromise = originalGet.call(this, url, config) as Promise<AxiosResponse>;
     pendingRequests.set(cacheKey, reqPromise);
     try {
       const res = await reqPromise;
       return res;
-    } catch(e) {
+    } catch(e: any) {
       pendingRequests.delete(cacheKey);
+      if (e.isAxiosError) {
+        e.message = `[FAILED URL: ${url}] ` + e.message;
+      }
       throw e;
     }
   }

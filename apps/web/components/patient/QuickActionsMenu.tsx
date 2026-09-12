@@ -24,7 +24,7 @@ export function QuickActionsMenu() {
       title: "Upload Records",
       description: "Store documents on blockchain",
       icon: UploadCloud,
-      href: "/patient/records/upload",
+      href: "/patient/records",
       color: "bg-emerald-500/10 text-emerald-600",
     },
     {

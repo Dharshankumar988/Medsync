@@ -24,7 +24,7 @@ import { dashboardService } from "@/services/dashboard.service";
 export default function AdminDashboard() {
   const queryClient = useQueryClient();
 
-  const { data: stats, isLoading: loading } = useQuery({
+  const { data: stats, isLoading: loading, isError } = useQuery({
     queryKey: ["adminDashboard"],
     queryFn: () => dashboardService.getAdminDashboard(),
   });
@@ -85,7 +85,7 @@ export default function AdminDashboard() {
       </motion.div>
 
       <AnimatePresence mode="wait">
-        {loading || !stats ? (
+        {loading ? (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="grid gap-5 md:grid-cols-2 lg:grid-cols-4 mt-6">
             {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
               <Card key={i} className="rounded-2xl border-border/60 bg-card/50 shadow-sm">
@@ -99,6 +99,11 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             ))}
+          </motion.div>
+        ) : isError || !stats ? (
+          <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center h-64 border border-dashed rounded-xl bg-muted/20 mt-6">
+            <p className="text-muted-foreground font-medium mb-4">Failed to load admin dashboard stats.</p>
+            <Button variant="outline" onClick={fetchData}>Retry</Button>
           </motion.div>
         ) : (
           <motion.div key="content" initial="hidden" animate="visible" exit={{ opacity: 0, y: -10 }} variants={stagger} className="space-y-8">

@@ -296,27 +296,32 @@ export default function AppointmentsPage() {
           <Button variant="outline" size="icon" onClick={() => loadAppointments()} className="rounded-xl">
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Dialog
-            open={isDialogOpen}
-            onOpenChange={(open) => {
-              if (open && user?.role === "PATIENT" && (user.profile_completion_percentage || 0) < 100) {
+          <Button 
+            className="shrink-0 rounded-xl"
+            onClick={() => {
+              if (user?.role === "PATIENT" && (user.profile_completion_percentage || 0) < 100) {
                 toast.error("Please complete your profile first.");
                 router.push("/patient/profile");
                 return;
               }
-              if (open && user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
+              if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
                 openEnrollmentModal();
                 return;
               }
-              setIsDialogOpen(open);
-              if (!open) resetBooking();
+              setIsDialogOpen(true);
             }}
           >
-            <DialogTrigger asChild>
-              <Button className="shrink-0 rounded-xl">
-                <Plus className="mr-2 h-4 w-4" /> Book Appointment
-              </Button>
-            </DialogTrigger>
+            <Plus className="mr-2 h-4 w-4" /> Book Appointment
+          </Button>
+          <Dialog
+            open={isDialogOpen}
+            onOpenChange={(open) => {
+              if (!open) {
+                setIsDialogOpen(false);
+                resetBooking();
+              }
+            }}
+          >
             <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>

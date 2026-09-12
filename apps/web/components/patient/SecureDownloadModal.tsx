@@ -103,12 +103,7 @@ export default function SecureDownloadModal({ prescriptionId, open, onOpenChange
       const response = await axios.get(`${apiUrl}/prescriptions/download/${authRef}`);
       const downloadUrl = response.data.data.url;
 
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.setAttribute('download', `prescription-${prescriptionId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      window.open(downloadUrl, '_blank');
 
       toast.success("Download started securely.");
       onOpenChange(false);

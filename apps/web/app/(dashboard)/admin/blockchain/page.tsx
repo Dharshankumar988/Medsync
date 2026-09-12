@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
 import { Shield, ShieldAlert, CheckCircle } from "lucide-react";
-import { Skeleton, Badge } from "@medsync/ui";
+import { Skeleton, Badge, Button } from "@medsync/ui";
 import api from "@/lib/api";
 
 export default function AdminBlockchain() {
@@ -32,7 +32,14 @@ export default function AdminBlockchain() {
         <p className="text-muted-foreground mt-2">Monitor smart contract logs, transactions, and integrity mismatches.</p>
       </div>
 
-      {loading || !data ? <Skeleton className="h-96 w-full" /> : (
+      {loading ? (
+        <Skeleton className="h-96 w-full" />
+      ) : !data ? (
+        <div className="flex flex-col items-center justify-center h-96 border border-dashed rounded-xl bg-muted/20">
+          <p className="text-muted-foreground font-medium">Failed to load blockchain overview.</p>
+          <Button variant="outline" className="mt-4" onClick={fetchData}>Retry</Button>
+        </div>
+      ) : (
         <div className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
