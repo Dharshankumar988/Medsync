@@ -7,6 +7,7 @@ export interface PharmacyInventoryItem {
   stock: number;
   unit_price: number;
   expiry_date: string;
+  category?: string;
 }
 
 export interface PharmacyOrder {
@@ -29,7 +30,8 @@ export const pharmacyService = {
         dosage: item.medicine.brand_name || item.medicine.generic_name || "N/A",
         stock: item.stock_quantity,
         unit_price: item.unit_price,
-        expiry_date: item.expiry_date
+        expiry_date: item.expiry_date,
+        category: item.medicine?.category || "Others"
       })) || [];
     } catch {
       return [];
