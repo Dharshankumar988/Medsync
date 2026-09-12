@@ -5,14 +5,14 @@ import { Package, TrendingUp } from "lucide-react";
 import { PharmacyInventoryItem } from "@/services/pharmacy.service";
 
 export function InventoryOverviewWidget({ inventory = [] }: { inventory?: PharmacyInventoryItem[] }) {
-  const totalValue = inventory.reduce((sum, item) => sum + (item.stock_quantity * item.selling_price), 0);
-  const totalItems = inventory.reduce((sum, item) => sum + item.stock_quantity, 0);
+  const totalValue = inventory.reduce((sum, item) => sum + (item.stock * item.unit_price), 0);
+  const totalItems = inventory.reduce((sum, item) => sum + item.stock, 0);
 
   // Group by category for distribution
   const categoryCount: Record<string, number> = {};
   inventory.forEach(item => {
     const cat = item.category || "Others";
-    categoryCount[cat] = (categoryCount[cat] || 0) + item.stock_quantity;
+    categoryCount[cat] = (categoryCount[cat] || 0) + item.stock;
   });
 
   const categories = Object.entries(categoryCount)
