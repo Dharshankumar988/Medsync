@@ -419,7 +419,7 @@ async def get_blockchain_status(
             chain_id=health.get("chain_id", 0),
             rpc_health="CONNECTED" if health.get("status") == "healthy" else "DISCONNECTED",
             gas_price_gwei=0.0,
-            wallet_address=blockchain_gateway.account.address if hasattr(blockchain_gateway, "account") and blockchain_gateway.account else None,
+            wallet_address=blockchain_client.wallet_address,
             wallet_balance_eth=0.0
         )
         return APIResponse(message="Blockchain status", data=status.model_dump())
@@ -550,16 +550,21 @@ async def get_network_details(
 ):
     """Get detailed network information."""
     try:
-        health = await asyncio.to_thread(blockchain_gateway.get_health)
-        latest_block = await asyncio.to_thread(lambda: blockchain_client.w3.eth.block_number)
-        gas_price = await asyncio.to_thread(lambda: blockchain_client.w3.eth.gas_price)
-        
+        health = await asyncio.to_thread(blockchain_gateway.get_health_status)
+        if blockchain_client.w3:
+            latest_block = await asyncio.to_thread(lambda: blockchain_client.w3.eth.block_number)
+            gas_price = await asyncio.to_thread(lambda: blockchain_client.w3.eth.gas_price)
+            gas_price_gwei = float(blockchain_client.w3.from_wei(gas_price, "gwei"))
+        else:
+            latest_block = 0
+            gas_price_gwei = 0.0
+            
         data = {
             "network": health.get("network", "unknown"),
             "chain_id": health.get("chain_id", 0),
             "status": "healthy" if health.get("status") == "healthy" else "degraded",
             "latest_block": latest_block,
-            "gas_price_gwei": float(blockchain_client.w3.from_wei(gas_price, "gwei")),
+            "gas_price_gwei": gas_price_gwei,
             "rpc_provider": "Default RPC"
         }
         return APIResponse(message="Network details retrieved", data=data)
@@ -582,13 +587,19 @@ async def get_wallet_details(
 ):
     """Get backend wallet details."""
     try:
-        address = blockchain_gateway.account.address
-        balance_wei = await asyncio.to_thread(blockchain_client.w3.eth.get_balance, address)
-        nonce = await asyncio.to_thread(blockchain_client.w3.eth.get_transaction_count, address)
+        address = blockchain_client.wallet_address
+        if blockchain_client.w3:
+            balance_wei = await asyncio.to_thread(blockchain_client.w3.eth.get_balance, address)
+            nonce = await asyncio.to_thread(blockchain_client.w3.eth.get_transaction_count, address)
+            balance_eth = float(blockchain_client.w3.from_wei(balance_wei, "ether"))
+        else:
+            balance_wei = 0
+            nonce = 0
+            balance_eth = 0.0
         
         data = {
             "address": address,
-            "balance_eth": float(blockchain_client.w3.from_wei(balance_wei, "ether")),
+            "balance_eth": balance_eth,
             "nonce": nonce,
             "status": "healthy" if balance_wei > 0 else "low_balance"
         }

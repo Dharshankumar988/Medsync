@@ -7,6 +7,7 @@ from app.blockchain.client import blockchain_client
 from app.blockchain.mock_gateway import MockBlockchainGateway
 from app.blockchain.provider import blockchain_gateway
 import time
+import asyncio
 
 logger = logging.getLogger("blockchain.workers.confirmation")
 
@@ -37,13 +38,14 @@ async def poll_confirmations():
             transactions = result.scalars().all()
             
             if not transactions:
+            if not transactions:
                 return
 
-            current_block = blockchain_client.w3.eth.block_number
+            current_block = await asyncio.to_thread(lambda: blockchain_client.w3.eth.block_number)
 
             for tx in transactions:
                 try:
-                    receipt = blockchain_client.w3.eth.get_transaction_receipt(tx.transaction_hash)
+                    receipt = await asyncio.to_thread(blockchain_client.w3.eth.get_transaction_receipt, tx.transaction_hash)
                     
                     if receipt:
                         # Calculate confirmations

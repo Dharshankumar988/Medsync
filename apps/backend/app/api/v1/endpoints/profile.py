@@ -99,7 +99,7 @@ async def get_profile(
     profile_data = {
         "id": str(user.id),
         "email": user.email,
-        "full_name": user.full_name,
+        "full_name": None,
         "role": user.role,
         "profile_completion_percentage": user.profile_completion_percentage,
         "cover_image_url": user.cover_image_url,
@@ -112,6 +112,7 @@ async def get_profile(
         profile = await db.execute(select(Patient).where(Patient.user_id == user_id))
         profile = profile.scalar_one_or_none()
         if profile:
+            profile_data["full_name"] = profile.full_name
             profile_data.update({
                 "date_of_birth": str(profile.date_of_birth) if profile.date_of_birth else None,
                 "gender": profile.gender,
@@ -132,6 +133,7 @@ async def get_profile(
         profile = await db.execute(select(Doctor).where(Doctor.user_id == user_id))
         profile = profile.scalar_one_or_none()
         if profile:
+            profile_data["full_name"] = profile.full_name
             profile_data.update({
                 "qualifications": profile.qualifications,
                 "clinic_name": profile.clinic_name,
@@ -153,6 +155,7 @@ async def get_profile(
         profile = await db.execute(select(Pharmacy).where(Pharmacy.user_id == user_id))
         profile = profile.scalar_one_or_none()
         if profile:
+            profile_data["full_name"] = profile.business_name
             profile_data.update({
                 "license_number": profile.license_number,
                 "gst_number": profile.gst_number,

@@ -70,8 +70,10 @@ class BlockchainSyncTask(Base, UUIDMixin, TimestampMixin):
     # Relationship to transaction
     transaction = relationship("BlockchainTransaction")
 
-class BlockchainAuditLog(Base, UUIDMixin, TimestampMixin):
+class BlockchainAuditLog(Base, UUIDMixin):
     __tablename__ = "blockchain_audit_logs"
+    
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, index=True)
     
     entity_type: Mapped[SyncEntityType] = mapped_column(Enum(SyncEntityType, native_enum=False), nullable=False, index=True)
     entity_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)

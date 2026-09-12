@@ -11,6 +11,7 @@ from app.models.blockchain import (
     BlockchainTransaction
 )
 from app.blockchain.provider import blockchain_gateway
+import asyncio
 
 logger = logging.getLogger("blockchain.sync_service")
 
@@ -70,39 +71,46 @@ class BlockchainSyncService:
             # Map the entity/action to the correct contract call
             if task.entity_type == SyncEntityType.PRESCRIPTION:
                 if task.action_type == SyncActionType.CREATE:
-                    receipt = blockchain_gateway.write_contract(
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
                         "PrescriptionRegistry", "createPrescription",
                         data_hash, str(task.payload.get("patient_id", "")), str(task.payload.get("doctor_id", ""))
                     )
             elif task.entity_type == SyncEntityType.MEDICAL_RECORD:
                 if task.action_type == SyncActionType.CREATE:
-                    receipt = blockchain_gateway.write_contract(
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
                         "MedicalRecordRegistry", "registerRecord",
                         data_hash, str(task.payload.get("patient_id", ""))
                     )
                 elif task.action_type == SyncActionType.GRANT_ACCESS:
-                    receipt = blockchain_gateway.write_contract(
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
                         "MedicalRecordRegistry", "grantAccess",
                         data_hash, str(task.payload.get("doctor_id", ""))
                     )
                 elif task.action_type == SyncActionType.REVOKE_ACCESS:
-                    receipt = blockchain_gateway.write_contract(
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
                         "MedicalRecordRegistry", "revokeAccess",
                         data_hash, str(task.payload.get("doctor_id", ""))
                     )
             elif task.entity_type == SyncEntityType.PATIENT:
                 if task.action_type == SyncActionType.CREATE:
-                    receipt = blockchain_gateway.write_contract(
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
                         "PatientRegistry", "registerPatient", data_hash
                     )
             elif task.entity_type == SyncEntityType.DOCTOR:
                 if task.action_type == SyncActionType.VERIFY:
-                    receipt = blockchain_gateway.write_contract(
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
                         "DoctorRegistry", "verifyDoctor", data_hash
                     )
             elif task.entity_type == SyncEntityType.PHARMACY:
                 if task.action_type == SyncActionType.VERIFY:
-                    receipt = blockchain_gateway.write_contract(
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
                         "PharmacyRegistry", "verifyPharmacy", data_hash
                     )
             else:
