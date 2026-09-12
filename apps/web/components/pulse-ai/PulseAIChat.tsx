@@ -76,6 +76,39 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [scanType, setScanType] = useState("bone");
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const storageKey = `pulse-chat-${role}-${patientId || "global"}`;
+
+  // Load from session storage on mount
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.messages && Array.isArray(parsed.messages)) {
+          setMessages(parsed.messages);
+        }
+        if (parsed.sessionId) {
+          setSessionId(parsed.sessionId);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load chat history", e);
+    }
+    setIsLoaded(true);
+  }, [storageKey]);
+
+  // Save to session storage whenever messages or sessionId changes
+  useEffect(() => {
+    if (isLoaded) {
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify({ messages, sessionId }));
+      } catch (e) {
+        console.warn("Failed to save chat history", e);
+      }
+    }
+  }, [messages, sessionId, storageKey, isLoaded]);
 
   // Cleanup pending requests on unmount or controller change
   useEffect(() => {

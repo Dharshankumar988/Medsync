@@ -65,9 +65,17 @@ class GroqClient:
         return self._healthy and self.client is not None
 
     async def verify_health(self) -> bool:
+        import time
         if not self.client:
             self._healthy = False
             return False
+            
+        if hasattr(self, '_last_health_check') and not self._healthy:
+            if time.time() - self._last_health_check < 60:
+                return False
+                
+        self._last_health_check = time.time()
+
             
         models_to_test = [ai_config.GROQ_MODEL, ai_config.GROQ_FALLBACK_MODEL]
         

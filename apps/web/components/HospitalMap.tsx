@@ -34,13 +34,12 @@ function MapBounds({ hospitals, userLoc }: { hospitals: any[], userLoc: [number,
   useEffect(() => {
     const validHospitals = hospitals.filter((h) => h.latitude && h.longitude);
     const pts = validHospitals.map((h) => L.latLng(h.latitude, h.longitude));
-    if (userLoc) {
-      pts.push(L.latLng(userLoc[0], userLoc[1]));
-    }
     
     if (pts.length > 0) {
       const bounds = L.latLngBounds(pts);
-      map.fitBounds(bounds, { padding: [50, 50] });
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    } else if (userLoc) {
+      map.setView(L.latLng(userLoc[0], userLoc[1]), 13);
     }
   }, [hospitals, map, userLoc]);
 

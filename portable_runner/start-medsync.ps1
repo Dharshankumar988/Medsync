@@ -72,29 +72,40 @@ $FACE_PORT = 8080
 function Start-FaceService {
     Write-Host "`n--- Starting Face Service ---" -ForegroundColor Cyan
     
-    # Try pulling pre-built image from GHCR first
     $FACE_IMAGE = $null
-    Write-Host "Pulling Face Service image from registry..." -ForegroundColor Cyan
-    $pullArgs = "pull $FACE_REGISTRY_IMAGE"
-    $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
-    if ($pullProcess.ExitCode -eq 0) {
+    Write-Host "Checking for existing Face Service image..." -ForegroundColor Cyan
+    $localReg = docker images -q $FACE_REGISTRY_IMAGE
+    $localBlt = docker images -q $FACE_LOCAL_IMAGE
+    
+    if ($localReg) {
         $FACE_IMAGE = $FACE_REGISTRY_IMAGE
-        Write-Host "`nUsing registry image: $FACE_IMAGE" -ForegroundColor Green
-    } else {
-        Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
-        $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
-        $FaceDockerfile = Join-Path $RepoRoot "apps" "face-service" "Dockerfile"
-        if (-not (Test-Path $FaceDockerfile)) {
-            Write-Host "ERROR: Face Service Dockerfile not found and registry image unavailable." -ForegroundColor Red
-            exit 1
-        }
-        docker build -t $FACE_LOCAL_IMAGE -f "$FaceDockerfile" "$RepoRoot\apps\face-service"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Failed to build face service image." -ForegroundColor Red
-            exit 1
-        }
+        Write-Host "Found registry image locally: $FACE_IMAGE" -ForegroundColor Green
+    } elseif ($localBlt) {
         $FACE_IMAGE = $FACE_LOCAL_IMAGE
-        Write-Host "Using locally built image: $FACE_IMAGE" -ForegroundColor Green
+        Write-Host "Found locally built image: $FACE_IMAGE" -ForegroundColor Green
+    } else {
+        Write-Host "Pulling Face Service image from registry..." -ForegroundColor Cyan
+        $pullArgs = "pull $FACE_REGISTRY_IMAGE"
+        $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
+        if ($pullProcess.ExitCode -eq 0) {
+            $FACE_IMAGE = $FACE_REGISTRY_IMAGE
+            Write-Host "`nUsing registry image: $FACE_IMAGE" -ForegroundColor Green
+        } else {
+            Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
+            $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
+            $FaceDockerfile = Join-Path $RepoRoot "apps" "face-service" "Dockerfile"
+            if (-not (Test-Path $FaceDockerfile)) {
+                Write-Host "ERROR: Face Service Dockerfile not found and registry image unavailable." -ForegroundColor Red
+                exit 1
+            }
+            docker build -t $FACE_LOCAL_IMAGE -f "$FaceDockerfile" "$RepoRoot\apps\face-service"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "ERROR: Failed to build face service image." -ForegroundColor Red
+                exit 1
+            }
+            $FACE_IMAGE = $FACE_LOCAL_IMAGE
+            Write-Host "Using locally built image: $FACE_IMAGE" -ForegroundColor Green
+        }
     }
 
     $existing = docker ps -a -q -f "name=^/${FACE_CONTAINER}$"
@@ -133,24 +144,35 @@ function Start-Backend {
     param ([string]$EnvOverride = "")
     Write-Host "`n--- Starting Backend ---" -ForegroundColor Cyan
     
-    # Try pulling pre-built image from GHCR first
     $BACKEND_IMAGE = $null
-    Write-Host "Pulling Backend image from registry..." -ForegroundColor Cyan
-    $pullArgs = "pull $BACKEND_REGISTRY_IMAGE"
-    $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
-    if ($pullProcess.ExitCode -eq 0) {
+    Write-Host "Checking for existing Backend image..." -ForegroundColor Cyan
+    $localReg = docker images -q $BACKEND_REGISTRY_IMAGE
+    $localBlt = docker images -q $BACKEND_LOCAL_IMAGE
+    
+    if ($localReg) {
         $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
-        Write-Host "`nUsing registry image: $BACKEND_IMAGE" -ForegroundColor Green
-    } else {
-        Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
-        $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
-        docker build -t $BACKEND_LOCAL_IMAGE -f "$RepoRoot\apps\backend\Dockerfile" "$RepoRoot"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Failed to build backend image." -ForegroundColor Red
-            exit 1
-        }
+        Write-Host "Found registry image locally: $BACKEND_IMAGE" -ForegroundColor Green
+    } elseif ($localBlt) {
         $BACKEND_IMAGE = $BACKEND_LOCAL_IMAGE
-        Write-Host "Using locally built image: $BACKEND_IMAGE" -ForegroundColor Green
+        Write-Host "Found locally built image: $BACKEND_IMAGE" -ForegroundColor Green
+    } else {
+        Write-Host "Pulling Backend image from registry..." -ForegroundColor Cyan
+        $pullArgs = "pull $BACKEND_REGISTRY_IMAGE"
+        $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
+        if ($pullProcess.ExitCode -eq 0) {
+            $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
+            Write-Host "`nUsing registry image: $BACKEND_IMAGE" -ForegroundColor Green
+        } else {
+            Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
+            $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
+            docker build -t $BACKEND_LOCAL_IMAGE -f "$RepoRoot\apps\backend\Dockerfile" "$RepoRoot"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "ERROR: Failed to build backend image." -ForegroundColor Red
+                exit 1
+            }
+            $BACKEND_IMAGE = $BACKEND_LOCAL_IMAGE
+            Write-Host "Using locally built image: $BACKEND_IMAGE" -ForegroundColor Green
+        }
     }
 
     $existing = docker ps -a -q -f "name=^/${BACKEND_CONTAINER}$"

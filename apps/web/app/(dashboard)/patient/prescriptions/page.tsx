@@ -11,8 +11,12 @@ import { toast } from "sonner";
 import axios from "axios";
 import SecureDownloadModal from "@/components/patient/SecureDownloadModal";
 import SecureOrderModal from "@/components/patient/SecureOrderModal";
+import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
+import { useSecurityStore } from "@/store/useSecurityStore";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 export default function PrescriptionsPage() {
+  const { user } = useAuth();
   const [userId, setUserId] = useState<string>("");
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +24,10 @@ export default function PrescriptionsPage() {
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [selectedPrescriptionId, setSelectedPrescriptionId] = useState<string | null>(null);
+
+  // Security
+  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(userId, user?.role?.toLowerCase());
+  const { openEnrollmentModal } = useSecurityStore();
   
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -166,6 +174,10 @@ export default function PrescriptionsPage() {
                     size="sm" 
                     className="flex-1" 
                     onClick={() => {
+                      if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
+                        openEnrollmentModal();
+                        return;
+                      }
                       setSelectedPrescriptionId(prescription.id);
                       setDownloadDialogOpen(true);
                     }}
@@ -179,6 +191,10 @@ export default function PrescriptionsPage() {
                       size="sm" 
                       className="flex-1"
                       onClick={() => {
+                        if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
+                          openEnrollmentModal();
+                          return;
+                        }
                         setSelectedPrescriptionId(prescription.id);
                         setOrderDialogOpen(true);
                       }}

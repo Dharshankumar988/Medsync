@@ -80,10 +80,15 @@ async def block_listener_loop():
                     from_block = sync_state.last_processed_block + 1
                     
                     if from_block <= latest_block:
-                        logger.debug(f"Syncing {contract_name} from {from_block} to {latest_block}")
-                        await fetch_and_enqueue_events(contract_name, from_block, latest_block)
+                        # Alchemy and other RPCs have a limit (usually 2000 blocks) per eth_getLogs request.
+                        # We chunk the requests to prevent 400 Bad Request errors.
+                        MAX_BLOCKS = 2000
+                        to_block = min(latest_block, from_block + MAX_BLOCKS - 1)
                         
-                        sync_state.last_processed_block = latest_block
+                        logger.debug(f"Syncing {contract_name} from {from_block} to {to_block}")
+                        await fetch_and_enqueue_events(contract_name, from_block, to_block)
+                        
+                        sync_state.last_processed_block = to_block
                         await db.commit()
                         
         except Exception as e:

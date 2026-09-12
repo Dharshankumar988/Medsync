@@ -5,8 +5,9 @@ import { useSecurityEnrollment } from '@/hooks/useSecurityEnrollment';
 import { SecurityService } from '@/services/security.service';
 import { authService } from '@/services/auth.service';
 import { supabase } from '@/lib/supabase';
-import { ShieldAlert, ShieldCheck, Camera, CheckCircle2, Loader2, Lock } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, Camera, CheckCircle2, Loader2, Lock, X } from 'lucide-react';
 import { Button, Input } from '@medsync/ui';
+import { useSecurityStore } from '@/store/useSecurityStore';
 
 export default function SecurityEnrollmentModal() {
   const [userId, setUserId] = useState<string>();
@@ -65,7 +66,9 @@ export default function SecurityEnrollmentModal() {
     return () => { stopCamera(); };
   }, [step, stopCamera, stream]);
 
-  if (role !== 'patient' || isStatusLoading || status === 'COMPLETED') {
+  const { isEnrollmentModalOpen, closeEnrollmentModal } = useSecurityStore();
+
+  if (!isEnrollmentModalOpen || role !== 'patient' || isStatusLoading || status === 'COMPLETED') {
     return null;
   }
 
@@ -119,7 +122,7 @@ export default function SecurityEnrollmentModal() {
       const { data: session } = await supabase.auth.getSession();
       if (session?.session?.access_token) {
         await SecurityService.enrollFace(session.session.access_token, faceImages);
-        window.location.reload(); // Reload to remove modal and refresh status
+        closeEnrollmentModal();
       }
     } catch (err: any) {
       console.error(err);
@@ -134,6 +137,15 @@ export default function SecurityEnrollmentModal() {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-md px-4">
       <div className="w-full max-w-md bg-card p-6 rounded-2xl shadow-xl border border-border/50 relative overflow-hidden">
         
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="absolute right-4 top-4"
+          onClick={closeEnrollmentModal}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+
         <div className="text-center mb-6">
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
             <ShieldAlert className="w-8 h-8 text-primary" />

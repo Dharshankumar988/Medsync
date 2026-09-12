@@ -403,7 +403,10 @@ export default function RegisterPage() {
                         </div>
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-foreground/80">Clinic Location (Map)</label>
-                          <LocationPickerMap onLocationSelect={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} />
+                          <LocationPickerMap 
+                            onLocationSelect={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} 
+                            onAddressFound={(addr) => { if(!clinicAddress) setClinicAddress(addr); }}
+                          />
                         </div>
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-foreground/80">Clinic Address</label>

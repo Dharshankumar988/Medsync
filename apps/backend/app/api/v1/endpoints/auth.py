@@ -8,6 +8,7 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.models.pharmacy import Pharmacy
+from app.models.hospital import Hospital
 from app.models.doctor_location import DoctorLocation
 from app.models.verification import VerificationRequest, VerificationStatus, RoleType
 
@@ -75,6 +76,21 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
 
         # Add location if private clinic
         if payload.clinic_name and payload.latitude and payload.longitude:
+            # Create a Hospital record for the clinic so it appears on the map
+            new_hospital = Hospital(
+                user_id=new_user.id,
+                name=payload.clinic_name,
+                address=payload.clinic_address or "Unknown",
+                latitude=payload.latitude,
+                longitude=payload.longitude,
+                is_active=True,
+                is_verified=False
+            )
+            db.add(new_hospital)
+            await db.flush()
+            
+            profile.hospital_id = new_hospital.id
+
             location = DoctorLocation(
                 doctor_id=profile.id,
                 location_type="CLINIC",

@@ -27,19 +27,46 @@ function MapClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number,
 
 interface LocationPickerMapProps {
   onLocationSelect: (lat: number, lng: number) => void;
+  onAddressFound?: (address: string) => void;
   initialLocation?: { lat: number; lng: number } | null;
 }
 
-export default function LocationPickerMap({ onLocationSelect, initialLocation }: LocationPickerMapProps) {
+export default function LocationPickerMap({ onLocationSelect, onAddressFound, initialLocation }: LocationPickerMapProps) {
   const [position, setPosition] = useState<[number, number] | null>(
     initialLocation ? [initialLocation.lat, initialLocation.lng] : null
   );
 
   const defaultCenter: [number, number] = [12.9716, 77.5946];
 
+  const fetchAddress = async (lat: number, lng: number) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const data = await res.json();
+      if (data && data.address) {
+        const addr = data.address;
+        const parts = [
+          addr.hospital || addr.clinic || addr.amenity,
+          addr.road,
+          addr.suburb || addr.neighbourhood,
+          addr.city || addr.town || addr.village,
+          addr.state,
+          addr.postcode
+        ].filter(Boolean);
+        onAddressFound?.(parts.length > 0 ? parts.join(", ") : data.display_name);
+      } else if (data && data.display_name) {
+        onAddressFound?.(data.display_name);
+      }
+    } catch (err) {
+      console.error("Reverse geocoding failed", err);
+    }
+  };
+
   const handleLocationSelect = (lat: number, lng: number) => {
     setPosition([lat, lng]);
     onLocationSelect(lat, lng);
+    if (onAddressFound) {
+      fetchAddress(lat, lng);
+    }
   };
 
   return (

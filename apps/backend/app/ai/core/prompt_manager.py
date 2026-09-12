@@ -49,6 +49,27 @@ class PromptManager:
         return any(kw in lower for kw in emergency_keywords)
 
     @staticmethod
+    def is_conversational(text: str) -> bool:
+        """Detect if a message is purely conversational small talk to bypass expensive operations."""
+        if not text:
+            return True
+        lower = text.strip().lower()
+        if len(lower.split()) > 10:
+            return False
+            
+        conversational_phrases = {
+            "hi", "hello", "hey", "greetings", 
+            "thanks", "thank you", "thx", "tysm",
+            "good morning", "good evening", "good afternoon",
+            "how are you", "whats up", "ok", "okay", "bye", "goodbye", "cool"
+        }
+        
+        import re
+        clean_text = re.sub(r'[^\w\s]', '', lower).strip()
+        return clean_text in conversational_phrases
+
+
+    @staticmethod
     def build_messages(
         system_prompt: str,
         history: list,

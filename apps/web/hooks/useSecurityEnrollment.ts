@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { SecurityService } from '@/services/security.service';
+import { useSecurityStore } from '@/store/useSecurityStore';
 
 export function useSecurityEnrollment(userId: string | undefined, role: string | undefined) {
-  const [status, setStatus] = useState<string>('NOT_STARTED');
+  const { status, setStatus } = useSecurityStore();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

@@ -149,6 +149,10 @@ class RAGService:
         if not query or len(query.strip()) < 5:
             return ""
 
+        from app.ai.core.prompt_manager import PromptManager
+        if PromptManager.is_conversational(query):
+            return "No medical context needed for conversational query."
+
         context_parts = []
         
         # 1. Semantic Knowledge Base Retrieval (All Roles)

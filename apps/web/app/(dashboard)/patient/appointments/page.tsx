@@ -17,6 +17,8 @@ import api from "@/lib/api";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useRouter } from "next/navigation";
+import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
+import { useSecurityStore } from "@/store/useSecurityStore";
 
 const HospitalMap = dynamic(() => import("@/components/HospitalMap"), { ssr: false, loading: () => <div className="h-[300px] w-full rounded-xl bg-card/50 animate-pulse border border-border flex items-center justify-center text-sm text-muted-foreground">Loading Map...</div> });
 
@@ -48,6 +50,10 @@ export default function AppointmentsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const { user } = useAuth();
   const router = useRouter();
+
+  // Security
+  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(userId, user?.role?.toLowerCase());
+  const { openEnrollmentModal } = useSecurityStore();
 
   // Booking dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -296,6 +302,10 @@ export default function AppointmentsPage() {
               if (open && user?.role === "PATIENT" && (user.profile_completion_percentage || 0) < 100) {
                 toast.error("Please complete your profile first.");
                 router.push("/patient/profile");
+                return;
+              }
+              if (open && user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
+                openEnrollmentModal();
                 return;
               }
               setIsDialogOpen(open);
