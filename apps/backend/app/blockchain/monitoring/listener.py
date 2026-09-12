@@ -65,6 +65,7 @@ async def block_listener_loop():
     while True:
         try:
             latest_block = blockchain_client.w3.eth.block_number
+            caught_up = True
             
             async with AsyncSessionLocal() as db:
                 for contract_name in TRACKED_CONTRACTS:
@@ -80,9 +81,9 @@ async def block_listener_loop():
                     from_block = sync_state.last_processed_block + 1
                     
                     if from_block <= latest_block:
-                        # Alchemy and other RPCs have a limit (usually 2000 blocks) per eth_getLogs request.
-                        # We chunk the requests to prevent 400 Bad Request errors.
-                        MAX_BLOCKS = 2000
+                        caught_up = False
+                        # Alchemy Free Tier on Polygon Amoy restricts eth_getLogs to a 10 block range
+                        MAX_BLOCKS = int(os.getenv("BLOCKCHAIN_MAX_BLOCKS", "10"))
                         to_block = min(latest_block, from_block + MAX_BLOCKS - 1)
                         
                         logger.debug(f"Syncing {contract_name} from {from_block} to {to_block}")
@@ -93,8 +94,12 @@ async def block_listener_loop():
                         
         except Exception as e:
             logger.error(f"Listener loop error: {e}")
+            caught_up = True # sleep on error to avoid spamming the RPC
         
-        await asyncio.sleep(15) # Poll every 15 seconds (typical block time)
+        if caught_up:
+            await asyncio.sleep(15) # Poll every 15 seconds (typical block time)
+        else:
+            await asyncio.sleep(1) # Small delay to respect rate limits while catching up
 
 def start_event_listener():
     # Will be called during app startup

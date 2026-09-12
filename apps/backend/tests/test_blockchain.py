@@ -1,6 +1,6 @@
 import pytest
 import json
-from app.utils.hash import generate_prescription_hash
+from app.utils.hash import generate_canonical_hash
 from app.models.blockchain import SyncStatus as BlockchainTaskStatus
 from app.blockchain.client import BlockchainClient
 
@@ -20,8 +20,8 @@ def test_generate_prescription_hash_determinism():
         "prescription_id": "123e4567-e89b-12d3-a456-426614174000"
     }
     
-    hash_1 = generate_prescription_hash(data_1)
-    hash_2 = generate_prescription_hash(data_2)
+    hash_1 = generate_canonical_hash(data_1)
+    hash_2 = generate_canonical_hash(data_2)
     
     assert hash_1 == hash_2, "Hashes must be identical for the same data"
 
@@ -36,7 +36,7 @@ def test_generate_prescription_hash_mutation():
         "diagnosis": "Common cold", # lowercase c
     }
     
-    assert generate_prescription_hash(data_1) != generate_prescription_hash(data_2)
+    assert generate_canonical_hash(data_1) != generate_canonical_hash(data_2)
 
 @pytest.mark.asyncio
 async def test_blockchain_status_enums():

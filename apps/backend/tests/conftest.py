@@ -11,6 +11,7 @@ os.environ['BLOCKCHAIN_RPC_URL'] = 'http://localhost:8545'
 os.environ['BLOCKCHAIN_MODE'] = 'mock'
 os.environ['SSL_CERT_FILE'] = certifi.where()
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+os.environ['BIOMETRIC_ENCRYPTION_KEY'] = 'YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE='
 
 # Mock native packages that cannot be installed on Windows ARM64 for local dev testing
 sys.modules['web3'] = MagicMock()
