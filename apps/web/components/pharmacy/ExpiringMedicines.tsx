@@ -43,7 +43,6 @@ export function ExpiringMedicines({ inventory = [] }: { inventory?: PharmacyInve
                 <div>
                   <p className="font-semibold">{item.medication_name}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="text-xs py-0 h-5">Batch: {item.batch_number}</Badge>
                     <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {new Date(item.expiry_date).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -51,7 +50,7 @@ export function ExpiringMedicines({ inventory = [] }: { inventory?: PharmacyInve
                   <p className={`font-bold ${item.daysLeft < 45 ? 'text-red-500' : 'text-amber-500'}`}>
                     {item.daysLeft} days
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{item.stock_quantity} in stock</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.stock} in stock</p>
                 </div>
               </div>
             ))
