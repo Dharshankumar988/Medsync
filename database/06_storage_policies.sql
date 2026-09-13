@@ -79,3 +79,20 @@ USING (
     bucket_id = 'prescriptions' 
     AND (storage.foldername(name))[1] = auth.uid()::text
 );
+
+-- ==============================================================================
+-- DATABASE RLS POLICIES FOR PRESCRIPTIONS
+-- ==============================================================================
+
+-- Policy: Doctors can manage prescription items
+DROP POLICY IF EXISTS "Doctors can manage prescription items" ON public.prescription_items;
+CREATE POLICY "Doctors can manage prescription items" ON public.prescription_items
+FOR ALL
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.prescriptions p
+        WHERE p.id = prescription_items.prescription_id 
+        AND p.doctor_id = auth.uid()
+    )
+);

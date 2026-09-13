@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from "@medsync/ui";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
+import api from "@/lib/api";
 import { MapPin, ShieldCheck, Download, Printer } from "lucide-react";
 import { Skeleton } from "@medsync/ui";
 
@@ -18,18 +19,12 @@ export default function PharmacyQRPage() {
       if (!session) return;
 
       try {
-        const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
-        const res = await fetch(`${baseUrl}/api/v1/pharmacy/my-qr`, {
-          headers: { Authorization: `Bearer ${session.access_token}` }
-        });
-        
-        if (!res.ok) throw new Error("Failed to fetch pharmacy QR");
-        
-        const json = await res.json();
+        const res = await api.get('/api/v1/pharmacy/my-qr');
+        const json = res.data;
         setQrIdentifier(json.data.qr_identifier);
         setPharmacyName(json.data.business_name || "MedSync Pharmacy");
       } catch (e: any) {
-        setError(e.message);
+        setError(e.response?.data?.detail || e.message || "Failed to load QR");
       }
     }
     loadPharmacyQR();

@@ -65,6 +65,7 @@ export default function RegisterPage() {
   // Additional fields for Doctor & Pharmacy
   const [licenseNumber, setLicenseNumber] = useState("");
   const [doctorPracticeType, setDoctorPracticeType] = useState<"HOSPITAL" | "CLINIC">("HOSPITAL");
+  const [pharmacyPracticeType, setPharmacyPracticeType] = useState<"INDEPENDENT" | "HOSPITAL" | "CLINIC">("INDEPENDENT");
   const [selectedHospitalId, setSelectedHospitalId] = useState("");
   const [clinicName, setClinicName] = useState("");
   const [clinicAddress, setClinicAddress] = useState("");
@@ -77,10 +78,10 @@ export default function RegisterPage() {
   const [pharmacyAddress, setPharmacyAddress] = useState("");
 
   useEffect(() => {
-    if (role === "DOCTOR" && doctorPracticeType === "HOSPITAL") {
+    if ((role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL")) {
       hospitalService.getHospitals().then(res => setHospitals(res.data.data)).catch(console.error);
     }
-  }, [role, doctorPracticeType]);
+  }, [role, doctorPracticeType, pharmacyPracticeType]);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -120,9 +121,19 @@ export default function RegisterPage() {
         return;
       }
     }
-    if (role === "PHARMACY" && (!businessName || !licenseNumber || !contactNumber || !latitude)) {
-      setError("Business Name, License Number, Contact Number, and Map Location are required for pharmacies.");
-      return;
+    if (role === "PHARMACY") {
+      if (!businessName || !licenseNumber || !contactNumber || !latitude) {
+        setError("Business Name, License Number, Contact Number, and Map Location are required for pharmacies.");
+        return;
+      }
+      if (pharmacyPracticeType === "HOSPITAL" && !selectedHospitalId) {
+        setError("Please select a hospital.");
+        return;
+      }
+      if (pharmacyPracticeType === "CLINIC" && !clinicName) {
+        setError("Please provide the clinic name.");
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -135,8 +146,8 @@ export default function RegisterPage() {
         role,
         full_name: fullName,
         license_number: role === "DOCTOR" || role === "PHARMACY" ? licenseNumber : undefined,
-        hospital_id: role === "DOCTOR" && doctorPracticeType === "HOSPITAL" ? selectedHospitalId : undefined,
-        clinic_name: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? clinicName : undefined,
+        hospital_id: (role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL") ? selectedHospitalId : undefined,
+        clinic_name: (role === "DOCTOR" && doctorPracticeType === "CLINIC") || (role === "PHARMACY" && pharmacyPracticeType === "CLINIC") ? clinicName : undefined,
         clinic_address: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? clinicAddress : (role === "PHARMACY" ? pharmacyAddress : undefined),
         latitude: (role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? latitude : undefined,
         longitude: (role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? longitude : undefined,
@@ -477,6 +488,74 @@ export default function RegisterPage() {
                         />
                       </div>
                     </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground/80">Pharmacy Practice Type</label>
+                      <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="radio" checked={pharmacyPracticeType === "INDEPENDENT"} onChange={() => setPharmacyPracticeType("INDEPENDENT")} className="accent-blue-500" />
+                          Independent
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="radio" checked={pharmacyPracticeType === "HOSPITAL"} onChange={() => setPharmacyPracticeType("HOSPITAL")} className="accent-blue-500" />
+                          Inside Hospital
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="radio" checked={pharmacyPracticeType === "CLINIC"} onChange={() => setPharmacyPracticeType("CLINIC")} className="accent-blue-500" />
+                          Linked to Clinic
+                        </label>
+                      </div>
+                    </div>
+
+                    <AnimatePresence mode="popLayout">
+                      {pharmacyPracticeType === "HOSPITAL" ? (
+                        <motion.div
+                          key="hospital-select"
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-2 overflow-hidden"
+                        >
+                          <label className="text-sm font-medium text-foreground/80">Select Hospital</label>
+                          <div className="relative">
+                            <Building className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                            <select
+                              value={selectedHospitalId}
+                              onChange={(e) => setSelectedHospitalId(e.target.value)}
+                              className="h-12 w-full pl-10 pr-4 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              required
+                              disabled={isLoading}
+                            >
+                              <option value="">-- Choose a Hospital --</option>
+                              {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                            </select>
+                          </div>
+                        </motion.div>
+                      ) : pharmacyPracticeType === "CLINIC" ? (
+                        <motion.div
+                          key="clinic-name"
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-2 overflow-hidden"
+                        >
+                          <label className="text-sm font-medium text-foreground/80">Clinic Name</label>
+                          <div className="relative">
+                            <Building2 className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                            <Input
+                              type="text"
+                              placeholder="e.g. MedSync Central Clinic"
+                              value={clinicName}
+                              onChange={(e) => setClinicName(e.target.value)}
+                              required
+                              disabled={isLoading}
+                              className="h-12 pl-10 pr-4 bg-background border-input"
+                            />
+                          </div>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground/80">Pharmacy Location (Map)</label>
                       <LocationPickerMap 

@@ -550,30 +550,29 @@ async def get_network_details(
 ):
     """Get detailed network information."""
     try:
-        health = await asyncio.to_thread(blockchain_gateway.get_health_status)
-        if blockchain_client.w3:
-            latest_block = await asyncio.to_thread(lambda: blockchain_client.w3.eth.block_number)
-            gas_price = await asyncio.to_thread(lambda: blockchain_client.w3.eth.gas_price)
-            gas_price_gwei = float(blockchain_client.w3.from_wei(gas_price, "gwei"))
-        else:
-            latest_block = 0
-            gas_price_gwei = 0.0
+        from web3 import Web3
+        # Connect directly to Amoy RPC for accurate monitoring
+        w3 = Web3(Web3.HTTPProvider("https://rpc-amoy.polygon.technology/"))
+        
+        latest_block = await asyncio.to_thread(lambda: w3.eth.block_number)
+        gas_price = await asyncio.to_thread(lambda: w3.eth.gas_price)
+        gas_price_gwei = float(w3.from_wei(gas_price, "gwei"))
             
         data = {
-            "network": health.get("network", "unknown"),
-            "chain_id": health.get("chain_id", 0),
-            "status": "healthy" if health.get("status") == "healthy" else "degraded",
+            "network": "Amoy",
+            "chain_id": 80002,
+            "status": "healthy" if w3.is_connected() else "degraded",
             "latest_block": latest_block,
             "gas_price_gwei": gas_price_gwei,
-            "rpc_provider": "Default RPC"
+            "rpc_provider": "https://rpc-amoy.polygon.technology/"
         }
         return APIResponse(message="Network details retrieved", data=data)
     except Exception as e:
         data = {
-            "network": "unknown",
-            "chain_id": 0,
+            "network": "Amoy",
+            "chain_id": 80002,
             "status": "degraded",
-            "latest_block": None,
+            "latest_block": 0,
             "gas_price_gwei": 0.0,
             "rpc_provider": "Unknown"
         }
@@ -587,15 +586,15 @@ async def get_wallet_details(
 ):
     """Get backend wallet details."""
     try:
-        address = blockchain_client.wallet_address
-        if blockchain_client.w3:
-            balance_wei = await asyncio.to_thread(blockchain_client.w3.eth.get_balance, address)
-            nonce = await asyncio.to_thread(blockchain_client.w3.eth.get_transaction_count, address)
-            balance_eth = float(blockchain_client.w3.from_wei(balance_wei, "ether"))
-        else:
-            balance_wei = 0
-            nonce = 0
-            balance_eth = 0.0
+        from web3 import Web3
+        w3 = Web3(Web3.HTTPProvider("https://rpc-amoy.polygon.technology/"))
+        
+        # User requested tracking for this specific wallet
+        address = "0x6EC559064e5BfAE4a98d1879c717139aceE49822"
+        
+        balance_wei = await asyncio.to_thread(w3.eth.get_balance, address)
+        nonce = await asyncio.to_thread(w3.eth.get_transaction_count, address)
+        balance_eth = float(w3.from_wei(balance_wei, "ether"))
         
         data = {
             "address": address,

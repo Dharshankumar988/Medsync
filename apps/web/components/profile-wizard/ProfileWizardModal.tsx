@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@medsync/ui";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
@@ -22,6 +23,7 @@ export function ProfileWizardModal({ isOpen, onClose, userId, role, onComplete }
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<any>({});
+  const queryClient = useQueryClient();
   
   // Specific for doctor
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
@@ -55,6 +57,7 @@ export function ProfileWizardModal({ isOpen, onClose, userId, role, onComplete }
       };
       
       await profileService.updateProfileCompletion(userId, payload);
+      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
       onComplete(percentage);
       onClose();
     } catch (error) {

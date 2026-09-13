@@ -130,6 +130,8 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
             license_number=payload.license_number or f"LIC-PHM-{str(new_user.id)[:8]}",
             contact_number=payload.contact_number,
             address=payload.clinic_address or payload.hospital_address, # Fallback to clinic_address/hospital_address if payload uses those
+            hospital_id=payload.hospital_id,
+            clinic_name=payload.clinic_name,
             location=location_data
         )
         db.add(profile)

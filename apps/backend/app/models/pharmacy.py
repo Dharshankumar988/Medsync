@@ -18,6 +18,8 @@ class Pharmacy(Base, UUIDMixin, TimestampMixin):
     city: Mapped[str] = mapped_column(String(100), nullable=True)
     state: Mapped[str] = mapped_column(String(100), nullable=True)
     country: Mapped[str] = mapped_column(String(100), nullable=True)
+    hospital_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("hospitals.id"), index=True, nullable=True)
+    clinic_name: Mapped[str] = mapped_column(String(255), nullable=True)
     pincode: Mapped[str] = mapped_column(String(20), nullable=True)
     operating_hours: Mapped[str] = mapped_column(String(100), nullable=True)
     working_days: Mapped[str] = mapped_column(String, nullable=True)

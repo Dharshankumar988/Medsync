@@ -206,6 +206,70 @@ async def get_admins(
     return APIResponse(message="Admins retrieved", data=data)
 
 from pydantic import BaseModel
+
+class AdminCreate(BaseModel):
+    email: str
+    password: str
+
+@router.post("/admins", response_model=APIResponse[dict])
+async def create_admin(
+    payload: AdminCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    # Register in Supabase
+    async with await get_supabase_client() as client:
+        res = await client.auth.sign_up({
+            "email": payload.email,
+            "password": payload.password
+        })
+        if not res or not res.user:
+            raise HTTPException(status_code=400, detail="Failed to create admin in Auth")
+        
+        # Check if already in DB
+        stmt = select(User).where(User.id == uuid.UUID(res.user.id))
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="User already exists in DB")
+            
+        new_user = User(
+            id=uuid.UUID(res.user.id),
+            email=payload.email,
+            role=UserRole.ADMIN,
+            status=UserStatus.ACTIVE,
+            is_verified=True,
+            profile_completion_percentage=100
+        )
+        db.add(new_user)
+        await db.commit()
+    
+    return APIResponse(message="Admin created successfully", data={"email": payload.email})
+
+@router.get("/doctors", response_model=APIResponse[list[dict]])
+async def get_doctors(
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200)
+):
+    stmt = select(Doctor, User).join(User, Doctor.user_id == User.id).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    rows = result.all()
+    
+    data = [{
+        "id": str(doctor.id),
+        "user_id": str(doctor.user_id),
+        "full_name": doctor.full_name,
+        "email": user.email,
+        "license_number": doctor.license_number,
+        "hospital_name": doctor.hospital_name,
+        "clinic_name": doctor.clinic_name,
+        "status": doctor.doctor_status
+    } for doctor, user in rows]
+    
+    return APIResponse(message="Doctors retrieved", data=data)
+
+from pydantic import BaseModel
 from typing import Optional
 
 class AdminPharmacyCreate(BaseModel):

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Badge, Input, Skeleton } from "@medsync/ui";
-import { Search, MapPin, Store, Clock, Phone, ShieldCheck, Star } from "lucide-react";
+import { Search, MapPin, Store, Clock, Phone, ShieldCheck, Star, Building } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 
@@ -20,6 +20,16 @@ export default function DoctorPharmaciesPage() {
   useEffect(() => {
     async function loadPharmacies() {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        
+        // Fetch doctor profile to check for linked clinics/hospitals
+        const { data: doctorProfile } = await supabase
+          .from("doctors")
+          .select("hospital_id, clinic_name")
+          .eq("user_id", session.user.id)
+          .single();
+
         const { data: pharmacyProfiles, error } = await supabase
           .from("pharmacies")
           .select("*");
@@ -38,9 +48,16 @@ export default function DoctorPharmaciesPage() {
             .map(profile => {
                const user = usersData?.find(u => u.id === profile.user_id);
                if (!user) return null;
-               return { ...profile, ...user };
+               
+               const isLinked = doctorProfile && (
+                 (profile.hospital_id && doctorProfile.hospital_id && profile.hospital_id === doctorProfile.hospital_id) ||
+                 (profile.clinic_name && doctorProfile.clinic_name && profile.clinic_name === doctorProfile.clinic_name)
+               );
+               
+               return { ...profile, ...user, isLinked };
             })
-            .filter(Boolean);
+            .filter(Boolean)
+            .sort((a: any, b: any) => (b.isLinked ? 1 : 0) - (a.isLinked ? 1 : 0));
             
           setPharmacies(mapped);
         }
@@ -112,9 +129,15 @@ export default function DoctorPharmaciesPage() {
                     <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 mb-3">
                       <Store className="h-5 w-5 text-emerald-500" />
                     </div>
-                    <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
-                      <ShieldCheck className="mr-1 h-3 w-3" /> Verified Partner
-                    </Badge>
+                    {pharmacy.isLinked ? (
+                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                        <Star className="mr-1 h-3 w-3 fill-emerald-500" /> Linked Partner
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                        <ShieldCheck className="mr-1 h-3 w-3" /> Verified Partner
+                      </Badge>
+                    )}
                   </div>
                   <CardTitle className="text-base line-clamp-1">{pharmacy.full_name || "MedSync Pharmacy"}</CardTitle>
                 </CardHeader>
@@ -128,6 +151,13 @@ export default function DoctorPharmaciesPage() {
                       </p>
                     </div>
                     
+                    {pharmacy.clinic_name && (
+                      <div className="flex items-center gap-2.5">
+                        <Building className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <p className="text-sm font-medium text-emerald-600">{pharmacy.clinic_name}</p>
+                      </div>
+                    )}
+
                     {pharmacy.operating_hours && (
                       <div className="flex items-center gap-2.5">
                         <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
