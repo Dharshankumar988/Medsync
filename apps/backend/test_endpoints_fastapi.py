@@ -3,15 +3,15 @@ import json
 import sys
 sys.path.append(".")
 from fastapi.testclient import TestClient
-from app.main import app
-from app.dependencies.auth import require_admin
+from main import app
+from app.api.v1.endpoints.admin import require_admin
 from app.schemas.session import AuthenticatedPrincipal
 import uuid
 
 # Mock the admin authentication dependency
 def mock_require_admin():
     return AuthenticatedPrincipal(
-        user_id=uuid.uuid4(),
+        id=uuid.uuid4(),
         role="ADMIN",
         email="admin@medsync.com",
         is_verified=True

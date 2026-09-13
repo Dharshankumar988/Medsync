@@ -132,7 +132,7 @@ export default function RegisterPage() {
       const response = await authService.register({
         email,
         password,
-        role: selectedRole.value,
+        role,
         full_name: fullName,
         license_number: role === "DOCTOR" || role === "PHARMACY" ? licenseNumber : undefined,
         hospital_id: role === "DOCTOR" && doctorPracticeType === "HOSPITAL" ? selectedHospitalId : undefined,
