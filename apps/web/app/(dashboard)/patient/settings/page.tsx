@@ -21,6 +21,10 @@ export default function SettingsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [resetModal, setResetModal] = useState<'pin' | 'face' | null>(null);
   
+  // Profile Image State
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  
   // Security Reset State
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -39,6 +43,26 @@ export default function SettingsPage() {
       if (data.user) setUserId(data.user.id);
     });
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    
+    async function loadProfile() {
+      try {
+        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/users/me`, {
+          headers: {
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          }
+        });
+        if (response.data?.data?.profile_image_url) {
+          setProfileImage(response.data.data.profile_image_url);
+        }
+      } catch (err) {
+        console.error("Error loading profile", err);
+      }
+    }
+    loadProfile();
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -126,6 +150,39 @@ export default function SettingsPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/login');
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size must be less than 5MB");
+        return;
+      }
+      setIsUploadingImage(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const response = await axios.post(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/users/me/profile-image`, 
+          formData, 
+          {
+            headers: {
+              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              'Content-Type': 'multipart/form-data'
+            }
+          }
+        );
+        if (response.data?.data?.profile_image_url) {
+          setProfileImage(response.data.data.profile_image_url);
+          toast.success("Profile image updated!");
+        }
+      } catch (err) {
+        toast.error("Failed to upload profile image.");
+      } finally {
+        setIsUploadingImage(false);
+      }
+    }
   };
 
   const startCamera = async () => {
@@ -300,6 +357,38 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border border-border/60 bg-card/50">
+          <CardHeader>
+            <CardTitle>Profile</CardTitle>
+            <CardDescription>Manage your public profile settings.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border/50 rounded-xl gap-4">
+              <div className="flex items-center gap-4">
+                {profileImage ? (
+                  <img src={profileImage} alt="Profile" className="h-16 w-16 rounded-full object-cover border border-border" />
+                ) : (
+                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center border border-border">
+                    <Camera className="h-6 w-6 text-primary/50" />
+                  </div>
+                )}
+                <div>
+                  <p className="font-medium">Profile Image</p>
+                  <p className="text-sm text-muted-foreground">Upload a clear photo for your medical profile.</p>
+                </div>
+              </div>
+              <div>
+                <input type="file" id="profile-upload" className="hidden" accept="image/png, image/jpeg, image/jpg" onChange={handleImageUpload} disabled={isUploadingImage} />
+                <label htmlFor="profile-upload">
+                  <Button asChild variant="outline" className="cursor-pointer" disabled={isUploadingImage}>
+                    <span>{isUploadingImage ? "Uploading..." : "Change Image"}</span>
+                  </Button>
+                </label>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

@@ -73,7 +73,7 @@ INSERT INTO public.medical_record_categories (id, name, description) VALUES
 ('{cat1_id}', 'Lab Reports', 'Laboratory test results') ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO public.medical_records (id, patient_id, uploaded_by, category_id, title, description, created_at, updated_at) VALUES
-('{rec1_id}', '{PAT_USER_ID}', '{DOC_USER_ID}', '{cat1_id}', 'Complete Blood Count (CBC)', 'Routine CBC panel ordered by Dr. Demo', '{now}', '{now}');
+('{rec1_id}', '{PAT_USER_ID}', '{DOC_USER_ID}', '{cat1_id}', 'Complete Blood Count (CBC)', 'Routine CBC panel ordered by Dr. Sharma', '{now}', '{now}');
 
 INSERT INTO public.medical_record_versions (id, record_id, version_number, ipfs_cid, file_type, file_size_bytes, change_description, is_current, blockchain_status, blockchain_tx_hash) VALUES
 ('{ver1_id}', '{rec1_id}', 1, 'QmTestCIDForLocalMockBlockchain1234567890abcdef', 'application/pdf', 102400, 'Initial upload', TRUE, 'CONFIRMED', '0xabc123mocktxhash4567890');
@@ -165,7 +165,7 @@ INSERT INTO public.delivery_tracking (id, order_id, tracking_number, current_sta
     sql.append(f"""
 -- NOTIFICATIONS
 INSERT INTO public.notifications (id, user_id, type, title, message, is_read, created_at, updated_at) VALUES
-('{notif1_id}', '{PAT_USER_ID}', 'APPOINTMENT', 'Appointment Confirmed', 'Your appointment with Dr. Demo is confirmed for tomorrow.', FALSE, '{now}', '{now}'),
+('{notif1_id}', '{PAT_USER_ID}', 'APPOINTMENT', 'Appointment Confirmed', 'Your appointment with Dr. Sharma is confirmed for tomorrow.', FALSE, '{now}', '{now}'),
 ('{notif2_id}', '{PHARM_USER_ID}', 'ORDER', 'New Order Received', 'You have received a new order.', FALSE, '{now}', '{now}');
     """)
 

@@ -124,6 +124,35 @@ class StorageService:
         return object_path, content_type, len(file_bytes), file_hash
 
     @staticmethod
+    async def upload_profile_image(user_id: str, file_bytes: bytes, filename: str, content_type: str) -> str:
+        StorageService._ensure_configured()
+        
+        safe_filename = StorageService._safe_name(filename)
+        # Store as new object/version to preserve old links
+        object_path = f"profiles/{user_id}/{uuid.uuid4().hex}-{safe_filename}"
+        
+        # Use public endpoint for profiles if bucket is public, else just store path.
+        # Actually, Supabase Storage uploads use the same API for public/private.
+        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+        
+        headers = {
+            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+            "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+            "x-upsert": "false",
+            "Content-Type": content_type
+        }
+        
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(url, headers=headers, content=file_bytes)
+            
+        if response.status_code not in (200, 201):
+            raise StorageServiceError(f"Supabase upload failed: {response.status_code} {response.text}")
+            
+        # Return the public URL
+        public_url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+        return public_url
+
+    @staticmethod
     async def create_signed_download_url(object_path: str, expires_in: int = 300) -> str:
         StorageService._ensure_configured()
 

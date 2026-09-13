@@ -38,7 +38,6 @@ async def poll_confirmations():
             transactions = result.scalars().all()
             
             if not transactions:
-            if not transactions:
                 return
 
             current_block = await asyncio.to_thread(lambda: blockchain_client.w3.eth.block_number)

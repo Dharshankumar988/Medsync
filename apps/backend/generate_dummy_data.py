@@ -31,7 +31,7 @@ async def seed_users():
         print("Starting dummy data generation...")
         
         # 1. ADMIN
-        admin_email = "admin@demo.com"
+        admin_email = "admin@example.com"
         admin_id = uuid.UUID(get_uuid(1, "adm"))
         existing_admin = (await db.execute(select(User).where(User.email == admin_email))).scalar_one_or_none()
         if not existing_admin:
@@ -51,7 +51,7 @@ async def seed_users():
         existing_hosp_user = (await db.execute(select(User).where(User.id == hosp_user_id))).scalar_one_or_none()
         if not existing_hosp_user:
             user = User(
-                id=hosp_user_id, email="hospital1@demo.com", password_hash="supabase",
+                id=hosp_user_id, email="hospital1@example.com", password_hash="supabase",
                 role=UserRole.HOSPITAL, status=UserStatus.ACTIVE, is_verified=True
             )
             db.add(user)
@@ -62,7 +62,7 @@ async def seed_users():
             )
             db.add(hosp)
 
-        doc_email = "doctor@demo.com"
+        doc_email = "doctor@example.com"
         doc_id = uuid.UUID(get_uuid(1, "doc"))
         existing_doc = (await db.execute(select(User).where(User.email == doc_email))).scalar_one_or_none()
         if not existing_doc:
@@ -72,13 +72,13 @@ async def seed_users():
             )
             db.add(user)
             doc = Doctor(
-                id=doc_id, user_id=doc_id, full_name="Dr. Demo Specialist",
+                id=doc_id, user_id=doc_id, full_name="Dr. Sharma",
                 specialization="Cardiology", license_number="DOC123456", hospital_id=hosp_user_id
             )
             db.add(doc)
 
         # 3. PATIENT
-        pat_email = "patient@demo.com"
+        pat_email = "patient@example.com"
         pat_id = uuid.UUID(get_uuid(1, "pat"))
         existing_pat = (await db.execute(select(User).where(User.email == pat_email))).scalar_one_or_none()
         if not existing_pat:
@@ -88,13 +88,13 @@ async def seed_users():
             )
             db.add(user)
             pat = Patient(
-                id=pat_id, user_id=pat_id, full_name="Patient Demo",
+                id=pat_id, user_id=pat_id, full_name="Aarav Sharma",
                 date_of_birth="1990-01-01", gender="MALE", blood_group="O+"
             )
             db.add(pat)
 
         # 4. PHARMACIES (Verified and Unverified)
-        pharmacy_email = "pharmacy@demo.com"
+        pharmacy_email = "pharmacy@example.com"
         pharmacy_id = uuid.UUID(get_uuid(1, "pha"))
         existing_pha = (await db.execute(select(User).where(User.email == pharmacy_email))).scalar_one_or_none()
         if not existing_pha:
@@ -111,7 +111,7 @@ async def seed_users():
             )
             db.add(pha)
         
-        pharmacy2_email = "unverified_pharmacy@demo.com"
+        pharmacy2_email = "unverified_pharmacy@example.com"
         pharmacy2_id = uuid.UUID(get_uuid(2, "pha"))
         existing_pha2 = (await db.execute(select(User).where(User.email == pharmacy2_email))).scalar_one_or_none()
         if not existing_pha2:

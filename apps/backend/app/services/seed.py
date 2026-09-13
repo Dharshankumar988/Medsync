@@ -8,12 +8,12 @@ from app.models.pharmacy import Pharmacy
 import uuid
 
 DEMO_USERS = [
-    {"email": "patient@demo.com", "password": "Demo@1234", "role": UserRole.PATIENT, "status": UserStatus.ACTIVE},
-    {"email": "patient2@demo.com", "password": "Demo@1234", "role": UserRole.PATIENT, "status": UserStatus.ACTIVE},
-    {"email": "doctor@demo.com", "password": "Demo@1234", "role": UserRole.DOCTOR, "status": UserStatus.ACTIVE},
-    {"email": "doctor2@demo.com", "password": "Demo@1234", "role": UserRole.DOCTOR, "status": UserStatus.PENDING},
-    {"email": "pharmacy@demo.com", "password": "Demo@1234", "role": UserRole.PHARMACY, "status": UserStatus.ACTIVE},
-    {"email": "admin@demo.com", "password": "Admin@1234", "role": UserRole.ADMIN, "status": UserStatus.ACTIVE},
+    {"email": "patient@example.com", "password": "Demo@1234", "role": UserRole.PATIENT, "status": UserStatus.ACTIVE},
+    {"email": "patient2@example.com", "password": "Demo@1234", "role": UserRole.PATIENT, "status": UserStatus.ACTIVE},
+    {"email": "doctor@example.com", "password": "Demo@1234", "role": UserRole.DOCTOR, "status": UserStatus.ACTIVE},
+    {"email": "doctor2@example.com", "password": "Demo@1234", "role": UserRole.DOCTOR, "status": UserStatus.PENDING},
+    {"email": "pharmacy@example.com", "password": "Demo@1234", "role": UserRole.PHARMACY, "status": UserStatus.ACTIVE},
+    {"email": "admin@example.com", "password": "Admin@1234", "role": UserRole.ADMIN, "status": UserStatus.ACTIVE},
 ]
 
 async def seed_database():

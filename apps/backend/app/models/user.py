@@ -31,6 +31,7 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     
     # Phase 16 profile fields
     cover_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    profile_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     bio: Mapped[str | None] = mapped_column(String, nullable=True)
     social_links: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
     languages_spoken: Mapped[str | None] = mapped_column(String, nullable=True)

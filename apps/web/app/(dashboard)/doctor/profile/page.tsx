@@ -191,7 +191,7 @@ export default function DoctorProfilePage() {
         setUploadProgress(prev => (prev < 90 ? prev + 10 : prev));
       }, 200);
 
-      const response = await api.post('/api/v1/profile/image', formData);
+      const response = await api.post('/api/v1/users/me/profile-image', formData);
       
       clearInterval(interval);
       setUploadProgress(100);

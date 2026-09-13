@@ -91,6 +91,20 @@ class QRPdfService:
         if qr_token:
             c.setFont("Helvetica", 8)
             c.drawString(width - 150, height - 210, f"Token: {qr_token}")
+            
+        # Draw Doctor Profile Image (Top-Right)
+        profile_img_url = doctor_data.get('profile_image_url')
+        if profile_img_url:
+            try:
+                import urllib.request
+                req = urllib.request.Request(profile_img_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response:
+                    img_data = response.read()
+                profile_image = ImageReader(io.BytesIO(img_data))
+                c.drawImage(profile_image, width - 80, height - 100, width=50, height=50)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Could not load doctor profile image: {e}")
         
         # Doctor Info
         c.setFont("Helvetica-Bold", 12)

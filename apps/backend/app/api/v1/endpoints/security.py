@@ -96,6 +96,21 @@ async def enroll_face_endpoint(
             )
             db.add(profile)
             
+        # Upload as profile image if none exists
+        user_result = await db.execute(select(User).where(User.id == current_user.id))
+        user_obj = user_result.scalar_one_or_none()
+        if user_obj and not getattr(user_obj, 'profile_image_url', None) and temp_files:
+            from app.services.storage import StorageService
+            with open(temp_files[0], 'rb') as f:
+                first_img_bytes = f.read()
+            public_url = await StorageService.upload_profile_image(
+                user_id=str(current_user.id),
+                file_bytes=first_img_bytes,
+                filename="face_enroll.jpg",
+                content_type="image/jpeg"
+            )
+            user_obj.profile_image_url = public_url
+            
         # Audit
         audit = AuditLog(
             user_id=current_user.id,
@@ -304,6 +319,21 @@ async def change_face_pin(
                 enrollment_status="COMPLETED"
             )
             db.add(profile)
+            
+        # Upload as profile image if none exists
+        user_result = await db.execute(select(User).where(User.id == current_user.id))
+        user_obj = user_result.scalar_one_or_none()
+        if user_obj and not getattr(user_obj, 'profile_image_url', None) and temp_files:
+            from app.services.storage import StorageService
+            with open(temp_files[0], 'rb') as f:
+                first_img_bytes = f.read()
+            public_url = await StorageService.upload_profile_image(
+                user_id=str(current_user.id),
+                file_bytes=first_img_bytes,
+                filename="face_enroll.jpg",
+                content_type="image/jpeg"
+            )
+            user_obj.profile_image_url = public_url
             
         audit = AuditLog(
             user_id=current_user.id,

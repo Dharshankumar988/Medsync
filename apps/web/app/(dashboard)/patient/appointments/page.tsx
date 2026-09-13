@@ -103,7 +103,7 @@ export default function AppointmentsPage() {
           const doctorIds = [...new Set(apptData.map((a: any) => a.doctor_id))];
           const { data: docData } = await supabase
             .from("doctors")
-            .select("*")
+            .select("*, users(profile_image_url)")
             .in("user_id", doctorIds);
 
           const docsMap = (docData || []).reduce((acc: any, doc: any) => {
@@ -116,7 +116,7 @@ export default function AppointmentsPage() {
               ...a,
               doctor_name: docsMap[a.doctor_id]?.full_name,
               doctor_specialization: docsMap[a.doctor_id]?.specialization,
-              doctor_picture: docsMap[a.doctor_id]?.profile_picture_url,
+              doctor_picture: docsMap[a.doctor_id]?.users?.profile_image_url || docsMap[a.doctor_id]?.profile_picture_url,
               hospital_name: docsMap[a.doctor_id]?.hospital_name,
             }))
           );
@@ -141,8 +141,11 @@ export default function AppointmentsPage() {
 
   const loadAllDoctors = useCallback(async () => {
     try {
-      const { data } = await supabase.from("doctors").select("*");
-      setAllDoctors(data || []);
+      const { data } = await supabase.from("doctors").select("*, users(profile_image_url)");
+      setAllDoctors((data || []).map((d: any) => ({
+        ...d,
+        profile_picture_url: d.users?.profile_image_url || d.profile_picture_url,
+      })));
     } catch {
       setAllDoctors([]);
     }
@@ -167,7 +170,7 @@ export default function AppointmentsPage() {
       // Fallback: load doctors by hospital_id from supabase
       const { data } = await supabase
         .from("doctors")
-        .select("*")
+        .select("*, users(profile_image_url)")
         .eq("hospital_id", hospital.id);
       setHospitalDoctors(
         (data || []).map((d: any) => ({
@@ -176,7 +179,7 @@ export default function AppointmentsPage() {
           specialization: d.specialization,
           consultation_fee: d.consultation_fee,
           experience_years: d.experience_years,
-          profile_picture_url: d.profile_picture_url,
+          profile_picture_url: d.users?.profile_image_url || d.profile_picture_url,
           bio: d.bio,
         }))
       );
@@ -398,9 +401,13 @@ export default function AppointmentsPage() {
                             onClick={() => handleSelectDoctor({ ...d, user_id: d.user_id })}
                             className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04] cursor-pointer transition-all group"
                           >
-                            <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 shrink-0">
-                              <User className="h-5 w-5 text-emerald-500" />
-                            </div>
+                            {d.profile_picture_url ? (
+                              <img src={d.profile_picture_url} alt="Doctor" className="h-10 w-10 rounded-xl object-cover shrink-0 border border-border" />
+                            ) : (
+                              <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 shrink-0">
+                                <User className="h-5 w-5 text-emerald-500" />
+                              </div>
+                            )}
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-sm truncate">Dr. {d.full_name}</p>
                               <p className="text-xs text-muted-foreground truncate">
@@ -436,9 +443,13 @@ export default function AppointmentsPage() {
                           onClick={() => handleSelectDoctor(d)}
                           className="flex items-center gap-4 p-4 rounded-xl border border-border/60 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04] cursor-pointer transition-all group"
                         >
-                          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 shrink-0">
-                            <Stethoscope className="h-6 w-6 text-emerald-500" />
-                          </div>
+                          {d.profile_picture_url ? (
+                            <img src={d.profile_picture_url} alt="Doctor" className="h-12 w-12 rounded-xl object-cover shrink-0 border border-border" />
+                          ) : (
+                            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 shrink-0">
+                              <Stethoscope className="h-6 w-6 text-emerald-500" />
+                            </div>
+                          )}
                           <div className="flex-1">
                             <p className="font-semibold">Dr. {d.full_name}</p>
                             <p className="text-sm text-muted-foreground">
@@ -471,9 +482,13 @@ export default function AppointmentsPage() {
 
                   <div className="p-4 rounded-xl bg-emerald-500/[0.04] border border-emerald-500/20">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                        <Stethoscope className="h-5 w-5 text-emerald-500" />
-                      </div>
+                      {selectedDoctor?.profile_picture_url ? (
+                        <img src={selectedDoctor.profile_picture_url} alt="Doctor" className="h-10 w-10 rounded-xl object-cover shrink-0 border border-border" />
+                      ) : (
+                        <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                          <Stethoscope className="h-5 w-5 text-emerald-500" />
+                        </div>
+                      )}
                       <div>
                         <p className="font-semibold">Dr. {selectedDoctor?.full_name}</p>
                         <p className="text-xs text-muted-foreground">

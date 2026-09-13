@@ -17,7 +17,10 @@ class PrescriptionService:
         doctor = next((u for u in users if u.id == doctor_id), None)
         patient = next((u for u in users if u.id == req.patient_id), None)
         
-        doctor_data = {"name": f"{doctor.first_name} {doctor.last_name}" if doctor else "Unknown"}
+        doctor_data = {
+            "name": f"{doctor.first_name} {doctor.last_name}" if doctor else "Unknown",
+            "profile_image_url": getattr(doctor, 'profile_image_url', None) if doctor else None
+        }
         patient_data = {"name": f"{patient.first_name} {patient.last_name}" if patient else "Unknown", "id": str(patient.id) if patient else ""}
 
         # 2. Pre-generate ID and secure Verification Token
@@ -61,6 +64,7 @@ class PrescriptionService:
             "appointment_id": req.appointment_id,
             "patient_id": req.patient_id,
             "doctor_id": doctor_id,
+            "doctor_profile_image_url": doctor_data["profile_image_url"],
             "diagnosis": req.diagnosis,
             "notes": req.notes,
             "is_finalized": True,
