@@ -65,7 +65,7 @@ export function ProfileWizardModal({ isOpen, onClose, userId, role, onComplete }
     } finally {
       setIsLoading(false);
     }
-  }, [formData, userId, onComplete, onClose, calculatePercentage]);
+  }, [formData, userId, onComplete, onClose, calculatePercentage, queryClient]);
 
   const renderCommonFields = () => (
     <form onSubmit={(e) => { e.preventDefault(); setStep(2); }} className="space-y-6 animate-in fade-in zoom-in-95">

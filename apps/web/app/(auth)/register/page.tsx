@@ -11,7 +11,7 @@ import { Input } from "@medsync/ui";
 import { 
   Activity, Loader2, UserPlus, LockKeyhole, Mail, User, 
   Eye, EyeOff, Shield, Heart, Stethoscope, Pill, 
-  CheckCircle2, AlertTriangle, Building2, Phone, BriefcaseMedical, Brain 
+  CheckCircle2, AlertTriangle, Building2, Building, Phone, BriefcaseMedical, Brain 
 } from "lucide-react";
 import { Alert, AlertDescription } from "@medsync/ui";
 import Link from "next/link";

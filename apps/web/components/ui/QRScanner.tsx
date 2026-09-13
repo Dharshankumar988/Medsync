@@ -73,6 +73,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
         scannerRef.current.stop().catch(console.error);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onScan]);
 
   return (
