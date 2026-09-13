@@ -19,9 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add profile image columns."""
-    op.add_column('users', sa.Column('profile_image_url', sa.String(1024), nullable=True))
-    op.add_column('prescriptions', sa.Column('doctor_profile_image_url', sa.String(1024), nullable=True))
+    """Add profile image columns (idempotent)."""
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_url VARCHAR(1024)")
+    op.execute("ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS doctor_profile_image_url VARCHAR(1024)")
 
 
 def downgrade() -> None:
