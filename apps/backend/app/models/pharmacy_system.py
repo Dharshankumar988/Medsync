@@ -96,6 +96,14 @@ class DeliveryTracking(Base, UUIDMixin, TimestampMixin):
     delivery_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     delivery_eta: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     delivery_progress: Mapped[int] = mapped_column(Integer, default=0)
+
+class DeliveryOTP(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "delivery_otps"
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_orders.id", ondelete="CASCADE"), index=True, unique=True, nullable=False)
+    otp_code: Mapped[str] = mapped_column(String(4), nullable=False)
+    is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
     delivery_code_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     delivery_code_expiry: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     delivery_simulation: Mapped[str | None] = mapped_column(Text, nullable=True)

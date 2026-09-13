@@ -120,11 +120,17 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         )
         db.add(vreq)
     elif payload.role == UserRole.PHARMACY:
+        location_data = None
+        if payload.latitude is not None and payload.longitude is not None:
+            location_data = {"lat": payload.latitude, "lng": payload.longitude}
+            
         profile = Pharmacy(
             user_id=new_user.id,
             business_name=payload.business_name or payload.full_name,
             license_number=payload.license_number or f"LIC-PHM-{str(new_user.id)[:8]}",
-            contact_number=payload.contact_number
+            contact_number=payload.contact_number,
+            address=payload.clinic_address or payload.hospital_address, # Fallback to clinic_address/hospital_address if payload uses those
+            location=location_data
         )
         db.add(profile)
         # Create verification request

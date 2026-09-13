@@ -38,8 +38,8 @@ export const DeliveryMap = memo(function DeliveryMap({ orderId, patientAddress, 
   const currentPos: [number, number] = [currentLat, currentLng];
 
   useEffect(() => {
-    const totalTime = 8000; // 8 seconds for animation
-    const updateInterval = 100;
+    const totalTime = 600000; // 10 minutes in real-time
+    const updateInterval = 1000; // Update every 1 second
     const steps = totalTime / updateInterval;
     let currentStep = 0;
 

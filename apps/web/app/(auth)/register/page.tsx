@@ -74,6 +74,7 @@ export default function RegisterPage() {
 
   const [businessName, setBusinessName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+  const [pharmacyAddress, setPharmacyAddress] = useState("");
 
   useEffect(() => {
     if (role === "DOCTOR" && doctorPracticeType === "HOSPITAL") {
@@ -119,25 +120,26 @@ export default function RegisterPage() {
         return;
       }
     }
-    if (role === "PHARMACY" && (!businessName || !licenseNumber || !contactNumber)) {
-      setError("Business Name, License Number, and Contact Number are required for pharmacies.");
+    if (role === "PHARMACY" && (!businessName || !licenseNumber || !contactNumber || !latitude)) {
+      setError("Business Name, License Number, Contact Number, and Map Location are required for pharmacies.");
       return;
     }
 
     setIsLoading(true);
 
     try {
+      // Perform registration using Auth service which integrates with Supabase
       const response = await authService.register({
-        full_name: fullName,
         email,
         password,
-        role,
-        license_number: role !== "PATIENT" ? licenseNumber : undefined,
+        role: selectedRole.value,
+        full_name: fullName,
+        license_number: role === "DOCTOR" || role === "PHARMACY" ? licenseNumber : undefined,
         hospital_id: role === "DOCTOR" && doctorPracticeType === "HOSPITAL" ? selectedHospitalId : undefined,
         clinic_name: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? clinicName : undefined,
-        clinic_address: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? clinicAddress : undefined,
-        latitude: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? latitude : undefined,
-        longitude: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? longitude : undefined,
+        clinic_address: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? clinicAddress : (role === "PHARMACY" ? pharmacyAddress : undefined),
+        latitude: (role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? latitude : undefined,
+        longitude: (role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? longitude : undefined,
         business_name: role === "PHARMACY" ? businessName : undefined,
         contact_number: role === "PHARMACY" ? contactNumber : undefined,
       });
@@ -474,6 +476,17 @@ export default function RegisterPage() {
                           className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                         />
                       </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground/80">Pharmacy Location (Map)</label>
+                      <LocationPickerMap 
+                        onLocationSelect={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} 
+                        onAddressFound={(addr) => { if(!pharmacyAddress) setPharmacyAddress(addr); }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground/80">Pharmacy Address</label>
+                      <Input value={pharmacyAddress} onChange={e => setPharmacyAddress(e.target.value)} placeholder="123 Pharma St" className="h-12 bg-background border-input" required disabled={isLoading} />
                     </div>
                   </motion.div>
                 )}

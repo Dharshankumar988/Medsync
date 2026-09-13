@@ -84,10 +84,6 @@ async def dispatch_order(
         )
         db.add(tracking)
         
-    # Generate OTP
-    otp = str(random.randint(100000, 999999))
-    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
-    
     # Assign simulated driver
     drivers = [
         ("Rahul Kumar", "https://api.dicebear.com/7.x/avataaars/svg?seed=Rahul", "KA-01-AB-1234", "Electric Bike"),
@@ -100,9 +96,6 @@ async def dispatch_order(
     # Simulation Start Parameters (Bangalore coords)
     tracking.delivery_started_at = datetime.utcnow()
     tracking.delivery_eta = datetime.utcnow() + timedelta(minutes=15)
-    tracking.delivery_progress = 0
-    tracking.current_status = "OUT_FOR_DELIVERY"
-    
     tracking.driver_name = driver[0]
     tracking.driver_avatar = driver[1]
     tracking.vehicle_number = driver[2]
@@ -118,22 +111,32 @@ async def dispatch_order(
     tracking.current_latitude = tracking.start_latitude
     tracking.current_longitude = tracking.start_longitude
     
+    # Generate 4-digit OTP and store in secure delivery_otps table
+    import secrets
+    otp = str(secrets.SystemRandom().randint(1000, 9999))
+    
+    otp_record = DeliveryOTP(
+        order_id=order_id,
+        otp_code=otp,
+        is_used=False,
+        expires_at=datetime.utcnow() + timedelta(minutes=15)
+    )
+    db.add(otp_record)
+    
+    # Also set hash for backwards compatibility if needed
+    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
     tracking.delivery_code_hash = otp_hash
     tracking.delivery_code_expiry = datetime.utcnow() + timedelta(minutes=15)
     
     # Update order status
-    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
-    order_res = await db.execute(order_stmt)
-    order = order_res.scalar_one_or_none()
-    if order:
-        order.status = OrderStatus.OUT_FOR_DELIVERY
+    order.status = OrderStatus.OUT_FOR_DELIVERY
 
     await db.commit()
     
     return APIResponse(
         message="Order dispatched successfully.",
         data={
-            "otp": otp, # In a real app this is sent via SMS, but we return it here for simulation testing
+            "otp": otp, # Return for testing/simulation
             "driver_name": driver[0],
             "vehicle": driver[3]
         }
@@ -142,45 +145,70 @@ async def dispatch_order(
 @router.get("/{order_id}/tracking", response_model=APIResponse)
 async def get_tracking(
     order_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(RoleChecker([UserRole.PATIENT, UserRole.PHARMACY]))
 ):
+    # Verify order ownership
+    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
+    order_res = await db.execute(order_stmt)
+    order = order_res.scalar_one_or_none()
+    
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    if current_user.role == UserRole.PATIENT and order.patient_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to track this order")
+    elif current_user.role == UserRole.PHARMACY and order.pharmacy_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to track this order")
+        
     stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
     result = await db.execute(stmt)
     tracking = result.scalar_one_or_none()
     
     if not tracking:
-        return APIResponse(message="No tracking found", data=None)
+        return APIResponse(message="No tracking info available yet", data=None)
+        
+    # Get OTP if patient
+    otp_data = None
+    if current_user.role == UserRole.PATIENT:
+        otp_stmt = select(DeliveryOTP).where(DeliveryOTP.order_id == order_id)
+        otp_res = await db.execute(otp_stmt)
+        otp_record = otp_res.scalar_one_or_none()
+        if otp_record and not otp_record.is_used:
+            otp_data = {"code": otp_record.otp_code}
         
     return APIResponse(
-        message="Tracking info retrieved",
+        message="Tracking retrieved successfully",
         data={
+            "tracking_number": tracking.tracking_number,
             "status": tracking.current_status,
-            "started_at": tracking.delivery_started_at,
             "eta": tracking.delivery_eta,
             "driver_name": tracking.driver_name,
             "driver_avatar": tracking.driver_avatar,
-            "vehicle_type": tracking.vehicle_type,
-            "vehicle_number": tracking.vehicle_number,
-            "speed": tracking.delivery_speed,
-            "start_lat": tracking.start_latitude,
-            "start_lng": tracking.start_longitude,
-            "end_lat": tracking.end_latitude,
-            "end_lng": tracking.end_longitude,
-            "current_lat": tracking.current_latitude,
-            "current_lng": tracking.current_longitude,
-            "has_otp": bool(tracking.delivery_code_hash)
+            "vehicle": tracking.vehicle_number,
+            "start_coords": [tracking.start_latitude, tracking.start_longitude],
+            "end_coords": [tracking.end_latitude, tracking.end_longitude],
+            "current_coords": [tracking.current_latitude, tracking.current_longitude],
+            "progress": tracking.delivery_progress,
+            "otp": otp_data
         }
     )
+
+class DeliveryVerification(BaseModel):
+    otp: str
 
 @router.post("/{order_id}/verify-delivery", response_model=APIResponse)
 async def verify_delivery(
     order_id: uuid.UUID,
-    req: VerifyDeliveryRequest,
+    req: DeliveryVerification,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.PHARMACY]))
 ):
     # Verify order ownership
-    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id).with_for_update()
+    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
     order_res = await db.execute(order_stmt)
     order = order_res.scalar_one_or_none()
     
@@ -190,40 +218,45 @@ async def verify_delivery(
         
     if order.pharmacy_id != current_user.id:
         from app.core.exceptions import ForbiddenException
-        raise ForbiddenException("Unauthorized to verify delivery for this order")
+        raise ForbiddenException("Unauthorized to verify this order")
         
-    if order.status != OrderStatus.OUT_FOR_DELIVERY:
-        return APIResponse(message="Cannot verify delivery: order is not out for delivery", data=None, status_code=400)
-
-    stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
+    stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id).with_for_update()
     result = await db.execute(stmt)
     tracking = result.scalar_one_or_none()
     
-    if not tracking or not tracking.delivery_code_hash:
-        return APIResponse(message="Tracking not found or no OTP set", data=None, status_code=400)
+    if not tracking:
+        return APIResponse(message="Tracking not found", data=None, status_code=400)
         
     if tracking.current_status == "DELIVERED":
         return APIResponse(message="Order already delivered", data=None, status_code=400)
         
-    if datetime.utcnow() > tracking.delivery_code_expiry:
+    # Check secure delivery_otps table
+    otp_stmt = select(DeliveryOTP).where(DeliveryOTP.order_id == order_id).with_for_update()
+    otp_res = await db.execute(otp_stmt)
+    otp_record = otp_res.scalar_one_or_none()
+    
+    if not otp_record:
+        return APIResponse(message="No OTP set for this order", data=None, status_code=400)
+        
+    if otp_record.is_used:
+        return APIResponse(message="OTP has already been used", data=None, status_code=400)
+        
+    if datetime.utcnow() > otp_record.expires_at:
         return APIResponse(message="OTP has expired", data=None, status_code=400)
         
-    req_hash = hashlib.sha256(req.otp.encode()).hexdigest()
-    if req_hash != tracking.delivery_code_hash:
+    if req.otp != otp_record.otp_code:
         return APIResponse(message="Invalid OTP", data=None, status_code=400)
+        
+    # Mark OTP as used
+    otp_record.is_used = True
         
     # Mark as delivered
     tracking.current_status = "DELIVERED"
     tracking.delivery_completed_at = datetime.utcnow()
-    tracking.delivery_code_hash = None # Clear OTP
     tracking.delivery_progress = 100
     
     # Update order
-    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
-    order_res = await db.execute(order_stmt)
-    order = order_res.scalar_one_or_none()
-    if order:
-        order.status = OrderStatus.DELIVERED
+    order.status = OrderStatus.DELIVERED
         
     await db.commit()
     
@@ -259,10 +292,25 @@ async def generate_delivery_code(
     # Generate new OTP using cryptographically secure generator
     import secrets
     otp = str(secrets.SystemRandom().randint(1000, 9999)) # 4-digit code requested by user
-    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
     
-    tracking.delivery_code_hash = otp_hash
-    tracking.delivery_code_expiry = datetime.utcnow() + timedelta(minutes=15)
+    # Upsert into delivery_otps
+    otp_stmt = select(DeliveryOTP).where(DeliveryOTP.order_id == order_id).with_for_update()
+    otp_res = await db.execute(otp_stmt)
+    otp_record = otp_res.scalar_one_or_none()
+    
+    if otp_record:
+        otp_record.otp_code = otp
+        otp_record.is_used = False
+        otp_record.expires_at = datetime.utcnow() + timedelta(minutes=15)
+        otp_record.updated_at = datetime.utcnow()
+    else:
+        otp_record = DeliveryOTP(
+            order_id=order_id,
+            otp_code=otp,
+            is_used=False,
+            expires_at=datetime.utcnow() + timedelta(minutes=15)
+        )
+        db.add(otp_record)
     
     await db.commit()
     
