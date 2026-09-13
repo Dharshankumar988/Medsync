@@ -551,7 +551,7 @@ INSERT INTO public.medical_record_categories (id, name, description) VALUES
 ('2a988ac7-411b-4bf2-9a86-9213e92e0b8b', 'Lab Reports', 'Laboratory test results') ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO public.medical_records (id, patient_id, uploaded_by, category_id, title, description, created_at, updated_at) VALUES
-('3edad050-ca2f-4e19-83f3-97bab710443a', '1c000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', '2a988ac7-411b-4bf2-9a86-9213e92e0b8b', 'Complete Blood Count (CBC)', 'Routine CBC panel ordered by Dr. Sharma', '2026-09-12 12:32:40', '2026-09-12 12:32:40');
+('3edad050-ca2f-4e19-83f3-97bab710443a', '1c000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', (SELECT id FROM public.medical_record_categories WHERE name = 'Lab Reports' LIMIT 1), 'Complete Blood Count (CBC)', 'Routine CBC panel ordered by Dr. Sharma', '2026-09-12 12:32:40', '2026-09-12 12:32:40');
 
 INSERT INTO public.medical_record_versions (id, record_id, version_number, ipfs_cid, file_type, file_size_bytes, change_description, is_current, blockchain_status, blockchain_tx_hash) VALUES
 ('a4e2d557-4888-46ac-930c-83a5ef241f3c', '3edad050-ca2f-4e19-83f3-97bab710443a', 1, 'QmTestCIDForLocalMockBlockchain1234567890abcdef', 'application/pdf', 102400, 'Initial upload', TRUE, 'CONFIRMED', '0xabc123mocktxhash4567890');
