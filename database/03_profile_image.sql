@@ -10,22 +10,12 @@ ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS doctor_profile_image_url VARC
 
 -- 3. Seed default images for specified test accounts
 
--- Doctor 1
+-- Doctor
 UPDATE users 
 SET profile_image_url = 'https://randomuser.me/api/portraits/men/32.jpg'
-WHERE email = 'doctor1@medsync.com';
+WHERE email = 'doctor@example.com';
 
--- Doctor 2
-UPDATE users 
-SET profile_image_url = 'https://randomuser.me/api/portraits/women/44.jpg'
-WHERE email = 'doctor2@medsync.com';
-
--- Patient 1
+-- Patient
 UPDATE users 
 SET profile_image_url = 'https://randomuser.me/api/portraits/men/11.jpg'
-WHERE email = 'patient1@medsync.com';
-
--- Patient 2
-UPDATE users 
-SET profile_image_url = 'https://randomuser.me/api/portraits/women/68.jpg'
-WHERE email = 'patient2@medsync.com';
+WHERE email = 'patient@example.com';

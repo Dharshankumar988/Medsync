@@ -9,7 +9,13 @@ from app.blockchain.workers.inventory_worker import process_restock_orders
 
 logger = logging.getLogger("blockchain.scheduler")
 
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(
+    job_defaults={
+        'coalesce': True,           # Merge missed runs into a single execution
+        'max_instances': 1,         # Prevent overlapping runs of the same job
+        'misfire_grace_time': 30,   # Allow jobs to run up to 30s late without warning
+    }
+)
 
 def start_scheduler():
     from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
@@ -36,22 +42,21 @@ def start_scheduler():
         replace_existing=True
     )
     
-    # Process events from the Database Event Queue every 5 seconds
+    # Process events from the Database Event Queue every 10 seconds
     scheduler.add_job(
         sync_events,
-        trigger=IntervalTrigger(seconds=5),
+        trigger=IntervalTrigger(seconds=10),
         id="event_worker",
-        replace_existing=True,
-        max_instances=1
+        replace_existing=True
     )
     
     # Start the background long-running block listener
     start_event_listener()
     
-    # Process inventory restock orders every 15 seconds
+    # Process inventory restock orders every 30 seconds
     scheduler.add_job(
         process_restock_orders,
-        trigger=IntervalTrigger(seconds=15),
+        trigger=IntervalTrigger(seconds=30),
         id="restock_worker",
         replace_existing=True
     )
