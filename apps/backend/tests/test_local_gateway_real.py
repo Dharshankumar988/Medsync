@@ -66,14 +66,13 @@ def main():
     except Exception as e:
         print(f"[ERROR] PrescriptionRegistry failed: {e}")
 
-    # 4. Test AuditTrail
-    print("\n--- Testing AuditTrail ---")
+    # 4. Test ConsentManagement
+    print("\n--- Testing ConsentManagement ---")
     try:
-        receipt = gateway.write_contract("AuditTrail", "logEvent", patient_hash, record_hash)
-        print(f"[SUCCESS] logEvent Tx: {receipt['transactionHash']}")
-        # AuditTrail.logEvent just logs an event, it doesn't return state data
+        receipt = gateway.write_contract("ConsentManagement", "grantConsent", patient_hash, doctor_hash)
+        print(f"[SUCCESS] grantConsent Tx: {receipt['transactionHash']}")
     except Exception as e:
-        print(f"[ERROR] AuditTrail failed: {e}")
+        print(f"[ERROR] ConsentManagement failed: {e}")
 
 if __name__ == "__main__":
     main()

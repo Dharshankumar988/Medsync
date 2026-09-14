@@ -1,10 +1,10 @@
 {
   "contractName": "DoctorRegistry",
-  "address": "0x047D689FBea8d4C351A366cAAe3dB3836B2bE190",
+  "address": "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
   "version": 1,
-  "timestamp": "2026-08-26T10:38:22.258Z",
-  "transactionHash": "0x6a5568a577aff44b23f3df3e1daa7fbfa317399fc5ab9bf657ea484686d54114",
-  "blockNumber": 45922259,
+  "timestamp": "2026-09-14T08:55:57.483Z",
+  "transactionHash": "0x350abd500b3535f312772ca34a5a70a6346891e76f526e5289e564e0becd88a5",
+  "blockNumber": 47553987,
   "deployer": "0x6EC559064e5BfAE4a98d1879c717139aceE49822",
   "network": "amoy",
   "chainId": 80002

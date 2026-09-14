@@ -101,16 +101,6 @@ class BlockchainGateway:
     def verify_pharmacy(self, pharmacy_hash: bytes) -> TransactionReceiptResult:
         return self.write_contract("PharmacyRegistry", "verifyPharmacy", pharmacy_hash)
 
-    def log_audit_event(self, event_type: bytes, entity_hash: bytes) -> TransactionReceiptResult:
-        # Enforce exact 32 bytes for bytes32
-        if len(event_type) < 32:
-            event_type = event_type.ljust(32, b'\x00')
-        elif len(event_type) > 32:
-            raise ValueError(f"event_type must be <= 32 bytes to fit in bytes32 ABI, got {len(event_type)}")
-            
-        if len(entity_hash) != 32:
-            raise ValueError(f"entity_hash must be exactly 32 bytes for bytes32 ABI, got {len(entity_hash)}")
-            
-        return self.write_contract("AuditTrail", "logEvent", event_type, entity_hash)
+
 
 blockchain_gateway = BlockchainGateway()

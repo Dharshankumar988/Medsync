@@ -14,7 +14,7 @@ async function main() {
   const balance = await hre.ethers.provider.getBalance(deployer.address);
   console.log(`Deployer balance: ${hre.ethers.formatEther(balance)} POL`);
 
-  const contractsToCheck = ["AuditTrail", "PatientRegistry", "DoctorRegistry", "PharmacyRegistry", "MedicalRecordRegistry", "PrescriptionRegistry"];
+  const contractsToCheck = ["ConsentManagement", "PatientRegistry", "DoctorRegistry", "PharmacyRegistry", "MedicalRecordRegistry", "PrescriptionRegistry"];
   for (const contractName of contractsToCheck) {
     const address = getContractAddress(hre.network.name, contractName);
     if (address) {

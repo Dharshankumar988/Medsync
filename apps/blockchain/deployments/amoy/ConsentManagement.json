@@ -1,0 +1,11 @@
+{
+  "contractName": "ConsentManagement",
+  "address": "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+  "version": 1,
+  "timestamp": "2026-09-14T08:54:45.874Z",
+  "transactionHash": "0x054be44a1ac4a8e12040485c707c1d3e6aa3669fea2d1d5b6621a1c9389f7a5f",
+  "blockNumber": 47553915,
+  "deployer": "0x6EC559064e5BfAE4a98d1879c717139aceE49822",
+  "network": "amoy",
+  "chainId": 80002
+}

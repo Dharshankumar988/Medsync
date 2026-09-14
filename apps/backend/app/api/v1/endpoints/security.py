@@ -100,16 +100,20 @@ async def enroll_face_endpoint(
         user_result = await db.execute(select(User).where(User.id == current_user.id))
         user_obj = user_result.scalar_one_or_none()
         if user_obj and not getattr(user_obj, 'profile_image_url', None) and temp_files:
-            from app.services.storage import StorageService
-            with open(temp_files[0], 'rb') as f:
-                first_img_bytes = f.read()
-            public_url = await StorageService.upload_profile_image(
-                user_id=str(current_user.id),
-                file_bytes=first_img_bytes,
-                filename="face_enroll.jpg",
-                content_type="image/jpeg"
-            )
-            user_obj.profile_image_url = public_url
+            try:
+                from app.services.storage import StorageService, StorageServiceError
+                with open(temp_files[0], 'rb') as f:
+                    first_img_bytes = f.read()
+                public_url = await StorageService.upload_profile_image(
+                    user_id=str(current_user.id),
+                    file_bytes=first_img_bytes,
+                    filename="face_enroll.jpg",
+                    content_type="image/jpeg"
+                )
+                user_obj.profile_image_url = public_url
+            except Exception as se:
+                import logging
+                logging.getLogger("medsync.security").warning(f"Could not upload profile image during face enrollment: {se}")
             
         # Audit
         audit = AuditLog(
@@ -126,6 +130,8 @@ async def enroll_face_endpoint(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import logging
+        logging.getLogger("medsync.security").error(f"Error during face enrollment: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An error occurred during face enrollment.")
     finally:
         for tmp_file in temp_files:
@@ -324,16 +330,20 @@ async def change_face_pin(
         user_result = await db.execute(select(User).where(User.id == current_user.id))
         user_obj = user_result.scalar_one_or_none()
         if user_obj and not getattr(user_obj, 'profile_image_url', None) and temp_files:
-            from app.services.storage import StorageService
-            with open(temp_files[0], 'rb') as f:
-                first_img_bytes = f.read()
-            public_url = await StorageService.upload_profile_image(
-                user_id=str(current_user.id),
-                file_bytes=first_img_bytes,
-                filename="face_enroll.jpg",
-                content_type="image/jpeg"
-            )
-            user_obj.profile_image_url = public_url
+            try:
+                from app.services.storage import StorageService
+                with open(temp_files[0], 'rb') as f:
+                    first_img_bytes = f.read()
+                public_url = await StorageService.upload_profile_image(
+                    user_id=str(current_user.id),
+                    file_bytes=first_img_bytes,
+                    filename="face_enroll.jpg",
+                    content_type="image/jpeg"
+                )
+                user_obj.profile_image_url = public_url
+            except Exception as se:
+                import logging
+                logging.getLogger("medsync.security").warning(f"Could not upload profile image during change face ID: {se}")
             
         audit = AuditLog(
             user_id=current_user.id,

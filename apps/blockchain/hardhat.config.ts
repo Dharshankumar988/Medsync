@@ -24,9 +24,17 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
-    hardhat: {},
+    hardhat: {
+      accounts: deployPrivateKey ? [
+        {
+          privateKey: deployPrivateKey.startsWith("0x") ? deployPrivateKey : "0x" + deployPrivateKey,
+          balance: "10000000000000000000000",
+        }
+      ] : undefined,
+    },
     localhost: {
       url: "http://127.0.0.1:8545",
+      accounts: deployPrivateKey ? [deployPrivateKey.startsWith("0x") ? deployPrivateKey : "0x" + deployPrivateKey] : [],
     },
     amoy: {
       url: polygonAmoyRpcUrl,

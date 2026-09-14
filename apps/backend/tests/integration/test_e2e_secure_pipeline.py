@@ -232,30 +232,8 @@ async def test_e2e_patient_registration(monkeypatch):
     
     # Polygon Read Verification
     read_receipt = blockchain_gateway.verify_patient(patient_hash)
-    assert read_receipt is not None
     assert read_receipt["status"] == 1, "Patient verification transaction failed"
     
     tx_hash_str = receipt['transactionHash'].hex() if isinstance(receipt['transactionHash'], bytes) else str(receipt['transactionHash'])
     print(f"\n[REPORT] PATIENT REGISTRATION TX Hash: {tx_hash_str}")
-
-@pytest.mark.asyncio
-async def test_e2e_audit_logging(monkeypatch):
-    """Phase 5 - Validate Audit Entry creation on real blockchain"""
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv("BLOCKCHAIN_MODE", "real")
-    
-    from app.blockchain.client import blockchain_client
-    blockchain_client._initialize()
-    
-    event_type = b"TEST_AUDIT_EVENT"
-    entity_hash = bytes.fromhex(generate_sha256_hash(b"test_entity_e2e_audit"))
-    
-    # Polygon Audit Logging
-    receipt = blockchain_gateway.log_audit_event(event_type, entity_hash)
-    assert receipt is not None
-    assert receipt["status"] == 1
-    
-    tx_hash_str = receipt['transactionHash'].hex() if isinstance(receipt['transactionHash'], bytes) else str(receipt['transactionHash'])
-    print(f"\n[REPORT] AUDIT LOGGING TX Hash: {tx_hash_str}")
-
 

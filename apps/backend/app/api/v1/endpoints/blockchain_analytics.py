@@ -63,13 +63,14 @@ async def blockchain_analytics() -> APIResponse[dict]:
     except Exception:
         connected = False
 
+    import os
     contract_addresses = [
-        ("Doctor Registry", blockchain_settings.DOCTOR_REGISTRY_ADDRESS),
-        ("Pharmacy Registry", blockchain_settings.PHARMACY_REGISTRY_ADDRESS),
-        ("Medical Records", blockchain_settings.RECORD_REGISTRY_ADDRESS),
-        ("Prescription Registry", blockchain_settings.PRESCRIPTION_REGISTRY_ADDRESS),
-        ("Consent Manager", blockchain_settings.CONSENT_MANAGER_ADDRESS),
-        ("Audit Logger", blockchain_settings.AUDIT_LOGGER_ADDRESS),
+        ("Patient Registry", os.getenv("PATIENT_REGISTRY_ADDRESS") or os.getenv("PATIENTREGISTRY_ADDRESS", "")),
+        ("Doctor Registry", os.getenv("DOCTOR_REGISTRY_ADDRESS") or os.getenv("DOCTORREGISTRY_ADDRESS", "")),
+        ("Pharmacy Registry", os.getenv("PHARMACY_REGISTRY_ADDRESS") or os.getenv("PHARMACYREGISTRY_ADDRESS", "")),
+        ("Medical Records", os.getenv("RECORD_REGISTRY_ADDRESS") or os.getenv("MEDICALRECORDREGISTRY_ADDRESS", "")),
+        ("Prescription Registry", os.getenv("PRESCRIPTION_REGISTRY_ADDRESS") or os.getenv("PRESCRIPTIONREGISTRY_ADDRESS", "")),
+        ("Consent Management", os.getenv("CONSENT_MANAGER_ADDRESS") or os.getenv("CONSENTMANAGEMENT_ADDRESS", "")),
     ]
 
     contract_stats = []

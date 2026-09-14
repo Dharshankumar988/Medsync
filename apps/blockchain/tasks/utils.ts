@@ -20,7 +20,7 @@ task("medsync:show-contracts", "Displays all deployed contract addresses for the
 task("medsync:export-abis", "Exports ABIs from artifacts")
   .setAction(async (taskArgs, hre) => {
     const CONTRACTS_TO_DEPLOY = [
-      "AuditTrail",
+      "ConsentManagement",
       "PatientRegistry",
       "DoctorRegistry",
       "PharmacyRegistry",

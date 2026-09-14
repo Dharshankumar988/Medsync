@@ -119,8 +119,10 @@ export const authService = {
         business_name: data.business_name,
         contact_number: data.contact_number,
       });
-    } catch (syncError) {
-      console.warn("Backend sync notice:", syncError);
+    } catch (syncError: any) {
+      console.error("Backend sync failed:", syncError);
+      const message = syncError.response?.data?.detail || syncError.message || "Failed to synchronize user data with backend.";
+      throw new Error(message);
     }
 
     const user = getUserProfile(authData.user);

@@ -510,13 +510,37 @@ async def get_all_contracts(
 ):
     """Get all loaded smart contracts."""
     contracts = []
-    for name, contract in contract_loader.contracts.items():
-        contracts.append({
-            "name": name,
-            "address": contract.address,
-            "version": "1.0.0", # Could be fetched from a version function if available
-            "health": "LOADED"
-        })
+    
+    # Use addresses dict (populated at startup from contract-addresses.json)
+    # rather than contracts dict (lazily populated only on first access)
+    if contract_loader.addresses:
+        for name, address in contract_loader.addresses.items():
+            contracts.append({
+                "name": name,
+                "address": address,
+                "version": "1.0.0",
+                "health": "LOADED"
+            })
+    else:
+        # Fallback: read from environment variables for mock/portable mode
+        import os
+        env_contracts = {
+            "ConsentManagement": os.getenv("CONSENT_MANAGER_ADDRESS") or os.getenv("CONSENTMANAGEMENT_ADDRESS", ""),
+            "PatientRegistry": os.getenv("PATIENT_REGISTRY_ADDRESS") or os.getenv("PATIENTREGISTRY_ADDRESS", ""),
+            "DoctorRegistry": os.getenv("DOCTOR_REGISTRY_ADDRESS") or os.getenv("DOCTORREGISTRY_ADDRESS", ""),
+            "PharmacyRegistry": os.getenv("PHARMACY_REGISTRY_ADDRESS") or os.getenv("PHARMACYREGISTRY_ADDRESS", ""),
+            "MedicalRecordRegistry": os.getenv("RECORD_REGISTRY_ADDRESS") or os.getenv("MEDICALRECORDREGISTRY_ADDRESS", ""),
+            "PrescriptionRegistry": os.getenv("PRESCRIPTION_REGISTRY_ADDRESS") or os.getenv("PRESCRIPTIONREGISTRY_ADDRESS", ""),
+        }
+        for name, address in env_contracts.items():
+            if address and address != "0x...":
+                contracts.append({
+                    "name": name,
+                    "address": address,
+                    "version": "1.0.0",
+                    "health": "ENV_CONFIGURED"
+                })
+    
     return APIResponse(message="Contracts retrieved", data=contracts)
 
 @router.get("/contracts/{name}", response_model=APIResponse)
@@ -589,8 +613,8 @@ async def get_wallet_details(
         from web3 import Web3
         w3 = Web3(Web3.HTTPProvider("https://rpc-amoy.polygon.technology/"))
         
-        # User requested tracking for this specific wallet
-        address = "0x6EC559064e5BfAE4a98d1879c717139aceE49822"
+        # Use the configured backend wallet address dynamically
+        address = blockchain_client.wallet_address
         
         balance_wei = await asyncio.to_thread(w3.eth.get_balance, address)
         nonce = await asyncio.to_thread(w3.eth.get_transaction_count, address)
@@ -604,7 +628,13 @@ async def get_wallet_details(
         }
         return APIResponse(message="Wallet details retrieved", data=data)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        data = {
+            "address": blockchain_client.wallet_address,
+            "balance_eth": 0.0,
+            "nonce": 0,
+            "status": "degraded"
+        }
+        return APIResponse(message=f"Wallet details degraded: {str(e)}", data=data)
 
 @router.get("/analytics", response_model=APIResponse)
 @limiter.limit("10/minute")

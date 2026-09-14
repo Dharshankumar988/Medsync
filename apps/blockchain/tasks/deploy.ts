@@ -11,7 +11,7 @@ task("medsync:deploy", "Deploys all MedSync smart contracts")
 task("medsync:verify", "Verifies all deployed MedSync contracts on Etherscan")
   .setAction(async (taskArgs, hre) => {
     const CONTRACTS_TO_DEPLOY = [
-      "AuditTrail",
+      "ConsentManagement",
       "PatientRegistry",
       "DoctorRegistry",
       "PharmacyRegistry",

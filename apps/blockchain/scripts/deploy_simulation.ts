@@ -36,11 +36,11 @@ async function main() {
   await pharmacyRegistry.waitForDeployment();
   console.log(`PharmacyRegistry deployed to: ${await pharmacyRegistry.getAddress()}`);
 
-  // Deploy AuditTrail
-  const AuditTrail = await ethers.getContractFactory("AuditTrail");
-  const auditTrail = await AuditTrail.deploy();
-  await auditTrail.waitForDeployment();
-  console.log(`AuditTrail deployed to: ${await auditTrail.getAddress()}`);
+  // Deploy ConsentManagement
+  const ConsentManagement = await ethers.getContractFactory("ConsentManagement");
+  const consentManagement = await ConsentManagement.deploy();
+  await consentManagement.waitForDeployment();
+  console.log(`ConsentManagement deployed to: ${await consentManagement.getAddress()}`);
 
   console.log("Local deployment simulation completed successfully!");
 }

@@ -5,7 +5,7 @@ import { exportABIs } from "./utils/abiExport";
 import { verifyContract } from "./utils/verification";
 
 const CONTRACTS_TO_DEPLOY = [
-  "AuditTrail",
+  "ConsentManagement",
   "PatientRegistry",
   "DoctorRegistry",
   "PharmacyRegistry",

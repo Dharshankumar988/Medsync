@@ -1,8 +1,8 @@
 {
-  "AuditTrail": "0xba3A98a1bE6E395908F1a84B5a473941be55fa17",
-  "PatientRegistry": "0x582a8781C310DbDF03bd4C3dFf5F4cBdc48de1F3",
-  "DoctorRegistry": "0x047D689FBea8d4C351A366cAAe3dB3836B2bE190",
-  "PharmacyRegistry": "0x58553480bEfa6438AA81827854Ab5eEe43631c78",
-  "MedicalRecordRegistry": "0x83Bf7a9E1e14bb1f876a5994c65179705b90FaA5",
-  "PrescriptionRegistry": "0x8acEd4E33d6570735a326aa17de49CE8B6B8E84F"
+  "ConsentManagement": "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+  "PatientRegistry": "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3",
+  "DoctorRegistry": "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+  "PharmacyRegistry": "0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9",
+  "MedicalRecordRegistry": "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+  "PrescriptionRegistry": "0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D"
 }
