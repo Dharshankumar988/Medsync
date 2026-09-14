@@ -15,7 +15,9 @@ class RemoteFaceVerificationProvider:
         self.auth_token = os.getenv("FACE_VERIFICATION_AUTH_TOKEN", "")
         
     def _get_headers(self) -> Dict[str, str]:
-        headers = {}
+        headers = {
+            "ngrok-skip-browser-warning": "true"
+        }
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
         return headers
