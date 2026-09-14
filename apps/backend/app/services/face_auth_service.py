@@ -78,7 +78,10 @@ class RemoteFaceVerificationProvider:
             resp_data = response.json()
             if resp_data.get("error"):
                 logger.error(f"Face service returned error: {resp_data['error']}")
-                # A domain error inside a 200 OK could be bad image quality or missing face
+                if resp_data["error"] in ["FACE_NOT_DETECTED", "POOR_IMAGE_QUALITY", "MULTIPLE_FACES_DETECTED"]:
+                    result["verified"] = False
+                    result["service_error"] = False
+                    return result
                 result["service_error"] = True
                 return result
                 

@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@medsync/ui';
 import { Button } from '@medsync/ui';
 import { Input } from '@medsync/ui';
-import { ShieldCheck, Camera, Loader2, Lock, Key } from 'lucide-react';
-import { SecurityService } from '@/services/security.service';
+import { Lock, Download, KeyRound, Loader2, Camera, UserSquare2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -18,100 +17,93 @@ interface SecureDownloadModalProps {
 }
 
 export default function SecureDownloadModal({ prescriptionId, open, onOpenChange }: SecureDownloadModalProps) {
-  const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
-  const [faceImage, setFaceImage] = useState<File | null>(null);
-  const [faceVerified, setFaceVerified] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-
-  const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-    } catch (err) {
-      console.error("Error accessing camera", err);
-    }
-  };
-
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      setStream(null);
-    }
-  }, [stream]);
+  
+  // Forgot PIN Flow State
+  const [isForgotPin, setIsForgotPin] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [confirmNewPin, setConfirmNewPin] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setPassword('');
       setPin('');
-      setFaceImage(null);
-      setFaceVerified(false);
-      startCamera();
-    } else {
-      stopCamera();
+      setIsForgotPin(false);
+      setNewPin('');
+      setConfirmNewPin('');
     }
-    return () => stopCamera();
-  }, [open, stopCamera]);
+  }, [open]);
 
-  const captureFace = () => {
-    if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext('2d');
-      if (context) {
-        canvasRef.current.width = videoRef.current.videoWidth;
-        canvasRef.current.height = videoRef.current.videoHeight;
-        context.drawImage(videoRef.current, 0, 0);
-
-        canvasRef.current.toBlob(blob => {
-          if (blob) {
-            const file = new File([blob], `auth_face.jpg`, { type: 'image/jpeg' });
-            setFaceImage(file);
-          }
-        }, 'image/jpeg');
-      }
-    }
-  };
-
-  const handleDownload = async () => {
-    if (!prescriptionId || !password || !pin || !faceImage) return;
+  const handleDownloadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prescriptionId || pin.length !== 6) return;
     setIsSubmitting(true);
-
+    
     try {
       const { data: session } = await supabase.auth.getSession();
       if (!session?.session?.access_token) throw new Error("Not authenticated");
-
-      const authRes = await SecurityService.authorizeDownload(
-        session.session.access_token,
-        prescriptionId,
-        pin,
-        password,
-        faceImage
-      );
-
-      const authRef = authRes.data.authorization_reference;
-
-      // Now fetch the actual download URL
+      
+      const formData = new FormData();
+      formData.append('pin', pin);
+      
       const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
-
-      const response = await axios.get(`${apiUrl}/prescriptions/download/${authRef}`);
-      const downloadUrl = response.data.data.url;
-
-      window.open(downloadUrl, '_blank');
-
-      toast.success("Download started securely.");
-      onOpenChange(false);
+      
+      const res = await axios.post(`${apiUrl}/prescriptions/${prescriptionId}/authorize-download`, formData, {
+        headers: { Authorization: `Bearer ${session.session.access_token}` }
+      });
+      
+      if (res.data?.data?.authorization_reference) {
+        const ref = res.data.data.authorization_reference;
+        const dlRes = await axios.get(`${apiUrl}/prescriptions/download/${ref}`, {
+          headers: { Authorization: `Bearer ${session.session.access_token}` }
+        });
+        
+        if (dlRes.data?.data?.url) {
+          window.open(dlRes.data.data.url, '_blank');
+          toast.success("Download authorized successfully.");
+          onOpenChange(false);
+        }
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Authorization failed.");
-      setFaceImage(null);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPinSubmit = async (file: File) => {
+    if (newPin.length !== 6 || newPin !== confirmNewPin) {
+      toast.error("New PIN must be 6 digits and match.");
+      return false;
+    }
+    setIsResetting(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('new_pin', newPin);
+      
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+      
+      await axios.post(`${apiUrl}/security/change-pin-face`, formData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      toast.success("PIN reset successfully! You can now use it to authorize the download.");
+      setIsForgotPin(false);
+      setPin('');
+      return true;
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || "Failed to reset PIN.");
+      return false;
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -120,90 +112,101 @@ export default function SecureDownloadModal({ prescriptionId, open, onOpenChange
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-primary" /> Secure Prescription Access
+            {isForgotPin ? (
+              <><UserSquare2 className="w-5 h-5 text-primary" /> Reset Authorization PIN</>
+            ) : (
+              <><Lock className="w-5 h-5 text-primary" /> Secure Download Authorization</>
+            )}
           </DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <p className="text-sm text-muted-foreground">
-            Prescription documents contain highly sensitive medical information. Please verify your identity.
-          </p>
-
-          <div className="space-y-3">
-            <div className="relative">
-              <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="password"
-                placeholder="Account Password"
-                className="pl-9"
-                value={password}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
-              />
+        
+        {isForgotPin ? (
+          <div className="space-y-6 py-2">
+            <p className="text-sm text-muted-foreground">
+              Verify your identity using your enrolled Face ID to securely create a new PIN.
+            </p>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">New 6-Digit PIN</label>
+                  <Input 
+                    type="password" 
+                    placeholder="••••••" 
+                    className="tracking-widest font-mono text-center text-lg h-12"
+                    maxLength={6}
+                    value={newPin}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Confirm PIN</label>
+                  <Input 
+                    type="password" 
+                    placeholder="••••••" 
+                    className="tracking-widest font-mono text-center text-lg h-12"
+                    maxLength={6}
+                    value={confirmNewPin}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmNewPin(e.target.value.replace(/\D/g, ''))}
+                  />
+                </div>
+              </div>
+              
+              {(newPin.length === 6 && newPin === confirmNewPin) ? (
+                <div className="space-y-2 pt-2 animate-in fade-in slide-in-from-bottom-2">
+                  <label className="text-sm font-medium flex items-center gap-2 text-primary">
+                    <Camera className="w-4 h-4" /> Verify Face to Confirm Reset
+                  </label>
+                  <FaceVerification onVerify={handleForgotPinSubmit} />
+                </div>
+              ) : (
+                <div className="p-4 bg-muted/50 rounded-lg border text-center text-sm text-muted-foreground">
+                  Enter and confirm your new 6-digit PIN to enable the camera.
+                </div>
+              )}
             </div>
-
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="password"
-                placeholder="6-Digit Authorization PIN"
-                className="pl-9 tracking-widest font-mono"
+            
+            <div className="pt-2">
+              <Button variant="outline" className="w-full" onClick={() => setIsForgotPin(false)} disabled={isResetting}>
+                Cancel Reset
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleDownloadSubmit} className="space-y-6 py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              Downloading a prescription requires authorization to ensure your medical records remain private and secure.
+            </p>
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between ml-1">
+                <label className="text-sm font-semibold flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-primary" /> Authorization PIN
+                </label>
+                <button type="button" onClick={() => setIsForgotPin(true)} className="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                  <KeyRound className="w-3 h-3" /> Forgot PIN?
+                </button>
+              </div>
+              <Input 
+                required
+                type="password" 
+                placeholder="••••••" 
+                className="tracking-widest font-mono text-center text-2xl h-14 rounded-xl shadow-sm border-2 focus-visible:border-primary focus-visible:ring-primary/20"
                 maxLength={6}
                 value={pin}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPin(e.target.value.replace(/\D/g, ''))}
+                autoFocus
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Camera className="w-4 h-4" /> Live Face Verification
-            </label>
-            {!faceVerified ? (
-              <FaceVerification
-                onVerify={async (file) => {
-                  // Hit the fast verification endpoint
-                  try {
-                    const formData = new FormData();
-                    formData.append('image', file);
-
-                    const { data: session } = await supabase.auth.getSession();
-                    const token = session?.session?.access_token;
-
-                    const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-                    const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
-
-                    const res = await axios.post(`${apiUrl}/security/verify-face`, formData, {
-                      headers: { Authorization: `Bearer ${token}` }
-                    });
-
-                    if (res.data.verified) {
-                      setFaceVerified(true);
-                      setFaceImage(file);
-                      return true;
-                    }
-                    return false;
-                  } catch (err) {
-                    console.error("Verification error", err);
-                    return false;
-                  }
-                }}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center p-6 border border-dashed rounded-lg bg-emerald-500/10">
-                <ShieldCheck className="w-8 h-8 text-emerald-500 mb-2" />
-                <p className="text-sm font-medium text-emerald-700">Identity Verified Successfully</p>
-              </div>
-            )}
-          </div>
-
-          <Button
-            className="w-full"
-            onClick={handleDownload}
-            disabled={isSubmitting || !password || pin.length !== 6 || !faceImage}
-          >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Authorize & Download"}
-          </Button>
-        </div>
+            
+            <Button 
+              type="submit"
+              className="w-full h-12 rounded-xl text-md shadow-md" 
+              disabled={isSubmitting || pin.length !== 6}
+            >
+              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Download className="w-4 h-4 mr-2" /> Authorize & Download</>}
+            </Button>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

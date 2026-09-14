@@ -13,39 +13,38 @@ from app.services.security_service import enroll_patient_pin, validate_patient_p
 from app.services.face_auth_service import face_auth_service
 from app.models.security import PatientBiometricProfile
 from app.models.audit_log import AuditLog
+from app.schemas.response import APIResponse
 
 router = APIRouter()
 
-from fastapi import Response
-
-@router.get("/status")
+@router.get("/status", response_model=APIResponse)
 async def get_status(
     response: Response,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR]))
 ):
     """
     Returns the security enrollment status of the patient:
     NOT_STARTED, PIN_CREATED, COMPLETED
     """
-    if current_user.role.upper() != UserRole.PATIENT.value.upper():
-        raise HTTPException(status_code=403, detail="Only patients require security enrollment.")
+    if current_user.role not in [UserRole.PATIENT, UserRole.DOCTOR]:
+        raise HTTPException(status_code=403, detail="Only patients and doctors require security enrollment.")
         
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     status_val = await get_security_status(db, current_user.id)
     return {"status": status_val}
 
-@router.post("/enroll-pin")
+@router.post("/enroll-pin", response_model=APIResponse)
 async def enroll_pin(
     pin: str = Form(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR]))
 ):
     """
     Enrolls or updates the 6-digit Authorization PIN.
     """
-    if current_user.role.upper() != UserRole.PATIENT.value.upper():
-        raise HTTPException(status_code=403, detail="Only patients can enroll a PIN.")
+    if current_user.role not in [UserRole.PATIENT, UserRole.DOCTOR]:
+        raise HTTPException(status_code=403, detail="Only patients and doctors can enroll a PIN.")
         
     try:
         await enroll_patient_pin(db, current_user.id, pin)

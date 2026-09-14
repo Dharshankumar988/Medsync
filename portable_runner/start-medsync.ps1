@@ -18,18 +18,9 @@ if (Test-Path "VERSION") {
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "           MEDSYNC PORTABLE RUNNER      " -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Automatically starting: Backend + Face Service" -ForegroundColor Green
 Write-Host ""
-Write-Host "What would you like to run?"
-Write-Host "1. Backend only"
-Write-Host "2. Backend + Face Service"
-Write-Host "3. Face Service only"
-Write-Host ""
-$choice = Read-Host "Enter your choice"
-
-if ($choice -notmatch "^[1-3]$") {
-    Write-Host "Invalid choice. Exiting." -ForegroundColor Red
-    exit 1
-}
+$choice = "2"
 
 # 1. Check if Docker is installed and running
 if (-not (Get-Command "docker" -ErrorAction SilentlyContinue)) {

@@ -12,6 +12,7 @@ interface FaceVerificationProps {
 export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificationProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -57,6 +58,11 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (videoRef.current && videoRef.current.srcObject) {
+        const srcStream = videoRef.current.srcObject as MediaStream;
+        srcStream.getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
       }
     };
   }, [onError]);
@@ -112,26 +118,21 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
       if (detections && detections.length > 0) {
         const face = detections[0];
         
-        // Draw bounding box
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(
-          face.boundingBox!.originX,
-          face.boundingBox!.originY,
-          face.boundingBox!.width,
-          face.boundingBox!.height
-        );
+        // Update overlay color to indicate detection
+        if (overlayRef.current) {
+          overlayRef.current.style.borderColor = '#10b981'; // Emerald 500
+        }
+
         
         // Throttle API call to 500ms
         const now = Date.now();
         if (now - lastApiCallTimeRef.current > 500 && !isProcessing) {
           lastApiCallTimeRef.current = now;
           
-          // Crop Face
+          // Send Full Frame to backend for reliable identification
           const tempCanvas = document.createElement('canvas');
-          const padding = 20; // add some padding around the face
-          const targetW = face.boundingBox!.width + padding * 2;
-          const targetH = face.boundingBox!.height + padding * 2;
+          const targetW = video.videoWidth;
+          const targetH = video.videoHeight;
           
           tempCanvas.width = targetW;
           tempCanvas.height = targetH;
@@ -140,10 +141,6 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
           if (tCtx) {
             tCtx.drawImage(
               video,
-              Math.max(0, face.boundingBox!.originX - padding),
-              Math.max(0, face.boundingBox!.originY - padding),
-              targetW,
-              targetH,
               0, 0, targetW, targetH
             );
             
@@ -172,6 +169,9 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
           }
         }
       } else {
+        if (overlayRef.current) {
+          overlayRef.current.style.borderColor = 'rgba(255,255,255,0.7)';
+        }
         setFeedback('No face detected. Please position your face in the frame.');
       }
     } catch (err) {
@@ -209,8 +209,28 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
           ref={canvasRef} 
           className="absolute inset-0 w-full h-full object-cover z-10 transform scale-x-[-1]"
         />
-        <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center overflow-hidden">
-          <div className="w-[60%] h-[80%] rounded-[50%] border-4 border-dashed border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"></div>
+        <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+          {/* Darkened background around the reticle */}
+          <div className="absolute inset-0 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] pointer-events-none"></div>
+          
+          {/* Modern Reticle / Corner brackets */}
+          <div 
+            ref={overlayRef}
+            className="relative w-[220px] h-[280px] sm:w-[260px] sm:h-[320px] transition-colors duration-300"
+            style={{ borderColor: 'rgba(255,255,255,0.7)' }}
+          >
+            {/* Top Left */}
+            <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 rounded-tl-2xl border-[inherit]"></div>
+            {/* Top Right */}
+            <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 rounded-tr-2xl border-[inherit]"></div>
+            {/* Bottom Left */}
+            <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 rounded-bl-2xl border-[inherit]"></div>
+            {/* Bottom Right */}
+            <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 rounded-br-2xl border-[inherit]"></div>
+            
+            {/* Inner oval for face shape guidance */}
+            <div className="absolute inset-2 border-2 border-dashed border-white/20 rounded-[40%]"></div>
+          </div>
         </div>
       </div>
       

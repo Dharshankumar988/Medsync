@@ -11,11 +11,12 @@ class PrescriptionItemBase(BaseModel):
     instructions: Optional[str] = None
 
 class PrescriptionCreate(BaseModel):
-    appointment_id: uuid.UUID
+    appointment_id: Optional[uuid.UUID] = None
     patient_id: uuid.UUID
     diagnosis: Optional[str] = None
     notes: Optional[str] = None
     items: List[PrescriptionItemBase]
+    pin: Optional[str] = None
 
 class PrescriptionItemResponse(PrescriptionItemBase):
     id: uuid.UUID

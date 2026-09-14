@@ -22,6 +22,14 @@ async def create_prescription(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(require_doctor)
 ):
+    if not req.pin:
+        raise HTTPException(status_code=400, detail="Doctor Authorization PIN is required.")
+        
+    from app.services.security_service import validate_patient_pin
+    is_valid = await validate_patient_pin(db, current_user.id, req.pin)
+    if not is_valid:
+        raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+        
     rx = await PrescriptionService.create_prescription(db, current_user.id, req)
     return APIResponse(message="Prescription finalized", data=rx)
 
@@ -108,7 +116,7 @@ async def authorize_prescription_download(
             try:
                 challenge_data = {"type": challenge_type} if challenge_type else None
                 fv = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path, challenge_data)
-                if not fv:
+                if not fv or not fv.get("verified"):
                     raise HTTPException(status_code=401, detail="Face verification failed")
                 
                 # Face auth resets PIN lockout
@@ -281,7 +289,7 @@ async def verify_prescription_auth(
 
         try:
             fv = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
-            if not fv:
+            if not fv or not fv.get("verified"):
                 raise HTTPException(status_code=401, detail="Face verification failed")
                 
             if cred:
@@ -402,7 +410,7 @@ async def order_prescription_online(
 
         try:
             fv = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
-            if not fv:
+            if not fv or not fv.get("verified"):
                 raise HTTPException(status_code=401, detail="Face verification failed")
                 
             if cred:
@@ -507,7 +515,7 @@ async def physical_pickup_prescription(
 
         try:
             fv = await asyncio.to_thread(face_auth_service.verify_patient, bio_profile.encrypted_template, tmp_path)
-            if not fv:
+            if not fv or not fv.get("verified"):
                 raise HTTPException(status_code=401, detail="Face verification failed")
                 
             if cred:

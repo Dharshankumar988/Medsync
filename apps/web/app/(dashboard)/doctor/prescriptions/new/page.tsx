@@ -36,6 +36,10 @@ export default function CreatePrescriptionPage() {
   const [newMedBrand, setNewMedBrand] = useState("");
   const [addingMed, setAddingMed] = useState(false);
 
+  // PIN Authorization State
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [pin, setPin] = useState("");
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setUserId(data.user.id);
@@ -152,27 +156,20 @@ export default function CreatePrescriptionPage() {
       return;
     }
 
+    // Open PIN verification modal
+    setPin("");
+    setIsPinModalOpen(true);
+  };
+
+  const handleConfirmSave = async () => {
+    if (pin.length !== 6) {
+      toast.error("PIN must be 6 digits");
+      return;
+    }
+
     setSaving(true);
     try {
-      // 1. Insert Prescription
-      const { data: presData, error: presErr } = await supabase
-        .from('prescriptions')
-        .insert({
-          doctor_id: userId,
-          patient_id: patientId,
-          appointment_id: apptId || null,
-          diagnosis,
-          notes,
-          is_dispensed: false
-        })
-        .select()
-        .single();
-        
-      if (presErr) throw presErr;
-
-      // 2. Insert Items
-      const itemsToInsert = validItems.map(item => ({
-        prescription_id: presData.id,
+      const validItems = items.filter(item => item.medicine_name && item.dosage).map(item => ({
         medicine_name: item.medicine_name,
         dosage: item.dosage,
         frequency: item.frequency,
@@ -180,17 +177,31 @@ export default function CreatePrescriptionPage() {
         instructions: item.instructions || "Take as directed"
       }));
 
-      const { error: itemsErr } = await supabase
-        .from('prescription_items')
-        .insert(itemsToInsert);
+      const payload = {
+        appointment_id: apptId || undefined,
+        patient_id: patientId,
+        diagnosis,
+        notes,
+        items: validItems,
+        pin: pin
+      };
 
-      if (itemsErr) throw itemsErr;
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+      
+      await axios.post(`${apiUrl}/prescriptions/`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-      toast.success("Prescription created successfully");
+      toast.success("Prescription finalized and signed securely");
+      setIsPinModalOpen(false);
       router.push('/doctor/prescriptions');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to create prescription");
+      toast.error(err.response?.data?.detail || "Failed to create prescription or invalid PIN");
     } finally {
       setSaving(false);
     }
@@ -360,6 +371,38 @@ export default function CreatePrescriptionPage() {
               <Button className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground" disabled={addingMed || !newMedName} onClick={handleAddNewMedicine}>
                 {addingMed ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />} 
                 Add Medicine
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isPinModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-card w-full max-w-sm p-6 rounded-2xl shadow-xl relative border border-border/50 text-center">
+            <Button variant="ghost" size="icon" className="absolute right-4 top-4" onClick={() => setIsPinModalOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+            <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <ShieldCheck className="w-6 h-6 text-primary" />
+            </div>
+            <h2 className="text-xl font-bold mb-2">Authorize Prescription</h2>
+            <p className="text-sm text-muted-foreground mb-6">Enter your 6-digit Doctor Authorization PIN to cryptographically sign and finalize this prescription.</p>
+            
+            <div className="space-y-6">
+              <Input 
+                type="password" 
+                placeholder="••••••" 
+                className="tracking-widest font-mono text-center text-3xl h-16 rounded-xl"
+                maxLength={6}
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                autoFocus
+              />
+              
+              <Button className="w-full h-12 text-md bg-emerald-600 hover:bg-emerald-700" disabled={saving || pin.length !== 6} onClick={handleConfirmSave}>
+                {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />} 
+                Sign & Finalize
               </Button>
             </div>
           </div>

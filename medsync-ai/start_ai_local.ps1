@@ -10,10 +10,10 @@ Write-Host "Activating virtual environment..."
 . .\venv\Scripts\Activate.ps1
 
 Write-Host "Installing PyTorch..."
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu --trusted-host download.pytorch.org
 
 Write-Host "Installing dependencies..."
-pip install -r requirements.txt
+pip install -r requirements.txt --trusted-host pypi.org --trusted-host files.pythonhosted.org
 
 Write-Host "Starting AI Microservice locally..."
 $env:CURL_CA_BUNDLE=""
