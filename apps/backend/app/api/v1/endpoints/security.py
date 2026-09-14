@@ -3,11 +3,12 @@ import shutil
 import tempfile
 import os
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.dependencies.db import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, RoleChecker
+from app.schemas.session import AuthenticatedPrincipal
 from app.models.user import User, UserRole
 from app.services.security_service import enroll_patient_pin, validate_patient_pin, get_security_status
 from app.services.face_auth_service import face_auth_service
