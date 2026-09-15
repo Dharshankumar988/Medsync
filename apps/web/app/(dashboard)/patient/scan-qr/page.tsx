@@ -10,6 +10,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRScanner } from "@/components/ui/QRScanner";
+import { FaceVerification } from "@/components/FaceVerification";
 
 type FlowType = "IDLE" | "PHARMACY" | "BLOCKCHAIN" | "URL" | "TEXT";
 type PharmacyStep = "CONFIRM" | "SELECT_PRESCRIPTION" | "PAYMENT" | "AUTHORIZE" | "SUCCESS";
@@ -43,9 +44,18 @@ export default function PatientQRScanPage() {
       await resolvePharmacy(data);
     } else if (data.startsWith("0x") || data.startsWith("QR-REC-")) {
       setFlow("BLOCKCHAIN");
-      // Simulate verifying the block on chain
       setLoading(true);
-      setTimeout(() => setLoading(false), 2000);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+        await fetch(`${baseUrl}/api/v1/blockchain/prescriptions/verify/${encodeURIComponent(data)}`, {
+          headers: session ? { Authorization: `Bearer ${session.access_token}` } : {}
+        });
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
     } else if (data.startsWith("http://") || data.startsWith("https://")) {
       setFlow("URL");
     } else {
@@ -460,20 +470,19 @@ export default function PatientQRScanPage() {
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-muted-foreground block text-left">Face Verification (Biometric Key)</label>
-                        <Input 
-                          type="file" 
-                          accept="image/*" 
-                          capture="user"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              setFaceImage(e.target.files[0]);
+                        {!faceImage ? (
+                          <FaceVerification 
+                            onVerify={async (file) => {
+                              setFaceImage(file);
                               setAuthPin("");
-                            } else {
-                              setFaceImage(null);
-                            }
-                          }}
-                          className="rounded-xl h-12 cursor-pointer"
-                        />
+                              return true;
+                            }}
+                          />
+                        ) : (
+                          <div className="p-4 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-200 flex items-center justify-center">
+                            <CheckCircle2 className="mr-2 h-5 w-5" /> Face Verification Successful.
+                          </div>
+                        )}
                       </div>
                     </div>
                     

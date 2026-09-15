@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS hospitals (
     longitude NUMERIC(11, 8),
     description TEXT,
     logo_url VARCHAR(1024),
+    type VARCHAR(50) DEFAULT 'hospital',
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
@@ -130,6 +131,8 @@ CREATE TABLE IF NOT EXISTS doctors (
     pincode VARCHAR(20),
     clinic_phone VARCHAR(20),
     clinic_email VARCHAR(255),
+    latitude NUMERIC(10, 8),
+    longitude NUMERIC(11, 8),
     languages TEXT,
     consultation_hours TEXT,
     consultation_timings JSONB,

@@ -574,9 +574,8 @@ async def get_network_details(
 ):
     """Get detailed network information."""
     try:
-        from web3 import Web3
-        # Connect directly to Amoy RPC for accurate monitoring
-        w3 = Web3(Web3.HTTPProvider("https://rpc-amoy.polygon.technology/"))
+        from app.blockchain.client import blockchain_client
+        w3 = blockchain_client.w3
         
         latest_block = await asyncio.to_thread(lambda: w3.eth.block_number)
         gas_price = await asyncio.to_thread(lambda: w3.eth.gas_price)
@@ -588,7 +587,7 @@ async def get_network_details(
             "status": "healthy" if w3.is_connected() else "degraded",
             "latest_block": latest_block,
             "gas_price_gwei": gas_price_gwei,
-            "rpc_provider": "https://rpc-amoy.polygon.technology/"
+            "rpc_provider": getattr(w3.provider, 'endpoint_uri', 'Unknown')
         }
         return APIResponse(message="Network details retrieved", data=data)
     except Exception as e:
@@ -610,8 +609,8 @@ async def get_wallet_details(
 ):
     """Get backend wallet details."""
     try:
-        from web3 import Web3
-        w3 = Web3(Web3.HTTPProvider("https://rpc-amoy.polygon.technology/"))
+        from app.blockchain.client import blockchain_client
+        w3 = blockchain_client.w3
         
         # Use the configured backend wallet address dynamically
         address = blockchain_client.wallet_address

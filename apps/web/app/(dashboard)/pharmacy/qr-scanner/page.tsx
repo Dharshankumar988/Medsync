@@ -12,7 +12,7 @@ import { QRScanner } from "@/components/ui/QRScanner";
 import { motion, AnimatePresence } from "framer-motion";
 
 type FlowType = "IDLE" | "PRESCRIPTION" | "BLOCKCHAIN" | "URL" | "TEXT";
-type PrescriptionStep = "PAYMENT" | "VERIFY_PIN" | "SUCCESS";
+type PrescriptionStep = "PAYMENT" | "SUCCESS";
 
 export default function PharmacyQRScannerPage() {
   // Base State
@@ -37,13 +37,21 @@ export default function PharmacyQRScannerPage() {
     setShowCamera(false);
     setError(null);
 
-    // If it looks like a blockchain hash
     if (data.startsWith("0x") || data.startsWith("QR-REC-")) {
       setFlow("BLOCKCHAIN");
       setIsLoading(true);
-      setTimeout(() => setIsLoading(false), 2500);
+      try {
+        const res = await pharmacyService.verifyBlockchainPrescription(data);
+        if (!res.valid) {
+           setError("Blockchain verification failed.");
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
       return;
-    } 
+    }
     
     // If it looks like a URL
     if (data.startsWith("http://") || data.startsWith("https://")) {
@@ -321,18 +329,15 @@ export default function PharmacyQRScannerPage() {
                 <div className="flex justify-center mb-4 relative z-10">
                   <div className="h-16 w-16 bg-amber-500/10 rounded-full flex items-center justify-center shadow-inner border border-amber-500/20">
                     {step === "PAYMENT" && <CreditCard className="h-8 w-8 text-amber-600" />}
-                    {step === "VERIFY_PIN" && <FileSignature className="h-8 w-8 text-amber-600" />}
                     {step === "SUCCESS" && <CheckCircle2 className="h-8 w-8 text-emerald-500" />}
                   </div>
                 </div>
                 <CardTitle className="text-2xl relative z-10">
                   {step === "PAYMENT" && "Payment & Co-Pay"}
-                  {step === "VERIFY_PIN" && "Patient Authorization"}
                   {step === "SUCCESS" && "Verification Complete"}
                 </CardTitle>
                 <CardDescription className="relative z-10">
                   {step === "PAYMENT" && "Review the order summary and collect the required co-pay before dispensing."}
-                  {step === "VERIFY_PIN" && "Ask the patient to enter their 6-digit PIN or use Face ID to authorize the release of records."}
                   {step === "SUCCESS" && "The prescription is fully authorized and ready for dispensing."}
                 </CardDescription>
               </CardHeader>
@@ -395,80 +400,14 @@ export default function PharmacyQRScannerPage() {
                         setFlow("IDLE");
                         setBasicData(null);
                       }}>Cancel</Button>
-                      <Button className="flex-1 rounded-xl h-12 bg-amber-600 hover:bg-amber-500 text-white shadow-md" onClick={() => setStep("VERIFY_PIN")} disabled={basicData.status === "TAMPERED"}>
-                        Proceed to Authorize <ScanLine className="w-4 h-4 ml-2" />
+                      <Button className="flex-1 rounded-xl h-12 bg-amber-600 hover:bg-amber-500 text-white shadow-md" onClick={() => {
+                        setFullPrescriptionData(basicData);
+                        setStep("SUCCESS");
+                      }} disabled={basicData.status === "TAMPERED"}>
+                        Proceed to Dispense <ScanLine className="w-4 h-4 ml-2" />
                       </Button>
                     </div>
                   </motion.div>
-                )}
-
-                {/* STEP 2: VERIFY PIN / FACE ID */}
-                {step === "VERIFY_PIN" && basicData && (
-                  <form onSubmit={handleVerifyPin} className="space-y-6">
-                    <div className="text-center p-4 bg-amber-500/10 rounded-xl border border-amber-500/20">
-                      <p className="text-sm font-medium text-amber-800 dark:text-amber-400">Total Co-Pay: <strong>$34.00</strong></p>
-                      <p className="text-xs text-muted-foreground mt-1">Authorization required to finalize payment and view medical records.</p>
-                    </div>
-
-                    <div className="space-y-5 pt-2">
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-foreground ml-1">Patient 6-Digit PIN</label>
-                        <Input
-                          type="password"
-                          inputMode="numeric"
-                          maxLength={6}
-                          placeholder="••••••"
-                          value={pin}
-                          onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-                          className="text-center text-3xl tracking-widest h-16 rounded-2xl shadow-inner border-2 focus-visible:border-amber-500 focus-visible:ring-amber-500/20"
-                          disabled={!!faceImage || basicData.status === "TAMPERED"}
-                          autoFocus
-                        />
-                      </div>
-                      
-                      <div className="relative py-2">
-                        <div className="absolute inset-0 flex items-center">
-                          <span className="w-full border-t border-border/60" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                          <span className="bg-card px-3 text-muted-foreground font-semibold tracking-wider">Or</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-foreground ml-1 flex items-center justify-between">
-                          <span>Face Verification (Fallback)</span>
-                        </label>
-                        <div className="relative">
-                          <Input 
-                            type="file" 
-                            accept="image/*" 
-                            capture="user"
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                setFaceImage(e.target.files[0]);
-                                setPin("");
-                              } else {
-                                setFaceImage(null);
-                              }
-                            }}
-                            disabled={basicData.status === "TAMPERED"}
-                            className="rounded-xl h-14 cursor-pointer border-2 hover:border-amber-500/50 pt-3"
-                          />
-                          <Camera className="absolute right-4 top-4 w-5 h-5 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-3 pt-6">
-                      <Button type="button" variant="ghost" className="flex-1 rounded-xl h-12 hover:bg-muted" onClick={() => setStep("PAYMENT")}>
-                        Back
-                      </Button>
-                      <Button type="submit" className="flex-[2] rounded-xl h-12 bg-amber-600 hover:bg-amber-500 text-white shadow-lg" disabled={(!pin && !faceImage) || (pin.length > 0 && pin.length !== 6) || isLoading || basicData.status === "TAMPERED"}>
-                        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Authorize Patient"}
-                      </Button>
-                    </div>
-                  </form>
                 )}
 
                 {/* STEP 3: SUCCESS & DISPENSE */}
@@ -487,7 +426,7 @@ export default function PharmacyQRScannerPage() {
                     <div className="bg-muted/30 p-5 rounded-2xl border border-border/60">
                       <h4 className="font-semibold mb-3 border-b border-border/60 pb-2 flex justify-between">
                         <span>Authorized Prescription</span>
-                        <span className="text-xs font-mono text-muted-foreground font-normal">{fullPrescriptionData.id.split('-')[0]}</span>
+                        <span className="text-xs font-mono text-muted-foreground font-normal">{fullPrescriptionData.prescription_id?.split('-')[0] || fullPrescriptionData.id?.split('-')[0]}</span>
                       </h4>
                       {fullPrescriptionData.diagnosis && (
                         <div className="mb-4">

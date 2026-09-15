@@ -56,7 +56,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
                 // Parse errors are expected frequently when scanning
               }
             );
-            setIsScanning(true);
+            // Scanner started successfully
           }
         }
       } catch (err) {

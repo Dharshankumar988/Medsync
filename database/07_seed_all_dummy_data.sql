@@ -1,433 +1,546 @@
--- ==============================================================================
--- SOURCE: 07_dummy_values.sql
--- ==============================================================================
--- ============================================================
--- ⚠️ MEDSYNC DEVELOPMENT DEMO DATABASE RESET + SEED
--- ============================================================
---
--- WARNING:
--- THIS SCRIPT IS DESTRUCTIVE.
---
--- It clears existing development/demo data and recreates
--- the MedSync demo dataset.
---
--- DO NOT RUN THIS AGAINST PRODUCTION.
--- DO NOT RUN THIS AGAINST A DATABASE CONTAINING REAL DATA.
---
--- Intended use:
---   Local development
---   Demo environments
---   Testing
---   Fresh database initialization
---
--- ============================================================
-
 BEGIN;
 
--- Disable Triggers temporarily
 SET session_replication_role = 'replica';
 
--- TRUNCATE existing tables aggressively
 TRUNCATE TABLE prescription_dispensing_log, prescription_download_authorizations, patient_biometric_profiles, patient_security_credentials, prescription_transfers, download_audit_logs, audit_logs, api_request_logs, consultations, medical_history_shares, consent_history, invoices, payments, delivery_tracking, medicine_order_items, medicine_orders, prescription_items, prescriptions, appointment_status_history, appointments, medicine_inventory, medicines, suppliers, medicine_categories, doctor_locations, pharmacy_locations, doctor_availability, verification_requests, ai_chat_messages, ai_chat_sessions, doctor_notes, ai_analyses, ocr_results, file_metadata, medical_record_versions, medical_record_tag_mappings, medical_records, medical_record_tags, medical_record_categories, notifications, notification_preferences, patients, doctors, pharmacies, admins, users, hospitals, knowledge_chunks, knowledge_documents, admin_ai_audit_logs CASCADE;
 
--- Clear Supabase Auth specifically for demo users
 DELETE FROM auth.identities WHERE user_id IN (SELECT id FROM auth.users WHERE email LIKE '%@medsync.com');
 DELETE FROM auth.users WHERE email LIKE '%@medsync.com';
 
 INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token, email_change_token_new, email_change) VALUES
 ('00000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'admin@medsync.com', crypt('admin', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "ADMIN", "full_name": "Super Admin"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'doctor1@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Aadhya Patel"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'doctor2@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Aarav Iyer"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'doctor3@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Shaurya Reddy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'doctor4@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Ishaan Singh"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'doctor5@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Isha Patel"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'doctor6@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Kavya Iyer"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'doctor7@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Swati Nair"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000008', 'authenticated', 'authenticated', 'doctor8@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Aditya Menon"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000009', 'authenticated', 'authenticated', 'doctor9@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Vikram Sharma"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000010', 'authenticated', 'authenticated', 'doctor10@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Aarav Patel"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000011', 'authenticated', 'authenticated', 'doctor11@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Krishna Reddy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000012', 'authenticated', 'authenticated', 'doctor12@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Diya Menon"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000013', 'authenticated', 'authenticated', 'doctor13@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Aarav Nair"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000014', 'authenticated', 'authenticated', 'doctor14@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Krishna Iyer"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000015', 'authenticated', 'authenticated', 'doctor15@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Aadhya Iyer"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'patient1@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Vihaan Iyer"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'patient2@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Suresh Nair"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'patient3@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Arjun Chauhan"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'patient4@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Amit Patel"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'patient5@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Saanvi Kumar"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'patient6@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Anjali Joshi"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'patient7@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Riya Chauhan"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000008', 'authenticated', 'authenticated', 'patient8@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Shruti Gupta"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000009', 'authenticated', 'authenticated', 'patient9@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Priya Reddy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000010', 'authenticated', 'authenticated', 'patient10@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Sneha Patel"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000011', 'authenticated', 'authenticated', 'patient11@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Vihaan Joshi"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000012', 'authenticated', 'authenticated', 'patient12@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Ishaan Verma"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000013', 'authenticated', 'authenticated', 'patient13@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Atharv Patel"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000014', 'authenticated', 'authenticated', 'patient14@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Shruti Reddy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000015', 'authenticated', 'authenticated', 'patient15@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Shruti Patel"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000016', 'authenticated', 'authenticated', 'patient16@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Amit Kumar"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000017', 'authenticated', 'authenticated', 'patient17@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Suresh Joshi"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000018', 'authenticated', 'authenticated', 'patient18@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Anjali Gupta"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000019', 'authenticated', 'authenticated', 'patient19@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Rohan Gupta"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000020', 'authenticated', 'authenticated', 'patient20@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Rahul Reddy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'pharmacy1@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Wellness Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'pharmacy2@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pulse Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'pharmacy3@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "GoodHealth Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'pharmacy4@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "CarePlus Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'pharmacy5@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "GoodHealth Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'pharmacy6@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "LifeCare Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'pharmacy7@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "TrueHealth Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000008', 'authenticated', 'authenticated', 'pharmacy8@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "LifeCare Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000009', 'authenticated', 'authenticated', 'pharmacy9@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pulse Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000010', 'authenticated', 'authenticated', 'pharmacy10@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "TrueHealth Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000011', 'authenticated', 'authenticated', 'pharmacy11@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "CarePlus Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000012', 'authenticated', 'authenticated', 'pharmacy12@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "CarePlus Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000013', 'authenticated', 'authenticated', 'pharmacy13@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Wellness Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000014', 'authenticated', 'authenticated', 'pharmacy14@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pulse Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000015', 'authenticated', 'authenticated', 'pharmacy15@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "LifeCare Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000016', 'authenticated', 'authenticated', 'pharmacy16@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "GoodHealth Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000017', 'authenticated', 'authenticated', 'pharmacy17@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Sanjeevani Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000018', 'authenticated', 'authenticated', 'pharmacy18@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Arogya Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000019', 'authenticated', 'authenticated', 'pharmacy19@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Sanjeevani Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000020', 'authenticated', 'authenticated', 'pharmacy20@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "LifeCare Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000021', 'authenticated', 'authenticated', 'pharmacy21@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "LifeCare Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000022', 'authenticated', 'authenticated', 'pharmacy22@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "CarePlus Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000023', 'authenticated', 'authenticated', 'pharmacy23@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Sanjeevani Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000024', 'authenticated', 'authenticated', 'pharmacy24@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "CarePlus Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000025', 'authenticated', 'authenticated', 'pharmacy25@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "CarePlus Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000026', 'authenticated', 'authenticated', 'pharmacy26@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "GoodHealth Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000027', 'authenticated', 'authenticated', 'pharmacy27@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "TrueHealth Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000028', 'authenticated', 'authenticated', 'pharmacy28@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Arogya Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000029', 'authenticated', 'authenticated', 'pharmacy29@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Sanjeevani Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', ''),
-('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000030', 'authenticated', 'authenticated', 'pharmacy30@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "TrueHealth Pharmacy"}'::jsonb, NOW(), NOW(), '', '', '', '');
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'doctor1@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 1"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'doctor2@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 2"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'doctor3@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 3"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'doctor4@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 4"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'doctor5@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 5"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'doctor6@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 6"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'doctor7@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 7"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000008', 'authenticated', 'authenticated', 'doctor8@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 8"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000009', 'authenticated', 'authenticated', 'doctor9@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 9"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000010', 'authenticated', 'authenticated', 'doctor10@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 10"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000011', 'authenticated', 'authenticated', 'doctor11@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 11"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000012', 'authenticated', 'authenticated', 'doctor12@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 12"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000013', 'authenticated', 'authenticated', 'doctor13@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 13"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000014', 'authenticated', 'authenticated', 'doctor14@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 14"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000015', 'authenticated', 'authenticated', 'doctor15@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 15"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000016', 'authenticated', 'authenticated', 'doctor16@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 16"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000017', 'authenticated', 'authenticated', 'doctor17@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 17"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000018', 'authenticated', 'authenticated', 'doctor18@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 18"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000019', 'authenticated', 'authenticated', 'doctor19@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 19"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000020', 'authenticated', 'authenticated', 'doctor20@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 20"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000021', 'authenticated', 'authenticated', 'doctor21@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 21"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000022', 'authenticated', 'authenticated', 'doctor22@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 22"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000023', 'authenticated', 'authenticated', 'doctor23@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 23"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000024', 'authenticated', 'authenticated', 'doctor24@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 24"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000025', 'authenticated', 'authenticated', 'doctor25@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 25"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000026', 'authenticated', 'authenticated', 'doctor26@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 26"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000027', 'authenticated', 'authenticated', 'doctor27@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 27"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000028', 'authenticated', 'authenticated', 'doctor28@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 28"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000029', 'authenticated', 'authenticated', 'doctor29@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 29"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000030', 'authenticated', 'authenticated', 'doctor30@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 30"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000031', 'authenticated', 'authenticated', 'doctor31@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 31"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000032', 'authenticated', 'authenticated', 'doctor32@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 32"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000033', 'authenticated', 'authenticated', 'doctor33@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 33"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000034', 'authenticated', 'authenticated', 'doctor34@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 34"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000035', 'authenticated', 'authenticated', 'doctor35@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 35"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000036', 'authenticated', 'authenticated', 'doctor36@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 36"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000037', 'authenticated', 'authenticated', 'doctor37@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 37"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000038', 'authenticated', 'authenticated', 'doctor38@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 38"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000039', 'authenticated', 'authenticated', 'doctor39@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 39"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000040', 'authenticated', 'authenticated', 'doctor40@medsync.com', crypt('doctor', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "DOCTOR", "full_name": "Doctor 40"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'patient1@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Patient 1"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'patient2@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Patient 2"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'patient3@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Patient 3"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'patient4@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Patient 4"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1c000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'patient5@medsync.com', crypt('patient', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PATIENT", "full_name": "Patient 5"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'pharmacy1@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 1"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'pharmacy2@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 2"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'pharmacy3@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 3"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'pharmacy4@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 4"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'pharmacy5@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 5"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000006', 'authenticated', 'authenticated', 'pharmacy6@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 6"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'pharmacy7@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 7"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000008', 'authenticated', 'authenticated', 'pharmacy8@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 8"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000009', 'authenticated', 'authenticated', 'pharmacy9@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 9"}'::jsonb, NOW(), NOW(), '', '', '', ''),
+('00000000-0000-0000-0000-000000000000', '1d000000-0000-0000-0000-000000000010', 'authenticated', 'authenticated', 'pharmacy10@medsync.com', crypt('pharma', gen_salt('bf', 10)), NOW(), '{"provider": "email", "providers": ["email"]}'::jsonb, '{"role": "PHARMACY", "full_name": "Pharmacy 10"}'::jsonb, NOW(), NOW(), '', '', '', '');
 
 INSERT INTO auth.identities (id, provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at) VALUES
-(gen_random_uuid(), '1a000000-0000-0000-0000-000000000001', '1a000000-0000-0000-0000-000000000001', '{"sub":"1a000000-0000-0000-0000-000000000001","email":"admin@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', '{"sub":"1b000000-0000-0000-0000-000000000001","email":"doctor1@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000002', '1b000000-0000-0000-0000-000000000002', '{"sub":"1b000000-0000-0000-0000-000000000002","email":"doctor2@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000003', '1b000000-0000-0000-0000-000000000003', '{"sub":"1b000000-0000-0000-0000-000000000003","email":"doctor3@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000004', '1b000000-0000-0000-0000-000000000004', '{"sub":"1b000000-0000-0000-0000-000000000004","email":"doctor4@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000005', '1b000000-0000-0000-0000-000000000005', '{"sub":"1b000000-0000-0000-0000-000000000005","email":"doctor5@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000006', '1b000000-0000-0000-0000-000000000006', '{"sub":"1b000000-0000-0000-0000-000000000006","email":"doctor6@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000007', '1b000000-0000-0000-0000-000000000007', '{"sub":"1b000000-0000-0000-0000-000000000007","email":"doctor7@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000008', '1b000000-0000-0000-0000-000000000008', '{"sub":"1b000000-0000-0000-0000-000000000008","email":"doctor8@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000009', '1b000000-0000-0000-0000-000000000009', '{"sub":"1b000000-0000-0000-0000-000000000009","email":"doctor9@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000010', '1b000000-0000-0000-0000-000000000010', '{"sub":"1b000000-0000-0000-0000-000000000010","email":"doctor10@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000011', '1b000000-0000-0000-0000-000000000011', '{"sub":"1b000000-0000-0000-0000-000000000011","email":"doctor11@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000012', '1b000000-0000-0000-0000-000000000012', '{"sub":"1b000000-0000-0000-0000-000000000012","email":"doctor12@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000013', '1b000000-0000-0000-0000-000000000013', '{"sub":"1b000000-0000-0000-0000-000000000013","email":"doctor13@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000014', '1b000000-0000-0000-0000-000000000014', '{"sub":"1b000000-0000-0000-0000-000000000014","email":"doctor14@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1b000000-0000-0000-0000-000000000015', '1b000000-0000-0000-0000-000000000015', '{"sub":"1b000000-0000-0000-0000-000000000015","email":"doctor15@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000001', '1c000000-0000-0000-0000-000000000001', '{"sub":"1c000000-0000-0000-0000-000000000001","email":"patient1@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000002', '1c000000-0000-0000-0000-000000000002', '{"sub":"1c000000-0000-0000-0000-000000000002","email":"patient2@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000003', '1c000000-0000-0000-0000-000000000003', '{"sub":"1c000000-0000-0000-0000-000000000003","email":"patient3@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000004', '1c000000-0000-0000-0000-000000000004', '{"sub":"1c000000-0000-0000-0000-000000000004","email":"patient4@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000005', '1c000000-0000-0000-0000-000000000005', '{"sub":"1c000000-0000-0000-0000-000000000005","email":"patient5@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000006', '1c000000-0000-0000-0000-000000000006', '{"sub":"1c000000-0000-0000-0000-000000000006","email":"patient6@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000007', '1c000000-0000-0000-0000-000000000007', '{"sub":"1c000000-0000-0000-0000-000000000007","email":"patient7@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000008', '1c000000-0000-0000-0000-000000000008', '{"sub":"1c000000-0000-0000-0000-000000000008","email":"patient8@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000009', '1c000000-0000-0000-0000-000000000009', '{"sub":"1c000000-0000-0000-0000-000000000009","email":"patient9@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000010', '1c000000-0000-0000-0000-000000000010', '{"sub":"1c000000-0000-0000-0000-000000000010","email":"patient10@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000011', '1c000000-0000-0000-0000-000000000011', '{"sub":"1c000000-0000-0000-0000-000000000011","email":"patient11@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000012', '1c000000-0000-0000-0000-000000000012', '{"sub":"1c000000-0000-0000-0000-000000000012","email":"patient12@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000013', '1c000000-0000-0000-0000-000000000013', '{"sub":"1c000000-0000-0000-0000-000000000013","email":"patient13@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000014', '1c000000-0000-0000-0000-000000000014', '{"sub":"1c000000-0000-0000-0000-000000000014","email":"patient14@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000015', '1c000000-0000-0000-0000-000000000015', '{"sub":"1c000000-0000-0000-0000-000000000015","email":"patient15@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000016', '1c000000-0000-0000-0000-000000000016', '{"sub":"1c000000-0000-0000-0000-000000000016","email":"patient16@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000017', '1c000000-0000-0000-0000-000000000017', '{"sub":"1c000000-0000-0000-0000-000000000017","email":"patient17@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000018', '1c000000-0000-0000-0000-000000000018', '{"sub":"1c000000-0000-0000-0000-000000000018","email":"patient18@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000019', '1c000000-0000-0000-0000-000000000019', '{"sub":"1c000000-0000-0000-0000-000000000019","email":"patient19@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1c000000-0000-0000-0000-000000000020', '1c000000-0000-0000-0000-000000000020', '{"sub":"1c000000-0000-0000-0000-000000000020","email":"patient20@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000001', '1d000000-0000-0000-0000-000000000001', '{"sub":"1d000000-0000-0000-0000-000000000001","email":"pharmacy1@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000002', '1d000000-0000-0000-0000-000000000002', '{"sub":"1d000000-0000-0000-0000-000000000002","email":"pharmacy2@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000003', '1d000000-0000-0000-0000-000000000003', '{"sub":"1d000000-0000-0000-0000-000000000003","email":"pharmacy3@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000004', '1d000000-0000-0000-0000-000000000004', '{"sub":"1d000000-0000-0000-0000-000000000004","email":"pharmacy4@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000005', '1d000000-0000-0000-0000-000000000005', '{"sub":"1d000000-0000-0000-0000-000000000005","email":"pharmacy5@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000006', '1d000000-0000-0000-0000-000000000006', '{"sub":"1d000000-0000-0000-0000-000000000006","email":"pharmacy6@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000007', '1d000000-0000-0000-0000-000000000007', '{"sub":"1d000000-0000-0000-0000-000000000007","email":"pharmacy7@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000008', '1d000000-0000-0000-0000-000000000008', '{"sub":"1d000000-0000-0000-0000-000000000008","email":"pharmacy8@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000009', '1d000000-0000-0000-0000-000000000009', '{"sub":"1d000000-0000-0000-0000-000000000009","email":"pharmacy9@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000010', '1d000000-0000-0000-0000-000000000010', '{"sub":"1d000000-0000-0000-0000-000000000010","email":"pharmacy10@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000011', '1d000000-0000-0000-0000-000000000011', '{"sub":"1d000000-0000-0000-0000-000000000011","email":"pharmacy11@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000012', '1d000000-0000-0000-0000-000000000012', '{"sub":"1d000000-0000-0000-0000-000000000012","email":"pharmacy12@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000013', '1d000000-0000-0000-0000-000000000013', '{"sub":"1d000000-0000-0000-0000-000000000013","email":"pharmacy13@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000014', '1d000000-0000-0000-0000-000000000014', '{"sub":"1d000000-0000-0000-0000-000000000014","email":"pharmacy14@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000015', '1d000000-0000-0000-0000-000000000015', '{"sub":"1d000000-0000-0000-0000-000000000015","email":"pharmacy15@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000016', '1d000000-0000-0000-0000-000000000016', '{"sub":"1d000000-0000-0000-0000-000000000016","email":"pharmacy16@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000017', '1d000000-0000-0000-0000-000000000017', '{"sub":"1d000000-0000-0000-0000-000000000017","email":"pharmacy17@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000018', '1d000000-0000-0000-0000-000000000018', '{"sub":"1d000000-0000-0000-0000-000000000018","email":"pharmacy18@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000019', '1d000000-0000-0000-0000-000000000019', '{"sub":"1d000000-0000-0000-0000-000000000019","email":"pharmacy19@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000020', '1d000000-0000-0000-0000-000000000020', '{"sub":"1d000000-0000-0000-0000-000000000020","email":"pharmacy20@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000021', '1d000000-0000-0000-0000-000000000021', '{"sub":"1d000000-0000-0000-0000-000000000021","email":"pharmacy21@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000022', '1d000000-0000-0000-0000-000000000022', '{"sub":"1d000000-0000-0000-0000-000000000022","email":"pharmacy22@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000023', '1d000000-0000-0000-0000-000000000023', '{"sub":"1d000000-0000-0000-0000-000000000023","email":"pharmacy23@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000024', '1d000000-0000-0000-0000-000000000024', '{"sub":"1d000000-0000-0000-0000-000000000024","email":"pharmacy24@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000025', '1d000000-0000-0000-0000-000000000025', '{"sub":"1d000000-0000-0000-0000-000000000025","email":"pharmacy25@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000026', '1d000000-0000-0000-0000-000000000026', '{"sub":"1d000000-0000-0000-0000-000000000026","email":"pharmacy26@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000027', '1d000000-0000-0000-0000-000000000027', '{"sub":"1d000000-0000-0000-0000-000000000027","email":"pharmacy27@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000028', '1d000000-0000-0000-0000-000000000028', '{"sub":"1d000000-0000-0000-0000-000000000028","email":"pharmacy28@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000029', '1d000000-0000-0000-0000-000000000029', '{"sub":"1d000000-0000-0000-0000-000000000029","email":"pharmacy29@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
-(gen_random_uuid(), '1d000000-0000-0000-0000-000000000030', '1d000000-0000-0000-0000-000000000030', '{"sub":"1d000000-0000-0000-0000-000000000030","email":"pharmacy30@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW());
+('1a000000-0000-0000-0000-000000000001', '1a000000-0000-0000-0000-000000000001', '1a000000-0000-0000-0000-000000000001', '{"sub": "1a000000-0000-0000-0000-000000000001", "email": "admin@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', '{"sub": "1b000000-0000-0000-0000-000000000001", "email": "doctor1@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000002', '1b000000-0000-0000-0000-000000000002', '1b000000-0000-0000-0000-000000000002', '{"sub": "1b000000-0000-0000-0000-000000000002", "email": "doctor2@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000003', '1b000000-0000-0000-0000-000000000003', '1b000000-0000-0000-0000-000000000003', '{"sub": "1b000000-0000-0000-0000-000000000003", "email": "doctor3@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000004', '1b000000-0000-0000-0000-000000000004', '1b000000-0000-0000-0000-000000000004', '{"sub": "1b000000-0000-0000-0000-000000000004", "email": "doctor4@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000005', '1b000000-0000-0000-0000-000000000005', '1b000000-0000-0000-0000-000000000005', '{"sub": "1b000000-0000-0000-0000-000000000005", "email": "doctor5@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000006', '1b000000-0000-0000-0000-000000000006', '1b000000-0000-0000-0000-000000000006', '{"sub": "1b000000-0000-0000-0000-000000000006", "email": "doctor6@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000007', '1b000000-0000-0000-0000-000000000007', '1b000000-0000-0000-0000-000000000007', '{"sub": "1b000000-0000-0000-0000-000000000007", "email": "doctor7@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000008', '1b000000-0000-0000-0000-000000000008', '1b000000-0000-0000-0000-000000000008', '{"sub": "1b000000-0000-0000-0000-000000000008", "email": "doctor8@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000009', '1b000000-0000-0000-0000-000000000009', '1b000000-0000-0000-0000-000000000009', '{"sub": "1b000000-0000-0000-0000-000000000009", "email": "doctor9@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000010', '1b000000-0000-0000-0000-000000000010', '1b000000-0000-0000-0000-000000000010', '{"sub": "1b000000-0000-0000-0000-000000000010", "email": "doctor10@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000011', '1b000000-0000-0000-0000-000000000011', '1b000000-0000-0000-0000-000000000011', '{"sub": "1b000000-0000-0000-0000-000000000011", "email": "doctor11@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000012', '1b000000-0000-0000-0000-000000000012', '1b000000-0000-0000-0000-000000000012', '{"sub": "1b000000-0000-0000-0000-000000000012", "email": "doctor12@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000013', '1b000000-0000-0000-0000-000000000013', '1b000000-0000-0000-0000-000000000013', '{"sub": "1b000000-0000-0000-0000-000000000013", "email": "doctor13@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000014', '1b000000-0000-0000-0000-000000000014', '1b000000-0000-0000-0000-000000000014', '{"sub": "1b000000-0000-0000-0000-000000000014", "email": "doctor14@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000015', '1b000000-0000-0000-0000-000000000015', '1b000000-0000-0000-0000-000000000015', '{"sub": "1b000000-0000-0000-0000-000000000015", "email": "doctor15@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000016', '1b000000-0000-0000-0000-000000000016', '1b000000-0000-0000-0000-000000000016', '{"sub": "1b000000-0000-0000-0000-000000000016", "email": "doctor16@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000017', '1b000000-0000-0000-0000-000000000017', '1b000000-0000-0000-0000-000000000017', '{"sub": "1b000000-0000-0000-0000-000000000017", "email": "doctor17@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000018', '1b000000-0000-0000-0000-000000000018', '1b000000-0000-0000-0000-000000000018', '{"sub": "1b000000-0000-0000-0000-000000000018", "email": "doctor18@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000019', '1b000000-0000-0000-0000-000000000019', '1b000000-0000-0000-0000-000000000019', '{"sub": "1b000000-0000-0000-0000-000000000019", "email": "doctor19@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000020', '1b000000-0000-0000-0000-000000000020', '1b000000-0000-0000-0000-000000000020', '{"sub": "1b000000-0000-0000-0000-000000000020", "email": "doctor20@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000021', '1b000000-0000-0000-0000-000000000021', '1b000000-0000-0000-0000-000000000021', '{"sub": "1b000000-0000-0000-0000-000000000021", "email": "doctor21@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000022', '1b000000-0000-0000-0000-000000000022', '1b000000-0000-0000-0000-000000000022', '{"sub": "1b000000-0000-0000-0000-000000000022", "email": "doctor22@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000023', '1b000000-0000-0000-0000-000000000023', '1b000000-0000-0000-0000-000000000023', '{"sub": "1b000000-0000-0000-0000-000000000023", "email": "doctor23@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000024', '1b000000-0000-0000-0000-000000000024', '1b000000-0000-0000-0000-000000000024', '{"sub": "1b000000-0000-0000-0000-000000000024", "email": "doctor24@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000025', '1b000000-0000-0000-0000-000000000025', '1b000000-0000-0000-0000-000000000025', '{"sub": "1b000000-0000-0000-0000-000000000025", "email": "doctor25@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000026', '1b000000-0000-0000-0000-000000000026', '1b000000-0000-0000-0000-000000000026', '{"sub": "1b000000-0000-0000-0000-000000000026", "email": "doctor26@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000027', '1b000000-0000-0000-0000-000000000027', '1b000000-0000-0000-0000-000000000027', '{"sub": "1b000000-0000-0000-0000-000000000027", "email": "doctor27@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000028', '1b000000-0000-0000-0000-000000000028', '1b000000-0000-0000-0000-000000000028', '{"sub": "1b000000-0000-0000-0000-000000000028", "email": "doctor28@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000029', '1b000000-0000-0000-0000-000000000029', '1b000000-0000-0000-0000-000000000029', '{"sub": "1b000000-0000-0000-0000-000000000029", "email": "doctor29@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000030', '1b000000-0000-0000-0000-000000000030', '1b000000-0000-0000-0000-000000000030', '{"sub": "1b000000-0000-0000-0000-000000000030", "email": "doctor30@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000031', '1b000000-0000-0000-0000-000000000031', '1b000000-0000-0000-0000-000000000031', '{"sub": "1b000000-0000-0000-0000-000000000031", "email": "doctor31@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000032', '1b000000-0000-0000-0000-000000000032', '1b000000-0000-0000-0000-000000000032', '{"sub": "1b000000-0000-0000-0000-000000000032", "email": "doctor32@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000033', '1b000000-0000-0000-0000-000000000033', '1b000000-0000-0000-0000-000000000033', '{"sub": "1b000000-0000-0000-0000-000000000033", "email": "doctor33@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000034', '1b000000-0000-0000-0000-000000000034', '1b000000-0000-0000-0000-000000000034', '{"sub": "1b000000-0000-0000-0000-000000000034", "email": "doctor34@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000035', '1b000000-0000-0000-0000-000000000035', '1b000000-0000-0000-0000-000000000035', '{"sub": "1b000000-0000-0000-0000-000000000035", "email": "doctor35@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000036', '1b000000-0000-0000-0000-000000000036', '1b000000-0000-0000-0000-000000000036', '{"sub": "1b000000-0000-0000-0000-000000000036", "email": "doctor36@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000037', '1b000000-0000-0000-0000-000000000037', '1b000000-0000-0000-0000-000000000037', '{"sub": "1b000000-0000-0000-0000-000000000037", "email": "doctor37@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000038', '1b000000-0000-0000-0000-000000000038', '1b000000-0000-0000-0000-000000000038', '{"sub": "1b000000-0000-0000-0000-000000000038", "email": "doctor38@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000039', '1b000000-0000-0000-0000-000000000039', '1b000000-0000-0000-0000-000000000039', '{"sub": "1b000000-0000-0000-0000-000000000039", "email": "doctor39@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000040', '1b000000-0000-0000-0000-000000000040', '1b000000-0000-0000-0000-000000000040', '{"sub": "1b000000-0000-0000-0000-000000000040", "email": "doctor40@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000001', '1c000000-0000-0000-0000-000000000001', '1c000000-0000-0000-0000-000000000001', '{"sub": "1c000000-0000-0000-0000-000000000001", "email": "patient1@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000002', '1c000000-0000-0000-0000-000000000002', '1c000000-0000-0000-0000-000000000002', '{"sub": "1c000000-0000-0000-0000-000000000002", "email": "patient2@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000003', '1c000000-0000-0000-0000-000000000003', '1c000000-0000-0000-0000-000000000003', '{"sub": "1c000000-0000-0000-0000-000000000003", "email": "patient3@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000004', '1c000000-0000-0000-0000-000000000004', '1c000000-0000-0000-0000-000000000004', '{"sub": "1c000000-0000-0000-0000-000000000004", "email": "patient4@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000005', '1c000000-0000-0000-0000-000000000005', '1c000000-0000-0000-0000-000000000005', '{"sub": "1c000000-0000-0000-0000-000000000005", "email": "patient5@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000001', '1d000000-0000-0000-0000-000000000001', '1d000000-0000-0000-0000-000000000001', '{"sub": "1d000000-0000-0000-0000-000000000001", "email": "pharmacy1@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000002', '1d000000-0000-0000-0000-000000000002', '1d000000-0000-0000-0000-000000000002', '{"sub": "1d000000-0000-0000-0000-000000000002", "email": "pharmacy2@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000003', '1d000000-0000-0000-0000-000000000003', '1d000000-0000-0000-0000-000000000003', '{"sub": "1d000000-0000-0000-0000-000000000003", "email": "pharmacy3@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000004', '1d000000-0000-0000-0000-000000000004', '1d000000-0000-0000-0000-000000000004', '{"sub": "1d000000-0000-0000-0000-000000000004", "email": "pharmacy4@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000005', '1d000000-0000-0000-0000-000000000005', '1d000000-0000-0000-0000-000000000005', '{"sub": "1d000000-0000-0000-0000-000000000005", "email": "pharmacy5@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000006', '1d000000-0000-0000-0000-000000000006', '1d000000-0000-0000-0000-000000000006', '{"sub": "1d000000-0000-0000-0000-000000000006", "email": "pharmacy6@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000007', '1d000000-0000-0000-0000-000000000007', '1d000000-0000-0000-0000-000000000007', '{"sub": "1d000000-0000-0000-0000-000000000007", "email": "pharmacy7@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000008', '1d000000-0000-0000-0000-000000000008', '1d000000-0000-0000-0000-000000000008', '{"sub": "1d000000-0000-0000-0000-000000000008", "email": "pharmacy8@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000009', '1d000000-0000-0000-0000-000000000009', '1d000000-0000-0000-0000-000000000009', '{"sub": "1d000000-0000-0000-0000-000000000009", "email": "pharmacy9@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000010', '1d000000-0000-0000-0000-000000000010', '1d000000-0000-0000-0000-000000000010', '{"sub": "1d000000-0000-0000-0000-000000000010", "email": "pharmacy10@medsync.com"}'::jsonb, 'email', NOW(), NOW(), NOW());
 
 INSERT INTO public.users (id, email, password_hash, role, status, is_verified, profile_completion_percentage, created_at, updated_at) VALUES
-('1a000000-0000-0000-0000-000000000001', 'admin@medsync.com', 'supabase_managed', 'ADMIN', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000001', 'doctor1@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000002', 'doctor2@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000003', 'doctor3@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000004', 'doctor4@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000005', 'doctor5@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000006', 'doctor6@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000007', 'doctor7@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000008', 'doctor8@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000009', 'doctor9@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000010', 'doctor10@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000011', 'doctor11@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000012', 'doctor12@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000013', 'doctor13@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000014', 'doctor14@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1b000000-0000-0000-0000-000000000015', 'doctor15@medsync.com', 'supabase_managed', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000001', 'patient1@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000002', 'patient2@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000003', 'patient3@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000004', 'patient4@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000005', 'patient5@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000006', 'patient6@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000007', 'patient7@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000008', 'patient8@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000009', 'patient9@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000010', 'patient10@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000011', 'patient11@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000012', 'patient12@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000013', 'patient13@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000014', 'patient14@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000015', 'patient15@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000016', 'patient16@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000017', 'patient17@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000018', 'patient18@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000019', 'patient19@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1c000000-0000-0000-0000-000000000020', 'patient20@medsync.com', 'supabase_managed', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000001', 'pharmacy1@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000002', 'pharmacy2@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000003', 'pharmacy3@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000004', 'pharmacy4@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000005', 'pharmacy5@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000006', 'pharmacy6@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000007', 'pharmacy7@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000008', 'pharmacy8@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000009', 'pharmacy9@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000010', 'pharmacy10@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000011', 'pharmacy11@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000012', 'pharmacy12@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000013', 'pharmacy13@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000014', 'pharmacy14@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000015', 'pharmacy15@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000016', 'pharmacy16@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000017', 'pharmacy17@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000018', 'pharmacy18@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000019', 'pharmacy19@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000020', 'pharmacy20@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000021', 'pharmacy21@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000022', 'pharmacy22@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000023', 'pharmacy23@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000024', 'pharmacy24@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000025', 'pharmacy25@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000026', 'pharmacy26@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000027', 'pharmacy27@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000028', 'pharmacy28@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000029', 'pharmacy29@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
-('1d000000-0000-0000-0000-000000000030', 'pharmacy30@medsync.com', 'supabase_managed', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW());
+('1a000000-0000-0000-0000-000000000001', 'admin@medsync.com', 'hashed_pw', 'ADMIN', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000001', 'doctor1@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000002', 'doctor2@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000003', 'doctor3@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000004', 'doctor4@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000005', 'doctor5@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000006', 'doctor6@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000007', 'doctor7@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000008', 'doctor8@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000009', 'doctor9@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000010', 'doctor10@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000011', 'doctor11@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000012', 'doctor12@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000013', 'doctor13@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000014', 'doctor14@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000015', 'doctor15@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000016', 'doctor16@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000017', 'doctor17@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000018', 'doctor18@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000019', 'doctor19@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000020', 'doctor20@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000021', 'doctor21@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000022', 'doctor22@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000023', 'doctor23@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000024', 'doctor24@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000025', 'doctor25@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000026', 'doctor26@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000027', 'doctor27@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000028', 'doctor28@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000029', 'doctor29@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000030', 'doctor30@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000031', 'doctor31@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000032', 'doctor32@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000033', 'doctor33@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000034', 'doctor34@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000035', 'doctor35@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000036', 'doctor36@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000037', 'doctor37@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000038', 'doctor38@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000039', 'doctor39@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1b000000-0000-0000-0000-000000000040', 'doctor40@medsync.com', 'hashed_pw', 'DOCTOR', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000001', 'patient1@medsync.com', 'hashed_pw', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000002', 'patient2@medsync.com', 'hashed_pw', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000003', 'patient3@medsync.com', 'hashed_pw', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000004', 'patient4@medsync.com', 'hashed_pw', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1c000000-0000-0000-0000-000000000005', 'patient5@medsync.com', 'hashed_pw', 'PATIENT', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000001', 'pharmacy1@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000002', 'pharmacy2@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000003', 'pharmacy3@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000004', 'pharmacy4@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000005', 'pharmacy5@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000006', 'pharmacy6@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000007', 'pharmacy7@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000008', 'pharmacy8@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000009', 'pharmacy9@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW()),
+('1d000000-0000-0000-0000-000000000010', 'pharmacy10@medsync.com', 'hashed_pw', 'PHARMACY', 'ACTIVE', TRUE, 100, NOW(), NOW());
 
 INSERT INTO public.admins (id, user_id, full_name, department, created_at, updated_at) VALUES ('3a000000-0000-0000-0000-000000000001', '1a000000-0000-0000-0000-000000000001', 'Super Admin', 'IT', NOW(), NOW());
-INSERT INTO public.hospitals (id, name, address, city, state, country, pincode, latitude, longitude, is_verified, is_active, created_at, updated_at) VALUES
-('2a000000-0000-0000-0000-000000000001', 'Bangalore MedCity Hospital - Indiranagar', 'Indiranagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560038', 12.971202, 77.642271, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000002', 'Silicon Valley Health - HSR Layout', 'HSR Layout, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560102', 12.913967, 77.640352, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000003', 'Garden City Clinic - Whitefield', 'Whitefield, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560066', 12.965004, 77.739536, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000004', 'TechHub Care - Electronic City', 'Electronic City, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560100', 12.828933, 77.680498, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000005', 'Greenwood Memorial - Jayanagar', 'Jayanagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560041', 12.923372, 77.585082, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000006', 'Lakeside Healthcare - JP Nagar', 'JP Nagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560078', 12.910836, 77.580457, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000007', 'Metro Health - Malleshwaram', 'Malleshwaram, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560003', 12.989653, 77.575068, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000008', 'Silver Oak Hospital - Rajajinagar', 'Rajajinagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560010', 12.995843, 77.543941, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000009', 'Crescent Care - Hebbal', 'Hebbal, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560024', 13.024690, 77.595801, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000010', 'Pinnacle Health - Yelahanka', 'Yelahanka, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560064', 13.105076, 77.608771, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000011', 'Horizon Hospital - Marathahalli', 'Marathahalli, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560037', 12.950074, 77.687880, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000012', 'Oasis Clinic - Bellandur', 'Bellandur, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560103', 12.940166, 77.677581, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000013', 'Summit Care - Banashankari', 'Banashankari, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560050', 12.922174, 77.549820, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000014', 'Harmony Health - Basavanagudi', 'Basavanagudi, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560004', 12.953515, 77.568570, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000015', 'Aura Medical Center - MG Road', 'MG Road, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560001', 12.959141, 77.604849, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000016', 'Bangalore MedCity Hospital - Indiranagar', 'Shivajinagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560051', 12.993486, 77.591214, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000017', 'Silicon Valley Health - HSR Layout', 'Koramangala, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560034', 12.933108, 77.638533, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000018', 'Garden City Clinic - Whitefield', 'Indiranagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560038', 12.989398, 77.633828, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000019', 'TechHub Care - Electronic City', 'HSR Layout, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560102', 12.915987, 77.641166, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000020', 'Greenwood Memorial - Jayanagar', 'Whitefield, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560066', 12.961505, 77.754868, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000021', 'Lakeside Healthcare - JP Nagar', 'Electronic City, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560100', 12.830222, 77.691014, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000022', 'Metro Health - Malleshwaram', 'Jayanagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560041', 12.922241, 77.586519, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000023', 'Silver Oak Hospital - Rajajinagar', 'JP Nagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560078', 12.913696, 77.571806, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000024', 'Crescent Care - Hebbal', 'Malleshwaram, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560003', 13.000075, 77.555882, TRUE, TRUE, NOW(), NOW()),
-('2a000000-0000-0000-0000-000000000025', 'Pinnacle Health - Yelahanka', 'Rajajinagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560010', 12.986861, 77.560388, TRUE, TRUE, NOW(), NOW());
 
-INSERT INTO public.doctors (id, user_id, full_name, specialization, license_number, hospital_name, hospital_address, experience_years, consultation_fee, hospital_id, doctor_status, created_at, updated_at) VALUES
-('3b000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', 'Aadhya Patel', 'ENT', 'LIC-DOC-1', 'Bangalore MedCity Hospital - Indiranagar', 'Indiranagar, Bengaluru', 18, 1200, '2a000000-0000-0000-0000-000000000001', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000002', '1b000000-0000-0000-0000-000000000002', 'Aarav Iyer', 'Neurology', 'LIC-DOC-2', 'Silicon Valley Health - HSR Layout', 'HSR Layout, Bengaluru', 8, 750, '2a000000-0000-0000-0000-000000000002', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000003', '1b000000-0000-0000-0000-000000000003', 'Shaurya Reddy', 'General Medicine', 'LIC-DOC-3', 'Garden City Clinic - Whitefield', 'Whitefield, Bengaluru', 3, 1000, '2a000000-0000-0000-0000-000000000003', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000004', '1b000000-0000-0000-0000-000000000004', 'Ishaan Singh', 'Cardiology', 'LIC-DOC-4', 'TechHub Care - Electronic City', 'Electronic City, Bengaluru', 3, 750, '2a000000-0000-0000-0000-000000000004', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000005', '1b000000-0000-0000-0000-000000000005', 'Isha Patel', 'General Medicine', 'LIC-DOC-5', 'Greenwood Memorial - Jayanagar', 'Jayanagar, Bengaluru', 17, 500, '2a000000-0000-0000-0000-000000000005', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000006', '1b000000-0000-0000-0000-000000000006', 'Kavya Iyer', 'Orthopedics', 'LIC-DOC-6', 'Lakeside Healthcare - JP Nagar', 'JP Nagar, Bengaluru', 18, 500, '2a000000-0000-0000-0000-000000000006', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000007', '1b000000-0000-0000-0000-000000000007', 'Swati Nair', 'Orthopedics', 'LIC-DOC-7', 'Metro Health - Malleshwaram', 'Malleshwaram, Bengaluru', 18, 1000, '2a000000-0000-0000-0000-000000000007', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000008', '1b000000-0000-0000-0000-000000000008', 'Aditya Menon', 'General Medicine', 'LIC-DOC-8', 'Silver Oak Hospital - Rajajinagar', 'Rajajinagar, Bengaluru', 13, 1000, '2a000000-0000-0000-0000-000000000008', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000009', '1b000000-0000-0000-0000-000000000009', 'Vikram Sharma', 'ENT', 'LIC-DOC-9', 'Crescent Care - Hebbal', 'Hebbal, Bengaluru', 17, 500, '2a000000-0000-0000-0000-000000000009', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000010', '1b000000-0000-0000-0000-000000000010', 'Aarav Patel', 'Neurology', 'LIC-DOC-10', 'Pinnacle Health - Yelahanka', 'Yelahanka, Bengaluru', 18, 1000, '2a000000-0000-0000-0000-000000000010', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000011', '1b000000-0000-0000-0000-000000000011', 'Krishna Reddy', 'Ophthalmology', 'LIC-DOC-11', 'Horizon Hospital - Marathahalli', 'Marathahalli, Bengaluru', 13, 750, '2a000000-0000-0000-0000-000000000011', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000012', '1b000000-0000-0000-0000-000000000012', 'Diya Menon', 'General Medicine', 'LIC-DOC-12', 'Oasis Clinic - Bellandur', 'Bellandur, Bengaluru', 9, 500, '2a000000-0000-0000-0000-000000000012', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000013', '1b000000-0000-0000-0000-000000000013', 'Aarav Nair', 'Ophthalmology', 'LIC-DOC-13', 'Summit Care - Banashankari', 'Banashankari, Bengaluru', 5, 1200, '2a000000-0000-0000-0000-000000000013', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000014', '1b000000-0000-0000-0000-000000000014', 'Krishna Iyer', 'Cardiology', 'LIC-DOC-14', 'Harmony Health - Basavanagudi', 'Basavanagudi, Bengaluru', 12, 750, '2a000000-0000-0000-0000-000000000014', 'APPROVED', NOW(), NOW()),
-('3b000000-0000-0000-0000-000000000015', '1b000000-0000-0000-0000-000000000015', 'Aadhya Iyer', 'Ophthalmology', 'LIC-DOC-15', 'Aura Medical Center - MG Road', 'MG Road, Bengaluru', 19, 500, '2a000000-0000-0000-0000-000000000015', 'APPROVED', NOW(), NOW());
+INSERT INTO public.hospitals (id, name, address, city, state, country, pincode, latitude, longitude, is_verified, is_active, type, google_maps_url, created_at, updated_at) VALUES
+('2a000000-0000-0000-0000-000000000001', 'Aster CMI Hospital - Best Multispeciality Hospital in Hebbal, Bengaluru', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.05453, 77.59187, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=13.05453%2C77.59187&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000002', 'Aster RV Hospital - Best Multispeciality Hospital in J. P. Nagar, Bengaluru', 'JP Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.91142, 77.58503, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.91142%2C77.58503&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000003', 'Apollo Hospitals | Best Hospital in Bannerghatta Road, Bengaluru', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8948, 77.5986, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.8948%2C77.5986&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000004', 'Fortis Hospital, Bannerghatta Road - Best Hospital in Bangalore', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8948, 77.5986, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.8948%2C77.5986&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000005', 'Manipal Hospitals', 'Old Airport Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9588, 77.6476, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.9588%2C77.6476&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000006', 'Manipal Hospital Yeshwanthpur', 'Yeshwanthpur', 'Bengaluru', 'Karnataka', 'India', '560001', 13.0097, 77.5504, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=13.0097%2C77.5504&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000007', 'Ramaiah Memorial Hospital', 'MS Ramaiah Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 13.02822, 77.56978, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=13.02822%2C77.56978&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000008', 'Sagar Hospitals', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.928015, 77.599463, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.928015%2C77.599463&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000009', 'St. John''s Medical College Hospital', 'Koramangala', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9279, 77.6287, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.9279%2C77.6287&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000010', 'Narayana Institute of Cardiac Sciences', 'Bommasandra', 'Bengaluru', 'Karnataka', 'India', '560001', 12.87507, 77.71453, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.87507%2C77.71453&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000011', 'Bangalore Baptist Hospital', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.035246, 77.589892, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=13.035246%2C77.589892&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000012', 'NIMHANS', 'Hosur Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.93976, 77.59445, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.93976%2C77.59445&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000013', 'Victoria Hospital', 'City Market', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9635, 77.5737, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.9635%2C77.5737&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000014', 'Bowring & Lady Curzon Hospital', 'Shivajinagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.97464, 77.60037, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.97464%2C77.60037&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000015', 'Jayadeva Institute of Cardiovascular Sciences', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9173, 77.596, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.9173%2C77.5960&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000016', 'Mallya Hospital', 'Vittal Mallya Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9707, 77.5956, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.9707%2C77.5956&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000017', 'HCG Cancer Centre', 'Kalinga Rao Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9574, 77.5864, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.9574%2C77.5864&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000018', 'Sakra World Hospital', 'Marathahalli', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9352, 77.695, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.9352%2C77.6950&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000019', 'BGS Gleneagles Global Hospital', 'Kengeri', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8994, 77.5008, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.8994%2C77.5008&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000020', 'Manipal Hospital Whitefield', 'Whitefield', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9755, 77.748, TRUE, TRUE, 'hospital', 'https://www.google.com/maps/search/?api=1&query=12.9755%2C77.7480&utm_source=chatgpt.com', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000021', 'Clinic - Aster Care', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.05953, 77.59687, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=13.05953%2C77.59687', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000022', 'Clinic - Aster Care', 'JP Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.91642, 77.59003, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=12.91642%2C77.59003', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000023', 'Clinic - Apollo Care', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8998, 77.6036, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=12.8998%2C77.6036', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000024', 'Clinic - Fortis Care', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8998, 77.6036, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=12.8998%2C77.6036', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000025', 'Clinic - Manipal Care', 'Old Airport Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9638, 77.65259999999999, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=12.9638%2C77.65259999999999', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000026', 'Clinic - Manipal Care', 'Yeshwanthpur', 'Bengaluru', 'Karnataka', 'India', '560001', 13.014700000000001, 77.55539999999999, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=13.014700000000001%2C77.55539999999999', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000027', 'Clinic - Ramaiah Care', 'MS Ramaiah Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 13.03322, 77.57477999999999, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=13.03322%2C77.57477999999999', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000028', 'Clinic - Sagar Care', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.933015000000001, 77.604463, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=12.933015000000001%2C77.604463', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000029', 'Clinic - St. Care', 'Koramangala', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9329, 77.63369999999999, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=12.9329%2C77.63369999999999', NOW(), NOW()),
+('2a000000-0000-0000-0000-000000000030', 'Clinic - Narayana Care', 'Bommasandra', 'Bengaluru', 'Karnataka', 'India', '560001', 12.88007, 77.71952999999999, TRUE, TRUE, 'clinic', 'https://www.google.com/maps/search/?api=1&query=12.88007%2C77.71952999999999', NOW(), NOW());
+
+INSERT INTO public.doctors (id, user_id, full_name, specialization, license_number, hospital_name, hospital_address, experience_years, consultation_fee, hospital_id, doctor_status, clinic_name, clinic_address, latitude, longitude, created_at, updated_at) VALUES
+('3b000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', 'Doctor 1', 'General Physician', 'LIC0001', 'Aster CMI Hospital - Best Multispeciality Hospital in Hebbal, Bengaluru', 'Hebbal', 10, 500.00, '2a000000-0000-0000-0000-000000000021', 'APPROVED', 'Clinic - Aster Care', 'Hebbal', 13.05953, 77.59687, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000002', '1b000000-0000-0000-0000-000000000002', 'Doctor 2', 'General Physician', 'LIC0002', 'Aster RV Hospital - Best Multispeciality Hospital in J. P. Nagar, Bengaluru', 'JP Nagar', 10, 500.00, '2a000000-0000-0000-0000-000000000022', 'APPROVED', 'Clinic - Aster Care', 'JP Nagar', 12.91642, 77.59003, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000003', '1b000000-0000-0000-0000-000000000003', 'Doctor 3', 'General Physician', 'LIC0003', 'Apollo Hospitals | Best Hospital in Bannerghatta Road, Bengaluru', 'Bannerghatta Road', 10, 500.00, '2a000000-0000-0000-0000-000000000023', 'APPROVED', 'Clinic - Apollo Care', 'Bannerghatta Road', 12.8998, 77.6036, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000004', '1b000000-0000-0000-0000-000000000004', 'Doctor 4', 'General Physician', 'LIC0004', 'Fortis Hospital, Bannerghatta Road - Best Hospital in Bangalore', 'Bannerghatta Road', 10, 500.00, '2a000000-0000-0000-0000-000000000024', 'APPROVED', 'Clinic - Fortis Care', 'Bannerghatta Road', 12.8998, 77.6036, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000005', '1b000000-0000-0000-0000-000000000005', 'Doctor 5', 'General Physician', 'LIC0005', 'Manipal Hospitals', 'Old Airport Road', 10, 500.00, '2a000000-0000-0000-0000-000000000025', 'APPROVED', 'Clinic - Manipal Care', 'Old Airport Road', 12.9638, 77.65259999999999, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000006', '1b000000-0000-0000-0000-000000000006', 'Doctor 6', 'General Physician', 'LIC0006', 'Manipal Hospital Yeshwanthpur', 'Yeshwanthpur', 10, 500.00, '2a000000-0000-0000-0000-000000000026', 'APPROVED', 'Clinic - Manipal Care', 'Yeshwanthpur', 13.014700000000001, 77.55539999999999, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000007', '1b000000-0000-0000-0000-000000000007', 'Doctor 7', 'General Physician', 'LIC0007', 'Ramaiah Memorial Hospital', 'MS Ramaiah Nagar', 10, 500.00, '2a000000-0000-0000-0000-000000000027', 'APPROVED', 'Clinic - Ramaiah Care', 'MS Ramaiah Nagar', 13.03322, 77.57477999999999, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000008', '1b000000-0000-0000-0000-000000000008', 'Doctor 8', 'General Physician', 'LIC0008', 'Sagar Hospitals', 'Jayanagar', 10, 500.00, '2a000000-0000-0000-0000-000000000028', 'APPROVED', 'Clinic - Sagar Care', 'Jayanagar', 12.933015000000001, 77.604463, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000009', '1b000000-0000-0000-0000-000000000009', 'Doctor 9', 'General Physician', 'LIC0009', 'St. John''s Medical College Hospital', 'Koramangala', 10, 500.00, '2a000000-0000-0000-0000-000000000029', 'APPROVED', 'Clinic - St. Care', 'Koramangala', 12.9329, 77.63369999999999, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000010', '1b000000-0000-0000-0000-000000000010', 'Doctor 10', 'General Physician', 'LIC0010', 'Narayana Institute of Cardiac Sciences', 'Bommasandra', 10, 500.00, '2a000000-0000-0000-0000-000000000030', 'APPROVED', 'Clinic - Narayana Care', 'Bommasandra', 12.88007, 77.71952999999999, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000011', '1b000000-0000-0000-0000-000000000011', 'Doctor 11', 'General Physician', 'LIC0011', 'Bangalore Baptist Hospital', 'Hebbal', 10, 500.00, '2a000000-0000-0000-0000-000000000011', 'APPROVED', NULL, NULL, 13.035246, 77.589892, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000012', '1b000000-0000-0000-0000-000000000012', 'Doctor 12', 'General Physician', 'LIC0012', 'NIMHANS', 'Hosur Road', 10, 500.00, '2a000000-0000-0000-0000-000000000012', 'APPROVED', NULL, NULL, 12.93976, 77.59445, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000013', '1b000000-0000-0000-0000-000000000013', 'Doctor 13', 'General Physician', 'LIC0013', 'Victoria Hospital', 'City Market', 10, 500.00, '2a000000-0000-0000-0000-000000000013', 'APPROVED', NULL, NULL, 12.9635, 77.5737, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000014', '1b000000-0000-0000-0000-000000000014', 'Doctor 14', 'General Physician', 'LIC0014', 'Bowring & Lady Curzon Hospital', 'Shivajinagar', 10, 500.00, '2a000000-0000-0000-0000-000000000014', 'APPROVED', NULL, NULL, 12.97464, 77.60037, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000015', '1b000000-0000-0000-0000-000000000015', 'Doctor 15', 'General Physician', 'LIC0015', 'Jayadeva Institute of Cardiovascular Sciences', 'Jayanagar', 10, 500.00, '2a000000-0000-0000-0000-000000000015', 'APPROVED', NULL, NULL, 12.9173, 77.596, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000016', '1b000000-0000-0000-0000-000000000016', 'Doctor 16', 'General Physician', 'LIC0016', 'Mallya Hospital', 'Vittal Mallya Road', 10, 500.00, '2a000000-0000-0000-0000-000000000016', 'APPROVED', NULL, NULL, 12.9707, 77.5956, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000017', '1b000000-0000-0000-0000-000000000017', 'Doctor 17', 'General Physician', 'LIC0017', 'HCG Cancer Centre', 'Kalinga Rao Road', 10, 500.00, '2a000000-0000-0000-0000-000000000017', 'APPROVED', NULL, NULL, 12.9574, 77.5864, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000018', '1b000000-0000-0000-0000-000000000018', 'Doctor 18', 'General Physician', 'LIC0018', 'Sakra World Hospital', 'Marathahalli', 10, 500.00, '2a000000-0000-0000-0000-000000000018', 'APPROVED', NULL, NULL, 12.9352, 77.695, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000019', '1b000000-0000-0000-0000-000000000019', 'Doctor 19', 'General Physician', 'LIC0019', 'BGS Gleneagles Global Hospital', 'Kengeri', 10, 500.00, '2a000000-0000-0000-0000-000000000019', 'APPROVED', NULL, NULL, 12.8994, 77.5008, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000020', '1b000000-0000-0000-0000-000000000020', 'Doctor 20', 'General Physician', 'LIC0020', 'Manipal Hospital Whitefield', 'Whitefield', 10, 500.00, '2a000000-0000-0000-0000-000000000020', 'APPROVED', NULL, NULL, 12.9755, 77.748, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000021', '1b000000-0000-0000-0000-000000000021', 'Doctor 21', 'General Physician', 'LIC0021', 'Aster CMI Hospital - Best Multispeciality Hospital in Hebbal, Bengaluru', 'Hebbal', 10, 500.00, '2a000000-0000-0000-0000-000000000001', 'APPROVED', NULL, NULL, 13.05453, 77.59187, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000022', '1b000000-0000-0000-0000-000000000022', 'Doctor 22', 'General Physician', 'LIC0022', 'Aster RV Hospital - Best Multispeciality Hospital in J. P. Nagar, Bengaluru', 'JP Nagar', 10, 500.00, '2a000000-0000-0000-0000-000000000002', 'APPROVED', NULL, NULL, 12.91142, 77.58503, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000023', '1b000000-0000-0000-0000-000000000023', 'Doctor 23', 'General Physician', 'LIC0023', 'Apollo Hospitals | Best Hospital in Bannerghatta Road, Bengaluru', 'Bannerghatta Road', 10, 500.00, '2a000000-0000-0000-0000-000000000003', 'APPROVED', NULL, NULL, 12.8948, 77.5986, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000024', '1b000000-0000-0000-0000-000000000024', 'Doctor 24', 'General Physician', 'LIC0024', 'Fortis Hospital, Bannerghatta Road - Best Hospital in Bangalore', 'Bannerghatta Road', 10, 500.00, '2a000000-0000-0000-0000-000000000004', 'APPROVED', NULL, NULL, 12.8948, 77.5986, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000025', '1b000000-0000-0000-0000-000000000025', 'Doctor 25', 'General Physician', 'LIC0025', 'Manipal Hospitals', 'Old Airport Road', 10, 500.00, '2a000000-0000-0000-0000-000000000005', 'APPROVED', NULL, NULL, 12.9588, 77.6476, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000026', '1b000000-0000-0000-0000-000000000026', 'Doctor 26', 'General Physician', 'LIC0026', 'Manipal Hospital Yeshwanthpur', 'Yeshwanthpur', 10, 500.00, '2a000000-0000-0000-0000-000000000006', 'APPROVED', NULL, NULL, 13.0097, 77.5504, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000027', '1b000000-0000-0000-0000-000000000027', 'Doctor 27', 'General Physician', 'LIC0027', 'Ramaiah Memorial Hospital', 'MS Ramaiah Nagar', 10, 500.00, '2a000000-0000-0000-0000-000000000007', 'APPROVED', NULL, NULL, 13.02822, 77.56978, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000028', '1b000000-0000-0000-0000-000000000028', 'Doctor 28', 'General Physician', 'LIC0028', 'Sagar Hospitals', 'Jayanagar', 10, 500.00, '2a000000-0000-0000-0000-000000000008', 'APPROVED', NULL, NULL, 12.928015, 77.599463, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000029', '1b000000-0000-0000-0000-000000000029', 'Doctor 29', 'General Physician', 'LIC0029', 'St. John''s Medical College Hospital', 'Koramangala', 10, 500.00, '2a000000-0000-0000-0000-000000000009', 'APPROVED', NULL, NULL, 12.9279, 77.6287, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000030', '1b000000-0000-0000-0000-000000000030', 'Doctor 30', 'General Physician', 'LIC0030', 'Narayana Institute of Cardiac Sciences', 'Bommasandra', 10, 500.00, '2a000000-0000-0000-0000-000000000010', 'APPROVED', NULL, NULL, 12.87507, 77.71453, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000031', '1b000000-0000-0000-0000-000000000031', 'Doctor 31', 'General Physician', 'LIC0031', 'Bangalore Baptist Hospital', 'Hebbal', 10, 500.00, '2a000000-0000-0000-0000-000000000011', 'APPROVED', NULL, NULL, 13.035246, 77.589892, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000032', '1b000000-0000-0000-0000-000000000032', 'Doctor 32', 'General Physician', 'LIC0032', 'NIMHANS', 'Hosur Road', 10, 500.00, '2a000000-0000-0000-0000-000000000012', 'APPROVED', NULL, NULL, 12.93976, 77.59445, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000033', '1b000000-0000-0000-0000-000000000033', 'Doctor 33', 'General Physician', 'LIC0033', 'Victoria Hospital', 'City Market', 10, 500.00, '2a000000-0000-0000-0000-000000000013', 'APPROVED', NULL, NULL, 12.9635, 77.5737, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000034', '1b000000-0000-0000-0000-000000000034', 'Doctor 34', 'General Physician', 'LIC0034', 'Bowring & Lady Curzon Hospital', 'Shivajinagar', 10, 500.00, '2a000000-0000-0000-0000-000000000014', 'APPROVED', NULL, NULL, 12.97464, 77.60037, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000035', '1b000000-0000-0000-0000-000000000035', 'Doctor 35', 'General Physician', 'LIC0035', 'Jayadeva Institute of Cardiovascular Sciences', 'Jayanagar', 10, 500.00, '2a000000-0000-0000-0000-000000000015', 'APPROVED', NULL, NULL, 12.9173, 77.596, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000036', '1b000000-0000-0000-0000-000000000036', 'Doctor 36', 'General Physician', 'LIC0036', 'Mallya Hospital', 'Vittal Mallya Road', 10, 500.00, '2a000000-0000-0000-0000-000000000016', 'APPROVED', NULL, NULL, 12.9707, 77.5956, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000037', '1b000000-0000-0000-0000-000000000037', 'Doctor 37', 'General Physician', 'LIC0037', 'HCG Cancer Centre', 'Kalinga Rao Road', 10, 500.00, '2a000000-0000-0000-0000-000000000017', 'APPROVED', NULL, NULL, 12.9574, 77.5864, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000038', '1b000000-0000-0000-0000-000000000038', 'Doctor 38', 'General Physician', 'LIC0038', 'Sakra World Hospital', 'Marathahalli', 10, 500.00, '2a000000-0000-0000-0000-000000000018', 'APPROVED', NULL, NULL, 12.9352, 77.695, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000039', '1b000000-0000-0000-0000-000000000039', 'Doctor 39', 'General Physician', 'LIC0039', 'BGS Gleneagles Global Hospital', 'Kengeri', 10, 500.00, '2a000000-0000-0000-0000-000000000019', 'APPROVED', NULL, NULL, 12.8994, 77.5008, NOW(), NOW()),
+('3b000000-0000-0000-0000-000000000040', '1b000000-0000-0000-0000-000000000040', 'Doctor 40', 'General Physician', 'LIC0040', 'Manipal Hospital Whitefield', 'Whitefield', 10, 500.00, '2a000000-0000-0000-0000-000000000020', 'APPROVED', NULL, NULL, 12.9755, 77.748, NOW(), NOW());
 
 INSERT INTO public.doctor_locations (id, doctor_id, location_type, location_name, hospital_id, address, city, state, country, pincode, latitude, longitude, is_primary, is_active, verification_status, created_at, updated_at) VALUES
-('4a000000-0000-0000-0000-000000000001', '3b000000-0000-0000-0000-000000000001', 'HOSPITAL', 'Bangalore MedCity Hospital - Indiranagar', '2a000000-0000-0000-0000-000000000001', 'Indiranagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560038', 12.971202, 77.642271, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000002', '3b000000-0000-0000-0000-000000000002', 'HOSPITAL', 'Silicon Valley Health - HSR Layout', '2a000000-0000-0000-0000-000000000002', 'HSR Layout, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560102', 12.913967, 77.640352, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000003', '3b000000-0000-0000-0000-000000000003', 'HOSPITAL', 'Garden City Clinic - Whitefield', '2a000000-0000-0000-0000-000000000003', 'Whitefield, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560066', 12.965004, 77.739536, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000004', '3b000000-0000-0000-0000-000000000004', 'HOSPITAL', 'TechHub Care - Electronic City', '2a000000-0000-0000-0000-000000000004', 'Electronic City, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560100', 12.828933, 77.680498, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000005', '3b000000-0000-0000-0000-000000000005', 'HOSPITAL', 'Greenwood Memorial - Jayanagar', '2a000000-0000-0000-0000-000000000005', 'Jayanagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560041', 12.923372, 77.585082, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000006', '3b000000-0000-0000-0000-000000000006', 'HOSPITAL', 'Lakeside Healthcare - JP Nagar', '2a000000-0000-0000-0000-000000000006', 'JP Nagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560078', 12.910836, 77.580457, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000007', '3b000000-0000-0000-0000-000000000007', 'HOSPITAL', 'Metro Health - Malleshwaram', '2a000000-0000-0000-0000-000000000007', 'Malleshwaram, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560003', 12.989653, 77.575068, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000008', '3b000000-0000-0000-0000-000000000008', 'HOSPITAL', 'Silver Oak Hospital - Rajajinagar', '2a000000-0000-0000-0000-000000000008', 'Rajajinagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560010', 12.995843, 77.543941, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000009', '3b000000-0000-0000-0000-000000000009', 'HOSPITAL', 'Crescent Care - Hebbal', '2a000000-0000-0000-0000-000000000009', 'Hebbal, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560024', 13.024690, 77.595801, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000010', '3b000000-0000-0000-0000-000000000010', 'HOSPITAL', 'Pinnacle Health - Yelahanka', '2a000000-0000-0000-0000-000000000010', 'Yelahanka, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560064', 13.105076, 77.608771, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000011', '3b000000-0000-0000-0000-000000000011', 'HOSPITAL', 'Horizon Hospital - Marathahalli', '2a000000-0000-0000-0000-000000000011', 'Marathahalli, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560037', 12.950074, 77.687880, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000012', '3b000000-0000-0000-0000-000000000012', 'HOSPITAL', 'Oasis Clinic - Bellandur', '2a000000-0000-0000-0000-000000000012', 'Bellandur, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560103', 12.940166, 77.677581, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000013', '3b000000-0000-0000-0000-000000000013', 'HOSPITAL', 'Summit Care - Banashankari', '2a000000-0000-0000-0000-000000000013', 'Banashankari, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560050', 12.922174, 77.549820, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000014', '3b000000-0000-0000-0000-000000000014', 'HOSPITAL', 'Harmony Health - Basavanagudi', '2a000000-0000-0000-0000-000000000014', 'Basavanagudi, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560004', 12.953515, 77.568570, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4a000000-0000-0000-0000-000000000015', '3b000000-0000-0000-0000-000000000015', 'HOSPITAL', 'Aura Medical Center - MG Road', '2a000000-0000-0000-0000-000000000015', 'MG Road, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560001', 12.959141, 77.604849, TRUE, TRUE, 'APPROVED', NOW(), NOW());
+('4b000000-0000-0000-0000-000000000001', '3b000000-0000-0000-0000-000000000001', 'CLINIC', 'Clinic - Aster Care', '2a000000-0000-0000-0000-000000000021', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.05953, 77.59687, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000041', '3b000000-0000-0000-0000-000000000001', 'HOSPITAL', 'Aster CMI Hospital - Best Multispeciality Hospital in Hebbal, Bengaluru', '2a000000-0000-0000-0000-000000000001', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.05453, 77.59187, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000002', '3b000000-0000-0000-0000-000000000002', 'CLINIC', 'Clinic - Aster Care', '2a000000-0000-0000-0000-000000000022', 'JP Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.91642, 77.59003, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000042', '3b000000-0000-0000-0000-000000000002', 'HOSPITAL', 'Aster RV Hospital - Best Multispeciality Hospital in J. P. Nagar, Bengaluru', '2a000000-0000-0000-0000-000000000002', 'JP Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.91142, 77.58503, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000003', '3b000000-0000-0000-0000-000000000003', 'CLINIC', 'Clinic - Apollo Care', '2a000000-0000-0000-0000-000000000023', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8998, 77.6036, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000043', '3b000000-0000-0000-0000-000000000003', 'HOSPITAL', 'Apollo Hospitals | Best Hospital in Bannerghatta Road, Bengaluru', '2a000000-0000-0000-0000-000000000003', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8948, 77.5986, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000004', '3b000000-0000-0000-0000-000000000004', 'CLINIC', 'Clinic - Fortis Care', '2a000000-0000-0000-0000-000000000024', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8998, 77.6036, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000044', '3b000000-0000-0000-0000-000000000004', 'HOSPITAL', 'Fortis Hospital, Bannerghatta Road - Best Hospital in Bangalore', '2a000000-0000-0000-0000-000000000004', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8948, 77.5986, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000005', '3b000000-0000-0000-0000-000000000005', 'CLINIC', 'Clinic - Manipal Care', '2a000000-0000-0000-0000-000000000025', 'Old Airport Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9638, 77.65259999999999, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000045', '3b000000-0000-0000-0000-000000000005', 'HOSPITAL', 'Manipal Hospitals', '2a000000-0000-0000-0000-000000000005', 'Old Airport Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9588, 77.6476, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000006', '3b000000-0000-0000-0000-000000000006', 'CLINIC', 'Clinic - Manipal Care', '2a000000-0000-0000-0000-000000000026', 'Yeshwanthpur', 'Bengaluru', 'Karnataka', 'India', '560001', 13.014700000000001, 77.55539999999999, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000046', '3b000000-0000-0000-0000-000000000006', 'HOSPITAL', 'Manipal Hospital Yeshwanthpur', '2a000000-0000-0000-0000-000000000006', 'Yeshwanthpur', 'Bengaluru', 'Karnataka', 'India', '560001', 13.0097, 77.5504, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000007', '3b000000-0000-0000-0000-000000000007', 'CLINIC', 'Clinic - Ramaiah Care', '2a000000-0000-0000-0000-000000000027', 'MS Ramaiah Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 13.03322, 77.57477999999999, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000047', '3b000000-0000-0000-0000-000000000007', 'HOSPITAL', 'Ramaiah Memorial Hospital', '2a000000-0000-0000-0000-000000000007', 'MS Ramaiah Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 13.02822, 77.56978, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000008', '3b000000-0000-0000-0000-000000000008', 'CLINIC', 'Clinic - Sagar Care', '2a000000-0000-0000-0000-000000000028', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.933015000000001, 77.604463, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000048', '3b000000-0000-0000-0000-000000000008', 'HOSPITAL', 'Sagar Hospitals', '2a000000-0000-0000-0000-000000000008', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.928015, 77.599463, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000009', '3b000000-0000-0000-0000-000000000009', 'CLINIC', 'Clinic - St. Care', '2a000000-0000-0000-0000-000000000029', 'Koramangala', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9329, 77.63369999999999, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000049', '3b000000-0000-0000-0000-000000000009', 'HOSPITAL', 'St. John''s Medical College Hospital', '2a000000-0000-0000-0000-000000000009', 'Koramangala', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9279, 77.6287, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000010', '3b000000-0000-0000-0000-000000000010', 'CLINIC', 'Clinic - Narayana Care', '2a000000-0000-0000-0000-000000000030', 'Bommasandra', 'Bengaluru', 'Karnataka', 'India', '560001', 12.88007, 77.71952999999999, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000050', '3b000000-0000-0000-0000-000000000010', 'HOSPITAL', 'Narayana Institute of Cardiac Sciences', '2a000000-0000-0000-0000-000000000010', 'Bommasandra', 'Bengaluru', 'Karnataka', 'India', '560001', 12.87507, 77.71453, FALSE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000011', '3b000000-0000-0000-0000-000000000011', 'HOSPITAL', 'Bangalore Baptist Hospital', '2a000000-0000-0000-0000-000000000011', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.035246, 77.589892, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000012', '3b000000-0000-0000-0000-000000000012', 'HOSPITAL', 'NIMHANS', '2a000000-0000-0000-0000-000000000012', 'Hosur Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.93976, 77.59445, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000013', '3b000000-0000-0000-0000-000000000013', 'HOSPITAL', 'Victoria Hospital', '2a000000-0000-0000-0000-000000000013', 'City Market', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9635, 77.5737, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000014', '3b000000-0000-0000-0000-000000000014', 'HOSPITAL', 'Bowring & Lady Curzon Hospital', '2a000000-0000-0000-0000-000000000014', 'Shivajinagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.97464, 77.60037, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000015', '3b000000-0000-0000-0000-000000000015', 'HOSPITAL', 'Jayadeva Institute of Cardiovascular Sciences', '2a000000-0000-0000-0000-000000000015', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9173, 77.596, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000016', '3b000000-0000-0000-0000-000000000016', 'HOSPITAL', 'Mallya Hospital', '2a000000-0000-0000-0000-000000000016', 'Vittal Mallya Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9707, 77.5956, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000017', '3b000000-0000-0000-0000-000000000017', 'HOSPITAL', 'HCG Cancer Centre', '2a000000-0000-0000-0000-000000000017', 'Kalinga Rao Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9574, 77.5864, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000018', '3b000000-0000-0000-0000-000000000018', 'HOSPITAL', 'Sakra World Hospital', '2a000000-0000-0000-0000-000000000018', 'Marathahalli', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9352, 77.695, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000019', '3b000000-0000-0000-0000-000000000019', 'HOSPITAL', 'BGS Gleneagles Global Hospital', '2a000000-0000-0000-0000-000000000019', 'Kengeri', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8994, 77.5008, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000020', '3b000000-0000-0000-0000-000000000020', 'HOSPITAL', 'Manipal Hospital Whitefield', '2a000000-0000-0000-0000-000000000020', 'Whitefield', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9755, 77.748, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000021', '3b000000-0000-0000-0000-000000000021', 'HOSPITAL', 'Aster CMI Hospital - Best Multispeciality Hospital in Hebbal, Bengaluru', '2a000000-0000-0000-0000-000000000001', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.05453, 77.59187, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000022', '3b000000-0000-0000-0000-000000000022', 'HOSPITAL', 'Aster RV Hospital - Best Multispeciality Hospital in J. P. Nagar, Bengaluru', '2a000000-0000-0000-0000-000000000002', 'JP Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.91142, 77.58503, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000023', '3b000000-0000-0000-0000-000000000023', 'HOSPITAL', 'Apollo Hospitals | Best Hospital in Bannerghatta Road, Bengaluru', '2a000000-0000-0000-0000-000000000003', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8948, 77.5986, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000024', '3b000000-0000-0000-0000-000000000024', 'HOSPITAL', 'Fortis Hospital, Bannerghatta Road - Best Hospital in Bangalore', '2a000000-0000-0000-0000-000000000004', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8948, 77.5986, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000025', '3b000000-0000-0000-0000-000000000025', 'HOSPITAL', 'Manipal Hospitals', '2a000000-0000-0000-0000-000000000005', 'Old Airport Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9588, 77.6476, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000026', '3b000000-0000-0000-0000-000000000026', 'HOSPITAL', 'Manipal Hospital Yeshwanthpur', '2a000000-0000-0000-0000-000000000006', 'Yeshwanthpur', 'Bengaluru', 'Karnataka', 'India', '560001', 13.0097, 77.5504, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000027', '3b000000-0000-0000-0000-000000000027', 'HOSPITAL', 'Ramaiah Memorial Hospital', '2a000000-0000-0000-0000-000000000007', 'MS Ramaiah Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 13.02822, 77.56978, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000028', '3b000000-0000-0000-0000-000000000028', 'HOSPITAL', 'Sagar Hospitals', '2a000000-0000-0000-0000-000000000008', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.928015, 77.599463, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000029', '3b000000-0000-0000-0000-000000000029', 'HOSPITAL', 'St. John''s Medical College Hospital', '2a000000-0000-0000-0000-000000000009', 'Koramangala', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9279, 77.6287, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000030', '3b000000-0000-0000-0000-000000000030', 'HOSPITAL', 'Narayana Institute of Cardiac Sciences', '2a000000-0000-0000-0000-000000000010', 'Bommasandra', 'Bengaluru', 'Karnataka', 'India', '560001', 12.87507, 77.71453, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000031', '3b000000-0000-0000-0000-000000000031', 'HOSPITAL', 'Bangalore Baptist Hospital', '2a000000-0000-0000-0000-000000000011', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.035246, 77.589892, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000032', '3b000000-0000-0000-0000-000000000032', 'HOSPITAL', 'NIMHANS', '2a000000-0000-0000-0000-000000000012', 'Hosur Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.93976, 77.59445, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000033', '3b000000-0000-0000-0000-000000000033', 'HOSPITAL', 'Victoria Hospital', '2a000000-0000-0000-0000-000000000013', 'City Market', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9635, 77.5737, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000034', '3b000000-0000-0000-0000-000000000034', 'HOSPITAL', 'Bowring & Lady Curzon Hospital', '2a000000-0000-0000-0000-000000000014', 'Shivajinagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.97464, 77.60037, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000035', '3b000000-0000-0000-0000-000000000035', 'HOSPITAL', 'Jayadeva Institute of Cardiovascular Sciences', '2a000000-0000-0000-0000-000000000015', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9173, 77.596, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000036', '3b000000-0000-0000-0000-000000000036', 'HOSPITAL', 'Mallya Hospital', '2a000000-0000-0000-0000-000000000016', 'Vittal Mallya Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9707, 77.5956, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000037', '3b000000-0000-0000-0000-000000000037', 'HOSPITAL', 'HCG Cancer Centre', '2a000000-0000-0000-0000-000000000017', 'Kalinga Rao Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9574, 77.5864, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000038', '3b000000-0000-0000-0000-000000000038', 'HOSPITAL', 'Sakra World Hospital', '2a000000-0000-0000-0000-000000000018', 'Marathahalli', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9352, 77.695, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000039', '3b000000-0000-0000-0000-000000000039', 'HOSPITAL', 'BGS Gleneagles Global Hospital', '2a000000-0000-0000-0000-000000000019', 'Kengeri', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8994, 77.5008, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4b000000-0000-0000-0000-000000000040', '3b000000-0000-0000-0000-000000000040', 'HOSPITAL', 'Manipal Hospital Whitefield', '2a000000-0000-0000-0000-000000000020', 'Whitefield', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9755, 77.748, TRUE, TRUE, 'VERIFIED', NOW(), NOW());
 
 INSERT INTO public.patients (id, user_id, full_name, date_of_birth, gender, blood_group, city, state, pincode, pin_hash, created_at, updated_at) VALUES
-('3c000000-0000-0000-0000-000000000001', '1c000000-0000-0000-0000-000000000001', 'Vihaan Iyer', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560034', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000002', '1c000000-0000-0000-0000-000000000002', 'Suresh Nair', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560038', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000003', '1c000000-0000-0000-0000-000000000003', 'Arjun Chauhan', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560102', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000004', '1c000000-0000-0000-0000-000000000004', 'Amit Patel', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560066', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000005', '1c000000-0000-0000-0000-000000000005', 'Saanvi Kumar', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560100', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000006', '1c000000-0000-0000-0000-000000000006', 'Anjali Joshi', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560041', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000007', '1c000000-0000-0000-0000-000000000007', 'Riya Chauhan', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560078', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000008', '1c000000-0000-0000-0000-000000000008', 'Shruti Gupta', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560003', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000009', '1c000000-0000-0000-0000-000000000009', 'Priya Reddy', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560010', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000010', '1c000000-0000-0000-0000-000000000010', 'Sneha Patel', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560024', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000011', '1c000000-0000-0000-0000-000000000011', 'Vihaan Joshi', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560064', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000012', '1c000000-0000-0000-0000-000000000012', 'Ishaan Verma', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560037', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000013', '1c000000-0000-0000-0000-000000000013', 'Atharv Patel', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560103', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000014', '1c000000-0000-0000-0000-000000000014', 'Shruti Reddy', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560050', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000015', '1c000000-0000-0000-0000-000000000015', 'Shruti Patel', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560004', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000016', '1c000000-0000-0000-0000-000000000016', 'Amit Kumar', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560001', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000017', '1c000000-0000-0000-0000-000000000017', 'Suresh Joshi', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560051', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000018', '1c000000-0000-0000-0000-000000000018', 'Anjali Gupta', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560034', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000019', '1c000000-0000-0000-0000-000000000019', 'Rohan Gupta', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560038', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW()),
-('3c000000-0000-0000-0000-000000000020', '1c000000-0000-0000-0000-000000000020', 'Rahul Reddy', '1990-01-01', 'Male', 'O+', 'Bengaluru', 'Karnataka', '560102', '$2b$12$TestPinHashForPatient1DemoUser12345678901234567', NOW(), NOW());
+('3c000000-0000-0000-0000-000000000001', '1c000000-0000-0000-0000-000000000001', 'Patient 1', '1990-01-01', 'MALE', 'O+', 'Bengaluru', 'Karnataka', '560001', 'hash123', NOW(), NOW()),
+('3c000000-0000-0000-0000-000000000002', '1c000000-0000-0000-0000-000000000002', 'Patient 2', '1990-01-01', 'MALE', 'O+', 'Bengaluru', 'Karnataka', '560001', 'hash123', NOW(), NOW()),
+('3c000000-0000-0000-0000-000000000003', '1c000000-0000-0000-0000-000000000003', 'Patient 3', '1990-01-01', 'MALE', 'O+', 'Bengaluru', 'Karnataka', '560001', 'hash123', NOW(), NOW()),
+('3c000000-0000-0000-0000-000000000004', '1c000000-0000-0000-0000-000000000004', 'Patient 4', '1990-01-01', 'MALE', 'O+', 'Bengaluru', 'Karnataka', '560001', 'hash123', NOW(), NOW()),
+('3c000000-0000-0000-0000-000000000005', '1c000000-0000-0000-0000-000000000005', 'Patient 5', '1990-01-01', 'MALE', 'O+', 'Bengaluru', 'Karnataka', '560001', 'hash123', NOW(), NOW());
 
 INSERT INTO public.pharmacies (id, user_id, business_name, license_number, address, city, state, contact_number, qr_identifier, created_at, updated_at) VALUES
-('3d000000-0000-0000-0000-000000000001', '1d000000-0000-0000-0000-000000000001', 'Wellness Pharmacy (Indiranagar)', 'LIC-PHM-1', 'Near Indiranagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-1-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000002', '1d000000-0000-0000-0000-000000000002', 'Sanjeevani Pharmacy (HSR Layout)', 'LIC-PHM-2', 'Near HSR Layout, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-2-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000003', '1d000000-0000-0000-0000-000000000003', 'TrueHealth Pharmacy (Whitefield)', 'LIC-PHM-3', 'Near Whitefield, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-3-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000004', '1d000000-0000-0000-0000-000000000004', 'CarePlus Pharmacy (Electronic City)', 'LIC-PHM-4', 'Near Electronic City, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-4-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000005', '1d000000-0000-0000-0000-000000000005', 'LifeCare Pharmacy (Jayanagar)', 'LIC-PHM-5', 'Near Jayanagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-5-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000006', '1d000000-0000-0000-0000-000000000006', 'GoodHealth Pharmacy (JP Nagar)', 'LIC-PHM-6', 'Near JP Nagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-6-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000007', '1d000000-0000-0000-0000-000000000007', 'Arogya Pharmacy (Malleshwaram)', 'LIC-PHM-7', 'Near Malleshwaram, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-7-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000008', '1d000000-0000-0000-0000-000000000008', 'TrueHealth Pharmacy (Rajajinagar)', 'LIC-PHM-8', 'Near Rajajinagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-8-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000009', '1d000000-0000-0000-0000-000000000009', 'LifeCare Pharmacy (Hebbal)', 'LIC-PHM-9', 'Near Hebbal, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-9-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000010', '1d000000-0000-0000-0000-000000000010', 'Sanjeevani Pharmacy (Yelahanka)', 'LIC-PHM-10', 'Near Yelahanka, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-10-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000011', '1d000000-0000-0000-0000-000000000011', 'TrueHealth Pharmacy (Marathahalli)', 'LIC-PHM-11', 'Near Marathahalli, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-11-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000012', '1d000000-0000-0000-0000-000000000012', 'Pulse Pharmacy (Bellandur)', 'LIC-PHM-12', 'Near Bellandur, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-12-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000013', '1d000000-0000-0000-0000-000000000013', 'LifeCare Pharmacy (Banashankari)', 'LIC-PHM-13', 'Near Banashankari, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-13-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000014', '1d000000-0000-0000-0000-000000000014', 'Wellness Pharmacy (Basavanagudi)', 'LIC-PHM-14', 'Near Basavanagudi, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-14-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000015', '1d000000-0000-0000-0000-000000000015', 'LifeCare Pharmacy (MG Road)', 'LIC-PHM-15', 'Near MG Road, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-15-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000016', '1d000000-0000-0000-0000-000000000016', 'Arogya Pharmacy (Shivajinagar)', 'LIC-PHM-16', 'Near Shivajinagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-16-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000017', '1d000000-0000-0000-0000-000000000017', 'Wellness Pharmacy (Koramangala)', 'LIC-PHM-17', 'Near Koramangala, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-17-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000018', '1d000000-0000-0000-0000-000000000018', 'GoodHealth Pharmacy (Indiranagar)', 'LIC-PHM-18', 'Near Indiranagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-18-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000019', '1d000000-0000-0000-0000-000000000019', 'Arogya Pharmacy (HSR Layout)', 'LIC-PHM-19', 'Near HSR Layout, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-19-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000020', '1d000000-0000-0000-0000-000000000020', 'Sanjeevani Pharmacy (Whitefield)', 'LIC-PHM-20', 'Near Whitefield, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-20-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000021', '1d000000-0000-0000-0000-000000000021', 'Wellness Pharmacy (Electronic City)', 'LIC-PHM-21', 'Near Electronic City, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-21-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000022', '1d000000-0000-0000-0000-000000000022', 'TrueHealth Pharmacy (Jayanagar)', 'LIC-PHM-22', 'Near Jayanagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-22-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000023', '1d000000-0000-0000-0000-000000000023', 'Pulse Pharmacy (JP Nagar)', 'LIC-PHM-23', 'Near JP Nagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-23-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000024', '1d000000-0000-0000-0000-000000000024', 'Arogya Pharmacy (Malleshwaram)', 'LIC-PHM-24', 'Near Malleshwaram, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-24-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000025', '1d000000-0000-0000-0000-000000000025', 'Pulse Pharmacy (Rajajinagar)', 'LIC-PHM-25', 'Near Rajajinagar, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-25-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000026', '1d000000-0000-0000-0000-000000000026', 'Sanjeevani Pharmacy (Hebbal)', 'LIC-PHM-26', 'Near Hebbal, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-26-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000027', '1d000000-0000-0000-0000-000000000027', 'Sanjeevani Pharmacy (Yelahanka)', 'LIC-PHM-27', 'Near Yelahanka, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-27-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000028', '1d000000-0000-0000-0000-000000000028', 'GoodHealth Pharmacy (Marathahalli)', 'LIC-PHM-28', 'Near Marathahalli, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-28-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000029', '1d000000-0000-0000-0000-000000000029', 'Sanjeevani Pharmacy (Bellandur)', 'LIC-PHM-29', 'Near Bellandur, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-29-ABC', NOW(), NOW()),
-('3d000000-0000-0000-0000-000000000030', '1d000000-0000-0000-0000-000000000030', 'LifeCare Pharmacy (Banashankari)', 'LIC-PHM-30', 'Near Banashankari, Bengaluru', 'Bengaluru', 'Karnataka', '1234567890', 'QR-PHM-30-ABC', NOW(), NOW());
+('3d000000-0000-0000-0000-000000000001', '1d000000-0000-0000-0000-000000000001', 'Pharmacy 1', 'PHARMLIC0001', 'Hebbal', 'Bengaluru', 'Karnataka', '9876543210', 'QR1', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000002', '1d000000-0000-0000-0000-000000000002', 'Pharmacy 2', 'PHARMLIC0002', 'JP Nagar', 'Bengaluru', 'Karnataka', '9876543210', 'QR2', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000003', '1d000000-0000-0000-0000-000000000003', 'Pharmacy 3', 'PHARMLIC0003', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', '9876543210', 'QR3', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000004', '1d000000-0000-0000-0000-000000000004', 'Pharmacy 4', 'PHARMLIC0004', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', '9876543210', 'QR4', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000005', '1d000000-0000-0000-0000-000000000005', 'Pharmacy 5', 'PHARMLIC0005', 'Old Airport Road', 'Bengaluru', 'Karnataka', '9876543210', 'QR5', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000006', '1d000000-0000-0000-0000-000000000006', 'Pharmacy 6', 'PHARMLIC0006', 'Yeshwanthpur', 'Bengaluru', 'Karnataka', '9876543210', 'QR6', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000007', '1d000000-0000-0000-0000-000000000007', 'Pharmacy 7', 'PHARMLIC0007', 'MS Ramaiah Nagar', 'Bengaluru', 'Karnataka', '9876543210', 'QR7', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000008', '1d000000-0000-0000-0000-000000000008', 'Pharmacy 8', 'PHARMLIC0008', 'Jayanagar', 'Bengaluru', 'Karnataka', '9876543210', 'QR8', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000009', '1d000000-0000-0000-0000-000000000009', 'Pharmacy 9', 'PHARMLIC0009', 'Koramangala', 'Bengaluru', 'Karnataka', '9876543210', 'QR9', NOW(), NOW()),
+('3d000000-0000-0000-0000-000000000010', '1d000000-0000-0000-0000-000000000010', 'Pharmacy 10', 'PHARMLIC0010', 'Bommasandra', 'Bengaluru', 'Karnataka', '9876543210', 'QR10', NOW(), NOW());
 
 INSERT INTO public.pharmacy_locations (id, pharmacy_id, location_name, address, city, state, country, pincode, latitude, longitude, is_primary, is_active, verification_status, created_at, updated_at) VALUES
-('4b000000-0000-0000-0000-000000000001', '3d000000-0000-0000-0000-000000000001', 'LifeCare Pharmacy (Indiranagar)', 'Near Indiranagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560038', 12.978061, 77.640825, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000002', '3d000000-0000-0000-0000-000000000002', 'GoodHealth Pharmacy (HSR Layout)', 'Near HSR Layout, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560102', 12.919899, 77.653405, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000003', '3d000000-0000-0000-0000-000000000003', 'LifeCare Pharmacy (Whitefield)', 'Near Whitefield, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560066', 12.970216, 77.760156, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000004', '3d000000-0000-0000-0000-000000000004', 'TrueHealth Pharmacy (Electronic City)', 'Near Electronic City, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560100', 12.853973, 77.678756, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000005', '3d000000-0000-0000-0000-000000000005', 'CarePlus Pharmacy (Jayanagar)', 'Near Jayanagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560041', 12.926824, 77.582657, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000006', '3d000000-0000-0000-0000-000000000006', 'Pulse Pharmacy (JP Nagar)', 'Near JP Nagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560078', 12.899582, 77.597344, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000007', '3d000000-0000-0000-0000-000000000007', 'Pulse Pharmacy (Malleshwaram)', 'Near Malleshwaram, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560003', 13.006099, 77.579060, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000008', '3d000000-0000-0000-0000-000000000008', 'TrueHealth Pharmacy (Rajajinagar)', 'Near Rajajinagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560010', 12.986630, 77.544408, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000009', '3d000000-0000-0000-0000-000000000009', 'CarePlus Pharmacy (Hebbal)', 'Near Hebbal, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560024', 13.043064, 77.585440, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000010', '3d000000-0000-0000-0000-000000000010', 'Wellness Pharmacy (Yelahanka)', 'Near Yelahanka, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560064', 13.089703, 77.609417, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000011', '3d000000-0000-0000-0000-000000000011', 'GoodHealth Pharmacy (Marathahalli)', 'Near Marathahalli, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560037', 12.957320, 77.688230, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000012', '3d000000-0000-0000-0000-000000000012', 'GoodHealth Pharmacy (Bellandur)', 'Near Bellandur, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560103', 12.924406, 77.687307, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000013', '3d000000-0000-0000-0000-000000000013', 'Sanjeevani Pharmacy (Banashankari)', 'Near Banashankari, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560050', 12.913588, 77.539327, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000014', '3d000000-0000-0000-0000-000000000014', 'Pulse Pharmacy (Basavanagudi)', 'Near Basavanagudi, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560004', 12.932002, 77.562935, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000015', '3d000000-0000-0000-0000-000000000015', 'Pulse Pharmacy (MG Road)', 'Near MG Road, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560001', 12.974055, 77.607263, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000016', '3d000000-0000-0000-0000-000000000016', 'Sanjeevani Pharmacy (Shivajinagar)', 'Near Shivajinagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560051', 13.000279, 77.614797, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000017', '3d000000-0000-0000-0000-000000000017', 'Wellness Pharmacy (Koramangala)', 'Near Koramangala, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560034', 12.939883, 77.619730, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000018', '3d000000-0000-0000-0000-000000000018', 'Arogya Pharmacy (Indiranagar)', 'Near Indiranagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560038', 12.985569, 77.642858, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000019', '3d000000-0000-0000-0000-000000000019', 'Pulse Pharmacy (HSR Layout)', 'Near HSR Layout, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560102', 12.910462, 77.649952, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000020', '3d000000-0000-0000-0000-000000000020', 'Pulse Pharmacy (Whitefield)', 'Near Whitefield, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560066', 12.957422, 77.748903, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000021', '3d000000-0000-0000-0000-000000000021', 'Arogya Pharmacy (Electronic City)', 'Near Electronic City, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560100', 12.827426, 77.684955, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000022', '3d000000-0000-0000-0000-000000000022', 'Sanjeevani Pharmacy (Jayanagar)', 'Near Jayanagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560041', 12.939438, 77.568218, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000023', '3d000000-0000-0000-0000-000000000023', 'Arogya Pharmacy (JP Nagar)', 'Near JP Nagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560078', 12.904182, 77.595069, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000024', '3d000000-0000-0000-0000-000000000024', 'Pulse Pharmacy (Malleshwaram)', 'Near Malleshwaram, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560003', 13.015196, 77.556370, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000025', '3d000000-0000-0000-0000-000000000025', 'Sanjeevani Pharmacy (Rajajinagar)', 'Near Rajajinagar, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560010', 12.984146, 77.543103, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000026', '3d000000-0000-0000-0000-000000000026', 'Arogya Pharmacy (Hebbal)', 'Near Hebbal, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560024', 13.021977, 77.599971, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000027', '3d000000-0000-0000-0000-000000000027', 'Wellness Pharmacy (Yelahanka)', 'Near Yelahanka, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560064', 13.111390, 77.588503, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000028', '3d000000-0000-0000-0000-000000000028', 'Sanjeevani Pharmacy (Marathahalli)', 'Near Marathahalli, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560037', 12.967716, 77.699270, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000029', '3d000000-0000-0000-0000-000000000029', 'Pulse Pharmacy (Bellandur)', 'Near Bellandur, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560103', 12.936516, 77.686842, TRUE, TRUE, 'APPROVED', NOW(), NOW()),
-('4b000000-0000-0000-0000-000000000030', '3d000000-0000-0000-0000-000000000030', 'TrueHealth Pharmacy (Banashankari)', 'Near Banashankari, Bengaluru', 'Bengaluru', 'Karnataka', 'India', '560050', 12.923469, 77.537840, TRUE, TRUE, 'APPROVED', NOW(), NOW());
+('4d000000-0000-0000-0000-000000000001', '3d000000-0000-0000-0000-000000000001', 'Pharmacy 1 Main', 'Hebbal', 'Bengaluru', 'Karnataka', 'India', '560001', 13.05453, 77.59187, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000002', '3d000000-0000-0000-0000-000000000002', 'Pharmacy 2 Main', 'JP Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.91142, 77.58503, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000003', '3d000000-0000-0000-0000-000000000003', 'Pharmacy 3 Main', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8948, 77.5986, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000004', '3d000000-0000-0000-0000-000000000004', 'Pharmacy 4 Main', 'Bannerghatta Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.8948, 77.5986, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000005', '3d000000-0000-0000-0000-000000000005', 'Pharmacy 5 Main', 'Old Airport Road', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9588, 77.6476, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000006', '3d000000-0000-0000-0000-000000000006', 'Pharmacy 6 Main', 'Yeshwanthpur', 'Bengaluru', 'Karnataka', 'India', '560001', 13.0097, 77.5504, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000007', '3d000000-0000-0000-0000-000000000007', 'Pharmacy 7 Main', 'MS Ramaiah Nagar', 'Bengaluru', 'Karnataka', 'India', '560001', 13.02822, 77.56978, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000008', '3d000000-0000-0000-0000-000000000008', 'Pharmacy 8 Main', 'Jayanagar', 'Bengaluru', 'Karnataka', 'India', '560001', 12.928015, 77.599463, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000009', '3d000000-0000-0000-0000-000000000009', 'Pharmacy 9 Main', 'Koramangala', 'Bengaluru', 'Karnataka', 'India', '560001', 12.9279, 77.6287, TRUE, TRUE, 'VERIFIED', NOW(), NOW()),
+('4d000000-0000-0000-0000-000000000010', '3d000000-0000-0000-0000-000000000010', 'Pharmacy 10 Main', 'Bommasandra', 'Bengaluru', 'Karnataka', 'India', '560001', 12.87507, 77.71453, TRUE, TRUE, 'VERIFIED', NOW(), NOW());
 
-
-SET session_replication_role = 'origin';
-COMMIT;
-
-
-
-
--- ==============================================================================
--- SOURCE: 08_seed_dummy_data.sql
--- ==============================================================================
--- ==============================================================================
--- MEDSYNC DUMMY DATA SEED SCRIPT (CONNECTED E2E TEST DATA)
--- ==============================================================================
--- This script relies on dummy_values.sql having already been run.
--- It ADDS relational data for:
---   admin@medsync.com (User: 1a...001)
---   doctor1@medsync.com (User: 1b...001)
---   patient1@medsync.com (User: 1c...001)
---   pharmacy1@medsync.com (User: 1d...001, verified)
---   pharmacy2@medsync.com (User: 1d...002, unverified)
---
--- No fake blockchain or IPFS values are provided, they are left NULL/PENDING.
--- ==============================================================================
-
-BEGIN;
-
--- 1. Modify pharmacy2 to be unverified for map testing
-UPDATE public.users 
-SET is_verified = FALSE, status = 'PENDING'
-WHERE id = '1d000000-0000-0000-0000-000000000002';
-
-UPDATE public.pharmacy_locations
-SET verification_status = 'PENDING'
-WHERE pharmacy_id = '1d000000-0000-0000-0000-000000000002';
-
--- 2. Doctor Availability
 INSERT INTO public.doctor_availability (id, doctor_id, day_of_week, start_time, end_time, is_available) VALUES
-('5b000000-0000-0000-0000-000000000001', '1b000000-0000-0000-0000-000000000001', 1, '09:00:00', '17:00:00', TRUE),
-('5b000000-0000-0000-0000-000000000002', '1b000000-0000-0000-0000-000000000001', 2, '09:00:00', '17:00:00', TRUE),
-('5b000000-0000-0000-0000-000000000003', '1b000000-0000-0000-0000-000000000001', 3, '09:00:00', '17:00:00', TRUE),
-('5b000000-0000-0000-0000-000000000004', '1b000000-0000-0000-0000-000000000001', 4, '09:00:00', '17:00:00', TRUE),
-('5b000000-0000-0000-0000-000000000005', '1b000000-0000-0000-0000-000000000001', 5, '09:00:00', '17:00:00', TRUE)
+('5b000000-0000-0000-0000-000000000001', '3b000000-0000-0000-0000-000000000001', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000002', '3b000000-0000-0000-0000-000000000001', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000003', '3b000000-0000-0000-0000-000000000001', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000004', '3b000000-0000-0000-0000-000000000001', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000005', '3b000000-0000-0000-0000-000000000001', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000006', '3b000000-0000-0000-0000-000000000002', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000007', '3b000000-0000-0000-0000-000000000002', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000008', '3b000000-0000-0000-0000-000000000002', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000009', '3b000000-0000-0000-0000-000000000002', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000010', '3b000000-0000-0000-0000-000000000002', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000011', '3b000000-0000-0000-0000-000000000003', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000012', '3b000000-0000-0000-0000-000000000003', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000013', '3b000000-0000-0000-0000-000000000003', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000014', '3b000000-0000-0000-0000-000000000003', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000015', '3b000000-0000-0000-0000-000000000003', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000016', '3b000000-0000-0000-0000-000000000004', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000017', '3b000000-0000-0000-0000-000000000004', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000018', '3b000000-0000-0000-0000-000000000004', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000019', '3b000000-0000-0000-0000-000000000004', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000020', '3b000000-0000-0000-0000-000000000004', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000021', '3b000000-0000-0000-0000-000000000005', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000022', '3b000000-0000-0000-0000-000000000005', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000023', '3b000000-0000-0000-0000-000000000005', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000024', '3b000000-0000-0000-0000-000000000005', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000025', '3b000000-0000-0000-0000-000000000005', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000026', '3b000000-0000-0000-0000-000000000006', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000027', '3b000000-0000-0000-0000-000000000006', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000028', '3b000000-0000-0000-0000-000000000006', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000029', '3b000000-0000-0000-0000-000000000006', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000030', '3b000000-0000-0000-0000-000000000006', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000031', '3b000000-0000-0000-0000-000000000007', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000032', '3b000000-0000-0000-0000-000000000007', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000033', '3b000000-0000-0000-0000-000000000007', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000034', '3b000000-0000-0000-0000-000000000007', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000035', '3b000000-0000-0000-0000-000000000007', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000036', '3b000000-0000-0000-0000-000000000008', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000037', '3b000000-0000-0000-0000-000000000008', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000038', '3b000000-0000-0000-0000-000000000008', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000039', '3b000000-0000-0000-0000-000000000008', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000040', '3b000000-0000-0000-0000-000000000008', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000041', '3b000000-0000-0000-0000-000000000009', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000042', '3b000000-0000-0000-0000-000000000009', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000043', '3b000000-0000-0000-0000-000000000009', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000044', '3b000000-0000-0000-0000-000000000009', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000045', '3b000000-0000-0000-0000-000000000009', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000046', '3b000000-0000-0000-0000-000000000010', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000047', '3b000000-0000-0000-0000-000000000010', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000048', '3b000000-0000-0000-0000-000000000010', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000049', '3b000000-0000-0000-0000-000000000010', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000050', '3b000000-0000-0000-0000-000000000010', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000051', '3b000000-0000-0000-0000-000000000011', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000052', '3b000000-0000-0000-0000-000000000011', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000053', '3b000000-0000-0000-0000-000000000011', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000054', '3b000000-0000-0000-0000-000000000011', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000055', '3b000000-0000-0000-0000-000000000011', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000056', '3b000000-0000-0000-0000-000000000012', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000057', '3b000000-0000-0000-0000-000000000012', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000058', '3b000000-0000-0000-0000-000000000012', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000059', '3b000000-0000-0000-0000-000000000012', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000060', '3b000000-0000-0000-0000-000000000012', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000061', '3b000000-0000-0000-0000-000000000013', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000062', '3b000000-0000-0000-0000-000000000013', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000063', '3b000000-0000-0000-0000-000000000013', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000064', '3b000000-0000-0000-0000-000000000013', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000065', '3b000000-0000-0000-0000-000000000013', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000066', '3b000000-0000-0000-0000-000000000014', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000067', '3b000000-0000-0000-0000-000000000014', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000068', '3b000000-0000-0000-0000-000000000014', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000069', '3b000000-0000-0000-0000-000000000014', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000070', '3b000000-0000-0000-0000-000000000014', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000071', '3b000000-0000-0000-0000-000000000015', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000072', '3b000000-0000-0000-0000-000000000015', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000073', '3b000000-0000-0000-0000-000000000015', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000074', '3b000000-0000-0000-0000-000000000015', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000075', '3b000000-0000-0000-0000-000000000015', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000076', '3b000000-0000-0000-0000-000000000016', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000077', '3b000000-0000-0000-0000-000000000016', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000078', '3b000000-0000-0000-0000-000000000016', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000079', '3b000000-0000-0000-0000-000000000016', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000080', '3b000000-0000-0000-0000-000000000016', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000081', '3b000000-0000-0000-0000-000000000017', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000082', '3b000000-0000-0000-0000-000000000017', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000083', '3b000000-0000-0000-0000-000000000017', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000084', '3b000000-0000-0000-0000-000000000017', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000085', '3b000000-0000-0000-0000-000000000017', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000086', '3b000000-0000-0000-0000-000000000018', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000087', '3b000000-0000-0000-0000-000000000018', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000088', '3b000000-0000-0000-0000-000000000018', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000089', '3b000000-0000-0000-0000-000000000018', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000090', '3b000000-0000-0000-0000-000000000018', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000091', '3b000000-0000-0000-0000-000000000019', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000092', '3b000000-0000-0000-0000-000000000019', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000093', '3b000000-0000-0000-0000-000000000019', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000094', '3b000000-0000-0000-0000-000000000019', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000095', '3b000000-0000-0000-0000-000000000019', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000096', '3b000000-0000-0000-0000-000000000020', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000097', '3b000000-0000-0000-0000-000000000020', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000098', '3b000000-0000-0000-0000-000000000020', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000099', '3b000000-0000-0000-0000-000000000020', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000100', '3b000000-0000-0000-0000-000000000020', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000101', '3b000000-0000-0000-0000-000000000021', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000102', '3b000000-0000-0000-0000-000000000021', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000103', '3b000000-0000-0000-0000-000000000021', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000104', '3b000000-0000-0000-0000-000000000021', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000105', '3b000000-0000-0000-0000-000000000021', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000106', '3b000000-0000-0000-0000-000000000022', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000107', '3b000000-0000-0000-0000-000000000022', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000108', '3b000000-0000-0000-0000-000000000022', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000109', '3b000000-0000-0000-0000-000000000022', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000110', '3b000000-0000-0000-0000-000000000022', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000111', '3b000000-0000-0000-0000-000000000023', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000112', '3b000000-0000-0000-0000-000000000023', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000113', '3b000000-0000-0000-0000-000000000023', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000114', '3b000000-0000-0000-0000-000000000023', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000115', '3b000000-0000-0000-0000-000000000023', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000116', '3b000000-0000-0000-0000-000000000024', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000117', '3b000000-0000-0000-0000-000000000024', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000118', '3b000000-0000-0000-0000-000000000024', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000119', '3b000000-0000-0000-0000-000000000024', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000120', '3b000000-0000-0000-0000-000000000024', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000121', '3b000000-0000-0000-0000-000000000025', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000122', '3b000000-0000-0000-0000-000000000025', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000123', '3b000000-0000-0000-0000-000000000025', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000124', '3b000000-0000-0000-0000-000000000025', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000125', '3b000000-0000-0000-0000-000000000025', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000126', '3b000000-0000-0000-0000-000000000026', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000127', '3b000000-0000-0000-0000-000000000026', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000128', '3b000000-0000-0000-0000-000000000026', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000129', '3b000000-0000-0000-0000-000000000026', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000130', '3b000000-0000-0000-0000-000000000026', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000131', '3b000000-0000-0000-0000-000000000027', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000132', '3b000000-0000-0000-0000-000000000027', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000133', '3b000000-0000-0000-0000-000000000027', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000134', '3b000000-0000-0000-0000-000000000027', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000135', '3b000000-0000-0000-0000-000000000027', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000136', '3b000000-0000-0000-0000-000000000028', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000137', '3b000000-0000-0000-0000-000000000028', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000138', '3b000000-0000-0000-0000-000000000028', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000139', '3b000000-0000-0000-0000-000000000028', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000140', '3b000000-0000-0000-0000-000000000028', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000141', '3b000000-0000-0000-0000-000000000029', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000142', '3b000000-0000-0000-0000-000000000029', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000143', '3b000000-0000-0000-0000-000000000029', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000144', '3b000000-0000-0000-0000-000000000029', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000145', '3b000000-0000-0000-0000-000000000029', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000146', '3b000000-0000-0000-0000-000000000030', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000147', '3b000000-0000-0000-0000-000000000030', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000148', '3b000000-0000-0000-0000-000000000030', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000149', '3b000000-0000-0000-0000-000000000030', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000150', '3b000000-0000-0000-0000-000000000030', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000151', '3b000000-0000-0000-0000-000000000031', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000152', '3b000000-0000-0000-0000-000000000031', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000153', '3b000000-0000-0000-0000-000000000031', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000154', '3b000000-0000-0000-0000-000000000031', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000155', '3b000000-0000-0000-0000-000000000031', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000156', '3b000000-0000-0000-0000-000000000032', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000157', '3b000000-0000-0000-0000-000000000032', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000158', '3b000000-0000-0000-0000-000000000032', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000159', '3b000000-0000-0000-0000-000000000032', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000160', '3b000000-0000-0000-0000-000000000032', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000161', '3b000000-0000-0000-0000-000000000033', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000162', '3b000000-0000-0000-0000-000000000033', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000163', '3b000000-0000-0000-0000-000000000033', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000164', '3b000000-0000-0000-0000-000000000033', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000165', '3b000000-0000-0000-0000-000000000033', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000166', '3b000000-0000-0000-0000-000000000034', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000167', '3b000000-0000-0000-0000-000000000034', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000168', '3b000000-0000-0000-0000-000000000034', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000169', '3b000000-0000-0000-0000-000000000034', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000170', '3b000000-0000-0000-0000-000000000034', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000171', '3b000000-0000-0000-0000-000000000035', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000172', '3b000000-0000-0000-0000-000000000035', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000173', '3b000000-0000-0000-0000-000000000035', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000174', '3b000000-0000-0000-0000-000000000035', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000175', '3b000000-0000-0000-0000-000000000035', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000176', '3b000000-0000-0000-0000-000000000036', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000177', '3b000000-0000-0000-0000-000000000036', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000178', '3b000000-0000-0000-0000-000000000036', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000179', '3b000000-0000-0000-0000-000000000036', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000180', '3b000000-0000-0000-0000-000000000036', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000181', '3b000000-0000-0000-0000-000000000037', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000182', '3b000000-0000-0000-0000-000000000037', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000183', '3b000000-0000-0000-0000-000000000037', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000184', '3b000000-0000-0000-0000-000000000037', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000185', '3b000000-0000-0000-0000-000000000037', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000186', '3b000000-0000-0000-0000-000000000038', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000187', '3b000000-0000-0000-0000-000000000038', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000188', '3b000000-0000-0000-0000-000000000038', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000189', '3b000000-0000-0000-0000-000000000038', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000190', '3b000000-0000-0000-0000-000000000038', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000191', '3b000000-0000-0000-0000-000000000039', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000192', '3b000000-0000-0000-0000-000000000039', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000193', '3b000000-0000-0000-0000-000000000039', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000194', '3b000000-0000-0000-0000-000000000039', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000195', '3b000000-0000-0000-0000-000000000039', 5, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000196', '3b000000-0000-0000-0000-000000000040', 1, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000197', '3b000000-0000-0000-0000-000000000040', 2, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000198', '3b000000-0000-0000-0000-000000000040', 3, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000199', '3b000000-0000-0000-0000-000000000040', 4, '09:00:00', '17:00:00', TRUE),
+('5b000000-0000-0000-0000-000000000200', '3b000000-0000-0000-0000-000000000040', 5, '09:00:00', '17:00:00', TRUE)
 ON CONFLICT (id) DO NOTHING;
 
 -- 3. Appointments (Doctor 1 <-> Patient 1)
@@ -648,21 +761,21 @@ UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Arjun Chauhan"') WHERE email = '1c000000-0000-0000-0000-000000000003';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Amit Patel"') WHERE email = '1c000000-0000-0000-0000-000000000004';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Saanvi Kumar"') WHERE email = '1c000000-0000-0000-0000-000000000005';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Anjali Joshi"') WHERE email = '1c000000-0000-0000-0000-000000000006';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Riya Chauhan"') WHERE email = '1c000000-0000-0000-0000-000000000007';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Shruti Gupta"') WHERE email = '1c000000-0000-0000-0000-000000000008';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Priya Reddy"') WHERE email = '1c000000-0000-0000-0000-000000000009';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sneha Patel"') WHERE email = '1c000000-0000-0000-0000-000000000010';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Vihaan Joshi"') WHERE email = '1c000000-0000-0000-0000-000000000011';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Ishaan Verma"') WHERE email = '1c000000-0000-0000-0000-000000000012';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Atharv Patel"') WHERE email = '1c000000-0000-0000-0000-000000000013';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Shruti Reddy"') WHERE email = '1c000000-0000-0000-0000-000000000014';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Shruti Patel"') WHERE email = '1c000000-0000-0000-0000-000000000015';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Amit Kumar"') WHERE email = '1c000000-0000-0000-0000-000000000016';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Suresh Joshi"') WHERE email = '1c000000-0000-0000-0000-000000000017';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Anjali Gupta"') WHERE email = '1c000000-0000-0000-0000-000000000018';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Rohan Gupta"') WHERE email = '1c000000-0000-0000-0000-000000000019';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Rahul Reddy"') WHERE email = '1c000000-0000-0000-0000-000000000020';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Anjali Joshi"') WHERE email = '1c000000-0000-0000-0000-000000000001';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Riya Chauhan"') WHERE email = '1c000000-0000-0000-0000-000000000002';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Shruti Gupta"') WHERE email = '1c000000-0000-0000-0000-000000000003';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Priya Reddy"') WHERE email = '1c000000-0000-0000-0000-000000000004';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sneha Patel"') WHERE email = '1c000000-0000-0000-0000-000000000005';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Vihaan Joshi"') WHERE email = '1c000000-0000-0000-0000-000000000001';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Ishaan Verma"') WHERE email = '1c000000-0000-0000-0000-000000000002';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Atharv Patel"') WHERE email = '1c000000-0000-0000-0000-000000000003';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Shruti Reddy"') WHERE email = '1c000000-0000-0000-0000-000000000004';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Shruti Patel"') WHERE email = '1c000000-0000-0000-0000-000000000005';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Amit Kumar"') WHERE email = '1c000000-0000-0000-0000-000000000001';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Suresh Joshi"') WHERE email = '1c000000-0000-0000-0000-000000000002';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Anjali Gupta"') WHERE email = '1c000000-0000-0000-0000-000000000003';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Rohan Gupta"') WHERE email = '1c000000-0000-0000-0000-000000000004';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Rahul Reddy"') WHERE email = '1c000000-0000-0000-0000-000000000005';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Wellness Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000001';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Pulse Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000002';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"GoodHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000003';
@@ -673,23 +786,23 @@ UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"LifeCare Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000008';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Pulse Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000009';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"TrueHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000010';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000011';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000012';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Wellness Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000013';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Pulse Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000014';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"LifeCare Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000015';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"GoodHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000016';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sanjeevani Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000017';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Arogya Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000018';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sanjeevani Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000019';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"LifeCare Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000020';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"LifeCare Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000021';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000022';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sanjeevani Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000023';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000024';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000025';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"GoodHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000026';
-UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"TrueHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000027';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000001';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000002';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Wellness Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000003';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Pulse Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000004';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"LifeCare Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000005';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"GoodHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000006';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sanjeevani Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000007';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Arogya Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000008';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sanjeevani Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000009';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"LifeCare Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000010';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"LifeCare Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000001';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000002';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sanjeevani Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000003';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000004';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"CarePlus Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000005';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"GoodHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000006';
+UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"TrueHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000007';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Arogya Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000028';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"Sanjeevani Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000029';
 UPDATE auth.users SET raw_user_meta_data = jsonb_set(raw_user_meta_data, '{full_name}', '"TrueHealth Pharmacy"') WHERE email = '1d000000-0000-0000-0000-000000000030';
@@ -794,21 +907,21 @@ UPDATE public.patients SET full_name = 'Suresh Nair' WHERE user_id = '1c000000-0
 UPDATE public.patients SET full_name = 'Arjun Chauhan' WHERE user_id = '1c000000-0000-0000-0000-000000000003';
 UPDATE public.patients SET full_name = 'Amit Patel' WHERE user_id = '1c000000-0000-0000-0000-000000000004';
 UPDATE public.patients SET full_name = 'Saanvi Kumar' WHERE user_id = '1c000000-0000-0000-0000-000000000005';
-UPDATE public.patients SET full_name = 'Anjali Joshi' WHERE user_id = '1c000000-0000-0000-0000-000000000006';
-UPDATE public.patients SET full_name = 'Riya Chauhan' WHERE user_id = '1c000000-0000-0000-0000-000000000007';
-UPDATE public.patients SET full_name = 'Shruti Gupta' WHERE user_id = '1c000000-0000-0000-0000-000000000008';
-UPDATE public.patients SET full_name = 'Priya Reddy' WHERE user_id = '1c000000-0000-0000-0000-000000000009';
-UPDATE public.patients SET full_name = 'Sneha Patel' WHERE user_id = '1c000000-0000-0000-0000-000000000010';
-UPDATE public.patients SET full_name = 'Vihaan Joshi' WHERE user_id = '1c000000-0000-0000-0000-000000000011';
-UPDATE public.patients SET full_name = 'Ishaan Verma' WHERE user_id = '1c000000-0000-0000-0000-000000000012';
-UPDATE public.patients SET full_name = 'Atharv Patel' WHERE user_id = '1c000000-0000-0000-0000-000000000013';
-UPDATE public.patients SET full_name = 'Shruti Reddy' WHERE user_id = '1c000000-0000-0000-0000-000000000014';
-UPDATE public.patients SET full_name = 'Shruti Patel' WHERE user_id = '1c000000-0000-0000-0000-000000000015';
-UPDATE public.patients SET full_name = 'Amit Kumar' WHERE user_id = '1c000000-0000-0000-0000-000000000016';
-UPDATE public.patients SET full_name = 'Suresh Joshi' WHERE user_id = '1c000000-0000-0000-0000-000000000017';
-UPDATE public.patients SET full_name = 'Anjali Gupta' WHERE user_id = '1c000000-0000-0000-0000-000000000018';
-UPDATE public.patients SET full_name = 'Rohan Gupta' WHERE user_id = '1c000000-0000-0000-0000-000000000019';
-UPDATE public.patients SET full_name = 'Rahul Reddy' WHERE user_id = '1c000000-0000-0000-0000-000000000020';
+UPDATE public.patients SET full_name = 'Anjali Joshi' WHERE user_id = '1c000000-0000-0000-0000-000000000001';
+UPDATE public.patients SET full_name = 'Riya Chauhan' WHERE user_id = '1c000000-0000-0000-0000-000000000002';
+UPDATE public.patients SET full_name = 'Shruti Gupta' WHERE user_id = '1c000000-0000-0000-0000-000000000003';
+UPDATE public.patients SET full_name = 'Priya Reddy' WHERE user_id = '1c000000-0000-0000-0000-000000000004';
+UPDATE public.patients SET full_name = 'Sneha Patel' WHERE user_id = '1c000000-0000-0000-0000-000000000005';
+UPDATE public.patients SET full_name = 'Vihaan Joshi' WHERE user_id = '1c000000-0000-0000-0000-000000000001';
+UPDATE public.patients SET full_name = 'Ishaan Verma' WHERE user_id = '1c000000-0000-0000-0000-000000000002';
+UPDATE public.patients SET full_name = 'Atharv Patel' WHERE user_id = '1c000000-0000-0000-0000-000000000003';
+UPDATE public.patients SET full_name = 'Shruti Reddy' WHERE user_id = '1c000000-0000-0000-0000-000000000004';
+UPDATE public.patients SET full_name = 'Shruti Patel' WHERE user_id = '1c000000-0000-0000-0000-000000000005';
+UPDATE public.patients SET full_name = 'Amit Kumar' WHERE user_id = '1c000000-0000-0000-0000-000000000001';
+UPDATE public.patients SET full_name = 'Suresh Joshi' WHERE user_id = '1c000000-0000-0000-0000-000000000002';
+UPDATE public.patients SET full_name = 'Anjali Gupta' WHERE user_id = '1c000000-0000-0000-0000-000000000003';
+UPDATE public.patients SET full_name = 'Rohan Gupta' WHERE user_id = '1c000000-0000-0000-0000-000000000004';
+UPDATE public.patients SET full_name = 'Rahul Reddy' WHERE user_id = '1c000000-0000-0000-0000-000000000005';
 
 -- Update pharmacies
 UPDATE public.pharmacies SET business_name = 'Wellness Pharmacy (Indiranagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000001';
@@ -831,40 +944,40 @@ UPDATE public.pharmacies SET business_name = 'LifeCare Pharmacy (Hebbal)' WHERE 
 UPDATE public.pharmacy_locations SET location_name = 'LifeCare Pharmacy (Hebbal)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000009';
 UPDATE public.pharmacies SET business_name = 'Sanjeevani Pharmacy (Yelahanka)' WHERE user_id = '1d000000-0000-0000-0000-000000000010';
 UPDATE public.pharmacy_locations SET location_name = 'Sanjeevani Pharmacy (Yelahanka)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000010';
-UPDATE public.pharmacies SET business_name = 'TrueHealth Pharmacy (Marathahalli)' WHERE user_id = '1d000000-0000-0000-0000-000000000011';
-UPDATE public.pharmacy_locations SET location_name = 'TrueHealth Pharmacy (Marathahalli)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000011';
-UPDATE public.pharmacies SET business_name = 'Pulse Pharmacy (Bellandur)' WHERE user_id = '1d000000-0000-0000-0000-000000000012';
-UPDATE public.pharmacy_locations SET location_name = 'Pulse Pharmacy (Bellandur)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000012';
-UPDATE public.pharmacies SET business_name = 'LifeCare Pharmacy (Banashankari)' WHERE user_id = '1d000000-0000-0000-0000-000000000013';
-UPDATE public.pharmacy_locations SET location_name = 'LifeCare Pharmacy (Banashankari)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000013';
-UPDATE public.pharmacies SET business_name = 'Wellness Pharmacy (Basavanagudi)' WHERE user_id = '1d000000-0000-0000-0000-000000000014';
-UPDATE public.pharmacy_locations SET location_name = 'Wellness Pharmacy (Basavanagudi)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000014';
-UPDATE public.pharmacies SET business_name = 'LifeCare Pharmacy (MG Road)' WHERE user_id = '1d000000-0000-0000-0000-000000000015';
-UPDATE public.pharmacy_locations SET location_name = 'LifeCare Pharmacy (MG Road)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000015';
-UPDATE public.pharmacies SET business_name = 'Arogya Pharmacy (Shivajinagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000016';
-UPDATE public.pharmacy_locations SET location_name = 'Arogya Pharmacy (Shivajinagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000016';
-UPDATE public.pharmacies SET business_name = 'Wellness Pharmacy (Koramangala)' WHERE user_id = '1d000000-0000-0000-0000-000000000017';
-UPDATE public.pharmacy_locations SET location_name = 'Wellness Pharmacy (Koramangala)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000017';
-UPDATE public.pharmacies SET business_name = 'GoodHealth Pharmacy (Indiranagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000018';
-UPDATE public.pharmacy_locations SET location_name = 'GoodHealth Pharmacy (Indiranagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000018';
-UPDATE public.pharmacies SET business_name = 'Arogya Pharmacy (HSR Layout)' WHERE user_id = '1d000000-0000-0000-0000-000000000019';
-UPDATE public.pharmacy_locations SET location_name = 'Arogya Pharmacy (HSR Layout)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000019';
-UPDATE public.pharmacies SET business_name = 'Sanjeevani Pharmacy (Whitefield)' WHERE user_id = '1d000000-0000-0000-0000-000000000020';
-UPDATE public.pharmacy_locations SET location_name = 'Sanjeevani Pharmacy (Whitefield)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000020';
-UPDATE public.pharmacies SET business_name = 'Wellness Pharmacy (Electronic City)' WHERE user_id = '1d000000-0000-0000-0000-000000000021';
-UPDATE public.pharmacy_locations SET location_name = 'Wellness Pharmacy (Electronic City)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000021';
-UPDATE public.pharmacies SET business_name = 'TrueHealth Pharmacy (Jayanagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000022';
-UPDATE public.pharmacy_locations SET location_name = 'TrueHealth Pharmacy (Jayanagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000022';
-UPDATE public.pharmacies SET business_name = 'Pulse Pharmacy (JP Nagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000023';
-UPDATE public.pharmacy_locations SET location_name = 'Pulse Pharmacy (JP Nagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000023';
-UPDATE public.pharmacies SET business_name = 'Arogya Pharmacy (Malleshwaram)' WHERE user_id = '1d000000-0000-0000-0000-000000000024';
-UPDATE public.pharmacy_locations SET location_name = 'Arogya Pharmacy (Malleshwaram)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000024';
-UPDATE public.pharmacies SET business_name = 'Pulse Pharmacy (Rajajinagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000025';
-UPDATE public.pharmacy_locations SET location_name = 'Pulse Pharmacy (Rajajinagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000025';
-UPDATE public.pharmacies SET business_name = 'Sanjeevani Pharmacy (Hebbal)' WHERE user_id = '1d000000-0000-0000-0000-000000000026';
-UPDATE public.pharmacy_locations SET location_name = 'Sanjeevani Pharmacy (Hebbal)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000026';
-UPDATE public.pharmacies SET business_name = 'Sanjeevani Pharmacy (Yelahanka)' WHERE user_id = '1d000000-0000-0000-0000-000000000027';
-UPDATE public.pharmacy_locations SET location_name = 'Sanjeevani Pharmacy (Yelahanka)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000027';
+UPDATE public.pharmacies SET business_name = 'TrueHealth Pharmacy (Marathahalli)' WHERE user_id = '1d000000-0000-0000-0000-000000000001';
+UPDATE public.pharmacy_locations SET location_name = 'TrueHealth Pharmacy (Marathahalli)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000001';
+UPDATE public.pharmacies SET business_name = 'Pulse Pharmacy (Bellandur)' WHERE user_id = '1d000000-0000-0000-0000-000000000002';
+UPDATE public.pharmacy_locations SET location_name = 'Pulse Pharmacy (Bellandur)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000002';
+UPDATE public.pharmacies SET business_name = 'LifeCare Pharmacy (Banashankari)' WHERE user_id = '1d000000-0000-0000-0000-000000000003';
+UPDATE public.pharmacy_locations SET location_name = 'LifeCare Pharmacy (Banashankari)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000003';
+UPDATE public.pharmacies SET business_name = 'Wellness Pharmacy (Basavanagudi)' WHERE user_id = '1d000000-0000-0000-0000-000000000004';
+UPDATE public.pharmacy_locations SET location_name = 'Wellness Pharmacy (Basavanagudi)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000004';
+UPDATE public.pharmacies SET business_name = 'LifeCare Pharmacy (MG Road)' WHERE user_id = '1d000000-0000-0000-0000-000000000005';
+UPDATE public.pharmacy_locations SET location_name = 'LifeCare Pharmacy (MG Road)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000005';
+UPDATE public.pharmacies SET business_name = 'Arogya Pharmacy (Shivajinagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000006';
+UPDATE public.pharmacy_locations SET location_name = 'Arogya Pharmacy (Shivajinagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000006';
+UPDATE public.pharmacies SET business_name = 'Wellness Pharmacy (Koramangala)' WHERE user_id = '1d000000-0000-0000-0000-000000000007';
+UPDATE public.pharmacy_locations SET location_name = 'Wellness Pharmacy (Koramangala)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000007';
+UPDATE public.pharmacies SET business_name = 'GoodHealth Pharmacy (Indiranagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000008';
+UPDATE public.pharmacy_locations SET location_name = 'GoodHealth Pharmacy (Indiranagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000008';
+UPDATE public.pharmacies SET business_name = 'Arogya Pharmacy (HSR Layout)' WHERE user_id = '1d000000-0000-0000-0000-000000000009';
+UPDATE public.pharmacy_locations SET location_name = 'Arogya Pharmacy (HSR Layout)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000009';
+UPDATE public.pharmacies SET business_name = 'Sanjeevani Pharmacy (Whitefield)' WHERE user_id = '1d000000-0000-0000-0000-000000000010';
+UPDATE public.pharmacy_locations SET location_name = 'Sanjeevani Pharmacy (Whitefield)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000010';
+UPDATE public.pharmacies SET business_name = 'Wellness Pharmacy (Electronic City)' WHERE user_id = '1d000000-0000-0000-0000-000000000001';
+UPDATE public.pharmacy_locations SET location_name = 'Wellness Pharmacy (Electronic City)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000001';
+UPDATE public.pharmacies SET business_name = 'TrueHealth Pharmacy (Jayanagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000002';
+UPDATE public.pharmacy_locations SET location_name = 'TrueHealth Pharmacy (Jayanagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000002';
+UPDATE public.pharmacies SET business_name = 'Pulse Pharmacy (JP Nagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000003';
+UPDATE public.pharmacy_locations SET location_name = 'Pulse Pharmacy (JP Nagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000003';
+UPDATE public.pharmacies SET business_name = 'Arogya Pharmacy (Malleshwaram)' WHERE user_id = '1d000000-0000-0000-0000-000000000004';
+UPDATE public.pharmacy_locations SET location_name = 'Arogya Pharmacy (Malleshwaram)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000004';
+UPDATE public.pharmacies SET business_name = 'Pulse Pharmacy (Rajajinagar)' WHERE user_id = '1d000000-0000-0000-0000-000000000005';
+UPDATE public.pharmacy_locations SET location_name = 'Pulse Pharmacy (Rajajinagar)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000005';
+UPDATE public.pharmacies SET business_name = 'Sanjeevani Pharmacy (Hebbal)' WHERE user_id = '1d000000-0000-0000-0000-000000000006';
+UPDATE public.pharmacy_locations SET location_name = 'Sanjeevani Pharmacy (Hebbal)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000006';
+UPDATE public.pharmacies SET business_name = 'Sanjeevani Pharmacy (Yelahanka)' WHERE user_id = '1d000000-0000-0000-0000-000000000007';
+UPDATE public.pharmacy_locations SET location_name = 'Sanjeevani Pharmacy (Yelahanka)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000007';
 UPDATE public.pharmacies SET business_name = 'GoodHealth Pharmacy (Marathahalli)' WHERE user_id = '1d000000-0000-0000-0000-000000000028';
 UPDATE public.pharmacy_locations SET location_name = 'GoodHealth Pharmacy (Marathahalli)' WHERE pharmacy_id = '3d000000-0000-0000-0000-000000000028';
 UPDATE public.pharmacies SET business_name = 'Sanjeevani Pharmacy (Bellandur)' WHERE user_id = '1d000000-0000-0000-0000-000000000029';

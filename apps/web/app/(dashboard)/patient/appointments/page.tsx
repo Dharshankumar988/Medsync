@@ -260,12 +260,15 @@ export default function AppointmentsPage() {
     });
   };
 
-  const filteredHospitals = hospitals.filter(
+  const filteredAllHospitals = hospitals.filter(
     (h: any) =>
       !searchQuery ||
       h.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       h.city?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const filteredHospitalsList = filteredAllHospitals.filter((h: any) => h.type === 'hospital' || !h.type);
+  const filteredClinicsList = filteredAllHospitals.filter((h: any) => h.type === 'clinic');
 
   const filteredDoctors = allDoctors.filter(
     (d: any) =>
@@ -347,24 +350,25 @@ export default function AppointmentsPage() {
                     />
                   </div>
 
+                  {/* Map showing all locations */}
+                  <div className="mb-4">
+                    <HospitalMap 
+                      hospitals={filteredAllHospitals} 
+                      onSelectHospital={handleSelectHospital} 
+                    />
+                  </div>
+
                   {/* Hospitals */}
                   <div>
                     <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-blue-500" /> Hospitals
                     </h3>
                     
-                    <div className="mb-4">
-                      <HospitalMap 
-                        hospitals={filteredHospitals} 
-                        onSelectHospital={handleSelectHospital} 
-                      />
-                    </div>
-
-                    <div className="grid gap-3 max-h-[200px] overflow-y-auto">
-                      {filteredHospitals.length === 0 ? (
+                    <div className="grid gap-3 max-h-[200px] overflow-y-auto mb-6">
+                      {filteredHospitalsList.length === 0 ? (
                         <p className="text-sm text-muted-foreground py-4 text-center">No hospitals found</p>
                       ) : (
-                        filteredHospitals.map((h: any) => (
+                        filteredHospitalsList.map((h: any) => (
                           <div
                             key={h.id}
                             onClick={() => handleSelectHospital(h)}
@@ -379,7 +383,65 @@ export default function AppointmentsPage() {
                                 {[h.city, h.state].filter(Boolean).join(", ") || h.address}
                               </p>
                             </div>
+                            {h.google_maps_url && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mr-2 border-blue-200 text-blue-600 hover:bg-blue-50 z-10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(h.google_maps_url, "_blank");
+                                }}
+                              >
+                                Directions
+                              </Button>
+                            )}
                             <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 transition-colors" />
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Clinics */}
+                  <div>
+                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <Stethoscope className="h-4 w-4 text-purple-500" /> Clinics
+                    </h3>
+                    
+                    <div className="grid gap-3 max-h-[200px] overflow-y-auto mb-6">
+                      {filteredClinicsList.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">No clinics found</p>
+                      ) : (
+                        filteredClinicsList.map((c: any) => (
+                          <div
+                            key={c.id}
+                            onClick={() => handleSelectHospital(c)}
+                            className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:border-purple-500/40 hover:bg-purple-500/[0.04] cursor-pointer transition-all group"
+                          >
+                            <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10 shrink-0">
+                              <Stethoscope className="h-5 w-5 text-purple-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{c.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {[c.city, c.state].filter(Boolean).join(", ") || c.address}
+                              </p>
+                            </div>
+                            {c.google_maps_url && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mr-2 border-purple-200 text-purple-600 hover:bg-purple-50 z-10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(c.google_maps_url, "_blank");
+                                }}
+                              >
+                                Directions
+                              </Button>
+                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-purple-500 transition-colors" />
                           </div>
                         ))
                       )}
