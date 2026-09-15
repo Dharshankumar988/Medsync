@@ -72,6 +72,8 @@ class MedicineOrderCreate(BaseModel):
     pharmacy_id: uuid.UUID
     prescription_id: Optional[uuid.UUID] = None
     delivery_address: str
+    delivery_latitude: Optional[float] = None
+    delivery_longitude: Optional[float] = None
     items: List[OrderItemCreate]
 
 class MedicineOrderResponse(BaseModel):
@@ -80,5 +82,9 @@ class MedicineOrderResponse(BaseModel):
     pharmacy_id: uuid.UUID
     status: OrderStatus
     total_amount: float
+    delivery_address: Optional[str] = None
+    delivery_latitude: Optional[float] = None
+    delivery_longitude: Optional[float] = None
     created_at: datetime
+    updated_at: datetime
     model_config = {"from_attributes": True}

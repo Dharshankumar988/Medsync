@@ -103,6 +103,35 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                     is_active=True
                 )
                 db.add(location)
+            elif payload.hospital_name and payload.latitude and payload.longitude and not payload.hospital_id:
+                # Register New Hospital flow
+                # Check for duplicate
+                existing_hosp = await db.execute(select(Hospital).where(Hospital.name.ilike(payload.hospital_name)))
+                hosp = existing_hosp.scalars().first()
+                if hosp:
+                    profile.hospital_id = hosp.id
+                else:
+                    new_hospital = Hospital(
+                        user_id=new_user.id,
+                        name=payload.hospital_name,
+                        address=payload.hospital_address or "Unknown",
+                        latitude=payload.latitude,
+                        longitude=payload.longitude,
+                        is_active=True,
+                        is_verified=False
+                    )
+                    db.add(new_hospital)
+                    await db.flush()
+                    profile.hospital_id = new_hospital.id
+
+                location = DoctorLocation(
+                    doctor_id=profile.id,
+                    location_type="HOSPITAL",
+                    hospital_id=profile.hospital_id,
+                    is_primary=True,
+                    is_active=True
+                )
+                db.add(location)
             elif payload.hospital_id:
                 # Add hospital location link
                 location = DoctorLocation(

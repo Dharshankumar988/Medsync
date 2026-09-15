@@ -9,6 +9,11 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { FaceVerification } from '../FaceVerification';
+import dynamic from 'next/dynamic';
+
+const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
+  ssr: false,
+});
 
 interface SecureOrderModalProps {
   prescriptionId: string | null;
@@ -21,6 +26,8 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
   const [pharmacies, setPharmacies] = useState<any[]>([]);
   const [pharmacyId, setPharmacyId] = useState('');
   const [address, setAddress] = useState('');
+  const [latitude, setLatitude] = useState<number>(0);
+  const [longitude, setLongitude] = useState<number>(0);
   const [pin, setPin] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -49,7 +56,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
 
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prescriptionId || !pharmacyId || !address || pin.length !== 6) return;
+    if (!prescriptionId || !pharmacyId || !address || !latitude || pin.length !== 6) return;
     setIsSubmitting(true);
     
     try {
@@ -59,6 +66,8 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
       const formData = new FormData();
       formData.append('pharmacy_id', pharmacyId);
       formData.append('delivery_address', address);
+      formData.append('delivery_latitude', latitude.toString());
+      formData.append('delivery_longitude', longitude.toString());
       formData.append('pin', pin);
       
       const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
@@ -198,13 +207,26 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
             </div>
             
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground ml-1">Delivery Address</label>
+              <label className="text-sm font-medium text-foreground ml-1">Delivery Location</label>
+              <LocationPickerMap 
+                onLocationSelect={(lat, lng) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+                }}
+                onAddressFound={(addr) => {
+                  if (!address) setAddress(addr);
+                }}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground ml-1">Delivery Address Details</label>
               <textarea 
                 required
                 className="flex min-h-[100px] w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm resize-none"
                 value={address}
                 onChange={e => setAddress(e.target.value)}
-                placeholder="Enter complete delivery address..."
+                placeholder="Enter complete delivery address (building, floor, etc.)..."
               />
             </div>
             
@@ -231,7 +253,7 @@ export default function SecureOrderModal({ prescriptionId, open, onOpenChange, o
             <Button 
               type="submit"
               className="w-full h-12 rounded-xl text-md shadow-md mt-4" 
-              disabled={isSubmitting || !pharmacyId || !address || pin.length !== 6}
+              disabled={isSubmitting || !pharmacyId || !address || !latitude || pin.length !== 6}
             >
               {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Authorize & Place Order"}
             </Button>

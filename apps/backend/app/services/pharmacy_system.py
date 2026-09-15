@@ -33,6 +33,8 @@ class PharmacyService:
             "pharmacy_id": req.pharmacy_id,
             "prescription_id": req.prescription_id,
             "delivery_address": req.delivery_address,
+            "delivery_latitude": req.delivery_latitude,
+            "delivery_longitude": req.delivery_longitude,
             "status": OrderStatus.PENDING,
             "total_amount": total_amount
         }

@@ -74,6 +74,8 @@ class MedicineOrder(Base, UUIDMixin, TimestampMixin):
     order_type: Mapped[str] = mapped_column(String(50), default="ONLINE_DELIVERY")
     total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    delivery_latitude: Mapped[float | None] = mapped_column(Numeric(10, 8), nullable=True)
+    delivery_longitude: Mapped[float | None] = mapped_column(Numeric(11, 8), nullable=True)
 
 class MedicineOrderItem(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "medicine_order_items"

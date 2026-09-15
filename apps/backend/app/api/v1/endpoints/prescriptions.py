@@ -338,6 +338,8 @@ async def order_prescription_online(
     id: uuid.UUID,
     pharmacy_id: uuid.UUID = Form(...),
     delivery_address: str = Form(...),
+    delivery_latitude: float = Form(None),
+    delivery_longitude: float = Form(None),
     pin: str = Form(None),
     face_image: UploadFile = File(None),
     db: AsyncSession = Depends(get_db),
@@ -430,6 +432,8 @@ async def order_prescription_online(
             prescription_id=rx.id,
             status=OrderStatus.PENDING,
             delivery_address=delivery_address,
+            delivery_latitude=delivery_latitude,
+            delivery_longitude=delivery_longitude,
             order_type="ONLINE_DELIVERY",
             total_amount=0.0
         )

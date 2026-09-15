@@ -72,6 +72,13 @@ export default function RegisterPage() {
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [hospitalSearch, setHospitalSearch] = useState("");
+  const [showHospitalDropdown, setShowHospitalDropdown] = useState(false);
+  const [isRegisteringNewHospital, setIsRegisteringNewHospital] = useState(false);
+  const [newHospitalName, setNewHospitalName] = useState("");
+  const [newHospitalAddress, setNewHospitalAddress] = useState("");
+  const [newHospitalLatitude, setNewHospitalLatitude] = useState(0);
+  const [newHospitalLongitude, setNewHospitalLongitude] = useState(0);
 
   const [businessName, setBusinessName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
@@ -112,9 +119,15 @@ export default function RegisterPage() {
         setError("Medical License Number is required for doctors.");
         return;
       }
-      if (doctorPracticeType === "HOSPITAL" && !selectedHospitalId) {
-        setError("Please select a hospital.");
-        return;
+      if (doctorPracticeType === "HOSPITAL") {
+        if (!isRegisteringNewHospital && !selectedHospitalId) {
+          setError("Please select a hospital.");
+          return;
+        }
+        if (isRegisteringNewHospital && (!newHospitalName || !newHospitalLatitude)) {
+          setError("Please provide the new hospital name and location.");
+          return;
+        }
       }
       if (doctorPracticeType === "CLINIC" && (!clinicName || !latitude)) {
         setError("Please provide clinic name and map location.");
@@ -126,9 +139,15 @@ export default function RegisterPage() {
         setError("Business Name, License Number, Contact Number, and Map Location are required for pharmacies.");
         return;
       }
-      if (pharmacyPracticeType === "HOSPITAL" && !selectedHospitalId) {
-        setError("Please select a hospital.");
-        return;
+      if (pharmacyPracticeType === "HOSPITAL") {
+        if (!isRegisteringNewHospital && !selectedHospitalId) {
+          setError("Please select a hospital.");
+          return;
+        }
+        if (isRegisteringNewHospital && (!newHospitalName || !newHospitalLatitude)) {
+          setError("Please provide the new hospital name and location.");
+          return;
+        }
       }
       if (pharmacyPracticeType === "CLINIC" && !clinicName) {
         setError("Please provide the clinic name.");
@@ -146,11 +165,13 @@ export default function RegisterPage() {
         role,
         full_name: fullName,
         license_number: role === "DOCTOR" || role === "PHARMACY" ? licenseNumber : undefined,
-        hospital_id: (role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL") ? selectedHospitalId : undefined,
+        hospital_id: ((role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL")) && !isRegisteringNewHospital ? selectedHospitalId : undefined,
+        hospital_name: ((role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL")) && isRegisteringNewHospital ? newHospitalName : undefined,
+        hospital_address: ((role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL")) && isRegisteringNewHospital ? newHospitalAddress : undefined,
         clinic_name: (role === "DOCTOR" && doctorPracticeType === "CLINIC") || (role === "PHARMACY" && pharmacyPracticeType === "CLINIC") ? clinicName : undefined,
         clinic_address: role === "DOCTOR" && doctorPracticeType === "CLINIC" ? clinicAddress : (role === "PHARMACY" ? pharmacyAddress : undefined),
-        latitude: (role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? latitude : undefined,
-        longitude: (role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? longitude : undefined,
+        latitude: ((role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL")) && isRegisteringNewHospital ? newHospitalLatitude : ((role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? latitude : undefined),
+        longitude: ((role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL")) && isRegisteringNewHospital ? newHospitalLongitude : ((role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? longitude : undefined),
         business_name: role === "PHARMACY" ? businessName : undefined,
         contact_number: role === "PHARMACY" ? contactNumber : undefined,
       });
@@ -395,18 +416,78 @@ export default function RegisterPage() {
                     </div>
 
                     {doctorPracticeType === "HOSPITAL" ? (
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground/80">Select Hospital</label>
-                        <select 
-                          value={selectedHospitalId} 
-                          onChange={(e) => setSelectedHospitalId(e.target.value)}
-                          className="w-full h-12 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                          <option value="">Select a hospital...</option>
-                          {hospitals.map(h => (
-                            <option key={h.id} value={h.id}>{h.name} - {h.city}</option>
-                          ))}
-                        </select>
+                      <div className="space-y-4">
+                        <div className="space-y-2 relative">
+                          <label className="text-sm font-medium text-foreground/80">Search & Select Hospital</label>
+                          <div className="relative">
+                            <Building className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                            <Input
+                              type="text"
+                              placeholder="Search hospital..."
+                              value={hospitalSearch}
+                              onChange={(e) => {
+                                setHospitalSearch(e.target.value);
+                                setShowHospitalDropdown(true);
+                                setIsRegisteringNewHospital(false);
+                                setSelectedHospitalId("");
+                              }}
+                              onFocus={() => setShowHospitalDropdown(true)}
+                              className="h-12 pl-10 pr-4 bg-background border-input"
+                            />
+                          </div>
+                          
+                          {showHospitalDropdown && (
+                            <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
+                              {hospitals.filter(h => h.name.toLowerCase().includes(hospitalSearch.toLowerCase())).map(h => (
+                                <div 
+                                  key={h.id} 
+                                  className="p-3 hover:bg-muted cursor-pointer text-sm border-b border-border/50"
+                                  onClick={() => {
+                                    setSelectedHospitalId(h.id);
+                                    setHospitalSearch(h.name);
+                                    setShowHospitalDropdown(false);
+                                    setIsRegisteringNewHospital(false);
+                                  }}
+                                >
+                                  <div className="font-medium">{h.name}</div>
+                                  <div className="text-xs text-muted-foreground">{h.city || 'Unknown Location'}</div>
+                                </div>
+                              ))}
+                              <div 
+                                className="p-3 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 cursor-pointer text-sm font-medium"
+                                onClick={() => {
+                                  setIsRegisteringNewHospital(true);
+                                  setShowHospitalDropdown(false);
+                                  setSelectedHospitalId("");
+                                  setHospitalSearch("Registering New Hospital");
+                                }}
+                              >
+                                + Register New Hospital
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {isRegisteringNewHospital && (
+                          <div className="space-y-4 p-4 border border-blue-500/30 rounded-xl bg-blue-500/5">
+                            <h4 className="text-sm font-semibold text-blue-600">New Hospital Details</h4>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-foreground/80">Hospital Name</label>
+                              <Input value={newHospitalName} onChange={e => setNewHospitalName(e.target.value)} placeholder="Enter full hospital name" className="h-12 bg-background border-input" />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-foreground/80">Location (Map)</label>
+                              <LocationPickerMap 
+                                onLocationSelect={(lat, lng) => { setNewHospitalLatitude(lat); setNewHospitalLongitude(lng); }} 
+                                onAddressFound={(addr) => { if(!newHospitalAddress) setNewHospitalAddress(addr); }}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-foreground/80">Complete Address</label>
+                              <Input value={newHospitalAddress} onChange={e => setNewHospitalAddress(e.target.value)} placeholder="Exact address" className="h-12 bg-background border-input" />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-4">
@@ -514,22 +595,79 @@ export default function RegisterPage() {
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
                           exit={{ opacity: 0, height: 0 }}
-                          className="space-y-2 overflow-hidden"
+                          className="space-y-4 overflow-hidden"
                         >
-                          <label className="text-sm font-medium text-foreground/80">Select Hospital</label>
-                          <div className="relative">
-                            <Building className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
-                            <select
-                              value={selectedHospitalId}
-                              onChange={(e) => setSelectedHospitalId(e.target.value)}
-                              className="h-12 w-full pl-10 pr-4 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                              required
-                              disabled={isLoading}
-                            >
-                              <option value="">-- Choose a Hospital --</option>
-                              {hospitals.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-                            </select>
+                          <div className="space-y-2 relative">
+                            <label className="text-sm font-medium text-foreground/80">Search & Select Hospital</label>
+                            <div className="relative">
+                              <Building className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                              <Input
+                                type="text"
+                                placeholder="Search hospital..."
+                                value={hospitalSearch}
+                                onChange={(e) => {
+                                  setHospitalSearch(e.target.value);
+                                  setShowHospitalDropdown(true);
+                                  setIsRegisteringNewHospital(false);
+                                  setSelectedHospitalId("");
+                                }}
+                                onFocus={() => setShowHospitalDropdown(true)}
+                                className="h-12 pl-10 pr-4 bg-background border-input"
+                              />
+                            </div>
+                            
+                            {showHospitalDropdown && (
+                              <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
+                                {hospitals.filter(h => h.name.toLowerCase().includes(hospitalSearch.toLowerCase())).map(h => (
+                                  <div 
+                                    key={h.id} 
+                                    className="p-3 hover:bg-muted cursor-pointer text-sm border-b border-border/50"
+                                    onClick={() => {
+                                      setSelectedHospitalId(h.id);
+                                      setHospitalSearch(h.name);
+                                      setShowHospitalDropdown(false);
+                                      setIsRegisteringNewHospital(false);
+                                    }}
+                                  >
+                                    <div className="font-medium">{h.name}</div>
+                                    <div className="text-xs text-muted-foreground">{h.city || 'Unknown Location'}</div>
+                                  </div>
+                                ))}
+                                <div 
+                                  className="p-3 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 cursor-pointer text-sm font-medium"
+                                  onClick={() => {
+                                    setIsRegisteringNewHospital(true);
+                                    setShowHospitalDropdown(false);
+                                    setSelectedHospitalId("");
+                                    setHospitalSearch("Registering New Hospital");
+                                  }}
+                                >
+                                  + Register New Hospital
+                                </div>
+                              </div>
+                            )}
                           </div>
+
+                          {isRegisteringNewHospital && (
+                            <div className="space-y-4 p-4 border border-blue-500/30 rounded-xl bg-blue-500/5">
+                              <h4 className="text-sm font-semibold text-blue-600">New Hospital Details</h4>
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-foreground/80">Hospital Name</label>
+                                <Input value={newHospitalName} onChange={e => setNewHospitalName(e.target.value)} placeholder="Enter full hospital name" className="h-12 bg-background border-input" />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-foreground/80">Location (Map)</label>
+                                <LocationPickerMap 
+                                  onLocationSelect={(lat, lng) => { setNewHospitalLatitude(lat); setNewHospitalLongitude(lng); }} 
+                                  onAddressFound={(addr) => { if(!newHospitalAddress) setNewHospitalAddress(addr); }}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-foreground/80">Complete Address</label>
+                                <Input value={newHospitalAddress} onChange={e => setNewHospitalAddress(e.target.value)} placeholder="Exact address" className="h-12 bg-background border-input" />
+                              </div>
+                            </div>
+                          )}
                         </motion.div>
                       ) : pharmacyPracticeType === "CLINIC" ? (
                         <motion.div

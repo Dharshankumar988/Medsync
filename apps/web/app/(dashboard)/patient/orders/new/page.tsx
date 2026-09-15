@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Inpu
 import { Store, FileText, CheckCircle2, ChevronRight, Lock, Loader2, ArrowRight, Truck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
+import dynamic from "next/dynamic";
+
+const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 
 export default function NewOnlineOrderPage() {
   const router = useRouter();
@@ -18,6 +21,9 @@ export default function NewOnlineOrderPage() {
   const [selectedPrescription, setSelectedPrescription] = useState<string | null>(null);
   
   const [authPin, setAuthPin] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [latitude, setLatitude] = useState(0);
+  const [longitude, setLongitude] = useState(0);
   const [loading, setLoading] = useState(false);
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
 
@@ -67,7 +73,10 @@ export default function NewOnlineOrderPage() {
   };
 
   const handleAuthorize = async () => {
-    if (!authPin) return;
+    if (!authPin || !deliveryAddress || !latitude) {
+      alert("Please enter PIN and select a delivery location.");
+      return;
+    }
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -76,7 +85,9 @@ export default function NewOnlineOrderPage() {
       // In a real app we'd capture the face image, but here we just pass a dummy or require PIN
       const formData = new FormData();
       formData.append('pharmacy_id', selectedPharmacy.id);
-      formData.append('delivery_address', 'Default Address'); // Could be fetched from profile
+      formData.append('delivery_address', deliveryAddress);
+      formData.append('delivery_latitude', latitude.toString());
+      formData.append('delivery_longitude', longitude.toString());
       formData.append('pin', authPin);
       
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/prescriptions/${selectedPrescription}/order-online`, {
@@ -266,9 +277,34 @@ export default function NewOnlineOrderPage() {
                 <CardTitle>Authorization Required</CardTitle>
                 <CardDescription>Enter PIN or use Face ID to authorize this order</CardDescription>
               </CardHeader>
-              <CardContent className="p-8 text-center space-y-6">
+              <CardContent className="p-8 space-y-6">
                 
-                <div className="max-w-xs mx-auto space-y-4">
+                <div className="space-y-4 text-left">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Delivery Location</label>
+                    <LocationPickerMap 
+                      onLocationSelect={(lat, lng) => {
+                        setLatitude(lat);
+                        setLongitude(lng);
+                      }}
+                      onAddressFound={(addr) => {
+                        if (!deliveryAddress) setDeliveryAddress(addr);
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Complete Address</label>
+                    <textarea 
+                      required
+                      className="flex min-h-[80px] w-full rounded-xl border border-input bg-background px-4 py-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm resize-none"
+                      value={deliveryAddress}
+                      onChange={e => setDeliveryAddress(e.target.value)}
+                      placeholder="Enter complete delivery address (building, floor, etc.)..."
+                    />
+                  </div>
+                </div>
+
+                <div className="max-w-xs mx-auto space-y-4 pt-4 border-t border-border/50 text-center">
                   <Input 
                     type="password" 
                     placeholder="Enter 6-digit PIN" 
@@ -287,7 +323,7 @@ export default function NewOnlineOrderPage() {
                   <Button variant="ghost" onClick={() => setStep("select_prescription")} disabled={loading}>Cancel</Button>
                   <Button 
                     onClick={handleAuthorize} 
-                    disabled={!authPin || loading}
+                    disabled={!authPin || !deliveryAddress || !latitude || loading}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white min-w-[140px] rounded-xl"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify Identity"}

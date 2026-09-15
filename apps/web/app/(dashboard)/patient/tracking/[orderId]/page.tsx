@@ -30,9 +30,9 @@ export default function DeliveryTrackingPage({ params }: { params: Promise<{ ord
       const { data } = await supabase.from('medicine_orders').select('*, pharmacies:pharmacy_id(full_name)').eq('id', orderId).single();
       if (data) {
         setOrder(data);
-        if (data.status === "SHIPPED" || data.status === "OUT_FOR_DELIVERY") {
+        if (data.status === "SHIPPED" || data.status === "OUT_FOR_DELIVERY" || data.status === "DISPENSED") {
           setDeliveryStatus("out_for_delivery");
-          startTrackingAnimation();
+          startTrackingAnimation(data.updated_at);
         } else if (data.status === "DELIVERED") {
           setDeliveryStatus("delivered");
           setProgress(100);
@@ -43,16 +43,16 @@ export default function DeliveryTrackingPage({ params }: { params: Promise<{ ord
     }
   };
 
-  const startTrackingAnimation = () => {
-    // 10-minute slow-moving delivery animation (simulated here faster for demo, say 2 minutes)
-    const durationMs = 120000;
+  const startTrackingAnimation = (updatedAtStr: string) => {
+    const updatedAt = new Date(updatedAtStr).getTime();
+    // 10-minute delivery duration
+    const durationMs = 10 * 60 * 1000;
     const intervalMs = 1000;
-    const steps = durationMs / intervalMs;
-    let currentStep = 0;
 
     const interval = setInterval(() => {
-      currentStep++;
-      const newProgress = Math.min((currentStep / steps) * 100, 100);
+      const now = Date.now();
+      const elapsed = now - updatedAt;
+      const newProgress = Math.min((elapsed / durationMs) * 100, 100);
       setProgress(newProgress);
       if (newProgress >= 100) {
         setDeliveryStatus("arrived");
@@ -117,9 +117,13 @@ export default function DeliveryTrackingPage({ params }: { params: Promise<{ ord
           <div className="flex-1 relative">
             <DeliveryMap 
               orderId={orderId as string}
-              patientAddress="Patient Delivery Address"
+              patientAddress={order?.delivery_address || "Patient Delivery Address"}
               patientName={order?.patient_name || "Patient"}
               pharmacyAddress={order?.pharmacies?.full_name || "Pharmacy"}
+              pharmacyId={order?.pharmacy_id}
+              deliveryLat={order?.delivery_latitude}
+              deliveryLng={order?.delivery_longitude}
+              updatedAt={order?.updated_at}
               onClose={() => router.push("/patient/dashboard")}
             />
             {/* Overlay progress bar */}
