@@ -7,7 +7,6 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 
 import { PulseAIFloating } from "@/components/pulse-ai/PulseAIFloating";
-import { ProfileCompletionBadge } from "@/components/profile-wizard/ProfileCompletionBadge";
 import SecurityEnrollmentModal from "@/components/patient/SecurityEnrollmentModal";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -67,7 +66,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
       <PulseAIFloating role={displayRole as any} />
-      <ProfileCompletionBadge role={displayRole as any} />
       <SecurityEnrollmentModal />
     </div>
   )

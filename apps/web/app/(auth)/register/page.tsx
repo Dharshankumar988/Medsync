@@ -62,6 +62,11 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState("PATIENT");
   
+  // Patient fields
+  const [bloodGroup, setBloodGroup] = useState("");
+  const [gender, setGender] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  
   // Additional fields for Doctor & Pharmacy
   const [licenseNumber, setLicenseNumber] = useState("");
   const [doctorPracticeType, setDoctorPracticeType] = useState<"HOSPITAL" | "CLINIC">("HOSPITAL");
@@ -174,6 +179,9 @@ export default function RegisterPage() {
         longitude: ((role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL")) && isRegisteringNewHospital ? newHospitalLongitude : ((role === "DOCTOR" && doctorPracticeType === "CLINIC") || role === "PHARMACY" ? longitude : undefined),
         business_name: role === "PHARMACY" ? businessName : undefined,
         contact_number: role === "PHARMACY" ? contactNumber : undefined,
+        blood_group: role === "PATIENT" ? bloodGroup : undefined,
+        gender: role === "PATIENT" ? gender : undefined,
+        date_of_birth: role === "PATIENT" ? dateOfBirth : undefined,
       });
 
       if (response.data?.needsEmailVerification) {
@@ -376,6 +384,58 @@ export default function RegisterPage() {
 
               {/* Dynamic Role Fields */}
               <AnimatePresence mode="popLayout">
+                {role === "PATIENT" && (
+                  <motion.div
+                    key="patient-fields"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="grid grid-cols-1 md:grid-cols-3 gap-5 overflow-hidden pt-1"
+                  >
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground/80">Gender</label>
+                      <select
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="w-full h-12 px-4 bg-background border border-input rounded-md hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all duration-200"
+                      >
+                        <option value="" disabled>Select Gender</option>
+                        <option value="MALE">Male</option>
+                        <option value="FEMALE">Female</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground/80">Blood Group</label>
+                      <select
+                        value={bloodGroup}
+                        onChange={(e) => setBloodGroup(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="w-full h-12 px-4 bg-background border border-input rounded-md hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all duration-200"
+                      >
+                        <option value="" disabled>Select Type</option>
+                        {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(bg => (
+                          <option key={bg} value={bg}>{bg}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground/80">Date of Birth</label>
+                      <input
+                        type="date"
+                        value={dateOfBirth}
+                        onChange={(e) => setDateOfBirth(e.target.value)}
+                        required
+                        disabled={isLoading}
+                        className="w-full h-12 px-4 bg-background border border-input rounded-md hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all duration-200 text-sm"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
                 {role === "DOCTOR" && (
                   <motion.div
                     key="doctor-fields"

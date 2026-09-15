@@ -73,6 +73,9 @@ export const authService = {
     license_number?: string;
     business_name?: string; 
     contact_number?: string;
+    blood_group?: string;
+    gender?: string;
+    date_of_birth?: string;
   }) => {
     const normalizedRole = normalizeRole(data.role);
 
@@ -93,6 +96,9 @@ export const authService = {
           license_number: data.license_number,
           business_name: data.business_name,
           contact_number: data.contact_number,
+          blood_group: data.blood_group,
+          gender: data.gender,
+          date_of_birth: data.date_of_birth,
         },
       },
     });
@@ -118,6 +124,9 @@ export const authService = {
         license_number: data.license_number,
         business_name: data.business_name,
         contact_number: data.contact_number,
+        blood_group: data.blood_group,
+        gender: data.gender,
+        date_of_birth: data.date_of_birth,
       });
     } catch (syncError: any) {
       console.error("Backend sync failed:", syncError);

@@ -39,3 +39,6 @@ class UserSyncRequest(BaseModel):
     license_number: Optional[str] = None
     business_name: Optional[str] = None
     contact_number: Optional[str] = None
+    blood_group: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None

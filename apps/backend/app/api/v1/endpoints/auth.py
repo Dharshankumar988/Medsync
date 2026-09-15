@@ -41,6 +41,25 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         is_patient = payload.role == UserRole.PATIENT
         new_status = UserStatus.ACTIVE if is_patient else UserStatus.PENDING
 
+        # Determine default avatar based on role and gender
+        default_avatar = None
+        gender = (payload.gender or "").upper()
+        
+        if payload.role == UserRole.PATIENT:
+            if gender == "FEMALE":
+                default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Jocelyn&backgroundColor=ffdfbf"
+            else:
+                default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4"
+        elif payload.role == UserRole.DOCTOR:
+            if gender == "FEMALE":
+                default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9"
+            else:
+                default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Jude&backgroundColor=c0aede"
+        elif payload.role == UserRole.PHARMACY:
+            default_avatar = "https://api.dicebear.com/7.x/shapes/svg?seed=" + str(payload.id) + "&backgroundColor=b6e3f4"
+        elif payload.role == UserRole.HOSPITAL:
+            default_avatar = "https://api.dicebear.com/7.x/shapes/svg?seed=" + str(payload.id) + "&backgroundColor=c0aede"
+
         # Create base user
         new_user = User(
             id=payload.id,
@@ -49,14 +68,22 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
             role=payload.role,
             status=new_status,
             is_verified=is_patient,
-            profile_completion_percentage=80 if is_patient else 40
+            profile_completion_percentage=100,
+            profile_image_url=default_avatar
         )
         db.add(new_user)
         await db.flush()
 
         # Create profile
         if payload.role == UserRole.PATIENT:
-            profile = Patient(user_id=new_user.id, full_name=payload.full_name)
+            profile = Patient(
+                user_id=new_user.id, 
+                full_name=payload.full_name,
+                blood_group=payload.blood_group,
+                gender=payload.gender,
+                date_of_birth=payload.date_of_birth,
+                profile_picture_url=default_avatar
+            )
             db.add(profile)
         elif payload.role == UserRole.DOCTOR:
             profile = Doctor(
@@ -70,7 +97,8 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                 license_number=payload.license_number or f"LIC-{str(new_user.id)[:8]}",
                 experience_years=1,
                 consultation_fee=500,
-                doctor_status="PENDING"
+                doctor_status="PENDING",
+                profile_picture_url=default_avatar
             )
             db.add(profile)
             await db.flush() # flush to get doctor profile id
