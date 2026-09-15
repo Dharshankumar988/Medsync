@@ -5,7 +5,7 @@ base_url = "http://localhost:8000"
 email = "admin@medsync.com"
 password = "admin"
 
-def test_endpoints():
+def run_endpoints_test():
     print(f"Testing endpoints on {base_url}...")
     
     # Login
@@ -44,4 +44,4 @@ def test_endpoints():
             print(f"FAIL (Did not reject): {ep} - {resp.status_code}\n")
 
 if __name__ == "__main__":
-    test_endpoints()
+    run_endpoints_test()

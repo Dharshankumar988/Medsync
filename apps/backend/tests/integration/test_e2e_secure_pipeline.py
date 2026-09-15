@@ -36,6 +36,12 @@ from app.blockchain.gateway import blockchain_gateway
 SYNTHETIC_RECORD = b"MEDSYNC_SYNTHETIC_TEST_RECORD_2026"
 SYNTHETIC_PRESCRIPTION = b"MEDSYNC_SYNTHETIC_TEST_PRESCRIPTION_2026"
 
+requires_credentials = pytest.mark.skipif(
+    not os.getenv("PINATA_JWT") or not os.getenv("BLOCKCHAIN_PRIVATE_KEY"),
+    reason="Missing credentials for real E2E tests"
+)
+
+@requires_credentials
 @pytest.mark.asyncio
 async def test_e2e_medical_record_pipeline(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
@@ -108,6 +114,7 @@ async def test_e2e_medical_record_pipeline(monkeypatch):
     tx_hash_str = receipt['transactionHash'].hex() if isinstance(receipt['transactionHash'], bytes) else str(receipt['transactionHash'])
     print(f"[REPORT] RECORD TX Hash: {tx_hash_str}")
 
+@requires_credentials
 @pytest.mark.asyncio
 async def test_e2e_prescription_pipeline(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
@@ -213,6 +220,7 @@ async def test_tamper_blockchain_hash_mismatch(monkeypatch):
     with pytest.raises(ValueError, match="HASH MISMATCH: REJECT RECORD"):
         verify_and_decrypt()
 
+@requires_credentials
 @pytest.mark.asyncio
 async def test_e2e_patient_registration(monkeypatch):
     """Phase 5 - Validate Patient Registration on real blockchain"""

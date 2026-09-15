@@ -1,7 +1,7 @@
 import asyncio
 import httpx
 
-async def test_qr():
+async def run_qr_test():
     # Login as pharmacy
     async with httpx.AsyncClient(base_url="http://localhost:8000") as client:
         resp = await client.post("/api/v1/auth/login", data={"username": "demo.pharmacy@medsync.com", "password": "password"})
@@ -16,4 +16,4 @@ async def test_qr():
         print("QR Body:", qr_resp.text)
 
 if __name__ == "__main__":
-    asyncio.run(test_qr())
+    asyncio.run(run_qr_test())

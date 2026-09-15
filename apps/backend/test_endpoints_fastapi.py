@@ -29,7 +29,7 @@ endpoints = [
     "/api/v1/admin/blockchain"
 ]
 
-def test_all():
+def run_test_all():
     print("Testing with mocked Admin auth...")
     for ep in endpoints:
         response = client.get(ep)
@@ -49,4 +49,4 @@ def test_all():
             print(f"FAIL (Did not reject): {ep} - {response.status_code}\n")
 
 if __name__ == "__main__":
-    test_all()
+    run_test_all()
