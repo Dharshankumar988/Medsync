@@ -29,7 +29,10 @@ async def fetch_and_enqueue_events(contract_name: str, from_block: int, to_block
         for event_abi in contract.events:
             event_name = event_abi.event_name
             try:
-                events = event_listener.get_past_events(contract_name, event_name, from_block, to_block)
+                events = await asyncio.to_thread(
+                    event_listener.get_past_events,
+                    contract_name, event_name, from_block, to_block
+                )
                 for e in events:
                     # Enqueue event
                     queue_item = BlockchainEventQueue(
@@ -64,7 +67,7 @@ async def block_listener_loop():
     logger.info("Starting blockchain event listener loop...")
     while True:
         try:
-            latest_block = blockchain_client.w3.eth.block_number
+            latest_block = await asyncio.to_thread(lambda: blockchain_client.w3.eth.block_number)
             caught_up = True
             
             async with AsyncSessionLocal() as db:

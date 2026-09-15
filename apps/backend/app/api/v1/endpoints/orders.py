@@ -119,14 +119,14 @@ async def dispatch_order(
         order_id=order_id,
         otp_code=otp,
         is_used=False,
-        expires_at=datetime.utcnow() + timedelta(minutes=15)
+        expires_at=datetime.utcnow() + timedelta(hours=2)
     )
     db.add(otp_record)
     
     # Also set hash for backwards compatibility if needed
     otp_hash = hashlib.sha256(otp.encode()).hexdigest()
     tracking.delivery_code_hash = otp_hash
-    tracking.delivery_code_expiry = datetime.utcnow() + timedelta(minutes=15)
+    tracking.delivery_code_expiry = datetime.utcnow() + timedelta(hours=2)
     
     # Update order status
     order.status = OrderStatus.OUT_FOR_DELIVERY
@@ -301,14 +301,14 @@ async def generate_delivery_code(
     if otp_record:
         otp_record.otp_code = otp
         otp_record.is_used = False
-        otp_record.expires_at = datetime.utcnow() + timedelta(minutes=15)
+        otp_record.expires_at = datetime.utcnow() + timedelta(hours=2)
         otp_record.updated_at = datetime.utcnow()
     else:
         otp_record = DeliveryOTP(
             order_id=order_id,
             otp_code=otp,
             is_used=False,
-            expires_at=datetime.utcnow() + timedelta(minutes=15)
+            expires_at=datetime.utcnow() + timedelta(hours=2)
         )
         db.add(otp_record)
     

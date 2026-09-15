@@ -4,7 +4,7 @@ import { useState, useRef, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, Navigation } from "lucide-react";
 import { Input } from "@medsync/ui";
 
 // Fix leaflet icon issue
@@ -105,18 +105,46 @@ export default function LocationPickerMap({ onLocationSelect, onAddressFound, in
     }
   };
 
-  const eventHandlers = useMemo(
-    () => ({
-      dragend() {
-        const marker = markerRef.current;
-        if (marker != null) {
-          const latlng = marker.getLatLng();
-          handleLocationSelect(latlng.lat, latlng.lng);
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    
+    setIsSearching(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setPosition([lat, lng]);
+        onLocationSelect(lat, lng);
+        if (onAddressFound) {
+          fetchAddress(lat, lng);
         }
+        setIsSearching(false);
       },
-    }),
-    []
-  );
+      (error) => {
+        console.error("Geolocation error:", error);
+        alert("Unable to retrieve your location. Please check your permissions.");
+        setIsSearching(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  };
+
+  const eventHandlers = {
+    dragend() {
+      const marker = markerRef.current;
+      if (marker != null) {
+        const latlng = marker.getLatLng();
+        handleLocationSelect(latlng.lat, latlng.lng);
+      }
+    },
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -130,6 +158,9 @@ export default function LocationPickerMap({ onLocationSelect, onAddressFound, in
             className="pl-9 h-10 bg-background"
           />
         </div>
+        <button type="button" onClick={handleGetCurrentLocation} disabled={isSearching} className="px-3 h-10 bg-secondary text-secondary-foreground rounded-md flex items-center justify-center hover:bg-secondary/80 disabled:opacity-50" title="Use My Current Location">
+          <Navigation className="h-4 w-4" />
+        </button>
         <button type="submit" disabled={isSearching} className="px-4 h-10 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-500 disabled:opacity-50">
           {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
         </button>
@@ -137,12 +168,13 @@ export default function LocationPickerMap({ onLocationSelect, onAddressFound, in
       <div className="h-[300px] w-full rounded-xl overflow-hidden border border-border z-0 relative">
         <MapContainer 
           center={position || defaultCenter} 
-          zoom={position ? 16 : 11} 
+          zoom={position ? 19 : 11} 
           style={{ height: "100%", width: "100%", zIndex: 0 }}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={19}
           />
           <MapClickHandler onLocationSelect={handleLocationSelect} />
           <MapUpdater position={position} />

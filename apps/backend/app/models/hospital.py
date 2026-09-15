@@ -7,7 +7,7 @@ from app.models.mixins import UUIDMixin, TimestampMixin
 class Hospital(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "hospitals"
     
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, unique=True, nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True, unique=True, nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=True)

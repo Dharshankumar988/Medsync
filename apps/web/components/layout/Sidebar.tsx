@@ -124,7 +124,7 @@ const menuGroups = {
     {
       label: "OPERATIONS & AI",
       items: [
-        { name: "Healthcare Operations", href: "/admin/operations", icon: Activity },
+        { name: "Facilities", href: "/admin/operations", icon: Activity },
         { name: "AI Management", href: "/admin/ai", icon: Brain, badge: "AI" },
         { name: "Pulse AI", href: "/admin/pulse-ai", icon: FileText, badge: "AI" },
       ]
