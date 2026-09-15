@@ -78,15 +78,18 @@ if ($fileInfo.Length -eq 0) {
 
 # 3. Extract ZIP
 Write-Host "Extracting archive..."
+$portableRunnerPath = Join-Path $installPath "portable_runner"
 try {
-    Expand-Archive -Path $zipPath -DestinationPath $installPath -Force
+    if (-not (Test-Path $portableRunnerPath)) {
+        New-Item -ItemType Directory -Path $portableRunnerPath -Force | Out-Null
+    }
+    Expand-Archive -Path $zipPath -DestinationPath $portableRunnerPath -Force
 } catch {
     Write-Host "ERROR: Failed to extract ZIP." -ForegroundColor Red
     exit 1
 }
 
 # 4. Verify extraction
-$portableRunnerPath = $installPath
 if (-not (Test-Path (Join-Path $portableRunnerPath "start-medsync.ps1"))) {
     Write-Host "ERROR: start-medsync.ps1 was not found in the downloaded archive." -ForegroundColor Red
     exit 1
@@ -111,12 +114,12 @@ if (Test-Path -LiteralPath $envPath) {
         Copy-Item -LiteralPath $envExamplePath -Destination $envPath
         Write-Host ".env has been created from .env.example." -ForegroundColor Green
         Write-Host "Open it and configure your required MedSync secrets before starting the backend." -ForegroundColor Yellow
-        
-        $openEnv = Read-Host "Would you like to open .env now? [Y/N]"
-        if ($openEnv -match "^[yY]") {
-            notepad "$envPath"
-        }
     }
+}
+
+$openEnv = Read-Host "Would you like to open .env now to configure your settings? [Y/N]"
+if ($openEnv -match "^[yY]") {
+    notepad "$envPath"
 }
 
 # 8. Final Install Output
