@@ -86,9 +86,9 @@ try {
 }
 
 # 4. Verify extraction
-$portableRunnerPath = Join-Path $installPath "portable_runner"
-if (-not (Test-Path $portableRunnerPath)) {
-    Write-Host "ERROR: portable_runner was not found in the downloaded archive." -ForegroundColor Red
+$portableRunnerPath = $installPath
+if (-not (Test-Path (Join-Path $portableRunnerPath "start-medsync.ps1"))) {
+    Write-Host "ERROR: start-medsync.ps1 was not found in the downloaded archive." -ForegroundColor Red
     exit 1
 }
 
