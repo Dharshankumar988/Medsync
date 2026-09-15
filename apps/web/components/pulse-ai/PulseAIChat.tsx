@@ -13,6 +13,8 @@ interface Message {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
+  imageUrl?: string;
+  boxes?: number[][];
 }
 
 interface PulseAIChatProps {
@@ -46,6 +48,48 @@ const ChatMessage = memo(function ChatMessage({
             : "bg-muted text-foreground rounded-tl-sm border border-border/50"
         )}
       >
+        {message.imageUrl && (
+          <div className="relative mt-2 mb-4 max-w-full overflow-hidden rounded-lg border border-border/50 bg-black/5">
+            <img 
+              src={message.imageUrl} 
+              alt="Medical Scan" 
+              className="w-full h-auto object-contain block"
+            />
+            {message.boxes && message.boxes.length > 0 && (
+              <svg 
+                className="absolute inset-0 w-full h-full pointer-events-none" 
+                viewBox="0 0 100 100" 
+                preserveAspectRatio="none"
+              >
+                {message.boxes.map((box, i) => {
+                  // Assuming box is [xmin, ymin, xmax, ymax] as percentages or normalized 0-1
+                  // If they are pixels, this logic would need the actual image dimensions,
+                  // but assuming they are 0-1 normalized coordinates for SVG % drawing.
+                  const isNormalized = box[0] <= 1 && box[2] <= 1;
+                  const x = isNormalized ? box[0] * 100 : box[0];
+                  const y = isNormalized ? box[1] * 100 : box[1];
+                  const width = isNormalized ? (box[2] - box[0]) * 100 : box[2] - box[0];
+                  const height = isNormalized ? (box[3] - box[1]) * 100 : box[3] - box[1];
+                  
+                  return (
+                    <rect 
+                      key={i}
+                      x={`${x}%`} 
+                      y={`${y}%`} 
+                      width={`${width}%`} 
+                      height={`${height}%`}
+                      fill="none" 
+                      stroke="#ef4444" 
+                      strokeWidth="2"
+                      strokeDasharray="4"
+                      className="drop-shadow-md"
+                    />
+                  );
+                })}
+              </svg>
+            )}
+          </div>
+        )}
         <div className="prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-900 prose-pre:text-zinc-50 max-w-none">
           <ReactMarkdown remarkPlugins={PLUGINS}>
             {message.content}
@@ -181,8 +225,13 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
       if (report.session_id) setSessionId(report.session_id);
       const finding = report.prediction;
       const explanation = role === "doctor" ? report.clinical_summary : report.patient_explanation;
-      const text = `**Model finding (${report.scan_type.toUpperCase()})**: ${finding.diagnosis}\n\nConfidence: ${finding.confidence_percent}%${explanation?.summary ? `\n\n${explanation.summary}` : "\n\nThe model result is available, but the explanatory service is unavailable."}`;
-      setMessages((prev) => prev.map((m) => m.id === assistantMessageId ? { ...m, content: text } : m));
+      
+      const objectUrl = URL.createObjectURL(file);
+      const boxes = finding.boxes || [];
+      
+      const text = `**Model Finding (${report.scan_type.toUpperCase()})**: ${finding.diagnosis}\n\n**Confidence**: ${finding.confidence_percent}%\n\n${explanation?.summary ? `**Summary:**\n${explanation.summary}` : "\n\nThe model result is available, but the explanatory service is unavailable."}\n\n${explanation?.recommendations ? `**Next Steps / Required Medications:**\n${explanation.recommendations.map((r: string) => `- ${r}`).join('\n')}` : ''}`;
+      
+      setMessages((prev) => prev.map((m) => m.id === assistantMessageId ? { ...m, content: text, imageUrl: objectUrl, boxes } : m));
     } catch (error: any) {
       console.error(error);
       const errorMessage = error.response?.data?.error?.message || error.response?.data?.detail || error.message || "Image analysis failed. No result was generated; retry after checking the image and service status.";
@@ -200,7 +249,7 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
   }, []);
 
   return (
-    <div className={cn("flex flex-col bg-card overflow-hidden", fullPage ? "h-full rounded-none" : "w-full h-full rounded-2xl shadow-2xl border border-border")}>
+    <div className={cn("flex flex-col bg-card overflow-hidden w-full h-full", fullPage ? "rounded-none" : "rounded-2xl shadow-2xl border border-border")}>
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border p-4 bg-muted/30">
         <PulseAIIcon size={32} animate={isLoading} />
@@ -236,10 +285,25 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
           {role === "doctor" && (
             <>
               <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => handleImage(e.target.files?.[0])} />
-              <select aria-label="Image model" value={scanType} onChange={(e) => setScanType(e.target.value)} className="hidden sm:block bg-transparent text-xs text-muted-foreground outline-none">
-                <option value="bone">Bone</option><option value="brain">Brain</option><option value="kidney">Kidney</option><option value="skin">Skin</option>
-              </select>
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md shrink-0 disabled:opacity-50" title="Upload image for model analysis">
+              
+              <div className="hidden sm:flex items-center gap-1 bg-background/50 p-1 rounded-lg border border-border">
+                {["bone", "brain", "kidney", "skin"].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setScanType(type)}
+                    className={cn(
+                      "px-3 py-1 text-[10px] font-medium uppercase tracking-wider rounded-md transition-all",
+                      scanType === type 
+                        ? "bg-primary text-primary-foreground shadow-sm" 
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors rounded-md shrink-0 disabled:opacity-50" title="Upload image for model analysis">
                 <ImageIcon size={18} />
               </button>
             </>

@@ -100,6 +100,34 @@ $process = Start-Process -FilePath $NgrokPath -ArgumentList $ngrokArgs -PassThru
 $PidFile = Join-Path $ScriptPath ".runner_pids.txt"
 $process.Id | Out-File -FilePath $PidFile -Append -Encoding utf8
 
+# 4.5 Wait for local server to be ready to avoid 502 Bad Gateway
+Write-Host "Waiting for local server on port $TargetPort to become healthy..."
+$MaxRetries = 30
+$RetryCount = 0
+$IsHealthy = $false
+
+while ($RetryCount -lt $MaxRetries) {
+    try {
+        if ($Mode -eq "Backend") {
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:$TargetPort/api/v1/health" -UseBasicParsing -ErrorAction Stop
+        } else {
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:$TargetPort/" -UseBasicParsing -ErrorAction Stop
+        }
+        if ($response.StatusCode -eq 200) {
+            $IsHealthy = $true
+            break
+        }
+    } catch {
+        # Ignore errors and retry
+    }
+    Start-Sleep -Seconds 2
+    $RetryCount++
+}
+
+if (-not $IsHealthy) {
+    Write-Host "WARNING: Local server on port $TargetPort did not become healthy in time. Ngrok tunnel may show 502 errors." -ForegroundColor Yellow
+}
+
 # 5. Query active URL
 Write-Host "Waiting for ngrok to initialize..."
 Start-Sleep -Seconds 3

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Badge } from "@medsync/ui";
 import { 
   Store, FileText, CheckCircle2, Lock, Loader2, ArrowRight, Camera, 
-  Link as LinkIcon, FileJson, ShieldCheck, Activity, Copy, CreditCard
+  Link as LinkIcon, FileJson, ShieldCheck, Activity, Copy, CreditCard, Upload
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,6 +32,39 @@ export default function PatientQRScanPage() {
   const [selectedPrescription, setSelectedPrescription] = useState<string | null>(null);
   const [authPin, setAuthPin] = useState("");
   const [faceImage, setFaceImage] = useState<File | null>(null);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      const res = await fetch("https://api.qrserver.com/v1/read-qr-code/", {
+        method: "POST",
+        body: formData,
+      });
+      
+      const json = await res.json();
+      if (json && json[0] && json[0].symbol && json[0].symbol[0].data) {
+        const qrData = json[0].symbol[0].data;
+        if (!qrData) throw new Error("No QR code found in image");
+        handleProcessQR(qrData);
+      } else {
+        throw new Error("Could not decode QR code");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to read QR code from image");
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Smart Routing Engine
   const handleProcessQR = async (data: string) => {
@@ -41,7 +74,8 @@ export default function PatientQRScanPage() {
 
     if (data.startsWith("QR-PHM-") || data.startsWith("medsync:pharmacy:")) {
       setFlow("PHARMACY");
-      await resolvePharmacy(data);
+      setPharmacyStep("VERIFYING_BLOCKCHAIN" as any);
+      await verifyPharmacyBlockchain(data);
     } else if (data.startsWith("0x") || data.startsWith("QR-REC-")) {
       setFlow("BLOCKCHAIN");
       setLoading(true);
@@ -64,27 +98,44 @@ export default function PatientQRScanPage() {
   };
 
   // --- Pharmacy Specific Logic ---
-  const resolvePharmacy = async (qrData: string) => {
+  const verifyPharmacyBlockchain = async (qrData: string) => {
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
       const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
-      const res = await fetch(`${baseUrl}/api/v1/pharmacy/resolve-qr/${encodeURIComponent(qrData)}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
+      
+      // Hit our new blockchain verification endpoint
+      const res = await fetch(`${baseUrl}/api/v1/pharmacy/verify-blockchain`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ qr_data: qrData })
       });
 
       if (!res.ok) {
-        throw new Error("Pharmacy not found or invalid QR");
+        throw new Error("Pharmacy not verified on blockchain");
       }
+      
       const json = await res.json();
-      setPharmacy({ id: json.data.pharmacy_id, name: json.data.business_name, address: json.data.address || "Verified Network Location" });
-      setPharmacyStep("CONFIRM");
+      setPharmacy({ 
+        id: json.data.pharmacy_id, 
+        name: json.data.business_name, 
+        address: json.data.address || "Verified Network Location",
+        verified: json.data.verified_on_blockchain
+      });
+      
+      // Add a slight delay for the verified UI to be seen
+      setTimeout(() => {
+        setPharmacyStep("CONFIRM");
+      }, 2000);
+      
     } catch (e: any) {
       console.error(e);
-      // Fallback for simulation
-      setPharmacy({ id: "sim-123", name: "CarePlus Pharmacy", address: "123 Health Ave, Medical District" });
-      setPharmacyStep("CONFIRM");
+      alert("Failed to verify pharmacy on the blockchain.");
+      setFlow("IDLE");
     } finally {
       setLoading(false);
     }
@@ -160,12 +211,19 @@ export default function PatientQRScanPage() {
           <motion.div key="idle" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
             <Card className="rounded-2xl border border-border/60 overflow-hidden shadow-sm">
               <div className="bg-muted/10 p-12 flex flex-col items-center justify-center min-h-[450px]">
-                {showCamera ? (
-                  <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl border border-border/50 bg-black">
-                    <QRScanner 
-                      onScan={handleProcessQR} 
-                      onClose={() => setShowCamera(false)} 
-                    />
+                {showCamera || loading ? (
+                  <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl border border-border/50 bg-black flex flex-col items-center justify-center relative min-h-[300px]">
+                    {loading && flow === "IDLE" ? (
+                      <div className="flex flex-col items-center gap-4 text-white z-20">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        <p className="font-medium text-sm">Processing Image...</p>
+                      </div>
+                    ) : (
+                      <QRScanner 
+                        onScan={handleProcessQR} 
+                        onClose={() => setShowCamera(false)} 
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center max-w-sm w-full space-y-8">
@@ -199,9 +257,18 @@ export default function PatientQRScanPage() {
                       </Button>
                     </div>
                     
-                    <div className="flex gap-2 justify-center pt-2">
-                      <Button variant="outline" size="sm" onClick={() => handleProcessQR("QR-PHM-123")} className="text-xs h-8">Simulate Pharmacy</Button>
-                      <Button variant="outline" size="sm" onClick={() => handleProcessQR("0x123abc456def789")} className="text-xs h-8">Simulate Blockchain</Button>
+                    <div className="flex gap-2 justify-center pt-4 w-full">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        onChange={handleFileUpload} 
+                      />
+                      <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full rounded-xl border-dashed border-2 hover:bg-muted/50 h-14">
+                        <Upload className="mr-2 h-5 w-5 text-primary" />
+                        Upload QR Image
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -337,6 +404,49 @@ export default function PatientQRScanPage() {
                 );
               })}
             </div>
+
+            {((pharmacyStep as any) === "VERIFYING_BLOCKCHAIN") && (
+              <motion.div key="verifying" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+                <Card className="rounded-3xl border border-blue-500/40 shadow-2xl overflow-hidden relative max-w-lg mx-auto bg-gradient-to-b from-card to-blue-500/5">
+                  <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-400 via-indigo-500 to-blue-400 bg-[length:200%_auto] animate-[gradient_2s_linear_infinite]"></div>
+                  <CardHeader className="text-center pb-8 pt-12 relative z-10">
+                    <div className="mx-auto h-28 w-28 relative flex items-center justify-center mb-6">
+                      {loading ? (
+                        <>
+                          <motion.div 
+                            className="absolute inset-0 border-[3px] border-blue-500/30 rounded-[35%] border-t-blue-500"
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                          />
+                          <motion.div 
+                            className="absolute inset-2 border-[3px] border-indigo-500/30 rounded-[40%] border-b-indigo-500"
+                            animate={{ rotate: -360 }}
+                            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                          />
+                          <ShieldCheck className="h-10 w-10 text-blue-500 animate-pulse" />
+                        </>
+                      ) : (
+                        <motion.div 
+                          initial={{ scale: 0 }} 
+                          animate={{ scale: 1 }} 
+                          transition={{ type: "spring", bounce: 0.5 }}
+                          className="mx-auto h-28 w-28 relative flex items-center justify-center"
+                        >
+                          <div className="absolute inset-0 bg-emerald-500/20 rounded-full animate-ping opacity-50"></div>
+                          <CheckCircle2 className="h-16 w-16 text-emerald-500 relative z-10" />
+                        </motion.div>
+                      )}
+                    </div>
+                    <CardTitle className="text-2xl font-bold">
+                      {loading ? "Verifying Pharmacy on Blockchain..." : "Pharmacy Verified!"}
+                    </CardTitle>
+                    <CardDescription className="text-base mt-2">
+                      {loading ? "Checking smart contract for authorized credentials." : "This pharmacy is an authorized node on the network."}
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              </motion.div>
+            )}
 
             {pharmacyStep === "CONFIRM" && pharmacy && (
               <motion.div key="confirm" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
@@ -516,9 +626,9 @@ export default function PatientQRScanPage() {
                         Your prescription and co-pay have been securely transferred to <strong>{pharmacy?.name}</strong> via smart contract.
                       </p>
                     </div>
-                    <div className="p-5 bg-muted/20 rounded-2xl max-w-xs mx-auto border shadow-sm">
-                      <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">Pharmacist Status</p>
-                      <p className="text-lg font-bold text-emerald-600">Awaiting Processing</p>
+                    <div className="p-5 bg-emerald-500/10 rounded-2xl max-w-xs mx-auto border border-emerald-500/30 shadow-sm">
+                      <p className="text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-400 mb-1">Pharmacist Status</p>
+                      <p className="text-lg font-bold text-emerald-600">Ready for Offline Pickup</p>
                     </div>
                     <Button onClick={() => router.push("/patient/dashboard")} className="mt-6 rounded-xl px-8 h-12">
                       Return to Dashboard

@@ -25,7 +25,6 @@ const sidebarLinks = [
   { name: "Event Explorer", href: "/admin/blockchain/events", icon: ActivitySquare },
   { name: "Analytics", href: "/admin/blockchain/analytics", icon: LineChart },
   { name: "Queues & Workers", href: "/admin/blockchain/queues", icon: Layers },
-  { name: "Dead Letter Queue", href: "/admin/blockchain/dlq", icon: ArchiveX },
 ];
 
 export default function BlockchainAdminLayout({

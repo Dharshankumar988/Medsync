@@ -133,7 +133,6 @@ const menuGroups = {
       label: "SYSTEM & SECURITY",
       items: [
         { name: "Blockchain", href: "/admin/blockchain", icon: Shield },
-        { name: "Interoperability", href: "/admin/interoperability", icon: RefreshCw },
         { name: "Security & Audit", href: "/admin/security", icon: ShieldCheck },
       ]
     },
