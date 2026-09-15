@@ -28,7 +28,7 @@ async def get_status(
     Returns the security enrollment status of the patient:
     NOT_STARTED, PIN_CREATED, COMPLETED
     """
-    if current_user.role not in [UserRole.PATIENT, UserRole.DOCTOR]:
+    if current_user.role.upper() not in [UserRole.PATIENT.value, UserRole.DOCTOR.value]:
         raise HTTPException(status_code=403, detail="Only patients and doctors require security enrollment.")
         
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -44,7 +44,7 @@ async def enroll_pin(
     """
     Enrolls or updates the 6-digit Authorization PIN.
     """
-    if current_user.role not in [UserRole.PATIENT, UserRole.DOCTOR]:
+    if current_user.role.upper() not in [UserRole.PATIENT.value, UserRole.DOCTOR.value]:
         raise HTTPException(status_code=403, detail="Only patients and doctors can enroll a PIN.")
         
     try:

@@ -76,6 +76,7 @@ export const authService = {
     blood_group?: string;
     gender?: string;
     date_of_birth?: string;
+    facility_type?: string;
   }) => {
     const normalizedRole = normalizeRole(data.role);
 
@@ -99,6 +100,7 @@ export const authService = {
           blood_group: data.blood_group,
           gender: data.gender,
           date_of_birth: data.date_of_birth,
+          facility_type: data.facility_type,
         },
       },
     });
@@ -127,10 +129,22 @@ export const authService = {
         blood_group: data.blood_group,
         gender: data.gender,
         date_of_birth: data.date_of_birth,
+        facility_type: data.facility_type,
       });
     } catch (syncError: any) {
       console.error("Backend sync failed:", syncError);
-      const message = syncError.response?.data?.detail || syncError.message || "Failed to synchronize user data with backend.";
+      let message = "Failed to synchronize user data with backend.";
+      if (syncError.response?.data?.detail) {
+        if (Array.isArray(syncError.response.data.detail)) {
+          message = syncError.response.data.detail.map((e: any) => `${e.loc?.join('.')}: ${e.msg}`).join(', ');
+        } else if (typeof syncError.response.data.detail === 'string') {
+          message = syncError.response.data.detail;
+        } else {
+          message = JSON.stringify(syncError.response.data.detail);
+        }
+      } else if (syncError.message) {
+        message = syncError.message;
+      }
       throw new Error(message);
     }
 

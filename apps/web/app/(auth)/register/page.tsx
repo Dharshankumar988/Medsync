@@ -90,8 +90,18 @@ export default function RegisterPage() {
   const [pharmacyAddress, setPharmacyAddress] = useState("");
 
   useEffect(() => {
-    if ((role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL")) {
-      hospitalService.getHospitals().then(res => setHospitals(res.data.data)).catch(console.error);
+    if (role === "DOCTOR" || role === "PHARMACY") {
+      const type = (role === "DOCTOR" && doctorPracticeType === "CLINIC") || 
+                   (role === "PHARMACY" && pharmacyPracticeType === "CLINIC") 
+                   ? "clinic" : "hospital";
+      
+      const shouldFetch = 
+        (role === "DOCTOR" && (doctorPracticeType === "HOSPITAL" || doctorPracticeType === "CLINIC")) || 
+        (role === "PHARMACY" && (pharmacyPracticeType === "HOSPITAL" || pharmacyPracticeType === "CLINIC"));
+        
+      if (shouldFetch) {
+        hospitalService.getHospitals({ type }).then(res => setHospitals(res.data.data)).catch(console.error);
+      }
     }
   }, [role, doctorPracticeType, pharmacyPracticeType]);
 
@@ -179,6 +189,7 @@ export default function RegisterPage() {
         hospital_address: isHospitalMode && isRegisteringNewHospital ? newHospitalAddress : undefined,
         clinic_name: isClinicMode && isRegisteringNewHospital ? newHospitalName : undefined,
         clinic_address: isClinicMode && isRegisteringNewHospital ? newHospitalAddress : undefined,
+        facility_type: isRegisteringNewHospital ? (isClinicMode ? "clinic" : "hospital") : undefined,
         latitude: isFacilityMode && isRegisteringNewHospital ? newHospitalLatitude : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? latitude : undefined),
         longitude: isFacilityMode && isRegisteringNewHospital ? newHospitalLongitude : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? longitude : undefined),
         business_name: role === "PHARMACY" ? businessName : undefined,

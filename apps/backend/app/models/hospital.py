@@ -25,6 +25,7 @@ class Hospital(Base, UUIDMixin, TimestampMixin):
     longitude: Mapped[float | None] = mapped_column(Numeric(11, 8), nullable=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    type: Mapped[str | None] = mapped_column(String(50), default='hospital')
 
     # Relationships
     user = relationship("User", back_populates="hospital_profile")

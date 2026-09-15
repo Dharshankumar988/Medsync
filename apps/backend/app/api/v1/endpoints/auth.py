@@ -113,7 +113,9 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                     latitude=payload.latitude,
                     longitude=payload.longitude,
                     is_active=True,
-                    is_verified=False
+                    is_verified=False,
+                    type="clinic",
+                    google_maps_url=payload.google_maps_url
                 )
                 db.add(new_hospital)
                 await db.flush()
@@ -146,7 +148,9 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                         latitude=payload.latitude,
                         longitude=payload.longitude,
                         is_active=True,
-                        is_verified=False
+                        is_verified=False,
+                        type=payload.facility_type or "hospital",
+                        google_maps_url=payload.google_maps_url
                     )
                     db.add(new_hospital)
                     await db.flush()

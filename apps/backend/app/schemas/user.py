@@ -42,3 +42,5 @@ class UserSyncRequest(BaseModel):
     blood_group: Optional[str] = None
     gender: Optional[str] = None
     date_of_birth: Optional[str] = None
+    facility_type: Optional[str] = None
+    google_maps_url: Optional[str] = None

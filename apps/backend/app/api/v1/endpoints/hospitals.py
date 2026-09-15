@@ -29,6 +29,8 @@ class HospitalCreate(BaseModel):
     website: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    type: Optional[str] = "hospital"
+    google_maps_url: Optional[str] = None
 
 class HospitalUpdate(HospitalCreate):
     name: Optional[str] = None
@@ -48,17 +50,23 @@ class HospitalResponse(HospitalCreate):
 async def list_hospitals(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200)
+    limit: int = Query(50, ge=1, le=200),
+    type: Optional[str] = Query(None)
 ):
     now = time_module.time()
-    if _hospitals_cache["data"] is not None and now < _hospitals_cache["expires"]:
-        cached_data = _hospitals_cache["data"]
+    cache_key = f"data_{type}"
+    if _hospitals_cache.get(cache_key) is not None and now < _hospitals_cache["expires"]:
+        cached_data = _hospitals_cache[cache_key]
         return APIResponse(message="Hospitals fetched from cache", data=cached_data[skip:skip+limit])
 
-    result = await db.execute(select(Hospital).where(Hospital.is_active == True))
+    stmt = select(Hospital).where(Hospital.is_active == True)
+    if type:
+        stmt = stmt.where(Hospital.type == type)
+        
+    result = await db.execute(stmt)
     hospitals = result.scalars().all()
     
-    _hospitals_cache["data"] = hospitals
+    _hospitals_cache[cache_key] = hospitals
     _hospitals_cache["expires"] = now + 300
     
     return APIResponse(message="Hospitals fetched successfully", data=hospitals[skip:skip+limit])

@@ -17,11 +17,14 @@ export interface Hospital {
   longitude?: number;
   is_verified: boolean;
   is_active: boolean;
+  type?: string;
+  google_maps_url?: string;
 }
 
 class HospitalService {
-  async getHospitals() {
-    return api.get<{data: Hospital[]}>(`${API_PREFIX}/hospitals`);
+  async getHospitals(params?: { type?: string }) {
+    const query = params?.type ? `?type=${params.type}` : '';
+    return api.get<{data: Hospital[]}>(`${API_PREFIX}/hospitals${query}`);
   }
 
   async createHospital(data: Partial<Hospital>) {

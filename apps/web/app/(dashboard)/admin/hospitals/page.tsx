@@ -43,7 +43,9 @@ export default function HospitalsManagementPage() {
     email: "",
     website: "",
     latitude: 0,
-    longitude: 0
+    longitude: 0,
+    type: "hospital",
+    google_maps_url: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -110,17 +112,30 @@ export default function HospitalsManagementPage() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
-                <DialogTitle>Add New Hospital</DialogTitle>
+                <DialogTitle>Add New Facility</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleCreate} className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Hospital Name</label>
-                  <Input 
-                    required 
-                    value={newHospital.name} 
-                    onChange={e => setNewHospital({...newHospital, name: e.target.value})} 
-                    placeholder="General Hospital" 
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Facility Name</label>
+                    <Input 
+                      required 
+                      value={newHospital.name} 
+                      onChange={e => setNewHospital({...newHospital, name: e.target.value})} 
+                      placeholder="e.g. General Hospital" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Facility Type</label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={newHospital.type}
+                      onChange={e => setNewHospital({...newHospital, type: e.target.value})}
+                    >
+                      <option value="hospital">Hospital</option>
+                      <option value="clinic">Clinic</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Location Map</label>
@@ -136,6 +151,15 @@ export default function HospitalsManagementPage() {
                     value={newHospital.address} 
                     onChange={e => setNewHospital({...newHospital, address: e.target.value})} 
                     placeholder="123 Medical Way" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Google Maps URL (Optional)</label>
+                  <Input 
+                    type="url"
+                    value={newHospital.google_maps_url} 
+                    onChange={e => setNewHospital({...newHospital, google_maps_url: e.target.value})} 
+                    placeholder="https://maps.google.com/..." 
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -233,7 +257,7 @@ export default function HospitalsManagementPage() {
                       </div>
                       <div>
                         <div className="font-medium">{hospital.name}</div>
-                        <div className="text-xs text-muted-foreground">ID: {hospital.id.substring(0,8)}...</div>
+                        <div className="text-xs text-muted-foreground capitalize">{hospital.type || 'Hospital'} • ID: {hospital.id.substring(0,8)}...</div>
                       </div>
                     </div>
                   </TableCell>
