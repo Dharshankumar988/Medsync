@@ -84,10 +84,12 @@ export default function RegisterPage() {
   const [newHospitalAddress, setNewHospitalAddress] = useState("");
   const [newHospitalLatitude, setNewHospitalLatitude] = useState(0);
   const [newHospitalLongitude, setNewHospitalLongitude] = useState(0);
+  const [newHospitalGmapsUrl, setNewHospitalGmapsUrl] = useState("");
 
   const [businessName, setBusinessName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [pharmacyAddress, setPharmacyAddress] = useState("");
+  const [pharmacyGmapsUrl, setPharmacyGmapsUrl] = useState("");
 
   useEffect(() => {
     if (role === "DOCTOR" || role === "PHARMACY") {
@@ -190,6 +192,7 @@ export default function RegisterPage() {
         clinic_name: isClinicMode && isRegisteringNewHospital ? newHospitalName : undefined,
         clinic_address: isClinicMode && isRegisteringNewHospital ? newHospitalAddress : undefined,
         facility_type: isRegisteringNewHospital ? (isClinicMode ? "clinic" : "hospital") : undefined,
+        google_maps_url: isRegisteringNewHospital ? newHospitalGmapsUrl : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? pharmacyGmapsUrl : undefined),
         latitude: isFacilityMode && isRegisteringNewHospital ? newHospitalLatitude : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? latitude : undefined),
         longitude: isFacilityMode && isRegisteringNewHospital ? newHospitalLongitude : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? longitude : undefined),
         business_name: role === "PHARMACY" ? businessName : undefined,
@@ -405,7 +408,7 @@ export default function RegisterPage() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="grid grid-cols-1 md:grid-cols-3 gap-5 overflow-hidden pt-1"
+                    className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-1"
                   >
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground/80">Gender</label>
@@ -457,7 +460,7 @@ export default function RegisterPage() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="grid grid-cols-1 gap-5 overflow-hidden pt-1"
+                    className="grid grid-cols-1 gap-5 pt-1"
                   >
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground/80">Practice Type</label>
@@ -560,6 +563,10 @@ export default function RegisterPage() {
                             <label className="text-sm font-medium text-foreground/80">Complete Address</label>
                             <Input value={newHospitalAddress} onChange={e => setNewHospitalAddress(e.target.value)} placeholder="Exact address" className="h-12 bg-background border-input" />
                           </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-foreground/80">Google Maps URL (Optional)</label>
+                            <Input value={newHospitalGmapsUrl} onChange={e => setNewHospitalGmapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 bg-background border-input" />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -572,7 +579,7 @@ export default function RegisterPage() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="space-y-5 overflow-hidden pt-1"
+                    className="space-y-5 pt-1"
                   >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <div className="space-y-2">
@@ -650,7 +657,7 @@ export default function RegisterPage() {
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
                           exit={{ opacity: 0, height: 0 }}
-                          className="space-y-4 overflow-hidden"
+                          className="space-y-4"
                         >
                           <div className="space-y-2 relative">
                             <label className="text-sm font-medium text-foreground/80">Search & Select {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</label>
@@ -721,6 +728,10 @@ export default function RegisterPage() {
                                 <label className="text-sm font-medium text-foreground/80">Complete Address</label>
                                 <Input value={newHospitalAddress} onChange={e => setNewHospitalAddress(e.target.value)} placeholder="Exact address" className="h-12 bg-background border-input" />
                               </div>
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-foreground/80">Google Maps URL (Optional)</label>
+                                <Input value={newHospitalGmapsUrl} onChange={e => setNewHospitalGmapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 bg-background border-input" />
+                              </div>
                             </div>
                           )}
                         </motion.div>
@@ -737,6 +748,10 @@ export default function RegisterPage() {
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-foreground/80">Pharmacy Address</label>
                       <Input value={pharmacyAddress} onChange={e => setPharmacyAddress(e.target.value)} placeholder="123 Pharma St" className="h-12 bg-background border-input" required disabled={isLoading} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground/80">Google Maps URL (Optional)</label>
+                      <Input value={pharmacyGmapsUrl} onChange={e => setPharmacyGmapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 bg-background border-input" disabled={isLoading} />
                     </div>
                   </motion.div>
                 )}
