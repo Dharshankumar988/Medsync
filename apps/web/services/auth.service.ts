@@ -77,6 +77,7 @@ export const authService = {
     gender?: string;
     date_of_birth?: string;
     facility_type?: string;
+    google_maps_url?: string;
   }) => {
     const normalizedRole = normalizeRole(data.role);
 
@@ -101,6 +102,7 @@ export const authService = {
           gender: data.gender,
           date_of_birth: data.date_of_birth,
           facility_type: data.facility_type,
+          google_maps_url: data.google_maps_url,
         },
       },
     });
@@ -130,6 +132,7 @@ export const authService = {
         gender: data.gender,
         date_of_birth: data.date_of_birth,
         facility_type: data.facility_type,
+        google_maps_url: data.google_maps_url,
       });
     } catch (syncError: any) {
       console.error("Backend sync failed:", syncError);

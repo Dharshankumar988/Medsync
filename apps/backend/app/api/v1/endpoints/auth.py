@@ -183,8 +183,12 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
             db.add(vreq)
         elif payload.role == UserRole.PHARMACY:
             location_data = None
-            if payload.latitude is not None and payload.longitude is not None:
-                location_data = {"lat": payload.latitude, "lng": payload.longitude}
+            if payload.latitude is not None or payload.google_maps_url is not None:
+                location_data = {
+                    "lat": payload.latitude, 
+                    "lng": payload.longitude,
+                    "google_maps_url": payload.google_maps_url
+                }
                 
             profile = Pharmacy(
                 user_id=new_user.id,
