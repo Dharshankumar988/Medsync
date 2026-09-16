@@ -18,7 +18,7 @@ import hmac
 import hashlib
 import os
 from datetime import datetime, timedelta
-import jwt
+from jose import jwt
 
 router = APIRouter()
 require_pharmacy = RoleChecker([UserRole.PHARMACY])
