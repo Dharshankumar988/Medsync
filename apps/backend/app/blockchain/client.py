@@ -79,26 +79,32 @@ class BlockchainClient:
         logger.info(f"Blockchain client: RPC connected and wallet configured")
 
     def _ensure_configured(self):
-        if not getattr(self, 'configured', False) or self.w3 is None:
+        if not getattr(self, 'configured', False):
             raise WalletConfigurationError("Blockchain functionality is not configured.")
 
+    def _ensure_rpc_available(self):
+        if self.w3 is None:
+            raise WalletConfigurationError("RPC connection not available (mock mode or not configured).")
 
     def get_chain_id(self) -> int:
         self._ensure_configured()
+        self._ensure_rpc_available()
         return self.w3.eth.chain_id
 
     def get_current_block(self) -> int:
         self._ensure_configured()
+        self._ensure_rpc_available()
         return self.w3.eth.block_number
 
     def get_balance(self, address: str = None) -> float:
         self._ensure_configured()
+        self._ensure_rpc_available()
         target = address or self.wallet_address
         balance_wei = self.w3.eth.get_balance(Web3.to_checksum_address(target))
         return float(self.w3.from_wei(balance_wei, "ether"))
 
     def is_connected(self) -> bool:
-        return self.w3.is_connected()
+        return self.w3 is not None and self.w3.is_connected()
 
 blockchain_client = BlockchainClient()
 

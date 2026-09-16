@@ -6,7 +6,7 @@ from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import User, UserRole
 from app.models.pharmacy_system import MedicineOrder, MedicineOrderItem, MedicineInventory, OrderStatus
-from app.models.prescription import Prescription
+from app.models.prescription import Prescription, PrescriptionItem
 from app.models.pharmacy import Pharmacy
 from app.models.patient import Patient
 from app.models.user import UserStatus
@@ -353,7 +353,11 @@ async def create_temporary_patient_access(
             action="TEMPORARY_PATIENT_ACCESS",
             entity_type="PATIENT",
             entity_id=patient.id,
-            details=f"Pharmacy {pharmacy.business_name} initiated temporary access for patient {patient.email}"
+            details={
+                "pharmacy_name": pharmacy.business_name,
+                "patient_email": patient.email,
+                "expires_in_minutes": 15
+            }
         )
         db.add(audit_log)
         await db.commit()
@@ -391,28 +395,44 @@ async def get_temporary_patient_prescriptions(
     
     # Get all undispensed prescriptions (simplified - in real scenario would filter by patient_id from token)
     stmt = select(Prescription).where(
-        Prescription.status == "ACTIVE",
-        Prescription.dispensed == False
+        Prescription.is_finalized == True,
+        Prescription.is_dispensed == False,
+        Prescription.is_revoked == False
     ).order_by(Prescription.created_at.desc())
     
     result = await db.execute(stmt)
     prescriptions = result.scalars().all()
     
+    # Get prescription items for each prescription
+    prescription_data = []
+    for p in prescriptions:
+        # Get items for this prescription
+        items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == p.id)
+        items_result = await db.execute(items_stmt)
+        items = items_result.scalars().all()
+        
+        prescription_data.append({
+            "id": str(p.id),
+            "patient_id": str(p.patient_id),
+            "doctor_id": str(p.doctor_id) if p.doctor_id else None,
+            "diagnosis": p.diagnosis,
+            "notes": p.notes,
+            "items": [
+                {
+                    "medicine_name": item.medicine_name,
+                    "dosage": item.dosage,
+                    "frequency": item.frequency,
+                    "duration_days": item.duration_days,
+                    "instructions": item.instructions
+                }
+                for item in items
+            ],
+            "created_at": p.created_at.isoformat() if p.created_at else None
+        })
+    
     return APIResponse(
         message="Prescriptions retrieved",
-        data=[
-            {
-                "id": str(p.id),
-                "patient_id": str(p.patient_id),
-                "doctor_id": str(p.doctor_id),
-                "diagnosis": p.diagnosis,
-                "medication": p.medication,
-                "dosage": p.dosage,
-                "instructions": p.instructions,
-                "created_at": p.created_at.isoformat() if p.created_at else None
-            }
-            for p in prescriptions
-        ]
+        data=prescription_data
     )
 
 @router.post("/temporary-patient-access/create-order")
