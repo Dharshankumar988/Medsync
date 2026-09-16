@@ -202,6 +202,27 @@ function Start-Backend {
     }
     Write-Host "Backend: HEALTHY" -ForegroundColor Green
     
+    # Check blockchain connectivity
+    Write-Host "`nChecking blockchain connectivity..." -ForegroundColor Cyan
+    try {
+        $blockchainInfo = docker exec $BACKEND_CONTAINER curl -s http://localhost:8000/api/v1/blockchain/network
+        if ($blockchainInfo) {
+            Write-Host "Blockchain Network Status:" -ForegroundColor Green
+            Write-Host $blockchainInfo
+        } else {
+            Write-Host "Blockchain network endpoint returned no data (may be in mock mode)" -ForegroundColor Yellow
+        }
+        
+        $walletInfo = docker exec $BACKEND_CONTAINER curl -s http://localhost:8000/api/v1/blockchain/wallet
+        if ($walletInfo) {
+            Write-Host ""
+            Write-Host "Backend Wallet Status:" -ForegroundColor Green
+            Write-Host $walletInfo
+        }
+    } catch {
+        Write-Host "Blockchain connectivity check failed (endpoint may not be available in current mode)" -ForegroundColor Yellow
+    }
+    
     # Open logs in a new PowerShell window
     Start-Process -FilePath "powershell" -ArgumentList "-NoProfile -Command `"& { Write-Host '--- Backend Logs ---' -ForegroundColor Cyan; docker logs -f $BACKEND_CONTAINER }`""
 }

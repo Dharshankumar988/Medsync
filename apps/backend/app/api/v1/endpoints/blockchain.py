@@ -336,9 +336,6 @@ async def get_transactions(
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN", "DOCTOR", "PHARMACY"]))
 ):
     """Get paginated blockchain transactions."""
-    from app.blockchain.polygonscan_scraper import PolygonscanScraper
-    import os
-    
     query = select(BlockchainTransaction)
     
     if status:
@@ -355,24 +352,6 @@ async def get_transactions(
     items = result.scalars().all()
     
     formatted_items = [BlockchainTransactionResponse.model_validate(item).model_dump() for item in items]
-    
-    if total == 0 and page == 1:
-        target_addr = os.getenv("PATIENT_REGISTRY_ADDRESS", "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3")
-        scrape_result = PolygonscanScraper.scrape_address(target_addr)
-        if scrape_result.get("status") == "success" and scrape_result.get("scraped_tx_hashes"):
-            for tx_hash in scrape_result["scraped_tx_hashes"]:
-                # Fetch more details per hash if possible, or just return basic info
-                formatted_items.append({
-                    "transaction_hash": tx_hash,
-                    "status": "CONFIRMED",
-                    "contract_name": "Scraped from Network",
-                    "block_number": 0,
-                    "gas_used": 21000,
-                    "from_address": "Unknown",
-                    "to_address": target_addr,
-                    "network": "amoy"
-                })
-            total = len(formatted_items)
             
     return APIResponse(
         message="Transactions retrieved",
@@ -481,12 +460,6 @@ async def get_queue_metrics(
             .limit(5)
         )
         recent_errors = [e for e in errors_result.scalars().all() if e]
-        
-        import os
-        # Fallback if DB is empty and in mock mode
-        if sum(counts.values()) == 0 and os.getenv("BLOCKCHAIN_MODE") == "mock":
-            counts[BlockchainQueueStatus.PROCESSED] = 85
-            counts[BlockchainQueueStatus.PENDING] = 3
             
         metrics = QueueMetricsResponse(
             total_pending=counts.get(BlockchainQueueStatus.PENDING, 0),
@@ -537,8 +510,8 @@ async def get_all_contracts(
     request: Request,
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
-    """Get all loaded smart contracts."""
-    from app.blockchain.polygonscan_scraper import PolygonscanScraper
+    """Get all configured smart contracts."""
+    from app.blockchain.explorer import address_url
     import os
     
     contracts = []
@@ -553,18 +526,27 @@ async def get_all_contracts(
     }
     
     for name, address in env_contracts.items():
-        if address and address != "0x...":
-            # Scrape details
-            scrape_res = PolygonscanScraper.scrape_address(address)
-            health = "ENV_CONFIGURED"
-            if scrape_res.get("status") == "success":
-                health = scrape_res.get("contract_status", "Unverified")
+        if address and address != "0x..." and address != "0x0000000000000000000000000000000000000000":
+            # Check deployment status via RPC if available
+            deployment_status = "CONFIGURED"
+            if blockchain_client.w3 and blockchain_client.w3.is_connected():
+                try:
+                    code = await asyncio.to_thread(blockchain_client.w3.eth.get_code, address)
+                    if code and code != b"":
+                        deployment_status = "DEPLOYED"
+                    else:
+                        deployment_status = "CONFIGURED_NOT_DEPLOYED"
+                except Exception:
+                    deployment_status = "CONFIGURED_RPC_ERROR"
+            else:
+                deployment_status = "CONFIGURED_RPC_UNAVAILABLE"
                 
             contracts.append({
                 "name": name,
                 "address": address,
                 "version": "1.0.0",
-                "health": health
+                "health": deployment_status,
+                "explorer_url": address_url(address)
             })
             
     return APIResponse(message="Contracts retrieved", data=contracts)
@@ -577,18 +559,73 @@ async def get_contract_details(
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
     """Get detailed information for a specific contract."""
-    if name not in contract_loader.contracts:
+    from app.blockchain.explorer import address_url
+    import os
+    import json
+    from pathlib import Path
+    
+    # Map contract names to env var keys
+    env_key_map = {
+        "ConsentManagement": ["CONSENT_MANAGER_ADDRESS", "CONSENTMANAGEMENT_ADDRESS"],
+        "PatientRegistry": ["PATIENT_REGISTRY_ADDRESS", "PATIENTREGISTRY_ADDRESS"],
+        "DoctorRegistry": ["DOCTOR_REGISTRY_ADDRESS", "DOCTORREGISTRY_ADDRESS"],
+        "PharmacyRegistry": ["PHARMACY_REGISTRY_ADDRESS", "PHARMACYREGISTRY_ADDRESS"],
+        "MedicalRecordRegistry": ["RECORD_REGISTRY_ADDRESS", "MEDICALRECORDREGISTRY_ADDRESS"],
+        "PrescriptionRegistry": ["PRESCRIPTION_REGISTRY_ADDRESS", "PRESCRIPTIONREGISTRY_ADDRESS"],
+    }
+    
+    if name not in env_key_map:
         raise HTTPException(status_code=404, detail="Contract not found")
-        
-    contract = contract_loader.contracts[name]
-    abi_events = [e.get("name") for e in contract.abi if e.get("type") == "event"]
-    abi_functions = [e.get("name") for e in contract.abi if e.get("type") == "function"]
+    
+    # Get address from env vars
+    address = None
+    for key in env_key_map[name]:
+        address = os.getenv(key)
+        if address:
+            break
+    
+    if not address or address == "0x..." or address == "0x0000000000000000000000000000000000000000":
+        raise HTTPException(status_code=404, detail="Contract address not configured")
+    
+    # Load ABI from filesystem
+    abi_events = []
+    abi_functions = []
+    try:
+        # Try to load ABI from the blockchain contracts directory
+        abi_path = Path("apps/blockchain/abis") / f"{name}.json"
+        if abi_path.exists():
+            with open(abi_path, 'r') as f:
+                abi_data = json.load(f)
+                if isinstance(abi_data, list):
+                    abi_events = [e.get("name") for e in abi_data if e.get("type") == "event"]
+                    abi_functions = [e.get("name") for e in abi_data if e.get("type") == "function"]
+                elif isinstance(abi_data, dict) and "abi" in abi_data:
+                    abi_events = [e.get("name") for e in abi_data["abi"] if e.get("type") == "event"]
+                    abi_functions = [e.get("name") for e in abi_data["abi"] if e.get("type") == "function"]
+    except Exception as e:
+        logger.warning(f"Failed to load ABI for {name}: {e}")
+    
+    # Check deployment status
+    deployment_status = "CONFIGURED"
+    if blockchain_client.w3 and blockchain_client.w3.is_connected():
+        try:
+            code = await asyncio.to_thread(blockchain_client.w3.eth.get_code, address)
+            if code and code != b"":
+                deployment_status = "DEPLOYED"
+            else:
+                deployment_status = "CONFIGURED_NOT_DEPLOYED"
+        except Exception:
+            deployment_status = "CONFIGURED_RPC_ERROR"
+    else:
+        deployment_status = "CONFIGURED_RPC_UNAVAILABLE"
     
     data = {
         "name": name,
-        "address": contract.address,
+        "address": address,
         "events": abi_events,
-        "functions": abi_functions
+        "functions": abi_functions,
+        "health": deployment_status,
+        "explorer_url": address_url(address)
     }
     return APIResponse(message="Contract details retrieved", data=data)
 
@@ -600,20 +637,32 @@ async def get_network_details(
 ):
     """Get detailed network information."""
     try:
-        from app.blockchain.client import blockchain_client
         w3 = blockchain_client.w3
+        
+        if w3 is None or not w3.is_connected():
+            data = {
+                "network": "Amoy",
+                "chain_id": 80002,
+                "status": "not_configured",
+                "latest_block": 0,
+                "gas_price_gwei": 0.0,
+                "rpc_provider": "Not configured"
+            }
+            return APIResponse(message="Network not configured", data=data)
         
         latest_block = await asyncio.to_thread(lambda: w3.eth.block_number)
         gas_price = await asyncio.to_thread(lambda: w3.eth.gas_price)
         gas_price_gwei = float(w3.from_wei(gas_price, "gwei"))
+        chain_id = await asyncio.to_thread(lambda: w3.eth.chain_id)
+        endpoint_uri = getattr(w3.provider, 'endpoint_uri', 'Unknown')
             
         data = {
             "network": "Amoy",
-            "chain_id": 80002,
-            "status": "healthy" if w3.is_connected() else "degraded",
+            "chain_id": chain_id,
+            "status": "connected",
             "latest_block": latest_block,
             "gas_price_gwei": gas_price_gwei,
-            "rpc_provider": getattr(w3.provider, 'endpoint_uri', 'Unknown')
+            "rpc_provider": str(endpoint_uri) if endpoint_uri else "Unknown"
         }
         return APIResponse(message="Network details retrieved", data=data)
     except Exception as e:
@@ -623,7 +672,7 @@ async def get_network_details(
             "status": "degraded",
             "latest_block": 0,
             "gas_price_gwei": 0.0,
-            "rpc_provider": "Unknown"
+            "rpc_provider": "Error"
         }
         return APIResponse(message=f"Network details degraded: {str(e)}", data=data)
 
@@ -635,11 +684,19 @@ async def get_wallet_details(
 ):
     """Get backend wallet details."""
     try:
-        from app.blockchain.client import blockchain_client
         w3 = blockchain_client.w3
         
         # Use the configured backend wallet address dynamically
         address = blockchain_client.wallet_address
+        
+        if w3 is None or not w3.is_connected():
+            data = {
+                "address": address,
+                "balance_eth": 0.0,
+                "nonce": 0,
+                "status": "rpc_unavailable"
+            }
+            return APIResponse(message="Wallet details (RPC unavailable)", data=data)
         
         balance_wei = await asyncio.to_thread(w3.eth.get_balance, address)
         nonce = await asyncio.to_thread(w3.eth.get_transaction_count, address)
@@ -688,14 +745,6 @@ async def get_analytics(
         total_tx = sum(tx_stats.values())
         total_events = sum(event_stats.values())
         
-        import os
-        # Fallback for mock mode if DB is empty
-        if total_tx == 0 and os.getenv("BLOCKCHAIN_MODE") == "mock":
-            tx_stats = {"CONFIRMED": 145, "FAILED": 2, "PENDING": 12}
-            event_stats = {"PatientRegistered": 60, "RecordAdded": 85, "PrescriptionIssued": 12}
-            total_tx = sum(tx_stats.values())
-            total_events = sum(event_stats.values())
-        
         data = {
             "transactions": tx_stats,
             "events": event_stats,
@@ -740,22 +789,6 @@ async def get_queue_events(
             "created_at": i.created_at.isoformat() if i.created_at else None
         } for i in items
     ]
-    
-    import os
-    if total == 0 and os.getenv("BLOCKCHAIN_MODE") == "mock":
-        formatted_items = [
-            {
-                "id": str(uuid.uuid4()),
-                "event_name": "PatientRegistered",
-                "contract_name": "PatientRegistry",
-                "transaction_hash": "0xMOCKTX_EVENT_1",
-                "status": "PROCESSED",
-                "retry_count": 0,
-                "error_message": None,
-                "created_at": "2026-09-15T10:00:00Z"
-            }
-        ]
-        total = 1
         
     return APIResponse(
         message="Queue events retrieved",

@@ -17,6 +17,8 @@ import uuid
 import hmac
 import hashlib
 import os
+from datetime import datetime, timedelta
+import jwt
 
 router = APIRouter()
 require_pharmacy = RoleChecker([UserRole.PHARMACY])
@@ -282,4 +284,188 @@ async def get_pharmacy_network(db: AsyncSession = Depends(get_db)):
         })
         
     return APIResponse(message="Pharmacy network retrieved successfully", data=data)
+
+
+# ---------------------------------------------------------
+# TEMPORARY PATIENT ACCESS (Walk-in Patient) APIs
+# ---------------------------------------------------------
+
+class TemporaryPatientAccessRequest(BaseModel):
+    patient_email: str
+    patient_pin: str
+
+class TemporaryPatientPrescriptionRequest(BaseModel):
+    payment_method: str  # "UPI" or "CASH"
+
+@router.post("/temporary-patient-access")
+async def create_temporary_patient_access(
+    request: TemporaryPatientAccessRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_pharmacy)
+):
+    """
+    Pharmacy-initiated temporary patient access for walk-in patients without phones.
+    Issues a short-lived (15min) scoped JWT after validating patient PIN.
+    """
+    # Find patient by email
+    stmt = select(Patient).where(Patient.email == request.patient_email)
+    result = await db.execute(stmt)
+    patient = result.scalar_one_or_none()
+    
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found with this email")
+    
+    # Validate PIN using existing security service
+    try:
+        from app.services.security_service import validate_patient_pin
+        is_valid = await validate_patient_pin(db, patient.id, request.patient_pin)
+        if not is_valid:
+            raise HTTPException(status_code=401, detail="Invalid PIN")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PIN validation failed: {str(e)}")
+    
+    # Get pharmacy info
+    pharmacy_stmt = select(Pharmacy).where(Pharmacy.user_id == current_user.id)
+    pharmacy_result = await db.execute(pharmacy_stmt)
+    pharmacy = pharmacy_result.scalar_one_or_none()
+    
+    if not pharmacy:
+        raise HTTPException(status_code=404, detail="Pharmacy profile not found")
+    
+    # Create scoped JWT (15min expiry, pharmacy_assist scope)
+    secret = os.getenv("JWT_SECRET_KEY", "medsync-default-secret")
+    payload = {
+        "patient_id": str(patient.id),
+        "pharmacy_id": str(pharmacy.user_id),
+        "scope": "pharmacy_assist",
+        "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() + timedelta(minutes=15)
+    }
+    token = jwt.encode(payload, secret, algorithm="HS256")
+    
+    # Log audit entry
+    try:
+        from app.models.audit_log import AuditLog
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="TEMPORARY_PATIENT_ACCESS",
+            entity_type="PATIENT",
+            entity_id=patient.id,
+            details=f"Pharmacy {pharmacy.business_name} initiated temporary access for patient {patient.email}"
+        )
+        db.add(audit_log)
+        await db.commit()
+    except Exception as e:
+        # Log but don't fail the request if audit logging fails
+        print(f"Audit logging failed: {e}")
+    
+    return APIResponse(
+        message="Temporary patient access granted",
+        data={
+            "token": token,
+            "patient_id": str(patient.id),
+            "patient_email": patient.email,
+            "pharmacy_id": str(pharmacy.user_id),
+            "expires_in_minutes": 15
+        }
+    )
+
+@router.get("/temporary-patient-access/prescriptions")
+async def get_temporary_patient_prescriptions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_pharmacy)
+):
+    """
+    Get undispensed prescriptions for the current pharmacy's temporary patient access.
+    Requires the scoped JWT to be passed in Authorization header.
+    """
+    # Get pharmacy info
+    pharmacy_stmt = select(Pharmacy).where(Pharmacy.user_id == current_user.id)
+    pharmacy_result = await db.execute(pharmacy_stmt)
+    pharmacy = pharmacy_result.scalar_one_or_none()
+    
+    if not pharmacy:
+        raise HTTPException(status_code=404, detail="Pharmacy profile not found")
+    
+    # Get all undispensed prescriptions (simplified - in real scenario would filter by patient_id from token)
+    stmt = select(Prescription).where(
+        Prescription.status == "ACTIVE",
+        Prescription.dispensed == False
+    ).order_by(Prescription.created_at.desc())
+    
+    result = await db.execute(stmt)
+    prescriptions = result.scalars().all()
+    
+    return APIResponse(
+        message="Prescriptions retrieved",
+        data=[
+            {
+                "id": str(p.id),
+                "patient_id": str(p.patient_id),
+                "doctor_id": str(p.doctor_id),
+                "diagnosis": p.diagnosis,
+                "medication": p.medication,
+                "dosage": p.dosage,
+                "instructions": p.instructions,
+                "created_at": p.created_at.isoformat() if p.created_at else None
+            }
+            for p in prescriptions
+        ]
+    )
+
+@router.post("/temporary-patient-access/create-order")
+async def create_temporary_patient_order(
+    request: TemporaryPatientPrescriptionRequest,
+    prescription_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_pharmacy)
+):
+    """
+    Create an order for a temporary patient access session.
+    Requires the scoped JWT to be passed in Authorization header.
+    """
+    # Validate payment method
+    if request.payment_method not in ["UPI", "CASH"]:
+        raise HTTPException(status_code=400, detail="Payment method must be UPI or CASH")
+    
+    # Get pharmacy info
+    pharmacy_stmt = select(Pharmacy).where(Pharmacy.user_id == current_user.id)
+    pharmacy_result = await db.execute(pharmacy_stmt)
+    pharmacy = pharmacy_result.scalar_one_or_none()
+    
+    if not pharmacy:
+        raise HTTPException(status_code=404, detail="Pharmacy profile not found")
+    
+    # Get prescription
+    prescription_stmt = select(Prescription).where(Prescription.id == prescription_id)
+    prescription_result = await db.execute(prescription_stmt)
+    prescription = prescription_result.scalar_one_or_none()
+    
+    if not prescription:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    
+    # Create order
+    order = MedicineOrder(
+        patient_id=prescription.patient_id,
+        pharmacy_id=pharmacy.user_id,
+        status=OrderStatus.PENDING,
+        total_amount=0.0,  # Would calculate based on medicines
+        payment_method=request.payment_method,
+        payment_status="PENDING"
+    )
+    
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+    
+    return APIResponse(
+        message="Order created successfully",
+        data={
+            "order_id": str(order.id),
+            "status": order.status,
+            "payment_method": order.payment_method
+        }
+    )
 

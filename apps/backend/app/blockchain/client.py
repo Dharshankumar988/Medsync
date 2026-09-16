@@ -25,12 +25,24 @@ class BlockchainClient:
         self.w3 = None
         self.wallet_address = "0x0000000000000000000000000000000000000000"
         
+        # ── Always derive wallet address from private key (identity, not writes) ──
+        try:
+            pk = blockchain_settings.BACKEND_PRIVATE_KEY
+            if not pk.startswith("0x"):
+                pk = "0x" + pk
+            self.account = Account.from_key(pk)
+            self.wallet_address = self.account.address
+            logger.info(f"Blockchain client: derived wallet address {self.wallet_address}")
+        except Exception as e:
+            logger.error("Failed to derive wallet from private key. Ensure BACKEND_PRIVATE_KEY is correct.")
+            # Keep default zero address if derivation fails
+        
+        # ── Mock mode: skip RPC connection and writes, but wallet is already derived ──
         if RESOLVED_BLOCKCHAIN_MODE not in ("production", "real"):
-            # Mock mode — no RPC, no wallet.  Nothing to do.
-            logger.info("Blockchain client: mock mode — RPC and wallet initialization skipped.")
+            logger.info("Blockchain client: mock mode — RPC connection and writes disabled (wallet derived).")
             return
             
-        # ── Production mode: validate config, connect to RPC, init wallet ──
+        # ── Production mode: validate config, connect to RPC for reads ──
         try:
             blockchain_settings.validate()
         except ValueError as e:
@@ -63,18 +75,8 @@ class BlockchainClient:
             # Do not raise here so app doesn't crash on boot; wait until invoked
             return
 
-        try:
-            # Ensure the key has a 0x prefix if it's hex
-            pk = blockchain_settings.BACKEND_PRIVATE_KEY
-            if not pk.startswith("0x"):
-                pk = "0x" + pk
-            self.account = Account.from_key(pk)
-            self.wallet_address = self.account.address
-            self.configured = True
-            logger.info(f"Initialized Blockchain Client with secure wallet: {self.wallet_address}")
-        except Exception as e:
-            logger.error("Failed to initialize wallet from private key. Ensure BACKEND_PRIVATE_KEY is correct.")
-            # Do not raise during boot
+        self.configured = True
+        logger.info(f"Blockchain client: RPC connected and wallet configured")
 
     def _ensure_configured(self):
         if not getattr(self, 'configured', False) or self.w3 is None:

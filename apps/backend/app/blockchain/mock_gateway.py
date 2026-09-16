@@ -42,6 +42,7 @@ class MockBlockchainGateway:
     def write_contract(
         self, contract_name: str, function_name: str, *args
     ) -> TransactionReceiptResult:
+        from app.blockchain.client import blockchain_client
         tx_hash = _mock_tx_hash()
         logger.info(
             f"[MOCK] write_contract {contract_name}.{function_name} -> {tx_hash}"
@@ -51,7 +52,7 @@ class MockBlockchainGateway:
             "blockNumber": 99999,
             "gasUsed": 21000,
             "status": 1,
-            "fromAddress": "0x0000000000000000000000000000000000000000",
+            "fromAddress": blockchain_client.wallet_address,
             "toAddress": "0x0000000000000000000000000000000000000001",
             "logs": [],
         }
@@ -65,12 +66,14 @@ class MockBlockchainGateway:
         return []
 
     def get_health_status(self) -> HealthStatus:
+        from app.blockchain.client import blockchain_client
+        rpc_connected = blockchain_client.w3 is not None and blockchain_client.w3.is_connected()
         return {
             "status": "healthy (mock)",
             "network": "mock",
             "chainId": 0,
             "currentBlock": 0,
-            "rpcConnected": False,
-            "walletAddress": "0x0000000000000000000000000000000000000000",
+            "rpcConnected": rpc_connected,
+            "walletAddress": blockchain_client.wallet_address,
             "walletBalanceEth": 0.0,
         }

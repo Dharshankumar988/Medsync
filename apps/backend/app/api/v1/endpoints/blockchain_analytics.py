@@ -8,12 +8,10 @@ from fastapi import APIRouter
 
 from app.blockchain.client import blockchain_client as w3_client
 from app.blockchain.config import blockchain_settings
+from app.blockchain.explorer import tx_url, address_url
 from app.schemas.response import APIResponse
 
 router = APIRouter()
-
-POLYGONSCAN_TX_BASE = "https://amoy.polygonscan.com/tx/"
-POLYGONSCAN_ADDRESS_BASE = "https://amoy.polygonscan.com/address/"
 
 
 def _short_hash(value: str, keep: int = 8) -> str:
@@ -24,7 +22,9 @@ def _short_hash(value: str, keep: int = 8) -> str:
 
 def _checksum_or_raw(address: str) -> str:
     try:
-        return w3_client.w3.to_checksum_address(address)
+        if w3_client.w3:
+            return w3_client.w3.to_checksum_address(address)
+        return address
     except Exception:
         return address
 
@@ -50,18 +50,19 @@ async def blockchain_analytics() -> APIResponse[dict]:
     chain_id = 80002
     latest_block = 0
     gas_price = 0
-    wallet_address = getattr(w3_client.account, "address", None)
+    wallet_address = w3_client.wallet_address
     wallet_balance_wei = 0
 
-    try:
-        connected = web3.is_connected()
-        chain_id = _safe_int(web3.eth.chain_id, 80002)
-        latest_block = _safe_int(web3.eth.block_number)
-        gas_price = _safe_int(web3.eth.gas_price)
-        if wallet_address:
-            wallet_balance_wei = _safe_int(web3.eth.get_balance(wallet_address))
-    except Exception:
-        connected = False
+    if web3:
+        try:
+            connected = web3.is_connected()
+            chain_id = _safe_int(web3.eth.chain_id, 80002)
+            latest_block = _safe_int(web3.eth.block_number)
+            gas_price = _safe_int(web3.eth.gas_price)
+            if wallet_address:
+                wallet_balance_wei = _safe_int(web3.eth.get_balance(wallet_address))
+        except Exception:
+            connected = False
 
     import os
     contract_addresses = [
@@ -97,7 +98,7 @@ async def blockchain_analytics() -> APIResponse[dict]:
     max_blocks = 30
     start_block = max(latest_block - max_blocks + 1, 0)
 
-    if connected and latest_block >= start_block:
+    if connected and web3 and latest_block >= start_block:
         for block_number in range(latest_block, start_block - 1, -1):
             try:
                 block = web3.eth.get_block(block_number, full_transactions=True)
@@ -124,7 +125,7 @@ async def blockchain_analytics() -> APIResponse[dict]:
                     "gasUsed": gas_used,
                     "timestamp": block_timestamp.isoformat(),
                     "status": "Success",
-                    "explorerUrl": f"{POLYGONSCAN_TX_BASE}{tx_hash}",
+                    "explorerUrl": tx_url(tx_hash),
                 })
                 tx_count_by_day[day_key] += 1
                 gas_spent_by_day[day_key] += gas_used
@@ -154,7 +155,7 @@ async def blockchain_analytics() -> APIResponse[dict]:
             "lastInteraction": last_interaction_by_contract.get(address, "No recent activity"),
             "totalCalls": _safe_int(calls_by_contract.get(address, 0)),
             "gasSpent": contract_gas_spent,
-            "explorerUrl": f"{POLYGONSCAN_ADDRESS_BASE}{address}",
+            "explorerUrl": address_url(address),
         })
 
     today_gas = gas_spent_by_day.get(now.date().isoformat(), 0)
@@ -213,10 +214,9 @@ async def blockchain_analytics() -> APIResponse[dict]:
             "wallet": {
                 "address": wallet_address,
                 "balanceWei": wallet_balance_wei,
-                "balanceMatic": float(web3.from_wei(wallet_balance_wei, "ether")) if wallet_balance_wei else 0,
+                "balanceMatic": float(web3.from_wei(wallet_balance_wei, "ether")) if wallet_balance_wei and web3 and connected else 0,
                 "network": "Polygon",
-                "explorerUrl": f"{POLYGONSCAN_ADDRESS_BASE}{wallet_address}" if wallet_address else None,
+                "explorerUrl": address_url(wallet_address) if wallet_address else None,
             },
-            "explorerBaseUrl": "https://amoy.polygonscan.com",
         },
     )

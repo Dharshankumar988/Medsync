@@ -33,7 +33,7 @@ export default function SecurityEnrollmentModal() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     if (status === 'PIN_CREATED') {
@@ -44,7 +44,7 @@ export default function SecurityEnrollmentModal() {
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      setStream(mediaStream);
+      streamRef.current = mediaStream;
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
@@ -54,23 +54,25 @@ export default function SecurityEnrollmentModal() {
   };
 
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      setStream(null);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
     if (videoRef.current && videoRef.current.srcObject) {
       const srcStream = videoRef.current.srcObject as MediaStream;
       srcStream.getTracks().forEach(t => t.stop());
       videoRef.current.srcObject = null;
     }
-  }, [stream]);
+  }, []);
 
   useEffect(() => {
-    if (step === 2 && !stream) {
+    if (step === 2 && !streamRef.current) {
       startCamera();
     }
-    return () => { stopCamera(); };
-  }, [step, stopCamera, stream]);
+    return () => { 
+      stopCamera();
+    };
+  }, [step, stopCamera]);
 
   const { isEnrollmentModalOpen, closeEnrollmentModal, setStatus } = useSecurityStore();
 
@@ -152,7 +154,10 @@ export default function SecurityEnrollmentModal() {
           variant="ghost" 
           size="icon" 
           className="absolute right-4 top-4"
-          onClick={closeEnrollmentModal}
+          onClick={() => {
+            stopCamera();
+            closeEnrollmentModal();
+          }}
         >
           <X className="h-4 w-4" />
         </Button>

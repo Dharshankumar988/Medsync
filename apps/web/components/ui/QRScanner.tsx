@@ -12,8 +12,16 @@ interface QRScannerProps {
 
 export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [hasCameras, setHasCameras] = useState<boolean | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const isScanningRef = useRef(false);
+  const onScanRef = useRef(onScan);
+  const onCloseRef = useRef(onClose);
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onScanRef.current = onScan;
+    onCloseRef.current = onClose;
+  }, [onScan, onClose]);
 
   useEffect(() => {
     let mounted = true;
@@ -40,16 +48,16 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
               },
               (decodedText) => {
                 // Ignore multiple scans while processing
-                if (isScanning) return;
-                setIsScanning(true);
+                if (isScanningRef.current) return;
+                isScanningRef.current = true;
                 
                 // Stop scanner and call onScan
                 if (scannerRef.current?.isScanning) {
                   scannerRef.current.stop().then(() => {
-                    onScan(decodedText);
+                    onScanRef.current(decodedText);
                   }).catch(console.error);
                 } else {
-                  onScan(decodedText);
+                  onScanRef.current(decodedText);
                 }
               },
               (errorMessage) => {
@@ -72,9 +80,16 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
       if (scannerRef.current && scannerRef.current.isScanning) {
         scannerRef.current.stop().catch(console.error);
       }
+      if (scannerRef.current) {
+        // clear() is available in html5-qrcode v2+
+        try {
+          scannerRef.current.clear();
+        } catch (e) {
+          console.error("Error clearing scanner:", e);
+        }
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onScan]);
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center p-4 bg-black/90 text-white rounded-2xl w-full max-w-md mx-auto aspect-[4/5] relative overflow-hidden">
@@ -86,7 +101,14 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
           if (scannerRef.current?.isScanning) {
             scannerRef.current.stop().catch(console.error);
           }
-          onClose();
+          if (scannerRef.current) {
+            try {
+              scannerRef.current.clear();
+            } catch (e) {
+              console.error("Error clearing scanner:", e);
+            }
+          }
+          onCloseRef.current();
         }}
       >
         <X className="h-5 w-5" />

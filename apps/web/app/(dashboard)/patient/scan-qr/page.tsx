@@ -10,7 +10,6 @@ import {
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRScanner } from "@/components/ui/QRScanner";
-import { FaceVerification } from "@/components/FaceVerification";
 
 type FlowType = "IDLE" | "PHARMACY" | "BLOCKCHAIN" | "URL" | "TEXT";
 type PharmacyStep = "CONFIRM" | "SELECT_PRESCRIPTION" | "PAYMENT" | "AUTHORIZE" | "SUCCESS";
@@ -31,7 +30,6 @@ export default function PatientQRScanPage() {
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [selectedPrescription, setSelectedPrescription] = useState<string | null>(null);
   const [authPin, setAuthPin] = useState("");
-  const [faceImage, setFaceImage] = useState<File | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -160,7 +158,7 @@ export default function PatientQRScanPage() {
   };
 
   const handleAuthorize = async () => {
-    if (!authPin && !faceImage) return;
+    if (!authPin || authPin.length !== 6) return;
     setLoading(true);
     
     try {
@@ -169,8 +167,7 @@ export default function PatientQRScanPage() {
 
       const formData = new FormData();
       formData.append('pharmacy_id', pharmacy.id);
-      if (authPin) formData.append('pin', authPin);
-      if (faceImage) formData.append('face_image', faceImage);
+      formData.append('pin', authPin);
 
       const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
       const res = await fetch(`${baseUrl}/api/v1/prescriptions/${selectedPrescription}/physical-pickup`, {
@@ -572,35 +569,14 @@ export default function PatientQRScanPage() {
                         onChange={(e) => setAuthPin(e.target.value)}
                         className="text-center text-xl tracking-widest h-14 rounded-xl shadow-sm"
                         maxLength={6}
-                        disabled={!!faceImage}
                       />
-                      <div className="relative my-4">
-                        <div className="absolute inset-0 flex items-center"><span className="w-full border-t"></span></div>
-                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground font-semibold">Or</span></div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-muted-foreground block text-left">Face Verification (Biometric Key)</label>
-                        {!faceImage ? (
-                          <FaceVerification 
-                            onVerify={async (file) => {
-                              setFaceImage(file);
-                              setAuthPin("");
-                              return true;
-                            }}
-                          />
-                        ) : (
-                          <div className="p-4 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-200 flex items-center justify-center">
-                            <CheckCircle2 className="mr-2 h-5 w-5" /> Face Verification Successful.
-                          </div>
-                        )}
-                      </div>
                     </div>
                     
                     <div className="flex justify-center gap-3 pt-4">
                       <Button variant="ghost" onClick={() => setPharmacyStep("PAYMENT")} disabled={loading}>Cancel</Button>
                       <Button 
                         onClick={handleAuthorize} 
-                        disabled={(!authPin && !faceImage) || (authPin.length > 0 && authPin.length !== 6) || loading}
+                        disabled={authPin.length !== 6 || loading}
                         className="bg-emerald-600 hover:bg-emerald-500 text-white min-w-[180px] rounded-xl shadow-md"
                       >
                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Authorize Transfer & Payment"}
