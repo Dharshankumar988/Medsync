@@ -43,6 +43,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
               { facingMode: "environment" },
               {
                 fps: 10,
+                // @ts-ignore: experimentalFeatures is valid but not typed
                 experimentalFeatures: {
                   useBarCodeDetectorIfSupported: true
                 }
