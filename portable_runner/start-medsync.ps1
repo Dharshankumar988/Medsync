@@ -84,7 +84,7 @@ function Start-FaceService {
         } else {
             Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
             $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
-            $FaceDockerfile = Join-Path $RepoRoot "apps" "face-service" "Dockerfile"
+            $FaceDockerfile = Join-Path $RepoRoot "apps\face-service\Dockerfile"
             if (-not (Test-Path $FaceDockerfile)) {
                 Write-Host "ERROR: Face Service Dockerfile not found and registry image unavailable." -ForegroundColor Red
                 exit 1

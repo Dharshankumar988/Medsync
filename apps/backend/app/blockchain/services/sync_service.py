@@ -65,7 +65,8 @@ class BlockchainSyncService:
 
         try:
             # Generate the deterministic hash from the payload
-            data_hash = self._generate_hash(task.payload)
+            data_hash_hex = self._generate_hash(task.payload)
+            data_hash_bytes = bytes.fromhex(data_hash_hex)
             receipt = None
             
             # Map the entity/action to the correct contract call
@@ -74,44 +75,61 @@ class BlockchainSyncService:
                     receipt = await asyncio.to_thread(
                         blockchain_gateway.write_contract,
                         "PrescriptionRegistry", "createPrescription",
-                        data_hash, str(task.payload.get("patient_id", "")), str(task.payload.get("doctor_id", ""))
+                        data_hash_bytes, bytes.fromhex(str(task.payload.get("patient_id", "")).replace("-", "")[:64].ljust(64, '0')), bytes.fromhex(str(task.payload.get("doctor_id", "")).replace("-", "")[:64].ljust(64, '0'))
                     )
             elif task.entity_type == SyncEntityType.MEDICAL_RECORD:
                 if task.action_type == SyncActionType.CREATE:
                     receipt = await asyncio.to_thread(
                         blockchain_gateway.write_contract,
                         "MedicalRecordRegistry", "registerRecord",
-                        data_hash, str(task.payload.get("patient_id", ""))
+                        data_hash_bytes, bytes.fromhex(str(task.payload.get("patient_id", "")).replace("-", "")[:64].ljust(64, '0'))
                     )
                 elif task.action_type == SyncActionType.GRANT_ACCESS:
                     receipt = await asyncio.to_thread(
                         blockchain_gateway.write_contract,
                         "MedicalRecordRegistry", "grantAccess",
-                        data_hash, str(task.payload.get("doctor_id", ""))
+                        data_hash_bytes, bytes.fromhex(str(task.payload.get("doctor_id", "")).replace("-", "")[:64].ljust(64, '0'))
                     )
                 elif task.action_type == SyncActionType.REVOKE_ACCESS:
                     receipt = await asyncio.to_thread(
                         blockchain_gateway.write_contract,
                         "MedicalRecordRegistry", "revokeAccess",
-                        data_hash, str(task.payload.get("doctor_id", ""))
+                        data_hash_bytes, bytes.fromhex(str(task.payload.get("doctor_id", "")).replace("-", "")[:64].ljust(64, '0'))
                     )
             elif task.entity_type == SyncEntityType.PATIENT:
                 if task.action_type == SyncActionType.CREATE:
                     receipt = await asyncio.to_thread(
                         blockchain_gateway.write_contract,
-                        "PatientRegistry", "registerPatient", data_hash
+                        "PatientRegistry", "registerPatient", data_hash_bytes, str(task.payload.get("wallet_address", "0x0000000000000000000000000000000000000000"))
                     )
             elif task.entity_type == SyncEntityType.DOCTOR:
-                if task.action_type == SyncActionType.VERIFY:
+                if task.action_type == SyncActionType.CREATE:
                     receipt = await asyncio.to_thread(
                         blockchain_gateway.write_contract,
-                        "DoctorRegistry", "verifyDoctor", data_hash
+                        "DoctorRegistry", "registerDoctor", 
+                        data_hash_bytes, 
+                        bytes.fromhex(str(task.payload.get("license_hash", task.id)).replace("-", "")[:64].ljust(64, '0')), 
+                        bytes.fromhex(str(task.payload.get("hospital_hash", task.id)).replace("-", "")[:64].ljust(64, '0')), 
+                        str(task.payload.get("owner", "0x0000000000000000000000000000000000000000"))
+                    )
+                elif task.action_type == SyncActionType.VERIFY:
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
+                        "DoctorRegistry", "verifyDoctor", data_hash_bytes
                     )
             elif task.entity_type == SyncEntityType.PHARMACY:
-                if task.action_type == SyncActionType.VERIFY:
+                if task.action_type == SyncActionType.CREATE:
                     receipt = await asyncio.to_thread(
                         blockchain_gateway.write_contract,
-                        "PharmacyRegistry", "verifyPharmacy", data_hash
+                        "PharmacyRegistry", "registerPharmacy", 
+                        data_hash_bytes, 
+                        bytes.fromhex(str(task.payload.get("license_hash", task.id)).replace("-", "")[:64].ljust(64, '0')), 
+                        str(task.payload.get("owner", "0x0000000000000000000000000000000000000000"))
+                    )
+                elif task.action_type == SyncActionType.VERIFY:
+                    receipt = await asyncio.to_thread(
+                        blockchain_gateway.write_contract,
+                        "PharmacyRegistry", "verifyPharmacy", data_hash_bytes
                     )
             else:
                 raise ValueError(f"Unsupported Sync Action: {task.entity_type} {task.action_type}")

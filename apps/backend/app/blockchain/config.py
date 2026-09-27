@@ -11,9 +11,9 @@ def _resolve_rpc_url() -> str:
 
 class BlockchainSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
-    BLOCKCHAIN_RPC_URL: str = _resolve_rpc_url()
+    BLOCKCHAIN_RPC_URL: str | None = None
     # Backward compat alias — existing code references POLYGON_RPC_URL
-    POLYGON_RPC_URL: str = _resolve_rpc_url()
+    POLYGON_RPC_URL: str | None = None
     BACKEND_PRIVATE_KEY: str = _clean(os.getenv("BACKEND_PRIVATE_KEY", ""))
     BLOCKCHAIN_NETWORK: str = "amoy"
     
@@ -28,8 +28,15 @@ class BlockchainSettings(BaseSettings):
     TX_TIMEOUT_SECONDS: int = int(os.getenv("TX_TIMEOUT_SECONDS", "120"))
     
     def validate(self):
+        # Resolve RPC URL at runtime so .env is already loaded by Pydantic
         if not self.BLOCKCHAIN_RPC_URL:
-            raise ValueError("BLOCKCHAIN_RPC_URL (or POLYGON_RPC_URL) must be configured")
+            self.BLOCKCHAIN_RPC_URL = self.POLYGON_RPC_URL or "http://127.0.0.1:8545"
+            
+        if not self.BLOCKCHAIN_RPC_URL or self.BLOCKCHAIN_RPC_URL == "http://127.0.0.1:8545":
+            if os.getenv("BLOCKCHAIN_MODE") in ("production", "real"):
+                import logging
+                logging.getLogger("blockchain.config").warning("RPC URL is set to localhost in production mode")
+        
         if not self.BACKEND_PRIVATE_KEY:
             raise ValueError("BACKEND_PRIVATE_KEY must be configured")
 

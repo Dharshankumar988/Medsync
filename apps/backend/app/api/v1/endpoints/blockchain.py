@@ -654,7 +654,14 @@ async def get_network_details(
         gas_price = await asyncio.to_thread(lambda: w3.eth.gas_price)
         gas_price_gwei = float(w3.from_wei(gas_price, "gwei"))
         chain_id = await asyncio.to_thread(lambda: w3.eth.chain_id)
-        endpoint_uri = getattr(w3.provider, 'endpoint_uri', 'Unknown')
+        # Redact API key from RPC URL — only expose hostname
+        raw_uri = str(getattr(w3.provider, 'endpoint_uri', 'Unknown'))
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(raw_uri)
+            rpc_display = f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else "Unknown"
+        except Exception:
+            rpc_display = "Connected"
             
         data = {
             "network": "Amoy",
@@ -662,7 +669,7 @@ async def get_network_details(
             "status": "connected",
             "latest_block": latest_block,
             "gas_price_gwei": gas_price_gwei,
-            "rpc_provider": str(endpoint_uri) if endpoint_uri else "Unknown"
+            "rpc_provider": rpc_display
         }
         return APIResponse(message="Network details retrieved", data=data)
     except Exception as e:

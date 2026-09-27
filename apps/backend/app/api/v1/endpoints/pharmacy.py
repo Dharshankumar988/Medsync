@@ -116,37 +116,47 @@ async def verify_pharmacy_blockchain(req: QRVerificationRequest, db: AsyncSessio
         raise HTTPException(status_code=403, detail="This pharmacy QR code is inactive or revoked.")
 
     # Blockchain Verification Logic
-    # Uses the existing blockchain_gateway (mock or production) and the same
-    # canonical SHA-256 hashing that the sync service uses when registering entities.
     verified_on_blockchain = False
+    blockchain_status = "unavailable"
+    network_name = "unknown"
+    contract_used = "PharmacyRegistry"
+    contract_address = None
+    wallet_address = None
+    transaction_hash = None
 
     try:
         from app.blockchain.provider import blockchain_gateway
+        from app.blockchain.client import blockchain_client
+        from app.blockchain.contracts.loader import contract_loader
         from app.utils.hash import generate_canonical_hash
 
-        # Build the same canonical payload that was used when the pharmacy was
-        # registered on-chain via the sync service.
+        # Extract network/RPC context
+        if blockchain_client.is_connected():
+            blockchain_status = "connected"
+            from app.blockchain.config import blockchain_settings
+            network_name = blockchain_settings.NETWORK_NAME
+            wallet_address = blockchain_client.wallet_address
+            try:
+                contract = contract_loader.get_contract("PharmacyRegistry")
+                contract_address = contract.address
+            except Exception:
+                pass
+
         canonical_payload = {
             "pharmacy_id": str(pharmacy.user_id),
             "email": str(user.email) if hasattr(user, 'email') else ""
         }
         data_hash_hex = generate_canonical_hash(canonical_payload)
-        pharmacy_hash = bytes.fromhex(data_hash_hex)  # 32 bytes (SHA-256)
+        pharmacy_hash = bytes.fromhex(data_hash_hex)
 
-        # read_contract works in both mock mode (returns True) and production
-        # mode (queries the real PharmacyRegistry.getPharmacy on-chain).
         result = blockchain_gateway.read_contract(
             "PharmacyRegistry", "getPharmacy", pharmacy_hash
         )
 
-        # In mock mode, read_contract returns True.
-        # In production mode, it returns the Pharmacy struct tuple:
-        #   (licenseHash, owner, createdTimestamp, updatedTimestamp, isVerified, isSuspended)
         if result is True:
-            # Mock mode — treat as verified
             verified_on_blockchain = True
+            blockchain_status = "mocked"
         elif isinstance(result, (tuple, list)):
-            # Production mode — index 4 is isVerified, index 5 is isSuspended
             is_verified = result[4]
             is_suspended = result[5]
             verified_on_blockchain = is_verified and not is_suspended
@@ -158,19 +168,22 @@ async def verify_pharmacy_blockchain(req: QRVerificationRequest, db: AsyncSessio
         logging.getLogger("pharmacy.blockchain").warning(
             f"Blockchain verification failed for pharmacy {pharmacy.user_id}: {e}"
         )
-        # If the contract reverts (entity not found) or gateway is unavailable,
-        # we still allow the flow but flag as unverified on-chain.
-        # The pharmacy was already validated against the local database above.
-        verified_on_blockchain = True  # Graceful degradation
+        blockchain_status = "unavailable"
 
-    if not verified_on_blockchain:
-         raise HTTPException(status_code=403, detail="Pharmacy is not authorized on the blockchain.")
-
-    return APIResponse(message="Pharmacy verified on blockchain successfully", data={
+    # Even if blockchain is unavailable, we still return the payload so the frontend
+    # can show "Blockchain verification unavailable" without failing the whole request.
+    
+    return APIResponse(message="Pharmacy verification completed", data={
         "pharmacy_id": pharmacy.user_id,
         "business_name": pharmacy.business_name,
         "address": pharmacy.address,
-        "verified_on_blockchain": verified_on_blockchain
+        "verified_on_blockchain": verified_on_blockchain,
+        "blockchain_status": blockchain_status,
+        "network": network_name,
+        "wallet_address": wallet_address,
+        "contract_used": contract_used,
+        "contract_address": contract_address,
+        "transaction_hash": transaction_hash
     })
 
 @router.get("/inventory")

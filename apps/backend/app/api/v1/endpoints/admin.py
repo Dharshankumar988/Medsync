@@ -514,59 +514,91 @@ async def get_admin_blockchain(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    from app.blockchain.polygonscan_scraper import PolygonscanScraper
+    from app.blockchain.explorer import address_url, tx_url
+    from app.blockchain.contracts.loader import contract_loader
     import os
-    
+
     # Fetch recent transactions from local DB
     stmt = select(BlockchainTransaction).order_by(BlockchainTransaction.created_at.desc()).limit(50)
     tx_res = await db.execute(stmt)
     db_transactions = tx_res.scalars().all()
-    
+
     transactions = [{
         "hash": tx.transaction_hash,
         "from": tx.from_address or "System",
         "status": tx.status,
-        "network": tx.network
+        "network": tx.network,
+        "explorer_url": tx_url(tx.transaction_hash) if tx.transaction_hash else None
     } for tx in db_transactions]
-    
+
     # Try to fetch actual blockchain health via web3
+    wallet_balance_eth = None
+    gas_price_gwei = None
+    rpc_url = None
     try:
-        health = await asyncio.to_thread(blockchain_gateway.get_health)
-        latest_block = await asyncio.to_thread(lambda: blockchain_client.w3.eth.block_number)
+        health = await asyncio.to_thread(blockchain_gateway.get_health_status)
         status_text = "Healthy" if health.get("status") == "healthy" else "Degraded"
         nodes = 1 if health.get("status") == "healthy" else 0
-    except Exception as e:
+        latest_block = health.get("currentBlock", 0)
+        chain_id = health.get("chainId", 0)
+        wallet_address = health.get("walletAddress", "None")
+        network_name = health.get("network", "amoy")
+        contract_health = health.get("contracts", {})
+        wallet_balance_eth = health.get("walletBalanceEth")
+
+        # Fetch gas price if connected
+        w3 = blockchain_client.w3
+        if w3 and w3.is_connected():
+            try:
+                gp = await asyncio.to_thread(lambda: w3.eth.gas_price)
+                gas_price_gwei = float(w3.from_wei(gp, "gwei"))
+            except Exception:
+                pass
+            # Redact API key from RPC URL — only expose hostname
+            raw_uri = str(getattr(w3.provider, 'endpoint_uri', ''))
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(raw_uri)
+                rpc_url = f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else "Unknown"
+            except Exception:
+                rpc_url = "Connected"
+    except Exception:
         status_text = "Unavailable"
         latest_block = 0
         nodes = 0
-        
-    # Fallback to Scraper if transactions are empty or node is unavailable
-    if (len(transactions) == 0 or status_text == "Unavailable"):
-        # Just use patient registry address to scrape generic network health
-        target_addr = os.getenv("PATIENT_REGISTRY_ADDRESS", "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3")
-        scrape_result = PolygonscanScraper.scrape_address(target_addr)
-        
-        if scrape_result.get("status") == "success":
-            status_text = "Scraped from PolygonScan"
-            nodes = 1
-            
-            # Populate some basic mock transactions from scraper if DB is empty
-            if len(transactions) == 0 and scrape_result.get("scraped_tx_hashes"):
-                for tx_hash in scrape_result["scraped_tx_hashes"][:5]:
-                    transactions.append({
-                        "hash": tx_hash,
-                        "from": "Unknown (Scraped)",
-                        "status": "CONFIRMED",
-                        "network": "amoy"
-                    })
-            elif len(transactions) == 0:
-                # Still empty even after scraping, let's inject a mock one to show the UI works
-                transactions.append({
-                    "hash": "0xMOCKTX_NoRealTransactionsFoundOnScraperOrDB",
-                    "from": "System",
-                    "status": "PENDING",
-                    "network": "amoy"
-                })
+        chain_id = 0
+        wallet_address = blockchain_client.wallet_address or "None"
+        network_name = "Unknown"
+        contract_health = {}
+
+    # Build detailed contracts list with addresses and deployment status
+    env_contracts = {
+        "ConsentManagement": os.getenv("CONSENT_MANAGER_ADDRESS") or os.getenv("CONSENTMANAGEMENT_ADDRESS", ""),
+        "PatientRegistry": os.getenv("PATIENT_REGISTRY_ADDRESS") or os.getenv("PATIENTREGISTRY_ADDRESS", ""),
+        "DoctorRegistry": os.getenv("DOCTOR_REGISTRY_ADDRESS") or os.getenv("DOCTORREGISTRY_ADDRESS", ""),
+        "PharmacyRegistry": os.getenv("PHARMACY_REGISTRY_ADDRESS") or os.getenv("PHARMACYREGISTRY_ADDRESS", ""),
+        "MedicalRecordRegistry": os.getenv("RECORD_REGISTRY_ADDRESS") or os.getenv("MEDICALRECORDREGISTRY_ADDRESS", ""),
+        "PrescriptionRegistry": os.getenv("PRESCRIPTION_REGISTRY_ADDRESS") or os.getenv("PRESCRIPTIONREGISTRY_ADDRESS", ""),
+    }
+
+    contracts_detail = []
+    for name, addr in env_contracts.items():
+        if not addr or addr in ("0x...", "0x0000000000000000000000000000000000000000"):
+            continue
+        health_status = contract_health.get(name, "unknown")
+        # If the health check didn't cover this contract, try on-chain verification
+        if health_status == "unknown" and blockchain_client.w3 and blockchain_client.w3.is_connected():
+            try:
+                code = await asyncio.to_thread(blockchain_client.w3.eth.get_code, addr)
+                health_status = "deployed" if code and code != b"" else "not_deployed"
+            except Exception:
+                health_status = "rpc_error"
+        contracts_detail.append({
+            "name": name,
+            "address": addr,
+            "health": health_status,
+            "explorer_url": address_url(addr)
+        })
 
     # Count mismatches / failures
     mismatches_stmt = select(func.count(BlockchainSyncTask.id)).where(BlockchainSyncTask.status == SyncStatus.FAILED)
@@ -577,7 +609,15 @@ async def get_admin_blockchain(
         "status": status_text,
         "nodes": nodes,
         "latest_block": latest_block,
+        "chain_id": chain_id,
+        "wallet_address": wallet_address,
+        "wallet_balance_eth": wallet_balance_eth,
+        "gas_price_gwei": gas_price_gwei,
+        "network_name": network_name,
+        "rpc_url": rpc_url,
+        "contracts": contracts_detail,
         "transactions": transactions,
-        "mismatches": mismatches
+        "mismatches": mismatches,
+        "explorer_base": "https://amoy.polygonscan.com"
     }
     return APIResponse(message="Blockchain overview retrieved", data=data)

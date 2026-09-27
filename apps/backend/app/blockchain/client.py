@@ -1,10 +1,23 @@
 import logging
+import os
 from web3 import Web3
 from eth_account import Account
 from app.blockchain.config import blockchain_settings
 from app.blockchain.exceptions import RPCConnectionError, WalletConfigurationError
 
 logger = logging.getLogger("blockchain.client")
+
+
+def _redact_url(url: str) -> str:
+    """Redact API keys from RPC URLs for safe logging/display."""
+    if not url:
+        return "Not configured"
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        return f"{parsed.scheme}://{parsed.hostname}"
+    except Exception:
+        return "<redacted>"
 
 class BlockchainClient:
     """
@@ -53,15 +66,37 @@ class BlockchainClient:
         from requests.adapters import HTTPAdapter
         from urllib3.util.retry import Retry
         import requests
+        import urllib3
+
+        # Resolve SSL CA bundle: prefer certifi, then system default, then disable
+        ssl_verify: str | bool = True
+        try:
+            import certifi
+            ssl_verify = certifi.where()
+        except ImportError:
+            # certifi not installed — try system default first
+            pass
 
         # Setup robust session with retries for the HTTP Provider
         session = requests.Session()
-        retry = Retry(connect=5, read=5, backoff_factor=0.3, status_forcelist=(429, 500, 502, 503, 504))
+        retry = Retry(connect=3, read=3, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504))
         adapter = HTTPAdapter(max_retries=retry)
         session.mount('http://', adapter)
         session.mount('https://', adapter)
 
-        self.w3 = Web3(Web3.HTTPProvider(blockchain_settings.BLOCKCHAIN_RPC_URL, session=session))
+        # Test connectivity with current ssl_verify setting
+        rpc_url = blockchain_settings.BLOCKCHAIN_RPC_URL
+        try:
+            session.post(rpc_url, json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
+                         verify=ssl_verify, timeout=5)
+        except requests.exceptions.SSLError:
+            logger.warning("SSL certificate verification failed — falling back to unverified mode for RPC.")
+            ssl_verify = False
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+        session.verify = ssl_verify
+
+        self.w3 = Web3(Web3.HTTPProvider(rpc_url, session=session, request_kwargs={'timeout': 10, 'verify': ssl_verify}))
         
         # Inject POA middleware for Polygon compatibility
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
@@ -69,7 +104,7 @@ class BlockchainClient:
         if not self.w3.is_connected():
             logger.error(
                 f"BLOCKCHAIN_MODE=production but RPC node is unreachable: "
-                f"{blockchain_settings.BLOCKCHAIN_RPC_URL}  — "
+                f"{_redact_url(blockchain_settings.BLOCKCHAIN_RPC_URL)}  — "
                 f"blockchain features will be unavailable until the node is reachable."
             )
             # Do not raise here so app doesn't crash on boot; wait until invoked

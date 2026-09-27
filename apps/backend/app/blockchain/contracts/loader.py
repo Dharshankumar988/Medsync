@@ -69,6 +69,23 @@ class ContractLoader:
         except Exception as e:
             logger.error(f"Error loading contract addresses: {e}")
 
+        # Fallback to env vars
+        env_map = {
+            "PatientRegistry": ["PATIENT_REGISTRY_ADDRESS", "PATIENTREGISTRY_ADDRESS"],
+            "DoctorRegistry": ["DOCTOR_REGISTRY_ADDRESS", "DOCTORREGISTRY_ADDRESS"],
+            "PharmacyRegistry": ["PHARMACY_REGISTRY_ADDRESS", "PHARMACYREGISTRY_ADDRESS"],
+            "MedicalRecordRegistry": ["RECORD_REGISTRY_ADDRESS", "MEDICALRECORDREGISTRY_ADDRESS"],
+            "PrescriptionRegistry": ["PRESCRIPTION_REGISTRY_ADDRESS", "PRESCRIPTIONREGISTRY_ADDRESS"],
+            "ConsentManagement": ["CONSENT_MANAGER_ADDRESS", "CONSENTMANAGEMENT_ADDRESS"]
+        }
+        for name, keys in env_map.items():
+            if name not in self.addresses:
+                for k in keys:
+                    v = os.getenv(k)
+                    if v and v != "0x..." and v != "0x0000000000000000000000000000000000000000":
+                        self.addresses[name] = v
+                        break
+
     def get_abi(self, contract_name: str) -> list:
         abi_file = os.path.join(self.abis_dir, f"{contract_name}.json")
         if not os.path.exists(abi_file):

@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Badge } from "@medsync/ui";
 import { 
   Store, FileText, CheckCircle2, Lock, Loader2, ArrowRight, Camera, 
-  Link as LinkIcon, FileJson, ShieldCheck, Activity, Copy, CreditCard, Upload
+  Link as LinkIcon, FileJson, ShieldCheck, ShieldAlert, Globe, Activity, Copy, CreditCard, Upload
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRScanner } from "@/components/ui/QRScanner";
 
 type FlowType = "IDLE" | "PHARMACY" | "BLOCKCHAIN" | "URL" | "TEXT";
-type PharmacyStep = "CONFIRM" | "SELECT_PRESCRIPTION" | "PAYMENT" | "AUTHORIZE" | "SUCCESS";
+type PharmacyStep = "VERIFYING_BLOCKCHAIN" | "VERIFICATION_RESULT" | "CONFIRM" | "SELECT_PRESCRIPTION" | "PAYMENT" | "AUTHORIZE" | "SUCCESS";
 
 export default function PatientQRScanPage() {
   const router = useRouter();
@@ -80,7 +80,7 @@ export default function PatientQRScanPage() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
-        await fetch(`${baseUrl}/api/v1/blockchain/prescriptions/verify/${encodeURIComponent(data)}`, {
+        await fetch(`${baseUrl}/api/v1/blockchain/prescription/${encodeURIComponent(data)}/verify`, {
           headers: session ? { Authorization: `Bearer ${session.access_token}` } : {}
         });
       } catch (e) {
@@ -113,8 +113,8 @@ export default function PatientQRScanPage() {
         body: JSON.stringify({ qr_data: qrData })
       });
 
-      if (!res.ok) {
-        throw new Error("Pharmacy not verified on blockchain");
+      if (!res.ok && res.status !== 403) {
+        throw new Error("Failed to reach verification endpoint");
       }
       
       const json = await res.json();
@@ -122,17 +122,21 @@ export default function PatientQRScanPage() {
         id: json.data.pharmacy_id, 
         name: json.data.business_name, 
         address: json.data.address || "Verified Network Location",
-        verified: json.data.verified_on_blockchain
+        verified: json.data.verified_on_blockchain,
+        blockchain_status: json.data.blockchain_status,
+        network: json.data.network,
+        wallet_address: json.data.wallet_address,
+        contract_used: json.data.contract_used,
+        contract_address: json.data.contract_address,
+        transaction_hash: json.data.transaction_hash
       });
       
-      // Add a slight delay for the verified UI to be seen
-      setTimeout(() => {
-        setPharmacyStep("CONFIRM");
-      }, 2000);
+      // Move to dedicated verification page
+      setPharmacyStep("VERIFICATION_RESULT");
       
     } catch (e: any) {
       console.error(e);
-      alert("Failed to verify pharmacy on the blockchain.");
+      alert("Failed to process pharmacy QR code.");
       setFlow("IDLE");
     } finally {
       setLoading(false);
@@ -389,8 +393,8 @@ export default function PatientQRScanPage() {
         {flow === "PHARMACY" && (
           <div className="space-y-6">
             <div className="flex items-center justify-center gap-2 mb-8">
-              {["CONFIRM", "SELECT_PRESCRIPTION", "PAYMENT", "AUTHORIZE"].map((step, i) => {
-                const steps = ["CONFIRM", "SELECT_PRESCRIPTION", "PAYMENT", "AUTHORIZE", "SUCCESS"];
+              {["VERIFICATION_RESULT", "CONFIRM", "SELECT_PRESCRIPTION", "PAYMENT", "AUTHORIZE"].map((step, i) => {
+                const steps = ["VERIFICATION_RESULT", "CONFIRM", "SELECT_PRESCRIPTION", "PAYMENT", "AUTHORIZE", "SUCCESS"];
                 const currentIndex = steps.indexOf(pharmacyStep);
                 const isPast = i < currentIndex;
                 const isCurrent = i === currentIndex;
@@ -402,45 +406,93 @@ export default function PatientQRScanPage() {
               })}
             </div>
 
-            {((pharmacyStep as any) === "VERIFYING_BLOCKCHAIN") && (
+            {pharmacyStep === "VERIFYING_BLOCKCHAIN" && (
               <motion.div key="verifying" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
                 <Card className="rounded-3xl border border-blue-500/40 shadow-2xl overflow-hidden relative max-w-lg mx-auto bg-gradient-to-b from-card to-blue-500/5">
                   <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-400 via-indigo-500 to-blue-400 bg-[length:200%_auto] animate-[gradient_2s_linear_infinite]"></div>
                   <CardHeader className="text-center pb-8 pt-12 relative z-10">
                     <div className="mx-auto h-28 w-28 relative flex items-center justify-center mb-6">
-                      {loading ? (
-                        <>
-                          <motion.div 
-                            className="absolute inset-0 border-[3px] border-blue-500/30 rounded-[35%] border-t-blue-500"
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                          />
-                          <motion.div 
-                            className="absolute inset-2 border-[3px] border-indigo-500/30 rounded-[40%] border-b-indigo-500"
-                            animate={{ rotate: -360 }}
-                            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                          />
-                          <ShieldCheck className="h-10 w-10 text-blue-500 animate-pulse" />
-                        </>
-                      ) : (
-                        <motion.div 
-                          initial={{ scale: 0 }} 
-                          animate={{ scale: 1 }} 
-                          transition={{ type: "spring", bounce: 0.5 }}
-                          className="mx-auto h-28 w-28 relative flex items-center justify-center"
-                        >
-                          <div className="absolute inset-0 bg-emerald-500/20 rounded-full animate-ping opacity-50"></div>
-                          <CheckCircle2 className="h-16 w-16 text-emerald-500 relative z-10" />
-                        </motion.div>
-                      )}
+                      <motion.div 
+                        className="absolute inset-0 border-[3px] border-blue-500/30 rounded-[35%] border-t-blue-500"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      />
+                      <motion.div 
+                        className="absolute inset-2 border-[3px] border-indigo-500/30 rounded-[40%] border-b-indigo-500"
+                        animate={{ rotate: -360 }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                      />
+                      <ShieldCheck className="h-10 w-10 text-blue-500 animate-pulse" />
                     </div>
                     <CardTitle className="text-2xl font-bold">
-                      {loading ? "Verifying Pharmacy on Blockchain..." : "Pharmacy Verified!"}
+                      Verifying Pharmacy on Blockchain...
                     </CardTitle>
                     <CardDescription className="text-base mt-2">
-                      {loading ? "Checking smart contract for authorized credentials." : "This pharmacy is an authorized node on the network."}
+                      Checking smart contract for authorized credentials.
                     </CardDescription>
                   </CardHeader>
+                </Card>
+              </motion.div>
+            )}
+
+            {pharmacyStep === "VERIFICATION_RESULT" && pharmacy && (
+              <motion.div key="verification_result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                <Card className="rounded-3xl shadow-xl overflow-hidden relative max-w-2xl mx-auto border-border/50">
+                  <div className={`absolute top-0 left-0 w-full h-1.5 ${pharmacy.verified ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                  <CardHeader className="text-center pb-6 pt-10">
+                    <div className={`mx-auto h-20 w-20 relative flex items-center justify-center mb-4 rounded-full ${pharmacy.verified ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
+                      {pharmacy.verified ? (
+                        <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                      ) : (
+                        <ShieldAlert className="h-10 w-10 text-red-500" />
+                      )}
+                    </div>
+                    <CardTitle className="text-3xl font-bold">
+                      {pharmacy.verified ? "Verified Network Node" : "Blockchain Verification Unavailable"}
+                    </CardTitle>
+                    <CardDescription className="text-base mt-2 max-w-md mx-auto">
+                      {pharmacy.verified 
+                        ? "This pharmacy has a valid cryptographic registration on the decentralized network." 
+                        : "We could not verify this pharmacy's signature on-chain. Proceed with caution."}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-6 pb-8 md:px-10">
+                    <div className="bg-muted/10 rounded-2xl p-6 border shadow-inner mb-8 space-y-5">
+                      <div className="flex justify-between items-center border-b border-border/50 pb-3">
+                        <span className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Store className="h-4 w-4"/> Pharmacy</span>
+                        <span className="font-semibold">{pharmacy.name}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/50 pb-3">
+                        <span className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4"/> Blockchain Status</span>
+                        <Badge variant="outline" className={pharmacy.blockchain_status === 'connected' ? 'text-emerald-500' : 'text-amber-500'}>
+                          {pharmacy.blockchain_status.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-border/50 pb-3">
+                        <span className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Globe className="h-4 w-4"/> Network</span>
+                        <span className="text-sm font-mono">{pharmacy.network || 'Unknown'}</span>
+                      </div>
+                      <div className="flex flex-col gap-1.5 border-b border-border/50 pb-3">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Contract Used</span>
+                        <div className="flex justify-between items-center bg-background rounded-lg p-2 border">
+                          <span className="text-xs font-semibold">{pharmacy.contract_used}</span>
+                          <span className="text-xs font-mono text-muted-foreground">{pharmacy.contract_address || '—'}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Wallet Address</span>
+                        <div className="flex justify-between items-center bg-background rounded-lg p-2 border">
+                          <span className="text-xs font-mono text-muted-foreground truncate max-w-[250px]">{pharmacy.wallet_address || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 justify-center">
+                      <Button variant="outline" onClick={() => setFlow("IDLE")} className="min-w-[140px] rounded-xl h-12">Cancel</Button>
+                      <Button onClick={() => setPharmacyStep("CONFIRM")} className="bg-primary hover:bg-primary/90 text-white min-w-[140px] rounded-xl h-12">
+                        Continue to Check-in <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
                 </Card>
               </motion.div>
             )}
