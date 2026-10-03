@@ -28,7 +28,7 @@ export default function NetworkMonitoring() {
     return <div className="animate-pulse h-64 bg-muted rounded-xl"></div>;
   }
 
-  const isHealthy = network?.status === "healthy";
+  const isHealthy = network?.status === "healthy" || network?.status === "connected";
 
   return (
     <div className="space-y-6">
@@ -44,9 +44,9 @@ export default function NetworkMonitoring() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm min-w-0">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2"><Server className="w-4 h-4" /> RPC Provider</p>
-          <p className="text-xl font-bold mt-2">{network?.rpc_provider || "Unknown"}</p>
+          <p className="text-xl font-bold mt-2 truncate" title={network?.rpc_provider || "Unknown"}>{network?.rpc_provider || "Unknown"}</p>
         </div>
         
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">

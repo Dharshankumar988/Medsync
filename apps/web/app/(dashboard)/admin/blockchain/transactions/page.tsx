@@ -44,8 +44,9 @@ export default function TransactionsExplorer() {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'CONFIRMED': return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30';
+    switch (status?.toUpperCase()) {
+      case 'CONFIRMED':
+      case 'SUCCESS': return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30';
       case 'FAILED': return 'bg-red-500/10 text-red-600 border-red-500/30';
       case 'PENDING': return 'bg-amber-500/10 text-amber-600 border-amber-500/30';
       default: return 'bg-muted text-muted-foreground border-border';
@@ -77,9 +78,9 @@ export default function TransactionsExplorer() {
             className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             <option value="ALL">All Statuses</option>
-            <option value="CONFIRMED">Confirmed</option>
-            <option value="PENDING">Pending</option>
-            <option value="FAILED">Failed</option>
+            <option value="success">Confirmed</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
           </select>
           <select 
             value={contract} 

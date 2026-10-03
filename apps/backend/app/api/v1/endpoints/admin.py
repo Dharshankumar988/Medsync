@@ -847,19 +847,18 @@ async def get_system_health(
     
     # 1. PostgreSQL DB Health
     try:
-        await db.execute(sa.text("SELECT 1"))
+        from sqlalchemy import text
+        await db.execute(text("SELECT 1"))
         services.append({"name": "PostgreSQL DB", "status": "HEALTHY", "reason": "Connected and responsive"})
     except Exception as e:
         services.append({"name": "PostgreSQL DB", "status": "ERROR", "reason": str(e)})
 
     # 2. Supabase Auth Health
     try:
-        import httpx
         from app.core.config import settings
-        url = f"{settings.SUPABASE_URL}/auth/v1/health" if settings.SUPABASE_URL else None
-        if url:
-            async with httpx.AsyncClient() as client:
-                res = await client.get(url, timeout=5)
+        if settings.SUPABASE_URL:
+            async with await get_supabase_client() as client:
+                res = await client.get("/health", timeout=5)
                 if res.status_code == 200:
                     services.append({"name": "Supabase Auth", "status": "HEALTHY", "reason": "Auth API is online"})
                 else:

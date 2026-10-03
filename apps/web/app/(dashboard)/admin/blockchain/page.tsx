@@ -58,8 +58,8 @@ function StatusIcon({ status }: { status: string }) {
 
 function ContractHealthBadge({ health }: { health: string }) {
   const h = health?.toLowerCase();
-  if (h === "available" || h === "deployed")
-    return <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25">{health}</Badge>;
+  if (h === "available" || h === "deployed" || h === "mocked")
+    return <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25">{h === "mocked" ? "Active (Mocked)" : health}</Badge>;
   if (h === "not_configured")
     return <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30">{health}</Badge>;
   return <Badge variant="destructive" className="bg-red-500/15 text-red-400 border-red-500/30">{health}</Badge>;
@@ -128,7 +128,7 @@ export default function AdminBlockchain() {
 
   const isHealthy = data.status === "Healthy";
   const isDegraded = data.status === "Degraded";
-  const availableContracts = data.contracts.filter(c => c.health === "available" || c.health === "deployed").length;
+  const availableContracts = data.contracts.filter(c => c.health === "available" || c.health === "deployed" || c.health === "mocked").length;
 
   return (
     <div className="space-y-6">
