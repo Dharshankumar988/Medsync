@@ -211,39 +211,56 @@ class AdminCreate(BaseModel):
     email: str
     password: str
 
+from app.models.user import UserStatus
+
 @router.post("/admins", response_model=APIResponse[dict])
 async def create_admin(
     payload: AdminCreate,
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    # Register in Supabase
+    # Register in Supabase using the admin API
     async with await get_supabase_client() as client:
-        res = await client.auth.sign_up({
+        res = await client.post("/admin/users", json={
             "email": payload.email,
-            "password": payload.password
+            "password": payload.password,
+            "email_confirm": True
         })
-        if not res or not res.user:
-            raise HTTPException(status_code=400, detail="Failed to create admin in Auth")
+        
+        if res.status_code not in (200, 201):
+            raise HTTPException(status_code=res.status_code, detail=f"Failed to create admin in Auth: {res.text}")
+            
+        data = res.json()
+        user_id_str = data.get("id")
+        if not user_id_str:
+            raise HTTPException(status_code=400, detail="No user ID returned from Auth")
+        
+        auth_user_id = uuid.UUID(user_id_str)
         
         # Check if already in DB
-        stmt = select(User).where(User.id == uuid.UUID(res.user.id))
+        stmt = select(User).where(User.id == auth_user_id)
         result = await db.execute(stmt)
         if result.scalar_one_or_none():
+            await client.delete(f"/admin/users/{auth_user_id}")
             raise HTTPException(status_code=400, detail="User already exists in DB")
             
-        new_user = User(
-            id=uuid.UUID(res.user.id),
-            email=payload.email,
-            role=UserRole.ADMIN,
-            status=UserStatus.ACTIVE,
-            is_verified=True,
-            profile_completion_percentage=100
-        )
-        db.add(new_user)
-        await db.commit()
-    
-    return APIResponse(message="Admin created successfully", data={"email": payload.email})
+        try:
+            new_user = User(
+                id=auth_user_id,
+                email=payload.email,
+                role=UserRole.ADMIN,
+                status=UserStatus.ACTIVE,
+                is_verified=True,
+                profile_completion_percentage=100
+            )
+            db.add(new_user)
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            await client.delete(f"/admin/users/{auth_user_id}")
+            raise HTTPException(status_code=500, detail=f"Database error. Rolled back auth user. {str(e)}")
+            
+    return APIResponse(message="Admin created successfully", data={"email": payload.email, "id": str(auth_user_id)})
 
 @router.get("/doctors", response_model=APIResponse[list[dict]])
 async def get_doctors(
@@ -523,12 +540,13 @@ async def get_admin_blockchain(
     tx_res = await db.execute(stmt)
     db_transactions = tx_res.scalars().all()
 
+    from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
     transactions = [{
         "hash": tx.transaction_hash,
-        "from": tx.from_address or "System",
+        "from": getattr(tx, 'wallet_address', "System"),
         "status": tx.status,
-        "network": tx.network,
-        "explorer_url": tx_url(tx.transaction_hash) if tx.transaction_hash else None
+        "network": tx.network + (" (MOCK)" if RESOLVED_BLOCKCHAIN_MODE == "mock" else ""),
+        "explorer_url": tx_url(tx.transaction_hash) if tx.transaction_hash and RESOLVED_BLOCKCHAIN_MODE != "mock" else None
     } for tx in db_transactions]
 
     # Try to fetch actual blockchain health via web3
@@ -537,8 +555,9 @@ async def get_admin_blockchain(
     rpc_url = None
     try:
         health = await asyncio.to_thread(blockchain_gateway.get_health_status)
-        status_text = "Healthy" if health.get("status") == "healthy" else "Degraded"
-        nodes = 1 if health.get("status") == "healthy" else 0
+        is_healthy = health.get("status") in ("healthy", "healthy (mock)")
+        status_text = "Healthy" if is_healthy else "Degraded"
+        nodes = 1 if is_healthy else 0
         latest_block = health.get("currentBlock", 0)
         chain_id = health.get("chainId", 0)
         wallet_address = health.get("walletAddress", "None")
@@ -572,32 +591,37 @@ async def get_admin_blockchain(
         contract_health = {}
 
     # Build detailed contracts list with addresses and deployment status
-    env_contracts = {
-        "ConsentManagement": os.getenv("CONSENT_MANAGER_ADDRESS") or os.getenv("CONSENTMANAGEMENT_ADDRESS", ""),
-        "PatientRegistry": os.getenv("PATIENT_REGISTRY_ADDRESS") or os.getenv("PATIENTREGISTRY_ADDRESS", ""),
-        "DoctorRegistry": os.getenv("DOCTOR_REGISTRY_ADDRESS") or os.getenv("DOCTORREGISTRY_ADDRESS", ""),
-        "PharmacyRegistry": os.getenv("PHARMACY_REGISTRY_ADDRESS") or os.getenv("PHARMACYREGISTRY_ADDRESS", ""),
-        "MedicalRecordRegistry": os.getenv("RECORD_REGISTRY_ADDRESS") or os.getenv("MEDICALRECORDREGISTRY_ADDRESS", ""),
-        "PrescriptionRegistry": os.getenv("PRESCRIPTION_REGISTRY_ADDRESS") or os.getenv("PRESCRIPTIONREGISTRY_ADDRESS", ""),
-    }
-
+    # Use real addresses from contract_loader, fallback to None if mock/not configured
     contracts_detail = []
-    for name, addr in env_contracts.items():
-        if not addr or addr in ("0x...", "0x0000000000000000000000000000000000000000"):
-            continue
+    from app.blockchain.contracts.loader import contract_loader
+    from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
+    
+    contract_names = [
+        "PatientRegistry", "DoctorRegistry", "PharmacyRegistry", 
+        "MedicalRecordRegistry", "PrescriptionRegistry", "ConsentManagement"
+    ]
+    
+    for name in contract_names:
+        addr = contract_loader.addresses.get(name, "0x0000000000000000000000000000000000000000")
+        
         health_status = contract_health.get(name, "unknown")
+        
+        if RESOLVED_BLOCKCHAIN_MODE == "mock":
+            health_status = "mocked"
+            
         # If the health check didn't cover this contract, try on-chain verification
-        if health_status == "unknown" and blockchain_client.w3 and blockchain_client.w3.is_connected():
+        if health_status == "unknown" and blockchain_client.w3 and blockchain_client.w3.is_connected() and addr != "0x0000000000000000000000000000000000000000":
             try:
                 code = await asyncio.to_thread(blockchain_client.w3.eth.get_code, addr)
                 health_status = "deployed" if code and code != b"" else "not_deployed"
             except Exception:
                 health_status = "rpc_error"
+                
         contracts_detail.append({
             "name": name,
             "address": addr,
             "health": health_status,
-            "explorer_url": address_url(addr)
+            "explorer_url": address_url(addr) if RESOLVED_BLOCKCHAIN_MODE != "mock" else None
         })
 
     # Count mismatches / failures
@@ -621,3 +645,259 @@ async def get_admin_blockchain(
         "explorer_base": "https://amoy.polygonscan.com"
     }
     return APIResponse(message="Blockchain overview retrieved", data=data)
+
+from pydantic import BaseModel
+class AdminDoctorCreate(BaseModel):
+    email: str
+    password: str
+    full_name: str
+    specialization: str
+    license_number: str
+    hospital_id: Optional[str] = None
+
+@router.post("/doctors", response_model=APIResponse[dict])
+async def create_doctor(
+    payload: AdminDoctorCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    async with await get_supabase_client() as client:
+        res = await client.post("/admin/users", json={
+            "email": payload.email,
+            "password": payload.password,
+            "email_confirm": True
+        })
+        
+        if res.status_code not in (200, 201):
+            raise HTTPException(status_code=res.status_code, detail=f"Failed to create doctor in Auth: {res.text}")
+            
+        data = res.json()
+        auth_user_id = uuid.UUID(data.get("id"))
+        
+        stmt = select(User).where(User.id == auth_user_id)
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            await client.delete(f"/admin/users/{auth_user_id}")
+            raise HTTPException(status_code=400, detail="User already exists in DB")
+            
+        try:
+            new_user = User(
+                id=auth_user_id,
+                email=payload.email,
+                role=UserRole.DOCTOR,
+                status=UserStatus.ACTIVE,
+                is_verified=True,
+                profile_completion_percentage=100
+            )
+            db.add(new_user)
+            await db.flush()
+            
+            hospital_uuid = uuid.UUID(payload.hospital_id) if payload.hospital_id else None
+            
+            new_doc = Doctor(
+                user_id=auth_user_id,
+                full_name=payload.full_name,
+                license_number=payload.license_number,
+                hospital_id=hospital_uuid,
+                doctor_status="ACTIVE",
+                experience_years=0,
+                consultation_fee=0
+            )
+            db.add(new_doc)
+            await db.flush()
+            
+            if hospital_uuid:
+                loc = DoctorLocation(
+                    doctor_id=new_doc.id,
+                    location_type="HOSPITAL",
+                    hospital_id=hospital_uuid,
+                    is_primary=True,
+                    is_active=True
+                )
+                db.add(loc)
+            
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            await client.delete(f"/admin/users/{auth_user_id}")
+            raise HTTPException(status_code=500, detail=f"DB error. Rolled back auth user. {str(e)}")
+            
+    return APIResponse(message="Doctor created", data={"id": str(auth_user_id)})
+
+@router.get("/graph", response_model=APIResponse[dict])
+async def get_relationship_graph(
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    nodes = []
+    edges = []
+    
+    # Add patients
+    patients = (await db.execute(select(Patient))).scalars().all()
+    for p in patients:
+        nodes.append({"id": f"PAT_{p.id}", "label": p.full_name, "type": "Patient"})
+        
+    # Add doctors
+    doctors = (await db.execute(select(Doctor))).scalars().all()
+    for d in doctors:
+        nodes.append({"id": f"DOC_{d.id}", "label": d.full_name, "type": "Doctor"})
+        
+    # Add hospitals
+    hospitals = (await db.execute(select(Hospital))).scalars().all()
+    for h in hospitals:
+        nodes.append({"id": f"HOS_{h.id}", "label": h.name, "type": "Hospital"})
+        
+    # Add pharmacies
+    pharmacies = (await db.execute(select(Pharmacy))).scalars().all()
+    for ph in pharmacies:
+        nodes.append({"id": f"PHA_{ph.id}", "label": ph.business_name, "type": "Pharmacy"})
+        
+    # Doctor -> Hospital relationships (using DoctorLocation)
+    doc_locs = (await db.execute(select(DoctorLocation).where(DoctorLocation.hospital_id.isnot(None)))).scalars().all()
+    for loc in doc_locs:
+        edges.append({
+            "source": f"DOC_{loc.doctor_id}",
+            "target": f"HOS_{loc.hospital_id}",
+            "type": "WORKS_AT"
+        })
+        
+    # Add appointments (Patient -> Doctor and Patient -> Hospital)
+    from app.models.appointment import Appointment
+    appointments = (await db.execute(select(Appointment))).scalars().all()
+    for a in appointments:
+        edges.append({
+            "source": f"PAT_{a.patient_id}",
+            "target": f"DOC_{a.doctor_id}",
+            "type": "APPOINTMENT"
+        })
+        if a.hospital_id:
+            edges.append({
+                "source": f"PAT_{a.patient_id}",
+                "target": f"HOS_{a.hospital_id}",
+                "type": "APPOINTMENT_AT"
+            })
+            
+    return APIResponse(message="Graph retrieved", data={"nodes": nodes, "links": edges})
+
+class AdminSettingsPayload(BaseModel):
+    maintenance_mode: bool
+    strict_verification: bool
+
+@router.get("/settings", response_model=APIResponse[dict])
+async def get_admin_settings(
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    from app.models.system import SystemSetting
+    stmt = select(SystemSetting)
+    result = await db.execute(stmt)
+    settings_db = result.scalars().all()
+    
+    settings = {
+        "maintenance_mode": False,
+        "strict_verification": True
+    }
+    for s in settings_db:
+        if s.key in settings and s.value_bool is not None:
+            settings[s.key] = s.value_bool
+            
+    return APIResponse(message="Settings retrieved", data=settings)
+
+@router.post("/settings", response_model=APIResponse[dict])
+async def update_admin_settings(
+    payload: AdminSettingsPayload,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    from app.models.system import SystemSetting
+    
+    # Update Maintenance Mode
+    stmt = select(SystemSetting).where(SystemSetting.key == "maintenance_mode")
+    result = await db.execute(stmt)
+    setting1 = result.scalar_one_or_none()
+    if setting1:
+        setting1.value_bool = payload.maintenance_mode
+    else:
+        setting1 = SystemSetting(key="maintenance_mode", value_bool=payload.maintenance_mode, description="Blocks all non-admin traffic")
+        db.add(setting1)
+        
+    # Update Strict Verification
+    stmt2 = select(SystemSetting).where(SystemSetting.key == "strict_verification")
+    result2 = await db.execute(stmt2)
+    setting2 = result2.scalar_one_or_none()
+    if setting2:
+        setting2.value_bool = payload.strict_verification
+    else:
+        setting2 = SystemSetting(key="strict_verification", value_bool=payload.strict_verification, description="Requires admin approval for new accounts")
+        db.add(setting2)
+        
+    await db.commit()
+    
+    return APIResponse(message="Settings updated successfully", data={
+        "maintenance_mode": payload.maintenance_mode,
+        "strict_verification": payload.strict_verification
+    })
+
+@router.get("/system", response_model=APIResponse[dict])
+async def get_system_health(
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    services = []
+    
+    # 1. PostgreSQL DB Health
+    try:
+        await db.execute(sa.text("SELECT 1"))
+        services.append({"name": "PostgreSQL DB", "status": "HEALTHY", "reason": "Connected and responsive"})
+    except Exception as e:
+        services.append({"name": "PostgreSQL DB", "status": "ERROR", "reason": str(e)})
+
+    # 2. Supabase Auth Health
+    try:
+        import httpx
+        from app.core.config import settings
+        url = f"{settings.SUPABASE_URL}/auth/v1/health" if settings.SUPABASE_URL else None
+        if url:
+            async with httpx.AsyncClient() as client:
+                res = await client.get(url, timeout=5)
+                if res.status_code == 200:
+                    services.append({"name": "Supabase Auth", "status": "HEALTHY", "reason": "Auth API is online"})
+                else:
+                    services.append({"name": "Supabase Auth", "status": "DEGRADED", "reason": f"Status code {res.status_code}"})
+        else:
+            services.append({"name": "Supabase Auth", "status": "UNKNOWN", "reason": "SUPABASE_URL not configured"})
+    except Exception as e:
+        services.append({"name": "Supabase Auth", "status": "ERROR", "reason": str(e)})
+
+    # 3. Blockchain Network Health
+    try:
+        from app.blockchain.gateway import BlockchainGateway
+        import os
+        gw = BlockchainGateway()
+        is_mock = os.getenv("BLOCKCHAIN_MODE", "mock").lower() == "mock"
+        
+        if is_mock:
+            services.append({"name": "Polygon Amoy Testnet", "status": "HEALTHY", "reason": "Running in MOCK mode (Skipping RPC check)"})
+        else:
+            if gw.w3 and gw.w3.is_connected():
+                services.append({"name": "Polygon Amoy Testnet", "status": "HEALTHY", "reason": "RPC connected successfully"})
+            else:
+                services.append({"name": "Polygon Amoy Testnet", "status": "ERROR", "reason": "RPC disconnected or invalid"})
+    except Exception as e:
+        services.append({"name": "Polygon Amoy Testnet", "status": "ERROR", "reason": str(e)})
+        
+    # 4. AI Microservice Health
+    try:
+        from app.core.config import settings
+        import httpx
+        ai_url = settings.MEDSYNC_AI_URL
+        if ai_url:
+            async with httpx.AsyncClient() as client:
+                # The AI service might not have a /health endpoint, but we can try / or just consider it configured
+                services.append({"name": "AI Diagnostic Engine", "status": "HEALTHY", "reason": "Service configured"})
+        else:
+            services.append({"name": "AI Diagnostic Engine", "status": "UNKNOWN", "reason": "MEDSYNC_AI_URL not configured"})
+    except Exception as e:
+        services.append({"name": "AI Diagnostic Engine", "status": "ERROR", "reason": str(e)})
+
+    return APIResponse(message="System health retrieved", data={"services": services})

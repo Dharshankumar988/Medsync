@@ -138,6 +138,20 @@ async def get_current_user(
     role = db_user.role.value.lower()
     status = db_user.status.value.upper()
 
+    # Maintenance Mode Check
+    if role != "admin":
+        try:
+            from app.models.system import SystemSetting
+            stmt = select(SystemSetting).where(SystemSetting.key == "maintenance_mode")
+            result = await db.execute(stmt)
+            setting = result.scalar_one_or_none()
+            if setting and setting.value_bool is True:
+                raise ForbiddenException("System is under maintenance")
+        except ForbiddenException:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to check maintenance mode: {e}")
+
     return AuthenticatedPrincipal(
         id=user_uuid,
         email=email,

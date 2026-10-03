@@ -25,6 +25,7 @@ from app.models.pharmacy_location import PharmacyLocation
 from app.models.medical_history_share import MedicalHistoryShare
 from app.models.audit_log import AuditLog
 from app.models.security import PatientSecurityCredential, PatientBiometricProfile, PrescriptionDownloadAuthorization
+from app.models.system import SystemSetting
 
 __all__ = [
     "Base",
@@ -75,4 +76,5 @@ __all__ = [
     "PatientSecurityCredential",
     "PatientBiometricProfile",
     "PrescriptionDownloadAuthorization",
+    "SystemSetting",
 ]

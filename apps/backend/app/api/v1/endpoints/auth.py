@@ -40,6 +40,24 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         # Determine status (Patients are active and verified, others pending verification)
         is_patient = payload.role == UserRole.PATIENT
         new_status = UserStatus.ACTIVE if is_patient else UserStatus.PENDING
+        
+        # Strict Verification Check
+        if not is_patient:
+            strict_verification = True
+            try:
+                from app.models.system import SystemSetting
+                stmt = select(SystemSetting).where(SystemSetting.key == "strict_verification")
+                result = await db.execute(stmt)
+                setting = result.scalar_one_or_none()
+                if setting and setting.value_bool is not None:
+                    strict_verification = setting.value_bool
+            except Exception as e:
+                import logging
+                logging.warning(f"Could not fetch strict_verification setting: {e}")
+                
+            if not strict_verification:
+                new_status = UserStatus.ACTIVE
+
 
         # Determine default avatar based on role and gender
         default_avatar = None

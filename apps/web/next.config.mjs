@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: "standalone",
   poweredByHeader: false,
   images: {
     domains: ["ipfs.io", "gateway.pinata.cloud"],

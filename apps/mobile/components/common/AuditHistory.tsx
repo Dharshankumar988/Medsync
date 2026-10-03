@@ -19,7 +19,7 @@ export function AuditHistory() {
   useEffect(() => {
     async function fetchAuditLogs() {
       try {
-        const res = await apiRequest('GET', '/blockchain/audit?size=10');
+        const res = await apiRequest('GET', '/api/v1/blockchain/audit?size=10');
         setLogs(res.data?.items || []);
       } catch (error) {
         console.error("Failed to load audit logs", error);

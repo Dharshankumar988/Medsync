@@ -50,12 +50,10 @@ class BlockchainClient:
             logger.error("Failed to derive wallet from private key. Ensure BACKEND_PRIVATE_KEY is correct.")
             # Keep default zero address if derivation fails
         
-        # ── Mock mode: skip RPC connection and writes, but wallet is already derived ──
+        # ── Always connect to RPC for reads, even in mock mode, to show true network status ──
         if RESOLVED_BLOCKCHAIN_MODE not in ("production", "real"):
-            logger.info("Blockchain client: mock mode — RPC connection and writes disabled (wallet derived).")
-            return
-            
-        # ── Production mode: validate config, connect to RPC for reads ──
+            logger.info("Blockchain client: mock mode — writes disabled, but RPC connected for reads.")
+
         try:
             blockchain_settings.validate()
         except ValueError as e:

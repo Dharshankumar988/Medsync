@@ -67,13 +67,29 @@ class MockBlockchainGateway:
 
     def get_health_status(self) -> HealthStatus:
         from app.blockchain.client import blockchain_client
-        rpc_connected = blockchain_client.w3 is not None and blockchain_client.w3.is_connected()
+        w3 = blockchain_client.w3
+        rpc_connected = w3 is not None and w3.is_connected()
+        
+        chain_id = 0
+        current_block = 0
+        balance = 0.0
+        
+        if rpc_connected:
+            try:
+                chain_id = w3.eth.chain_id
+                current_block = w3.eth.block_number
+                if blockchain_client.wallet_address:
+                    bal_wei = w3.eth.get_balance(blockchain_client.wallet_address)
+                    balance = float(w3.from_wei(bal_wei, 'ether'))
+            except Exception:
+                pass
+                
         return {
             "status": "healthy (mock)",
-            "network": "mock",
-            "chainId": 0,
-            "currentBlock": 0,
+            "network": "amoy (mock)",
+            "chainId": chain_id,
+            "currentBlock": current_block,
             "rpcConnected": rpc_connected,
             "walletAddress": blockchain_client.wallet_address,
-            "walletBalanceEth": 0.0,
+            "walletBalanceEth": balance,
         }

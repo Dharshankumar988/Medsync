@@ -16,10 +16,28 @@ export default function AdminUsers() {
   const [pharmacies, setPharmacies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+
+
   // Add Admin State
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminPassword, setNewAdminPassword] = useState("");
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
+  
+  // Add Doctor State
+  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [isAddingDoctor, setIsAddingDoctor] = useState(false);
+  const [newDoctor, setNewDoctor] = useState({
+    email: "", password: "", full_name: "", specialization: "", license_number: "", hospital_id: ""
+  });
+
+  
+  // Add Doctor State
+  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [isAddingDoctor, setIsAddingDoctor] = useState(false);
+  const [newDoctor, setNewDoctor] = useState({
+    email: "", password: "", full_name: "", specialization: "", license_number: "", hospital_id: ""
+  });
+
 
   useEffect(() => {
     fetchData();
@@ -28,18 +46,20 @@ export default function AdminUsers() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [vRes, pRes, aRes, dRes, phRes] = await Promise.all([
+      const [vRes, pRes, aRes, dRes, phRes, hRes] = await Promise.all([
         api.get('/api/v1/admin/verifications/pending'),
         api.get('/api/v1/admin/patients'),
         api.get('/api/v1/admin/admins'),
         api.get('/api/v1/admin/doctors'),
-        api.get('/api/v1/admin/pharmacies')
+        api.get('/api/v1/admin/pharmacies'),
+        api.get('/api/v1/hospitals')
       ]);
       setVerifications(vRes.data.data || []);
       setPatients(pRes.data.data || []);
       setAdmins(aRes.data.data || []);
       setDoctors(dRes.data.data || []);
       setPharmacies(phRes.data.data || []);
+      setHospitals(hRes.data.data || []);
     } catch (err) {
       console.error("Failed to fetch admin data", err);
     } finally {
@@ -83,6 +103,40 @@ export default function AdminUsers() {
     } catch (err) {
       console.error("Failed to reset security", err);
       toast.error("Failed to reset security");
+    }
+  };
+
+  const handleAddDoctor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDoctor.email || !newDoctor.password || !newDoctor.full_name) return;
+    try {
+      const payload: any = {...newDoctor};
+      if (!payload.hospital_id) delete payload.hospital_id; // don't send empty string
+      await api.post('/api/v1/admin/doctors', payload);
+      toast.success("Doctor created successfully!");
+      setNewDoctor({email: "", password: "", full_name: "", specialization: "", license_number: "", hospital_id: ""});
+      setIsAddingDoctor(false);
+      fetchData();
+    } catch (err: any) {
+      console.error("Failed to create doctor", err);
+      toast.error(err.response?.data?.detail || "Failed to create doctor");
+    }
+  };
+
+  const handleAddDoctor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDoctor.email || !newDoctor.password || !newDoctor.full_name) return;
+    try {
+      const payload: any = {...newDoctor};
+      if (!payload.hospital_id) delete payload.hospital_id; // don't send empty string
+      await api.post('/api/v1/admin/doctors', payload);
+      toast.success("Doctor created successfully!");
+      setNewDoctor({email: "", password: "", full_name: "", specialization: "", license_number: "", hospital_id: ""});
+      setIsAddingDoctor(false);
+      fetchData();
+    } catch (err: any) {
+      console.error("Failed to create doctor", err);
+      toast.error(err.response?.data?.detail || "Failed to create doctor");
     }
   };
 
@@ -192,10 +246,58 @@ export default function AdminUsers() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="doctors">
+                        <TabsContent value="doctors">
           <Card>
-            <CardHeader><CardTitle>Verified Doctors</CardTitle></CardHeader>
-            <CardContent>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Verified Doctors</CardTitle>
+                <CardDescription>Manage active doctors on the platform.</CardDescription>
+              </div>
+              <Button onClick={() => setIsAddingDoctor(!isAddingDoctor)} variant="outline">
+                {isAddingDoctor ? "Cancel" : "Add Doctor"}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {isAddingDoctor && (
+                <div className="p-4 border rounded-xl bg-muted/20 mb-6">
+                  <h3 className="font-medium mb-4">Register New Doctor</h3>
+                  <form onSubmit={handleAddDoctor} className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Full Name</label>
+                      <input type="text" required value={newDoctor.full_name} onChange={(e) => setNewDoctor({...newDoctor, full_name: e.target.value})} className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Email</label>
+                      <input type="email" required value={newDoctor.email} onChange={(e) => setNewDoctor({...newDoctor, email: e.target.value})} className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Password</label>
+                      <input type="password" required minLength={6} value={newDoctor.password} onChange={(e) => setNewDoctor({...newDoctor, password: e.target.value})} className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Specialization</label>
+                      <input type="text" value={newDoctor.specialization} onChange={(e) => setNewDoctor({...newDoctor, specialization: e.target.value})} className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">License Number</label>
+                      <input type="text" value={newDoctor.license_number} onChange={(e) => setNewDoctor({...newDoctor, license_number: e.target.value})} className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Hospital Assignment</label>
+                      <select value={newDoctor.hospital_id} onChange={(e) => setNewDoctor({...newDoctor, hospital_id: e.target.value})} className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <option value="">Independent (No Hospital)</option>
+                        {hospitals.map((h: any) => (
+                          <option key={h.id} value={h.id}>{h.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2 mt-2">
+                      <Button type="submit" className="h-10 px-8 bg-primary w-full md:w-auto">Create Doctor Profile</Button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
               {loading ? <Skeleton className="h-40 w-full" /> : (
                 <div className="divide-y border rounded-xl">
                   {doctors.map(d => (

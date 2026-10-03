@@ -330,6 +330,9 @@ async def get_transactions(
     request: Request,
     status: Optional[str] = None,
     network: Optional[str] = None,
+    contract: Optional[str] = None,
+    search: Optional[str] = None,
+    sort_by: str = Query("latest"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -338,20 +341,43 @@ async def get_transactions(
     """Get paginated blockchain transactions."""
     query = select(BlockchainTransaction)
     
-    if status:
+    if status and status != "ALL":
         query = query.where(BlockchainTransaction.status == status)
-    if network:
+    if network and network != "ALL":
         query = query.where(BlockchainTransaction.network == network)
+    if contract and contract != "ALL":
+        query = query.where(BlockchainTransaction.contract_name == contract)
+    if search:
+        query = query.where(
+            (BlockchainTransaction.transaction_hash.ilike(f"%{search}%")) |
+            (BlockchainTransaction.wallet_address.ilike(f"%{search}%"))
+        )
         
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
     
-    query = query.order_by(desc(BlockchainTransaction.created_at)).offset((page - 1) * size).limit(size)
+    if sort_by == "oldest":
+        query = query.order_by(BlockchainTransaction.created_at.asc())
+    else:
+        query = query.order_by(desc(BlockchainTransaction.created_at))
+        
+    query = query.offset((page - 1) * size).limit(size)
     result = await db.execute(query)
     items = result.scalars().all()
     
-    formatted_items = [BlockchainTransactionResponse.model_validate(item).model_dump() for item in items]
+    from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
+    from app.blockchain.explorer import tx_url
+    
+    formatted_items = []
+    for item in items:
+        base = BlockchainTransactionResponse.model_validate(item).model_dump()
+        if RESOLVED_BLOCKCHAIN_MODE == "mock":
+            base["network"] = base.get("network", "") + " (MOCK)"
+            base["explorer_url"] = None
+        else:
+            base["explorer_url"] = tx_url(base.get("transaction_hash")) if base.get("transaction_hash") else None
+        formatted_items.append(base)
             
     return APIResponse(
         message="Transactions retrieved",
