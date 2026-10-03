@@ -91,6 +91,9 @@ class BlockchainClient:
             logger.warning("SSL certificate verification failed — falling back to unverified mode for RPC.")
             ssl_verify = False
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"RPC connection test failed: {e}")
+            # Do not crash; we will handle is_connected() check below
 
         session.verify = ssl_verify
 
