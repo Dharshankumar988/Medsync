@@ -1,83 +1,5 @@
 "use client";
 import dynamic from 'next/dynamic';
-import { useCallback, useRef } from 'react';
-
-const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
-
-function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
-  const fgRef = useRef<any>();
-  
-  const graphData = {
-    nodes: nodes.map(n => ({ ...n })),
-    links: edges.map(e => ({ source: e.source, target: e.target, name: e.type }))
-  };
-
-  const getNodeColor = (node: any) => {
-    switch(node.type) {
-      case 'Patient': return '#3b82f6';
-      case 'Doctor': return '#10b981';
-      case 'Pharmacy': return '#f59e0b';
-      case 'Hospital': return '#8b5cf6';
-      case 'Prescription': return '#ec4899';
-      default: return '#9ca3af';
-    }
-  };
-
-  return (
-    <div className="w-full h-full border rounded-xl overflow-hidden bg-background relative">
-      <ForceGraph2D
-        ref={fgRef}
-        graphData={graphData}
-        nodeLabel="label"
-        nodeColor={getNodeColor}
-        nodeRelSize={6}
-        linkColor={() => 'var(--border)'}
-        linkDirectionalArrowLength={3.5}
-        linkDirectionalArrowRelPos={1}
-        onNodeClick={node => {
-          // Center/zoom on node
-          fgRef.current?.centerAt(node.x, node.y, 1000);
-          fgRef.current?.zoom(4, 2000);
-        }}
-        width={typeof window !== 'undefined' ? window.innerWidth - 300 > 800 ? 800 : 500 : 800}
-        height={500}
-        d3VelocityDecay={0.3}
-      />
-      <div className="absolute top-4 left-4 p-3 rounded-lg bg-card/80 backdrop-blur-sm border shadow-sm text-xs space-y-1">
-        <p className="font-semibold mb-2">Entity Legend</p>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3b82f6]"></div> Patient</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#10b981]"></div> Doctor</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#f59e0b]"></div> Pharmacy</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#8b5cf6]"></div> Hospital</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#ec4899]"></div> Prescription</div>
-      </div>
-
-      <div className="grid gap-6">
-        <Card className="col-span-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Share2 className="h-5 w-5"/> Entity Relationship Graph</CardTitle>
-            <CardDescription>Interactive spatial relationship view of all users and records in the system.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[550px] w-full p-6">
-            {graphLoading ? (
-              <div className="flex items-center justify-center h-full w-full border rounded-xl border-dashed">
-                <div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" />
-              </div>
-            ) : graphData && graphData.nodes.length > 0 ? (
-              <EntityGraph nodes={graphData.nodes} edges={graphData.edges} />
-            ) : (
-              <div className="flex items-center justify-center h-full w-full border rounded-xl border-dashed text-muted-foreground">
-                No relationship data available.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-import dynamic from 'next/dynamic';
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
 import { LineChart as LineChartIcon, BarChart as BarChartIcon, Activity, TrendingUp, Users, Share2 } from "lucide-react";
@@ -134,27 +56,6 @@ function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#ec4899]"></div> Prescription</div>
       </div>
 
-      <div className="grid gap-6">
-        <Card className="col-span-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Share2 className="h-5 w-5"/> Entity Relationship Graph</CardTitle>
-            <CardDescription>Interactive spatial relationship view of all users and records in the system.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[550px] w-full p-6">
-            {graphLoading ? (
-              <div className="flex items-center justify-center h-full w-full border rounded-xl border-dashed">
-                <div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" />
-              </div>
-            ) : graphData && graphData.nodes.length > 0 ? (
-              <EntityGraph nodes={graphData.nodes} edges={graphData.edges} />
-            ) : (
-              <div className="flex items-center justify-center h-full w-full border rounded-xl border-dashed text-muted-foreground">
-                No relationship data available.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

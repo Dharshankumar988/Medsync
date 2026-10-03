@@ -30,15 +30,6 @@ export default function AdminUsers() {
     email: "", password: "", full_name: "", specialization: "", license_number: "", hospital_id: ""
   });
 
-  
-  // Add Doctor State
-  const [hospitals, setHospitals] = useState<any[]>([]);
-  const [isAddingDoctor, setIsAddingDoctor] = useState(false);
-  const [newDoctor, setNewDoctor] = useState({
-    email: "", password: "", full_name: "", specialization: "", license_number: "", hospital_id: ""
-  });
-
-
   useEffect(() => {
     fetchData();
   }, []);
@@ -103,23 +94,6 @@ export default function AdminUsers() {
     } catch (err) {
       console.error("Failed to reset security", err);
       toast.error("Failed to reset security");
-    }
-  };
-
-  const handleAddDoctor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDoctor.email || !newDoctor.password || !newDoctor.full_name) return;
-    try {
-      const payload: any = {...newDoctor};
-      if (!payload.hospital_id) delete payload.hospital_id; // don't send empty string
-      await api.post('/api/v1/admin/doctors', payload);
-      toast.success("Doctor created successfully!");
-      setNewDoctor({email: "", password: "", full_name: "", specialization: "", license_number: "", hospital_id: ""});
-      setIsAddingDoctor(false);
-      fetchData();
-    } catch (err: any) {
-      console.error("Failed to create doctor", err);
-      toast.error(err.response?.data?.detail || "Failed to create doctor");
     }
   };
 
