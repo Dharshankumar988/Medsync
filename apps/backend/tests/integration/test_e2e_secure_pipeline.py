@@ -23,7 +23,7 @@ if 'BLOCKCHAIN_MODE' in os.environ:
     del os.environ['BLOCKCHAIN_MODE']
 
 # Remove conftest.py mocks for real E2E integration
-for mod in ['web3', 'web3.contract', 'web3.exceptions', 'eth_account', 'eth_account.messages', 'eth_utils']:
+for mod in ['web3', 'web3.middleware', 'web3.contract', 'web3.exceptions', 'eth_account', 'eth_account.messages', 'eth_utils']:
     sys.modules.pop(mod, None)
 
 from app.services.key_management import KeyManagementService, KeyManagementError

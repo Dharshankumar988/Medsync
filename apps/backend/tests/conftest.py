@@ -15,6 +15,7 @@ os.environ['BIOMETRIC_ENCRYPTION_KEY'] = 'YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYW
 
 # Mock native packages that cannot be installed on Windows ARM64 for local dev testing
 sys.modules['web3'] = MagicMock()
+sys.modules['web3.middleware'] = MagicMock()
 sys.modules['web3.contract'] = MagicMock()
 sys.modules['web3.exceptions'] = MagicMock()
 sys.modules['eth_account'] = MagicMock()
