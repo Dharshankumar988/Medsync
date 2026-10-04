@@ -187,6 +187,10 @@ export default function AppointmentsPage() {
   };
 
   const handleSelectDoctor = (doctor: any) => {
+    if (doctor.is_accepting_appointments === false) {
+      toast.error(`Dr. ${doctor.full_name} is currently not accepting new appointments.`);
+      return;
+    }
     setSelectedDoctor(doctor);
     setBookingData((prev) => ({
       ...prev,
@@ -195,6 +199,7 @@ export default function AppointmentsPage() {
     }));
     setBookingStep("book");
   };
+
 
   const handleBook = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -471,7 +476,14 @@ export default function AppointmentsPage() {
                               </div>
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">Dr. {d.full_name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-medium text-sm truncate">Dr. {d.full_name}</p>
+                                {d.is_accepting_appointments === false && (
+                                  <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">
+                                    Unavailable
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground truncate">
                                 {d.specialization} • {d.experience_years || 0}yr exp
                                 {d.consultation_fee ? ` • ₹${d.consultation_fee}` : ""}
@@ -513,7 +525,14 @@ export default function AppointmentsPage() {
                             </div>
                           )}
                           <div className="flex-1">
-                            <p className="font-semibold">Dr. {d.full_name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-semibold">Dr. {d.full_name}</p>
+                              {d.is_accepting_appointments === false && (
+                                <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">
+                                  Unavailable
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm text-muted-foreground">
                               {d.specialization}
                               {d.experience_years ? ` • ${d.experience_years}yr exp` : ""}

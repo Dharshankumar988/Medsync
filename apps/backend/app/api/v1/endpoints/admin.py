@@ -732,51 +732,91 @@ async def get_relationship_graph(
     nodes = []
     edges = []
     
+    node_ids = set()
+    
     # Add patients
-    patients = (await db.execute(select(Patient))).scalars().all()
-    for p in patients:
-        nodes.append({"id": f"PAT_{p.id}", "label": p.full_name, "type": "Patient"})
+    from app.models.user import User
+    patients_data = (await db.execute(select(Patient, User).join(User, Patient.user_id == User.id))).all()
+    for p, u in patients_data:
+        has_error = u.status == "SUSPENDED" or u.status == "BANNED"
+        nodes.append({"id": f"PAT_{p.id}", "label": p.full_name, "type": "Patient", "hasError": has_error})
+        node_ids.add(f"PAT_{p.id}")
         
     # Add doctors
-    doctors = (await db.execute(select(Doctor))).scalars().all()
-    for d in doctors:
-        nodes.append({"id": f"DOC_{d.id}", "label": d.full_name, "type": "Doctor"})
+    doctors_data = (await db.execute(select(Doctor, User).join(User, Doctor.user_id == User.id))).all()
+    for d, u in doctors_data:
+        has_error = d.doctor_status == "SUSPENDED" or u.status == "BANNED"
+        nodes.append({"id": f"DOC_{d.id}", "label": d.full_name, "type": "Doctor", "hasError": has_error})
+        node_ids.add(f"DOC_{d.id}")
         
+    from app.models.doctor import Hospital, DoctorLocation
     # Add hospitals
     hospitals = (await db.execute(select(Hospital))).scalars().all()
     for h in hospitals:
-        nodes.append({"id": f"HOS_{h.id}", "label": h.name, "type": "Hospital"})
+        nodes.append({"id": f"HOS_{h.id}", "label": h.name, "type": "Hospital", "hasError": False})
+        node_ids.add(f"HOS_{h.id}")
         
     # Add pharmacies
-    pharmacies = (await db.execute(select(Pharmacy))).scalars().all()
-    for ph in pharmacies:
-        nodes.append({"id": f"PHA_{ph.id}", "label": ph.business_name, "type": "Pharmacy"})
+    pharmacies_data = (await db.execute(select(Pharmacy, User).join(User, Pharmacy.user_id == User.id))).all()
+    for ph, u in pharmacies_data:
+        has_error = ph.blockchain_status == "FAILED" or u.status == "BANNED"
+        nodes.append({"id": f"PHA_{ph.id}", "label": ph.business_name, "type": "Pharmacy", "hasError": has_error})
+        node_ids.add(f"PHA_{ph.id}")
         
     # Doctor -> Hospital relationships (using DoctorLocation)
     doc_locs = (await db.execute(select(DoctorLocation).where(DoctorLocation.hospital_id.isnot(None)))).scalars().all()
     for loc in doc_locs:
-        edges.append({
-            "source": f"DOC_{loc.doctor_id}",
-            "target": f"HOS_{loc.hospital_id}",
-            "type": "WORKS_AT"
-        })
+        src = f"DOC_{loc.doctor_id}"
+        tgt = f"HOS_{loc.hospital_id}"
+        if src in node_ids and tgt in node_ids:
+            edges.append({"source": src, "target": tgt, "type": "WORKS_AT"})
         
-    # Add appointments (Patient -> Doctor and Patient -> Hospital)
+    # Add appointments
     from app.models.appointment import Appointment
     appointments = (await db.execute(select(Appointment))).scalars().all()
     for a in appointments:
-        edges.append({
-            "source": f"PAT_{a.patient_id}",
-            "target": f"DOC_{a.doctor_id}",
-            "type": "APPOINTMENT"
-        })
+        src = f"PAT_{a.patient_id}"
+        tgt = f"DOC_{a.doctor_id}"
+        if src in node_ids and tgt in node_ids:
+            edges.append({"source": src, "target": tgt, "type": "APPOINTMENT"})
+        
         if a.hospital_id:
-            edges.append({
-                "source": f"PAT_{a.patient_id}",
-                "target": f"HOS_{a.hospital_id}",
-                "type": "APPOINTMENT_AT"
-            })
+            tgt_h = f"HOS_{a.hospital_id}"
+            if src in node_ids and tgt_h in node_ids:
+                edges.append({"source": src, "target": tgt_h, "type": "APPOINTMENT_AT"})
+                
+    # Add prescriptions
+    from app.models.prescription import Prescription
+    prescriptions = (await db.execute(select(Prescription))).scalars().all()
+    for p in prescriptions:
+        nodes.append({"id": f"RX_{p.id}", "label": f"RX: {p.id.hex[:8]}", "type": "Prescription", "hasError": False})
+        node_ids.add(f"RX_{p.id}")
+        
+        doc_src = f"DOC_{p.doctor_id}"
+        if doc_src in node_ids:
+            edges.append({"source": doc_src, "target": f"RX_{p.id}", "type": "ISSUED"})
             
+        pat_tgt = f"PAT_{p.patient_id}"
+        if pat_tgt in node_ids:
+            edges.append({"source": f"RX_{p.id}", "target": pat_tgt, "type": "BELONGS_TO"})
+            
+    # Add medicine orders
+    from app.models.pharmacy_system import MedicineOrder
+    orders = (await db.execute(select(MedicineOrder))).scalars().all()
+    for o in orders:
+        has_error = o.status.value in ["CANCELLED", "FAILED"] if hasattr(o.status, "value") else str(o.status) in ["CANCELLED", "FAILED"]
+        nodes.append({"id": f"ORD_{o.id}", "label": f"Order: {o.id.hex[:8]}", "type": "Order", "hasError": has_error})
+        node_ids.add(f"ORD_{o.id}")
+        
+        pat_src = f"PAT_{o.patient_id}"
+        if pat_src in node_ids:
+            edges.append({"source": pat_src, "target": f"ORD_{o.id}", "type": "PLACED_ORDER"})
+            
+        if o.pharmacy_id:
+            pha_tgt = f"PHA_{o.pharmacy_id}"
+            if pha_tgt in node_ids:
+                edges.append({"source": f"ORD_{o.id}", "target": pha_tgt, "type": "FULFILLED_BY"})
+                
     return APIResponse(message="Graph retrieved", data={"nodes": nodes, "links": edges})
 
 class AdminSettingsPayload(BaseModel):

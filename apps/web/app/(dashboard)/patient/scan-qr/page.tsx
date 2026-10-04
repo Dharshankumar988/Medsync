@@ -70,7 +70,12 @@ export default function PatientQRScanPage() {
     setScanData(data);
     setShowCamera(false);
 
-    if (data.startsWith("QR-PHM-") || data.startsWith("medsync:pharmacy:")) {
+    if (
+      data.includes("/verify/pharmacy/") || 
+      data.startsWith("QR-PHM-") || 
+      data.startsWith("medsync:pharmacy:") ||
+      data.startsWith("PHARM_QR_")
+    ) {
       setFlow("PHARMACY");
       setPharmacyStep("VERIFYING_BLOCKCHAIN" as any);
       await verifyPharmacyBlockchain(data);

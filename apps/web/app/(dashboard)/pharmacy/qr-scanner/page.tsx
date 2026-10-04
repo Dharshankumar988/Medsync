@@ -55,7 +55,7 @@ export default function PharmacyQRScannerPage() {
     
     // If it looks like a URL
     if (data.startsWith("http://") || data.startsWith("https://")) {
-      setFlow("URL");
+      window.location.href = data;
       return;
     }
 

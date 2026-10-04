@@ -23,6 +23,47 @@ export default function PharmacyOrdersPage() {
     });
   }, []);
 
+  const [dispensingRxId, setDispensingRxId] = useState<string | null>(null);
+  const [dispensingOrder, setDispensingOrder] = useState<string | null>(null);
+  const [pinInput, setPinInput] = useState("");
+  const [isDispensing, setIsDispensing] = useState(false);
+
+  const handleDispenseWithPin = async () => {
+    if (!dispensingRxId || pinInput.length !== 4) return;
+    setIsDispensing(true);
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+      const formData = new FormData();
+      formData.append("pin", pinInput);
+      
+      const { supabase } = await import("@/lib/supabase");
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      
+      const res = await fetch(`${baseUrl}/prescriptions/${dispensingRxId}/dispense`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+      
+      if (res.ok) {
+        alert("Prescription dispensed successfully!");
+        setOrders(prev => prev.map(o => o.id === dispensingOrder ? { ...o, status: "DISPENSED" } : o));
+        setDispensingRxId(null);
+        setDispensingOrder(null);
+      } else {
+        const errorData = await res.json();
+        alert(`Failed to dispense: ${errorData.detail || "Invalid PIN"}`);
+      }
+    } catch (e) {
+      alert("Error dispensing prescription.");
+    } finally {
+      setIsDispensing(false);
+    }
+  };
+
   const handleDispatch = async (orderId: string) => {
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
@@ -41,22 +82,7 @@ export default function PharmacyOrdersPage() {
     }
   };
 
-  const handleVerifyDelivery = async (orderId: string) => {
-    const otp = window.prompt("Enter the 4-digit delivery verification code provided by the patient:");
-    if (!otp) return;
-    if (otp.length !== 4 || isNaN(Number(otp))) {
-      alert("Invalid code format. Must be 4 digits.");
-      return;
-    }
 
-    const success = await pharmacyService.verifyDelivery(orderId, otp);
-    if (success) {
-      alert("Delivery verified successfully!");
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "DELIVERED" } : o));
-    } else {
-      alert("Failed to verify delivery. Incorrect code.");
-    }
-  };
 
   const filteredOrders = useMemo(() => {
     let filtered = orders;
@@ -162,8 +188,19 @@ export default function PharmacyOrdersPage() {
 
                   <div className="pt-2">
                     {order.status === "PENDING" && (
-                      <Button variant="outline" className="w-full text-amber-600 border-amber-500/30 hover:bg-amber-500/10" onClick={() => window.location.href='/pharmacy/dashboard'}>
-                        Go to Dashboard to Verify & Dispense
+                      <Button 
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-black font-medium" 
+                        onClick={() => {
+                          if (order.prescription_id) {
+                            setDispensingRxId(order.prescription_id);
+                            setDispensingOrder(order.id);
+                            setPinInput("");
+                          } else {
+                            alert("This order has no prescription ID associated with it.");
+                          }
+                        }}
+                      >
+                        Dispense
                       </Button>
                     )}
                     {order.status === "DISPENSED" && (
@@ -173,11 +210,8 @@ export default function PharmacyOrdersPage() {
                     )}
                     {order.status === "OUT_FOR_DELIVERY" && (
                       <div className="flex gap-2">
-                        <Button variant="outline" className="flex-1 border-purple-500/30 text-purple-600 hover:bg-purple-500/10" onClick={() => setDispensingOrderId(order.id)}>
+                        <Button variant="outline" className="w-full border-purple-500/30 text-purple-600 hover:bg-purple-500/10" onClick={() => setDispensingOrderId(order.id)}>
                           <Truck className="h-4 w-4 mr-2" /> Track Map
-                        </Button>
-                        <Button className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white" onClick={() => handleVerifyDelivery(order.id)}>
-                          Verify Delivery
                         </Button>
                       </div>
                     )}
@@ -194,7 +228,37 @@ export default function PharmacyOrdersPage() {
         </div>
       )}
 
-      {dispensingOrderId && (
+      {dispensingRxId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-sm shadow-xl">
+            <CardHeader>
+              <CardTitle>Verify Dispense PIN</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Enter the 4-character PIN from the patient's prescription QR code to dispense.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input 
+                placeholder="e.g. A9B2" 
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.toUpperCase())}
+                maxLength={4}
+                className="text-center text-2xl tracking-[0.5em] font-mono h-14 uppercase"
+              />
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setDispensingRxId(null)}>Cancel</Button>
+                <Button 
+                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-black" 
+                  disabled={pinInput.length !== 4 || isDispensing}
+                  onClick={handleDispenseWithPin}
+                >
+                  {isDispensing ? "Dispensing..." : "Confirm Dispense"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {dispensingOrderId && !dispensingRxId && (
         <div className="fixed bottom-4 right-4 z-50 w-[450px]">
           {orders.filter(o => o.id === dispensingOrderId).map(order => (
             <DeliveryMap 

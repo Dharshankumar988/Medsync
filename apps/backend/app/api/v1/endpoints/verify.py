@@ -7,6 +7,8 @@ from app.core.config import settings
 from app.models.prescription import Prescription
 from app.models.pharmacy_system import MedicineOrder, DeliveryTracking, OrderStatus
 from app.models.user import User, UserStatus
+from app.models.doctor import Doctor
+from app.models.patient import Patient
 from app.schemas.response import APIResponse
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import UserRole
@@ -231,17 +233,17 @@ async def verify_qr(
                 authorized_for_details = True
 
     # Build Response Data
-    doc_stmt = select(User).where(User.id == rx.doctor_id)
-    pat_stmt = select(User).where(User.id == rx.patient_id)
+    doc_stmt = select(Doctor).where(Doctor.user_id == rx.doctor_id)
+    pat_stmt = select(Patient).where(Patient.user_id == rx.patient_id)
     doc_res = await db.execute(doc_stmt)
     pat_res = await db.execute(pat_stmt)
-    doc = doc_res.scalar_one_or_none()
-    pat = pat_res.scalar_one_or_none()
+    doc_prof = doc_res.scalar_one_or_none()
+    pat_prof = pat_res.scalar_one_or_none()
     
     response_data = {
         "prescription_id": str(rx.id),
-        "patient_name": f"{pat.first_name} {pat.last_name}" if pat else "Unknown",
-        "doctor_name": f"{doc.first_name} {doc.last_name}" if doc else "Unknown",
+        "patient_name": pat_prof.full_name if pat_prof else "Patient",
+        "doctor_name": doc_prof.full_name if doc_prof else "Doctor",
         "blockchain_status": rx.blockchain_status or "PENDING",
         "is_dispensed": rx.is_dispensed,
         "is_finalized": rx.is_finalized,

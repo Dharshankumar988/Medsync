@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, Integer, ForeignKey
+from sqlalchemy import String, Integer, ForeignKey, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from app.database.base_class import Base
@@ -49,6 +49,8 @@ class Doctor(Base, UUIDMixin, TimestampMixin):
     approved_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     approval_notes: Mapped[str] = mapped_column(String, nullable=True)
     doctor_status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)
+    is_accepting_appointments: Mapped[bool] = mapped_column(Boolean, default=True)
+    security_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     
     user = relationship("User", foreign_keys=[user_id], back_populates="doctor_profile")
     hospital = relationship("Hospital", back_populates="doctors")

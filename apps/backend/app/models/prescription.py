@@ -18,6 +18,7 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     expires_at: Mapped[str | None] = mapped_column(String, nullable=True) # ISO format timestamp or Date
     pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     qr_token: Mapped[str | None] = mapped_column(Text, nullable=True)    
+    pin: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # Blockchain Audit Fields
     blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)

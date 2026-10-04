@@ -64,10 +64,15 @@ async def get_my_qr(
 @router.get("/resolve-qr/{qr_identifier}")
 async def resolve_pharmacy_qr(qr_identifier: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Resolves a pharmacy QR code to its details."""
-    if not qr_identifier.startswith("QR-PHM-"):
-        raise HTTPException(status_code=400, detail="Invalid QR code format")
-        
-    stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).where(Pharmacy.qr_identifier == qr_identifier)
+    clean_qr = qr_identifier.strip()
+    if "/verify/pharmacy/" in clean_qr:
+        clean_qr = clean_qr.split("/verify/pharmacy/")[-1].split("?")[0].split("/")[0]
+    elif clean_qr.startswith("http://") or clean_qr.startswith("https://"):
+        clean_qr = clean_qr.rstrip("/").split("/")[-1]
+
+    stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).where(
+        (Pharmacy.qr_identifier == clean_qr) | (Pharmacy.qr_identifier == qr_identifier)
+    )
     result = await db.execute(stmt)
     row = result.first()
     
@@ -96,11 +101,15 @@ class QRVerificationRequest(BaseModel):
 @router.post("/verify-blockchain")
 async def verify_pharmacy_blockchain(req: QRVerificationRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Verifies a pharmacy on the blockchain and resolves its details."""
-    qr_identifier = req.qr_data
-    if not qr_identifier.startswith("QR-PHM-"):
-        raise HTTPException(status_code=400, detail="Invalid QR code format")
-        
-    stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).where(Pharmacy.qr_identifier == qr_identifier)
+    clean_qr = req.qr_data.strip()
+    if "/verify/pharmacy/" in clean_qr:
+        clean_qr = clean_qr.split("/verify/pharmacy/")[-1].split("?")[0].split("/")[0]
+    elif clean_qr.startswith("http://") or clean_qr.startswith("https://"):
+        clean_qr = clean_qr.rstrip("/").split("/")[-1]
+
+    stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).where(
+        (Pharmacy.qr_identifier == clean_qr) | (Pharmacy.qr_identifier == req.qr_data)
+    )
     result = await db.execute(stmt)
     row = result.first()
     

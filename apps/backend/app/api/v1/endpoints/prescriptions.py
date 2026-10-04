@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, status, Form, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.db import get_db
@@ -8,6 +9,7 @@ from app.schemas.response import APIResponse
 from app.schemas.session import AuthenticatedPrincipal
 from app.schemas.prescription import PrescriptionCreate, PrescriptionResponse
 from app.services.prescription import PrescriptionService
+from app.services.qr_pdf_service import QRPdfService
 from sqlalchemy import select
 from app.models.pharmacy_system import MedicineOrder
 from app.models.prescription import Prescription
@@ -15,6 +17,8 @@ from fastapi import HTTPException
 
 router = APIRouter()
 require_doctor = RoleChecker([UserRole.DOCTOR])
+
+DOWNLOAD_PIN_CACHE: dict[str, str] = {}
 
 @router.post("/", response_model=APIResponse[PrescriptionResponse], status_code=status.HTTP_201_CREATED)
 async def create_prescription(
@@ -130,6 +134,8 @@ async def authorize_prescription_download(
                     os.remove(tmp_path)
 
         auth_ref = await create_download_authorization(db, current_user.id, rx.id, password_verified=False, pin_verified=pin_verified, face_verified=face_verified)
+        if pin:
+            DOWNLOAD_PIN_CACHE[auth_ref] = pin
         return APIResponse(message="Authorization successful", data={"authorization_reference": auth_ref})
     
     # For doctors/admins, just return a direct short-lived auth reference bypassing MFA for now (or a different flow)
@@ -174,6 +180,26 @@ async def download_prescription_by_ref(
     if not rx or not rx.pdf_url:
         raise HTTPException(status_code=404, detail="Prescription PDF not found")
 
+    # Check if a PIN was used to authorize this download
+    pin = DOWNLOAD_PIN_CACHE.pop(authorization_reference, None)
+    if pin:
+        try:
+            raw_pdf_bytes = await StorageService.download_record_file(rx.pdf_url)
+            encrypted_pdf_bytes = QRPdfService.encrypt_pdf(raw_pdf_bytes, pin)
+            enc_object_path, _, _, _ = await StorageService.upload_bytes(
+                file_bytes=encrypted_pdf_bytes,
+                filename=f"prescription_{rx.id}_encrypted.pdf",
+                content_type="application/pdf",
+                patient_id=str(rx.patient_id),
+                record_id=str(rx.id),
+                version_number=2
+            )
+            signed_url = await StorageService.create_signed_download_url(enc_object_path, expires_in=300)
+            return APIResponse(message="Download URL generated (PIN encrypted)", data={"url": signed_url})
+        except Exception as e:
+            import logging
+            logging.getLogger("medsync.prescriptions").error(f"Error encrypting PDF with PIN: {e}", exc_info=True)
+
     # Generate signed URL valid for 5 minutes
     signed_url = await StorageService.create_signed_download_url(rx.pdf_url, expires_in=300)
     
@@ -182,6 +208,7 @@ async def download_prescription_by_ref(
 @router.post("/{id}/dispense", response_model=APIResponse)
 async def dispense_prescription(
     id: uuid.UUID,
+    pin: str = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PHARMACY]))
 ):
@@ -191,6 +218,9 @@ async def dispense_prescription(
     
     if not rx:
         raise HTTPException(status_code=404, detail="Prescription not found")
+        
+    if not pin or rx.pin != pin.upper():
+        raise HTTPException(status_code=400, detail="Invalid Dispense PIN. Please enter the correct 4-character PIN from the prescription.")
         
     if rx.is_dispensed:
         raise HTTPException(status_code=400, detail="Prescription has already been dispensed")

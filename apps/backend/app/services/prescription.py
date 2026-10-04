@@ -6,27 +6,48 @@ from app.services.qr_pdf_service import QRPdfService
 from app.services.storage import StorageService
 from sqlalchemy import select
 from app.models.user import User
+from app.models.doctor import Doctor
+from app.models.patient import Patient
 
 class PrescriptionService:
     @staticmethod
     async def create_prescription(db: AsyncSession, doctor_id: uuid.UUID, req: PrescriptionCreate):
         # 1. Fetch Doctor and Patient details
-        stmt = select(User).where(User.id.in_([doctor_id, req.patient_id]))
-        result = await db.execute(stmt)
-        users = result.scalars().all()
-        doctor = next((u for u in users if u.id == doctor_id), None)
-        patient = next((u for u in users if u.id == req.patient_id), None)
+        doc_stmt = select(Doctor).where(Doctor.user_id == doctor_id)
+        doc_res = await db.execute(doc_stmt)
+        doctor_profile = doc_res.scalar_one_or_none()
+
+        pat_stmt = select(Patient).where(Patient.user_id == req.patient_id)
+        pat_res = await db.execute(pat_stmt)
+        patient_profile = pat_res.scalar_one_or_none()
+
+        doc_user_stmt = select(User).where(User.id == doctor_id)
+        doc_user_res = await db.execute(doc_user_stmt)
+        doctor_user = doc_user_res.scalar_one_or_none()
         
         doctor_data = {
-            "name": f"{doctor.first_name} {doctor.last_name}" if doctor else "Unknown",
-            "profile_image_url": getattr(doctor, 'profile_image_url', None) if doctor else None
+            "name": doctor_profile.full_name if doctor_profile else "Doctor",
+            "profile_image_url": getattr(doctor_user, 'profile_image_url', None) if doctor_user else None
         }
-        patient_data = {"name": f"{patient.first_name} {patient.last_name}" if patient else "Unknown", "id": str(patient.id) if patient else ""}
+        patient_data = {
+            "name": patient_profile.full_name if patient_profile else "Patient",
+            "id": str(req.patient_id)
+        }
 
         # 2. Pre-generate ID and secure Verification Token
+        import string
+        import random
         import secrets
+        
         prescription_id = uuid.uuid4()
-        qr_token = f"MS-{secrets.token_hex(8).upper()}"
+        
+        # 4-character alphanumeric PIN
+        chars = string.ascii_uppercase + string.digits
+        pin = ''.join(random.choices(chars, k=4))
+        
+        # QR token now a URL to verify page
+        base_url = "https://medsync.vercel.app" # Standardize base URL
+        qr_token = f"{base_url}/verify/prescription/{prescription_id}"
         
         # 3. Generate QR Image and PDF
         qr_image_bytes = QRPdfService.generate_qr_code(qr_token)
@@ -34,7 +55,7 @@ class PrescriptionService:
         items_list = [item.model_dump() for item in req.items]
         
         pdf_bytes = QRPdfService.generate_prescription_pdf(
-            rx_data, patient_data, doctor_data, items_list, qr_image_bytes, qr_token=qr_token
+            rx_data, patient_data, doctor_data, items_list, qr_image_bytes, qr_token=qr_token, pin=pin
         )
         
         # 4. Upload PDF
@@ -70,6 +91,7 @@ class PrescriptionService:
             "is_finalized": True,
             "pdf_url": pdf_url,
             "qr_token": qr_token,
+            "pin": pin,
             "hash": canonical_hash
         }
         

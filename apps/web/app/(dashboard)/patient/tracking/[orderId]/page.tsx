@@ -17,7 +17,6 @@ export default function DeliveryTrackingPage({ params }: { params: Promise<{ ord
   const [order, setOrder] = useState<any>(null);
   const [deliveryStatus, setDeliveryStatus] = useState<"processing" | "out_for_delivery" | "arrived" | "delivered">("processing");
   const [progress, setProgress] = useState(0);
-  const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
 
   useEffect(() => {
@@ -63,35 +62,20 @@ export default function DeliveryTrackingPage({ params }: { params: Promise<{ ord
     return () => clearInterval(interval);
   };
 
-  const handleOrderDelivered = async () => {
-    setGeneratingCode(true);
-    try {
-      const res = await orderService.generateDeliveryCode(orderId as string);
-      
-      setDeliveryCode(res.data.otp);
-      setDeliveryStatus("arrived");
-      
-    } catch (e) {
-      console.error(e);
-      alert("Failed to generate code.");
-    } finally {
-      setGeneratingCode(false);
-    }
-  };
-
-  // Poll for delivery completion by driver
+  // Poll for delivery completion
   useEffect(() => {
-    if (deliveryCode && deliveryStatus === "arrived") {
+    if (deliveryStatus === "arrived" || deliveryStatus === "out_for_delivery") {
       const interval = setInterval(async () => {
         const { data } = await supabase.from('medicine_orders').select('status').eq('id', orderId).single();
         if (data && data.status === "DELIVERED") {
           setDeliveryStatus("delivered");
+          setProgress(100);
           clearInterval(interval);
         }
       }, 3000);
       return () => clearInterval(interval);
     }
-  }, [deliveryCode, deliveryStatus, orderId]);
+  }, [deliveryStatus, orderId]);
 
   if (!order) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-muted-foreground" /></div>;
 
@@ -155,37 +139,11 @@ export default function DeliveryTrackingPage({ params }: { params: Promise<{ ord
               {deliveryStatus !== "delivered" ? (
                 <div className="space-y-4">
                   <div className="p-4 bg-blue-500/10 text-blue-600 rounded-xl border border-blue-500/20 text-sm">
-                    When the driver arrives, press the button below to generate a secure confirmation code.
+                    Your order is on the way! Our automated system will mark it as delivered once the driver arrives.
                   </div>
-                  {!deliveryCode ? (
-                    <Button 
-                      className="w-full h-12 bg-blue-600 hover:bg-blue-500"
-                      onClick={handleOrderDelivered}
-                      disabled={generatingCode || deliveryStatus === 'processing'}
-                    >
-                      {generatingCode ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Package className="h-4 w-4 mr-2" />}
-                      Driver has arrived
-                    </Button>
-                  ) : (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="space-y-4 text-center"
-                    >
-                      <h3 className="font-bold text-lg">Provide this code to driver</h3>
-                      <p className="text-sm text-muted-foreground">The driver needs this code to validate the delivery in their app.</p>
-                      
-                      <div className="bg-muted p-6 rounded-2xl mt-4 border border-border/50">
-                        <div className="text-4xl font-mono font-bold tracking-[0.25em] text-foreground">
-                          {deliveryCode}
-                        </div>
-                      </div>
-                      
-                      <p className="text-xs text-amber-500 font-medium flex items-center justify-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" /> Waiting for driver validation
-                      </p>
-                    </motion.div>
-                  )}
+                  <p className="text-xs text-amber-500 font-medium flex items-center justify-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Awaiting delivery
+                  </p>
                 </div>
               ) : (
                 <motion.div 

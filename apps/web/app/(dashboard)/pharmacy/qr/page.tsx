@@ -69,7 +69,7 @@ export default function PharmacyQRPage() {
         <CardContent className="flex flex-col items-center p-10 bg-white">
           <div className="relative p-4 bg-white rounded-2xl shadow-sm border border-border/40">
             <QRCodeSVG 
-              value={qrIdentifier}
+              value={`${typeof window !== 'undefined' ? window.location.origin : 'https://medsync.vercel.app'}/verify/pharmacy/${qrIdentifier}`}
               size={256}
               level={"H"}
               includeMargin={true}

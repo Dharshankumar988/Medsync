@@ -31,6 +31,7 @@ class VerificationService:
         
         if user:
             user.status = UserStatus.ACTIVE
+            user.is_verified = True
             
             if user.role.value == "DOCTOR":
                 from app.models.doctor import Doctor
@@ -41,6 +42,16 @@ class VerificationService:
                     doctor.doctor_status = "ACTIVE"
                     doctor.approval_date = datetime.now(timezone.utc)
                     doctor.approved_by = admin_id
+            elif user.role.value == "PHARMACY":
+                from app.models.pharmacy import Pharmacy
+                from app.api.v1.endpoints.pharmacy import _generate_qr_identifier
+                phm_stmt = select(Pharmacy).where(Pharmacy.user_id == user.id)
+                phm_res = await db.execute(phm_stmt)
+                pharmacy = phm_res.scalar_one_or_none()
+                if pharmacy:
+                    if not pharmacy.qr_identifier:
+                        pharmacy.qr_identifier = _generate_qr_identifier(user.id)
+                    pharmacy.qr_status = "ACTIVE"
             
         await db.commit()
         await db.refresh(req)

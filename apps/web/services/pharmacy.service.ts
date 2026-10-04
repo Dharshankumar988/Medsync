@@ -92,15 +92,6 @@ export const pharmacyService = {
     }
   },
 
-  verifyDelivery: async (orderId: string, otp: string): Promise<boolean> => {
-    try {
-      await api.post(`/api/v1/orders/${orderId}/verify-delivery`, { otp });
-      return true;
-    } catch {
-      return false;
-    }
-  },
-
   discardExpired: async (inventoryId: string): Promise<boolean> => {
     try {
       await api.post(`/api/v1/inventory/${inventoryId}/discard`);

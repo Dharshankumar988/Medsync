@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input } from "@medsync/ui";
-import { Shield, Bell, Key, LogOut, Loader2, Lock } from "lucide-react";
+import { Shield, Bell, Key, LogOut, Loader2, Lock, CalendarCheck, CalendarX, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -13,10 +13,54 @@ export default function DoctorSettingsPage() {
   const [confirmPin, setConfirmPin] = useState("");
   const [isEnrollingPin, setIsEnrollingPin] = useState(false);
   const [pinStatus, setPinStatus] = useState<string>("NOT_STARTED");
+  const [isAcceptingAppointments, setIsAcceptingAppointments] = useState<boolean>(true);
+  const [isTogglingAppointments, setIsTogglingAppointments] = useState<boolean>(false);
 
   useEffect(() => {
     fetchPinStatus();
+    fetchAppointmentSetting();
   }, []);
+
+  const fetchAppointmentSetting = async () => {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const user = session?.session?.user;
+      if (!token || !user) return;
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+      const res = await axios.get(`${apiUrl}/profile/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data?.data?.is_accepting_appointments !== undefined) {
+        setIsAcceptingAppointments(res.data.data.is_accepting_appointments);
+      }
+    } catch (err) {
+      console.error("Failed to fetch appointment settings", err);
+    }
+  };
+
+  const handleToggleAppointments = async () => {
+    setIsTogglingAppointments(true);
+    const nextVal = !isAcceptingAppointments;
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error("Not authenticated");
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+      await axios.patch(`${apiUrl}/profile/doctor/accept-appointments`, 
+        { is_accepting_appointments: nextVal },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setIsAcceptingAppointments(nextVal);
+      toast.success(nextVal ? "You are now accepting appointments" : "Appointments paused successfully");
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Failed to update appointment setting");
+    } finally {
+      setIsTogglingAppointments(false);
+    }
+  };
 
   const fetchPinStatus = async () => {
     try {
@@ -77,6 +121,57 @@ export default function DoctorSettingsPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
+        <Card className="md:col-span-2 border-primary/20 bg-gradient-to-r from-primary/[0.03] to-transparent">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-xl font-bold">
+                {isAcceptingAppointments ? (
+                  <CalendarCheck className="w-5 h-5 text-emerald-500" />
+                ) : (
+                  <CalendarX className="w-5 h-5 text-amber-500" />
+                )}
+                Receive Appointments
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Controls whether patients can book consultations with you. When turned off, your booking availability is paused.
+              </CardDescription>
+            </div>
+            <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
+              isAcceptingAppointments 
+                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" 
+                : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${isAcceptingAppointments ? "bg-emerald-500" : "bg-amber-500"}`} />
+              {isAcceptingAppointments ? "Accepting Bookings" : "Bookings Paused"}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <div className="flex items-center justify-between p-4 bg-background rounded-xl border border-border/60">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">
+                  {isAcceptingAppointments 
+                    ? "Currently accepting appointment requests" 
+                    : "Currently not accepting new appointment requests"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isAcceptingAppointments 
+                    ? "Patients can view available time slots and book appointments." 
+                    : "Patients cannot book appointments with you until you resume."}
+                </p>
+              </div>
+              <Button 
+                variant={isAcceptingAppointments ? "outline" : "default"}
+                onClick={handleToggleAppointments}
+                disabled={isTogglingAppointments}
+                className={isAcceptingAppointments ? "border-amber-500/30 text-amber-600 hover:bg-amber-500/10" : "bg-emerald-600 hover:bg-emerald-700 text-white"}
+              >
+                {isTogglingAppointments && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {isAcceptingAppointments ? "Pause Bookings" : "Resume Bookings"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Lock className="w-4 h-4 text-primary" /> Authorization PIN</CardTitle>

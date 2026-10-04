@@ -341,8 +341,8 @@ async def get_transactions(
     """Get paginated blockchain transactions."""
     query = select(BlockchainTransaction)
     
-    if status and status != "ALL":
-        query = query.where(BlockchainTransaction.status == status)
+    if status and status.upper() != "ALL":
+        query = query.where(func.upper(BlockchainTransaction.status) == status.upper())
     if network and network != "ALL":
         query = query.where(BlockchainTransaction.network == network)
     if contract and contract != "ALL":
@@ -617,8 +617,11 @@ async def get_contract_details(
     abi_events = []
     abi_functions = []
     try:
-        # Try to load ABI from the blockchain contracts directory
-        abi_path = Path("apps/blockchain/abis") / f"{name}.json"
+        # Construct absolute path to the workspace root then to the abis folder
+        # apps/backend/app/api/v1/endpoints/blockchain.py -> 5 levels up to Medsync root
+        project_root = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+        abi_path = project_root / "apps" / "blockchain" / "abis" / f"{name}.json"
+        
         if abi_path.exists():
             with open(abi_path, 'r') as f:
                 abi_data = json.load(f)
@@ -695,7 +698,8 @@ async def get_network_details(
             "status": "connected",
             "latest_block": latest_block,
             "gas_price_gwei": gas_price_gwei,
-            "rpc_provider": rpc_display
+            "rpc_provider": rpc_display,
+            "rpc_provider_full": raw_uri
         }
         return APIResponse(message="Network details retrieved", data=data)
     except Exception as e:

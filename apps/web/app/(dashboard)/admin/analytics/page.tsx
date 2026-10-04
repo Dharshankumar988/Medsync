@@ -18,12 +18,14 @@ function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
   };
 
   const getNodeColor = (node: any) => {
+    if (node.hasError || node.status === 'ERROR' || node.status === 'FAILED') return '#ef4444';
     switch(node.type) {
       case 'Patient': return '#3b82f6';
       case 'Doctor': return '#10b981';
       case 'Pharmacy': return '#f59e0b';
       case 'Hospital': return '#8b5cf6';
       case 'Prescription': return '#ec4899';
+      case 'Order': return '#14b8a6';
       default: return '#9ca3af';
     }
   };
@@ -62,6 +64,8 @@ function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#f59e0b]"></div> Pharmacy</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#8b5cf6]"></div> Hospital</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#ec4899]"></div> Prescription</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#14b8a6]"></div> Order</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#ef4444]"></div> Error/Failed</div>
       </div>
     </div>
   );
@@ -74,7 +78,10 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     dashboardService.getAdminDashboard().then(data => {
-      setStats(data);
+      setStats(data || { users: { total: 1, patients: 0, doctors: 0, pharmacies: 0, pending_verification: 0 }, operations: { appointments: 0, prescriptions: 0, orders: 0 } });
+    }).catch(err => {
+      console.error(err);
+      setStats({ users: { total: 1, patients: 0, doctors: 0, pharmacies: 0, pending_verification: 0 }, operations: { appointments: 0, prescriptions: 0, orders: 0 } });
     });
     
     api.get('/api/v1/admin/graph').then(res => {
@@ -189,7 +196,7 @@ export default function AdminAnalytics() {
                 <div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" />
               </div>
             ) : graphData && graphData.nodes.length > 0 ? (
-              <EntityGraph nodes={graphData.nodes} edges={graphData.edges} />
+              <EntityGraph nodes={graphData.nodes} edges={graphData.edges || (graphData as any).links || []} />
             ) : (
               <div className="flex items-center justify-center h-full w-full border rounded-xl border-dashed text-muted-foreground">
                 No relationship data available.

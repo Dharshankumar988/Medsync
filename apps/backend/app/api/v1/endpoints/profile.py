@@ -56,6 +56,7 @@ class ProfileCompletionRequest(BaseModel):
     experience_years: Optional[int] = None
     bio: Optional[str] = None
     consultation_fee: Optional[int] = None
+    is_accepting_appointments: Optional[bool] = None
 
     # Pharmacy
     gst_number: Optional[str] = None
@@ -149,7 +150,8 @@ async def get_profile(
                 "experience_years": profile.experience_years,
                 "consultation_fee": profile.consultation_fee,
                 "profile_image": profile.profile_image,
-                "thumbnail": profile.thumbnail
+                "thumbnail": profile.thumbnail,
+                "is_accepting_appointments": profile.is_accepting_appointments
             })
     elif user.role == UserRole.PHARMACY:
         profile = await db.execute(select(Pharmacy).where(Pharmacy.user_id == user_id))
@@ -270,6 +272,8 @@ async def update_profile_completion(
                 profile.consultation_fee = payload.consultation_fee
             if hasattr(payload, 'consultation_timings') and payload.consultation_timings is not None:
                 profile.consultation_timings = payload.consultation_timings
+            if payload.is_accepting_appointments is not None:
+                profile.is_accepting_appointments = payload.is_accepting_appointments
 
     elif user.role == UserRole.PHARMACY:
         profile = await db.execute(select(Pharmacy).where(Pharmacy.user_id == user_id))
@@ -382,3 +386,26 @@ async def upload_profile_image(
             "thumbnail_url": thumb_url
         }
     )
+
+class DoctorAppointmentsToggleRequest(BaseModel):
+    is_accepting_appointments: bool
+
+@router.patch("/doctor/accept-appointments", response_model=APIResponse[dict])
+async def toggle_accept_appointments(
+    payload: DoctorAppointmentsToggleRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_doctor)
+):
+    stmt = select(Doctor).where(Doctor.user_id == current_user.id)
+    result = await db.execute(stmt)
+    doctor = result.scalar_one_or_none()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor profile not found")
+        
+    doctor.is_accepting_appointments = payload.is_accepting_appointments
+    await db.commit()
+    return APIResponse(
+        message=f"Appointments {'enabled' if doctor.is_accepting_appointments else 'paused'}",
+        data={"is_accepting_appointments": doctor.is_accepting_appointments}
+    )
+

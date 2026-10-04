@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { Activity, Zap, Server, Shield } from "lucide-react";
+import { Activity, Zap, Server, Shield, ExternalLink } from "lucide-react";
 
 export default function NetworkMonitoring() {
   const [network, setNetwork] = useState<any>(null);
@@ -44,25 +44,35 @@ export default function NetworkMonitoring() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm min-w-0">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2"><Server className="w-4 h-4" /> RPC Provider</p>
-          <p className="text-xl font-bold mt-2 truncate" title={network?.rpc_provider || "Unknown"}>{network?.rpc_provider || "Unknown"}</p>
+          {(network?.rpc_provider?.startsWith('http') || network?.rpc_provider?.startsWith('ws')) ? (
+            <a href={network.rpc_provider_full || network.rpc_provider} target="_blank" rel="noreferrer" className="text-lg font-bold mt-2 text-primary hover:underline truncate flex items-center gap-1.5 w-fit">
+              View Endpoint <ExternalLink className="w-4 h-4 shrink-0" />
+            </a>
+          ) : (
+            <p className="text-lg font-bold mt-2 truncate" title={network?.rpc_provider || "Unknown"}>{network?.rpc_provider || "Unknown"}</p>
+          )}
         </div>
         
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2"><Activity className="w-4 h-4" /> Network Name</p>
-          <p className="text-xl font-bold mt-2 capitalize">{network?.network}</p>
-          <p className="text-xs text-muted-foreground mt-1">Chain ID: {network?.chain_id}</p>
+          <div>
+            <p className="text-xl font-bold mt-2 capitalize">{network?.network}</p>
+            <p className="text-xs text-muted-foreground mt-1">Chain ID: {network?.chain_id}</p>
+          </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2"><Shield className="w-4 h-4" /> Latest Block</p>
-          <p className="text-2xl font-bold mt-2 font-mono">{network?.latest_block?.toLocaleString()}</p>
+          <p className="text-2xl font-bold mt-2 font-mono">{network?.latest_block ? network.latest_block.toLocaleString() : "—"}</p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2"><Zap className="w-4 h-4" /> Current Gas Price</p>
-          <p className="text-2xl font-bold mt-2">{network?.gas_price_gwei?.toFixed(2)} Gwei</p>
+          <p className="text-2xl font-bold mt-2">
+            {network?.gas_price_gwei && network.gas_price_gwei > 0 ? `${network.gas_price_gwei.toFixed(2)} Gwei` : "—"}
+          </p>
         </div>
       </div>
     </div>

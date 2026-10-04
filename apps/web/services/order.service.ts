@@ -10,24 +10,6 @@ export const orderService = {
       return [];
     }
   },
-  generateDeliveryCode: async (orderId: string) => {
-    try {
-      const res = await api.post(`/api/v1/orders/${orderId}/generate-delivery-code`);
-      return res.data;
-    } catch (err) {
-      console.error("Failed to generate delivery code:", err);
-      throw err;
-    }
-  },
-    verifyDelivery: async (orderId: string, otp: string) => {
-    try {
-      const res = await api.post(`/api/v1/orders/${orderId}/verify-delivery`, { otp });
-      return res.data;
-    } catch (err) {
-      console.error("Failed to verify delivery:", err);
-      throw err;
-    }
-  },
   payOrder: async (orderId: string) => {
     try {
       const res = await api.post(`/api/v1/orders/${orderId}/pay`);

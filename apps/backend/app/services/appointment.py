@@ -23,7 +23,14 @@ class AppointmentService:
         if not user or user.profile_completion_percentage < 100:
             raise BadRequestException("Please complete your health profile before booking an appointment.")
 
-        # 2. Check double-booking
+        # 2. Check if Doctor is accepting appointments
+        doc_stmt = select(Doctor).where((Doctor.user_id == req.doctor_id) | (Doctor.id == req.doctor_id))
+        doc_res = await db.execute(doc_stmt)
+        doctor = doc_res.scalar_one_or_none()
+        if doctor and not doctor.is_accepting_appointments:
+            raise DomainException("Doctor is currently not accepting new appointments.")
+
+        # 3. Check double-booking
         conflict = await appointment_repo.check_conflict(
             db, req.doctor_id, req.appointment_date, req.start_time, req.end_time
         )

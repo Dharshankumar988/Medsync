@@ -65,7 +65,8 @@ class QRPdfService:
         items: list, 
         qr_image_bytes: io.BytesIO,
         qr_token: str = None,
-        blockchain_tx: str = None
+        blockchain_tx: str = None,
+        pin: str = None
     ) -> io.BytesIO:
         """Generates the secure PDF for the prescription"""
         buffer = io.BytesIO()
@@ -88,9 +89,9 @@ class QRPdfService:
         # Draw QR Code
         qr_image = ImageReader(qr_image_bytes)
         c.drawImage(qr_image, width - 150, height - 200, width=100, height=100)
-        if qr_token:
-            c.setFont("Helvetica", 8)
-            c.drawString(width - 150, height - 210, f"Token: {qr_token}")
+        if pin:
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(width - 130, height - 215, f"PIN: {pin}")
             
         # Draw Doctor Profile Image (Top-Right)
         profile_img_url = doctor_data.get('profile_image_url')
@@ -192,3 +193,19 @@ class QRPdfService:
         output.write(output_stream)
         output_stream.seek(0)
         return output_stream.read()
+
+    @staticmethod
+    def encrypt_pdf(pdf_bytes: bytes, user_pin: str) -> bytes:
+        """Encrypts PDF using the user's PIN as password"""
+        import PyPDF2
+        import io
+        reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+        writer = PyPDF2.PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+        writer.encrypt(user_password=user_pin, owner_password=user_pin)
+        output_stream = io.BytesIO()
+        writer.write(output_stream)
+        output_stream.seek(0)
+        return output_stream.read()
+

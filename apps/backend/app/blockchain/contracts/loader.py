@@ -34,8 +34,8 @@ def _resolve_paths() -> tuple[str, str]:
         return bundled_deployments, bundled_abis
         
     workspace_dir = os.path.dirname(os.path.dirname(backend_dir))
-    deployments_dir = os.path.join(workspace_dir, "blockchain", "deployments", blockchain_settings.NETWORK_NAME)
-    abis_dir = os.path.join(workspace_dir, "blockchain", "abis")
+    deployments_dir = os.path.join(workspace_dir, "apps", "blockchain", "deployments", blockchain_settings.NETWORK_NAME)
+    abis_dir = os.path.join(workspace_dir, "apps", "blockchain", "abis")
     return deployments_dir, abis_dir
 
 class ContractLoader:
