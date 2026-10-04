@@ -26,6 +26,8 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
 
   // Initialize MediaPipe
   useEffect(() => {
+    const currentVideo = videoRef.current;
+    
     const initMediaPipe = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
@@ -59,10 +61,10 @@ export function FaceVerification({ onVerify, onSuccess, onError }: FaceVerificat
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
-      if (videoRef.current && videoRef.current.srcObject) {
-        const srcStream = videoRef.current.srcObject as MediaStream;
+      if (currentVideo && currentVideo.srcObject) {
+        const srcStream = currentVideo.srcObject as MediaStream;
         srcStream.getTracks().forEach(t => t.stop());
-        videoRef.current.srcObject = null;
+        currentVideo.srcObject = null;
       }
     };
   }, [onError]);

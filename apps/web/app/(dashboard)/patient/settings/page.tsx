@@ -369,6 +369,7 @@ export default function SettingsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border/50 rounded-xl gap-4">
               <div className="flex items-center gap-4">
                 {profileImage ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={profileImage} alt="Profile" className="h-16 w-16 rounded-full object-cover border border-border" />
                 ) : (
                   <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center border border-border">

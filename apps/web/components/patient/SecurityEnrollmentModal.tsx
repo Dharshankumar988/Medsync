@@ -58,10 +58,11 @@ export default function SecurityEnrollmentModal() {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const srcStream = videoRef.current.srcObject as MediaStream;
+    const currentVideo = videoRef.current;
+    if (currentVideo && currentVideo.srcObject) {
+      const srcStream = currentVideo.srcObject as MediaStream;
       srcStream.getTracks().forEach(t => t.stop());
-      videoRef.current.srcObject = null;
+      currentVideo.srcObject = null;
     }
   }, []);
 

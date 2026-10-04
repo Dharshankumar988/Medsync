@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, memo } from 'react';
+import React, { useEffect, useState, useRef, memo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge } from '@medsync/ui';
 import { MapPin, CheckCircle, Navigation } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
@@ -94,7 +94,7 @@ export const DeliveryMap = memo(function DeliveryMap({
   }, [pharmacyPos, patientPos]);
 
   // Calculate position on path based on progress
-  const getPositionAlongPath = (path: [number, number][], prog: number): [number, number] => {
+  const getPositionAlongPath = useCallback((path: [number, number][], prog: number): [number, number] => {
     if (path.length === 0) return pharmacyPos;
     if (path.length === 1 || prog <= 0) return path[0];
     if (prog >= 100) return path[path.length - 1];
@@ -113,7 +113,7 @@ export const DeliveryMap = memo(function DeliveryMap({
       start[0] + (end[0] - start[0]) * segmentRatio,
       start[1] + (end[1] - start[1]) * segmentRatio
     ];
-  };
+  }, [pharmacyPos]);
 
   // Timer Animation based on updatedAt
   useEffect(() => {
@@ -149,7 +149,7 @@ export const DeliveryMap = memo(function DeliveryMap({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [updatedAt, routePath, pharmacyPos, patientPos]);
+  }, [updatedAt, routePath, pharmacyPos, patientPos, getPositionAlongPath]);
 
   // Map Bounds
   const mapCenter: [number, number] = currentPos || pharmacyPos;

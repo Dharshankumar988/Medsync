@@ -50,6 +50,7 @@ const ChatMessage = memo(function ChatMessage({
       >
         {message.imageUrl && (
           <div className="relative mt-2 mb-4 max-w-full overflow-hidden rounded-lg border border-border/50 bg-black/5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img 
               src={message.imageUrl} 
               alt="Medical Scan" 

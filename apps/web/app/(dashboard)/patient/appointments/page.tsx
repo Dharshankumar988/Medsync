@@ -469,6 +469,7 @@ export default function AppointmentsPage() {
                             className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04] cursor-pointer transition-all group"
                           >
                             {d.profile_picture_url ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
                               <img src={d.profile_picture_url} alt="Doctor" className="h-10 w-10 rounded-xl object-cover shrink-0 border border-border" />
                             ) : (
                               <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 shrink-0">
@@ -518,6 +519,7 @@ export default function AppointmentsPage() {
                           className="flex items-center gap-4 p-4 rounded-xl border border-border/60 hover:border-emerald-500/40 hover:bg-emerald-500/[0.04] cursor-pointer transition-all group"
                         >
                           {d.profile_picture_url ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
                             <img src={d.profile_picture_url} alt="Doctor" className="h-12 w-12 rounded-xl object-cover shrink-0 border border-border" />
                           ) : (
                             <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 shrink-0">
@@ -564,6 +566,7 @@ export default function AppointmentsPage() {
                   <div className="p-4 rounded-xl bg-emerald-500/[0.04] border border-emerald-500/20">
                     <div className="flex items-center gap-3">
                       {selectedDoctor?.profile_picture_url ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img src={selectedDoctor.profile_picture_url} alt="Doctor" className="h-10 w-10 rounded-xl object-cover shrink-0 border border-border" />
                       ) : (
                         <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">

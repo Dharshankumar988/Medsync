@@ -233,7 +233,7 @@ export default function PharmacyOrdersPage() {
           <Card className="w-full max-w-sm shadow-xl">
             <CardHeader>
               <CardTitle>Verify Dispense PIN</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">Enter the 4-character PIN from the patient's prescription QR code to dispense.</p>
+              <p className="text-sm text-muted-foreground mt-1">Enter the 4-character PIN from the patient&apos;s prescription QR code to dispense.</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <Input 

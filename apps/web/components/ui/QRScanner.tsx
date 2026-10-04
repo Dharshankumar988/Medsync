@@ -237,7 +237,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
       }
       scannerRef.current = null;
     };
-  }, []);
+  }, [startAutoZoomDetection]);
 
   const handleClose = () => {
     if (autoZoomIntervalRef.current) {

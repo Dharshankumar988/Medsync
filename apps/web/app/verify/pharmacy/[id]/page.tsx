@@ -86,7 +86,7 @@ export default function VerifyPharmacyPage() {
       <div className="min-h-screen flex flex-col items-center justify-center p-6">
         <ShieldAlert className="w-12 h-12 text-red-500 mb-4" />
         <h1 className="text-xl font-bold">Verification Failed</h1>
-        <p className="text-muted-foreground mt-2 text-center">We could not verify this pharmacy's QR code. It may be fraudulent or inactive.</p>
+        <p className="text-muted-foreground mt-2 text-center">We could not verify this pharmacy&apos;s QR code. It may be fraudulent or inactive.</p>
         <Button className="mt-6" onClick={() => router.push('/')}>Return Home</Button>
       </div>
     );
