@@ -1,6 +1,6 @@
 """add_blockchain_status_to_profiles
 
-Revision ID: add_blockchain_status_to_profiles
+Revision ID: 5d1b4b4952de
 Revises: 5d1b4b4952de
 Create Date: 2026-01-15 00:00:00.000000
 
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'add_blockchain_status_to_profiles'
-down_revision: Union[str, Sequence[str], None] = '5d1b4b4952de'
+revision: str = '5d1b4b4952de'
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
