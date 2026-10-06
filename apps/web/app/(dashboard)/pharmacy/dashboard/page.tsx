@@ -18,7 +18,7 @@ import {
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Input } from "@medsync/ui";
 import { pharmacyService, PharmacyInventoryItem, PharmacyOrder } from "@/services/pharmacy.service";
 import dynamic from "next/dynamic";
-const DeliveryMap = dynamic(() => import("@/components/delivery/DeliveryMap"), { ssr: false });
+const DeliveryMap = dynamic(() => import("@/components/pharmacy/DeliveryMap").then(m => m.DeliveryMap), { ssr: false });
 import { InventoryOverviewWidget } from "@/components/pharmacy/InventoryOverviewWidget";
 import { ExpiringMedicines } from "@/components/pharmacy/ExpiringMedicines";
 import { supabase } from "@/lib/supabase";

@@ -56,14 +56,14 @@ function DeliveryMarker({ position, status }: { position: any, status: string })
   );
 }
 
-function MapBounds({ route, currentLocation }: { route: any[], currentLocation: any }) {
+function MapBounds({ route, currentLocation }: { route: any, currentLocation: any }) {
   const map = useMap();
 
   useEffect(() => {
     if (route && route.geometry && route.geometry.coordinates) {
       const coordinates = route.geometry.coordinates;
       const bounds = L.latLngBounds(
-        coordinates.map(coord => [coord[1], coord[0]])
+        coordinates.map((coord: any) => [coord[1], coord[0]])
       );
       map.fitBounds(bounds, { padding: [50, 50] });
     }
