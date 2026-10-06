@@ -18,5 +18,14 @@ export const orderService = {
       console.error("Failed to pay for order:", err);
       throw err;
     }
+  },
+  verifyDelivery: async (orderId: string, deliveryCode: string) => {
+    try {
+      const res = await api.post(`/api/v1/orders/${orderId}/verify-delivery`, { deliveryCode });
+      return res.data;
+    } catch (err) {
+      console.error("Failed to verify delivery:", err);
+      throw err;
+    }
   }
 };
