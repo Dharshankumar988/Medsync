@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -23,11 +23,15 @@ import {
   X,
   Fingerprint,
   BarChart3,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { Button } from "@medsync/ui";
 import dynamic from "next/dynamic";
+import { useTheme } from "next-themes";
 
 import { HeroGraphic } from "../components/HeroGraphic";
+import { MouseReactiveGrid } from "../components/MouseReactiveGrid";
 
 const BentoGrid = dynamic(() => import("../components/BentoGrid").then((mod) => mod.BentoGrid), {
   ssr: true,
@@ -107,9 +111,16 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 /* ─── Main Page ─── */
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground relative">
+      <MouseReactiveGrid />
 
       {/* ━━━ NAVIGATION ━━━ */}
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl">
@@ -127,6 +138,13 @@ export default function Home() {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+              aria-label="Toggle theme"
+            >
+              {mounted && theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
             <Button asChild variant="ghost" className="text-sm text-muted-foreground hover:text-foreground">
               <Link href="/login">Sign In</Link>
             </Button>
@@ -135,13 +153,22 @@ export default function Home() {
             </Button>
           </div>
 
-          <button
-            className="md:hidden p-2 text-muted-foreground hover:text-foreground"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          <div className="flex items-center gap-2 md:hidden">
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+              aria-label="Toggle theme"
+            >
+              {mounted && theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+            <button
+              className="p-2 text-muted-foreground hover:text-foreground"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
         </nav>
 
         {mobileMenuOpen && (

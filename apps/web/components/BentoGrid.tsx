@@ -185,12 +185,12 @@ export function BentoGrid() {
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <RegistryRow icon={FileText} title="Medical Record Registry" description="Secures and validates patient health records immutably on-chain." />
-            <RegistryRow icon={Users} title="Patient Registry" description="Manages identity verification and patient consent approvals." />
-            <RegistryRow icon={Stethoscope} title="Doctor Registry" description="Handles granular access rights for healthcare professionals." />
-            <RegistryRow icon={Pill} title="Prescription Registry" description="Tracks medical prescriptions on-chain to prevent fraud." />
-            <RegistryRow icon={Truck} title="Pharmacy Registry" description="Validates dispensing across decentralized pharmacy nodes." />
-            <RegistryRow icon={ScrollText} title="Audit Trail Protocol" description="Maintains a cryptographic proof of every system interaction." />
+            <RegistryRow icon={FileText} title="Medical Record Registry" description="Maintains immutable hashes and access grants for medical reports." />
+            <RegistryRow icon={Users} title="Patient Registry" description="Maintains secure blockchain identities and verification for patients." />
+            <RegistryRow icon={Stethoscope} title="Doctor Registry" description="Manages verified identities, licenses, and hospital affiliations for doctors." />
+            <RegistryRow icon={Pill} title="Prescription Registry" description="Tracks verified medical prescriptions on-chain to prevent fraud." />
+            <RegistryRow icon={Truck} title="Pharmacy Registry" description="Maintains a verified network of authorized decentralized pharmacies." />
+            <RegistryRow icon={ScrollText} title="Consent Management" description="Cryptographically manages and verifies patient consent for data access." />
           </div>
         </div>
       </motion.div>
