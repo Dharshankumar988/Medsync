@@ -7,9 +7,25 @@ logger = logging.getLogger("blockchain.monitoring.health")
 
 class HealthMonitoringService:
     def get_health(self) -> HealthStatus:
+        from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
         try:
             is_connected = blockchain_client.is_connected()
             if not is_connected:
+                # If in mock mode, still try to show some info
+                if RESOLVED_BLOCKCHAIN_MODE == "mock":
+                    return {
+                        "status": "degraded (mock)",
+                        "network": blockchain_settings.NETWORK_NAME,
+                        "chainId": None,
+                        "currentBlock": None,
+                        "rpcConnected": False,
+                        "walletAddress": blockchain_client.wallet_address,
+                        "walletBalanceEth": None,
+                        "contracts": {name: "not_deployed (mock)" for name in [
+                            "PatientRegistry", "DoctorRegistry", "PharmacyRegistry",
+                            "MedicalRecordRegistry", "PrescriptionRegistry", "ConsentManagement"
+                        ]}
+                    }
                 return self._offline_status()
 
             chain_id = blockchain_client.get_chain_id()
@@ -80,14 +96,20 @@ class HealthMonitoringService:
             getattr(contract.functions, method_name)(empty_hash).call()
 
     def _offline_status(self) -> HealthStatus:
+        from app.blockchain.provider import RESOLVED_BLOCKCHAIN_MODE
+        status = "unhealthy" if RESOLVED_BLOCKCHAIN_MODE in ("production", "real") else "degraded (mock)"
         return {
-            "status": "unhealthy",
+            "status": status,
             "network": blockchain_settings.NETWORK_NAME,
             "chainId": None,
             "currentBlock": None,
             "rpcConnected": False,
             "walletAddress": getattr(blockchain_client, "wallet_address", None),
-            "walletBalanceEth": None
+            "walletBalanceEth": None,
+            "contracts": {name: "unavailable" for name in [
+                "PatientRegistry", "DoctorRegistry", "PharmacyRegistry",
+                "MedicalRecordRegistry", "PrescriptionRegistry", "ConsentManagement"
+            ]}
         }
 
 health_service = HealthMonitoringService()

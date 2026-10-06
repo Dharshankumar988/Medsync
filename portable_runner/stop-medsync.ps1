@@ -1,4 +1,4 @@
-# Stop MedSync Backend and Face Service (PowerShell)
+# Stop MedSync Backend (PowerShell)
 $ErrorActionPreference = "Stop"
 $ScriptPath = $PSScriptRoot
 Set-Location -LiteralPath $ScriptPath

@@ -114,17 +114,12 @@ async def validate_patient_pin(db: AsyncSession, patient_id: uuid.UUID, pin: str
         return False
 
 async def get_security_status(db: AsyncSession, patient_id: uuid.UUID) -> str:
+    """Check if patient has enrolled a PIN (face authentication removed)."""
     pin_result = await db.execute(select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == patient_id))
     pin_obj = pin_result.scalars().first()
     has_pin = pin_obj is not None and getattr(pin_obj, 'is_active', True)
-    
-    face_result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == patient_id))
-    face_obj = face_result.scalars().first()
-    has_face = face_obj is not None and getattr(face_obj, 'enrollment_status', 'COMPLETED') == 'COMPLETED'
-    
-    if has_pin and has_face:
-        return "COMPLETED"
-    elif has_pin:
+
+    if has_pin:
         return "PIN_CREATED"
     else:
         return "NOT_STARTED"
@@ -144,3 +139,97 @@ async def create_download_authorization(db: AsyncSession, patient_id: uuid.UUID,
     await db.commit()
     await log_audit_event(db, patient_id, "PRESCRIPTION_DOWNLOAD_AUTHORIZED", "Prescription", prescription_id)
     return auth_ref
+
+async def enroll_doctor_pin(db: AsyncSession, doctor_user_id: uuid.UUID, pin: str):
+    """Enroll a doctor's authorization PIN for signing prescriptions."""
+    if len(pin) != 6 or not pin.isdigit():
+        raise ValueError("PIN must be exactly 6 digits.")
+    
+    from app.models.doctor import Doctor
+    result = await db.execute(select(Doctor).where(Doctor.user_id == doctor_user_id))
+    doctor = result.scalar_one_or_none()
+    
+    if not doctor:
+        raise ValueError("Doctor profile not found.")
+    
+    doctor.security_pin_hash = hash_pin(pin)
+    await db.commit()
+    await log_audit_event(db, doctor_user_id, "DOCTOR_PIN_CREATED", "Doctor", doctor.id)
+
+async def validate_doctor_pin(db: AsyncSession, doctor_user_id: uuid.UUID, pin: str) -> bool:
+    """Validate a doctor's authorization PIN."""
+    from app.models.doctor import Doctor
+    result = await db.execute(select(Doctor).where(Doctor.user_id == doctor_user_id))
+    doctor = result.scalar_one_or_none()
+    
+    if not doctor or not doctor.security_pin_hash:
+        await log_audit_event(db, doctor_user_id, "DOCTOR_PIN_VERIFICATION_FAILURE", details={"reason": "No PIN enrolled"})
+        return False
+    
+    if verify_pin(pin, doctor.security_pin_hash):
+        await log_audit_event(db, doctor_user_id, "DOCTOR_PIN_VERIFICATION_SUCCESS")
+        return True
+    else:
+        await log_audit_event(db, doctor_user_id, "DOCTOR_PIN_VERIFICATION_FAILURE")
+        return False
+
+async def get_doctor_security_status(db: AsyncSession, doctor_user_id: uuid.UUID) -> dict:
+    """Check if doctor has enrolled a PIN."""
+    from app.models.doctor import Doctor
+    result = await db.execute(select(Doctor).where(Doctor.user_id == doctor_user_id))
+    doctor = result.scalar_one_or_none()
+    
+    if not doctor:
+        return {"has_pin": False, "error": "Doctor profile not found"}
+    
+    return {
+        "has_pin": bool(doctor.security_pin_hash),
+        "doctor_id": str(doctor.id)
+    }
+
+async def enroll_pharmacy_pin(db: AsyncSession, pharmacy_user_id: uuid.UUID, pin: str):
+    """Enroll a pharmacy's authorization PIN."""
+    if len(pin) != 6 or not pin.isdigit():
+        raise ValueError("PIN must be exactly 6 digits.")
+    
+    from app.models.pharmacy import Pharmacy
+    result = await db.execute(select(Pharmacy).where(Pharmacy.user_id == pharmacy_user_id))
+    pharmacy = result.scalar_one_or_none()
+    
+    if not pharmacy:
+        raise ValueError("Pharmacy profile not found.")
+    
+    pharmacy.security_pin_hash = hash_pin(pin)
+    await db.commit()
+    await log_audit_event(db, pharmacy_user_id, "PHARMACY_PIN_CREATED", "Pharmacy", pharmacy.id)
+
+async def validate_pharmacy_pin(db: AsyncSession, pharmacy_user_id: uuid.UUID, pin: str) -> bool:
+    """Validate a pharmacy's authorization PIN."""
+    from app.models.pharmacy import Pharmacy
+    result = await db.execute(select(Pharmacy).where(Pharmacy.user_id == pharmacy_user_id))
+    pharmacy = result.scalar_one_or_none()
+    
+    if not pharmacy or not pharmacy.security_pin_hash:
+        await log_audit_event(db, pharmacy_user_id, "PHARMACY_PIN_VERIFICATION_FAILURE", details={"reason": "No PIN enrolled"})
+        return False
+    
+    if verify_pin(pin, pharmacy.security_pin_hash):
+        await log_audit_event(db, pharmacy_user_id, "PHARMACY_PIN_VERIFICATION_SUCCESS")
+        return True
+    else:
+        await log_audit_event(db, pharmacy_user_id, "PHARMACY_PIN_VERIFICATION_FAILURE")
+        return False
+
+async def get_pharmacy_security_status(db: AsyncSession, pharmacy_user_id: uuid.UUID) -> dict:
+    """Check if pharmacy has enrolled a PIN."""
+    from app.models.pharmacy import Pharmacy
+    result = await db.execute(select(Pharmacy).where(Pharmacy.user_id == pharmacy_user_id))
+    pharmacy = result.scalar_one_or_none()
+    
+    if not pharmacy:
+        return {"has_pin": False, "error": "Pharmacy profile not found"}
+    
+    return {
+        "has_pin": bool(pharmacy.security_pin_hash),
+        "pharmacy_id": str(pharmacy.id)
+    }

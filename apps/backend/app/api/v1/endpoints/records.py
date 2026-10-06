@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
 from typing import List
+from pydantic import BaseModel
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import UserRole
@@ -24,13 +25,32 @@ require_doctor = RoleChecker([UserRole.DOCTOR])
 async def upload_record(
     title: str = Form(...),
     description: str = Form(None),
+    is_prescription: bool = Form(False),
+    pin: str = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(require_patient)
 ):
+    from app.services.security_service import validate_patient_pin
+    from fastapi import HTTPException
+    
+    is_valid = await validate_patient_pin(db, current_user.id, pin)
+    if not is_valid:
+        raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
     req = MedicalRecordCreate(title=title, description=description)
-    record = await MedicalRecordService.upload_record(db, req, file, current_user.id, current_user.id)
-    return APIResponse(message="Record uploaded successfully", data=record)
+    record = await MedicalRecordService.upload_record(db, req, file, current_user.id, current_user.id, is_prescription=is_prescription)
+    
+    if is_prescription:
+        # QR token generated internally in upload_record
+        from app.services.qr_pdf_service import QRPdfService
+        token = QRPdfService.generate_verification_token(str(record.id), str(current_user.id))
+        
+        # We can dynamically add qr_token to the response object
+        response_data = MedicalRecordResponse.model_validate(record)
+        response_data.qr_token = token
+        return APIResponse(message="Record uploaded successfully", data=response_data)
+
+    return APIResponse(message="Record uploaded successfully", data=MedicalRecordResponse.model_validate(record))
 
 @router.get("", response_model=APIResponse[List[MedicalRecordResponse]])
 async def list_my_records(
@@ -40,13 +60,23 @@ async def list_my_records(
     records = await record_repo.get_by_patient(db, current_user.id)
     return APIResponse(message="Records retrieved", data=records)
 
+class GrantPermissionReq(BaseModel):
+    granted_to: uuid.UUID
+    expires_at: str = None
+    pin: str
+
 @router.post("/{record_id}/permissions", response_model=APIResponse[dict])
 async def grant_permission(
     record_id: uuid.UUID,
-    req: RecordPermissionCreate,
+    req: GrantPermissionReq,
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(require_patient)
 ):
+    from app.services.security_service import validate_patient_pin
+    is_valid = await validate_patient_pin(db, current_user.id, req.pin)
+    if not is_valid:
+        raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+
     record = await record_repo.get(db, record_id)
     if not record or record.patient_id != current_user.id:
         from app.core.exceptions import ForbiddenException
@@ -103,8 +133,8 @@ async def download_record(
         raise HTTPException(status_code=404, detail="No stored file found for this record")
         
     file_meta, version_data = row
-    
-    if version_data.blockchain_status != "CONFIRMED":
+
+    if version_data.blockchain_status not in ("SYNCED", "CONFIRMED"):
         raise HTTPException(status_code=403, detail="Record is not verified on the blockchain")
 
     signed_url = await StorageService.create_signed_download_url(file_meta.supabase_storage_path, expires_in=300)

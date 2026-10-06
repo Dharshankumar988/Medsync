@@ -51,6 +51,9 @@ class Doctor(Base, UUIDMixin, TimestampMixin):
     doctor_status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)
     is_accepting_appointments: Mapped[bool] = mapped_column(Boolean, default=True)
     security_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    
+    # Blockchain Audit Fields
+    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
+    blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
+
     user = relationship("User", foreign_keys=[user_id], back_populates="doctor_profile")
     hospital = relationship("Hospital", back_populates="doctors")

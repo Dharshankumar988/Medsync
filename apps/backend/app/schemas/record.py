@@ -31,6 +31,7 @@ class MedicalRecordResponse(MedicalRecordBase):
     is_archived: bool
     created_at: datetime
     updated_at: datetime
+    qr_token: Optional[str] = None
     
     model_config = {"from_attributes": True}
 

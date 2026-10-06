@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  output: 'standalone',
   images: {
     domains: ["ipfs.io", "gateway.pinata.cloud"],
     formats: ['image/avif', 'image/webp'],

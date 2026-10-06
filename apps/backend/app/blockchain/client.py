@@ -37,7 +37,7 @@ class BlockchainClient:
         self.configured = False
         self.w3 = None
         self.wallet_address = "0x0000000000000000000000000000000000000000"
-        
+
         # ── Always derive wallet address from private key (identity, not writes) ──
         try:
             pk = blockchain_settings.BACKEND_PRIVATE_KEY
@@ -47,9 +47,9 @@ class BlockchainClient:
             self.wallet_address = self.account.address
             logger.info(f"Blockchain client: derived wallet address {self.wallet_address}")
         except Exception as e:
-            logger.error("Failed to derive wallet from private key. Ensure BACKEND_PRIVATE_KEY is correct.")
+            logger.warning(f"Failed to derive wallet from private key: {e}. Using mock address.")
             # Keep default zero address if derivation fails
-        
+
         # ── Always connect to RPC for reads, even in mock mode, to show true network status ──
         if RESOLVED_BLOCKCHAIN_MODE not in ("production", "real"):
             logger.info("Blockchain client: mock mode — writes disabled, but RPC connected for reads.")
@@ -58,6 +58,8 @@ class BlockchainClient:
             blockchain_settings.validate()
         except ValueError as e:
             logger.warning(f"Blockchain configuration missing: {e}. Blockchain features disabled.")
+            # Don't return - still try to connect to RPC for status display
+            self.configured = True  # Mark as configured even if missing private key (for mock mode)
             return
 
         from web3.middleware import geth_poa_middleware
@@ -98,17 +100,24 @@ class BlockchainClient:
         session.verify = ssl_verify
 
         self.w3 = Web3(Web3.HTTPProvider(rpc_url, session=session, request_kwargs={'timeout': 10, 'verify': ssl_verify}))
-        
+
         # Inject POA middleware for Polygon compatibility
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-        
+
         if not self.w3.is_connected():
-            logger.error(
-                f"BLOCKCHAIN_MODE=production but RPC node is unreachable: "
-                f"{_redact_url(blockchain_settings.BLOCKCHAIN_RPC_URL)}  — "
-                f"blockchain features will be unavailable until the node is reachable."
-            )
+            if RESOLVED_BLOCKCHAIN_MODE in ("production", "real"):
+                logger.error(
+                    f"BLOCKCHAIN_MODE=production but RPC node is unreachable: "
+                    f"{_redact_url(blockchain_settings.BLOCKCHAIN_RPC_URL)}  — "
+                    f"blockchain features will be unavailable until the node is reachable."
+                )
+            else:
+                logger.warning(
+                    f"RPC node is unreachable (mock mode): "
+                    f"{_redact_url(blockchain_settings.BLOCKCHAIN_RPC_URL)}"
+                )
             # Do not raise here so app doesn't crash on boot; wait until invoked
+            self.configured = True  # Still mark as configured so we can show status
             return
 
         self.configured = True

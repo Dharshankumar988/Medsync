@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, status, Form, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import UserRole
@@ -28,12 +29,12 @@ async def create_prescription(
 ):
     if not req.pin:
         raise HTTPException(status_code=400, detail="Doctor Authorization PIN is required.")
-        
-    from app.services.security_service import validate_patient_pin
-    is_valid = await validate_patient_pin(db, current_user.id, req.pin)
+
+    from app.services.security_service import validate_doctor_pin
+    is_valid = await validate_doctor_pin(db, current_user.id, req.pin)
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
-        
+
     rx = await PrescriptionService.create_prescription(db, current_user.id, req)
     return APIResponse(message="Prescription finalized", data=rx)
 
@@ -211,9 +212,15 @@ async def download_prescription_by_ref(
 async def dispense_prescription(
     id: uuid.UUID,
     pin: str = Form(None),
+    auth_pin: str = Form(...),
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PHARMACY]))
 ):
+    from app.services.security_service import validate_pharmacy_pin
+    is_valid = await validate_pharmacy_pin(db, current_user.id, auth_pin)
+    if not is_valid:
+        raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+
     stmt = select(Prescription).where(Prescription.id == id).with_for_update()
     result = await db.execute(stmt)
     rx = result.scalar_one_or_none()
@@ -258,8 +265,94 @@ async def dispense_prescription(
             
         order.status = "DISPENSED"
         
+    # Create dispensing log entry with delivery tracking
+    from app.models.dispensing_log import PrescriptionDispensingLog
+    from app.models.patient import Patient
+    from app.models.pharmacy import Pharmacy
+    
+    # Get patient and pharmacy locations
+    patient_stmt = select(Patient).where(Patient.user_id == rx.patient_id)
+    patient_res = await db.execute(patient_stmt)
+    patient = patient_res.scalar_one_or_none()
+    
+    pharmacy_stmt = select(Pharmacy).where(Pharmacy.user_id == current_user.id)
+    pharmacy_res = await db.execute(pharmacy_stmt)
+    pharmacy = pharmacy_res.scalar_one_or_none()
+    
+    # Calculate delivery route (Bangalore simulation)
+    delivery_route = None
+    estimated_minutes = 10
+    
+    if patient and pharmacy:
+        from app.services.delivery_route_service import delivery_route_service
+        # Use predefined Bangalore locations for simulation
+        patient_locations = delivery_route_service.get_bangalore_patient_locations()
+        pharmacy_locations = delivery_route_service.get_bangalore_pharmacy_locations()
+        
+        # Pick predefined locations based on index (simulate)
+        patient_idx = int(str(rx.patient_id)[-1]) % len(patient_locations)
+        pharmacy_idx = int(str(current_user.id)[-1]) % len(pharmacy_locations)
+        
+        patient_loc = patient_locations[patient_idx]
+        pharmacy_loc = pharmacy_locations[pharmacy_idx]
+        
+        try:
+            route_data = await delivery_route_service.calculate_route(
+                pharmacy_loc["lat"],
+                pharmacy_loc["lon"],
+                patient_loc["lat"],
+                patient_loc["lon"]
+            )
+            delivery_route = route_data
+            estimated_minutes = route_data["estimated_minutes"]
+        except Exception as e:
+            import logging
+            logging.getLogger("medsync.prescription").warning(f"Route calculation failed: {e}, using defaults")
+    
+    # Create dispensing log
+    dispensing_log = PrescriptionDispensingLog(
+        prescription_id=rx.id,
+        pharmacy_id=current_user.id,
+        patient_id=rx.patient_id,
+        dispensed_by_name=pharmacy.business_name if pharmacy else "Unknown",
+        medicines_prescribed=[],  # Will be populated by order items if available
+        medicines_dispensed=[],
+        prescribed_count=0,
+        dispensed_count=0,
+        delivery_status="DISPATCHED",
+        delivery_started_at=datetime.utcnow(),
+        estimated_delivery_minutes=estimated_minutes,
+        delivery_route=delivery_route
+    )
+    
+    if order:
+        # Populate medicine data from order
+        for item, inv in items:
+            dispensing_log.medicines_prescribed.append({
+                "medicine_name": inv.medicine_name,
+                "quantity": item.quantity
+            })
+            dispensing_log.medicines_dispensed.append({
+                "medicine_name": inv.medicine_name,
+                "quantity": item.quantity
+            })
+        dispensing_log.prescribed_count = len(items)
+        dispensing_log.dispensed_count = len(items)
+    
+    db.add(dispensing_log)
     await db.commit()
-    return APIResponse(message="Prescription dispensed successfully", data={"prescription_id": str(rx.id)})
+    
+    return APIResponse(
+        message="Prescription dispensed successfully",
+        data={
+            "prescription_id": str(rx.id),
+            "delivery_tracking": {
+                "status": "DISPATCHED",
+                "estimated_minutes": estimated_minutes,
+                "route_available": delivery_route is not None
+            }
+        }
+    )
 
 @router.post("/{id}/verify", response_model=APIResponse)
 async def verify_prescription_auth(

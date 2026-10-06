@@ -18,9 +18,8 @@ if (Test-Path "VERSION") {
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "           MEDSYNC PORTABLE RUNNER      " -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Automatically starting: Backend + Face Service" -ForegroundColor Green
+Write-Host "Starting: Backend" -ForegroundColor Green
 Write-Host ""
-$choice = "2"
 
 # 1. Check if Docker is installed and running
 if (-not (Get-Command "docker" -ErrorAction SilentlyContinue)) {
@@ -55,81 +54,6 @@ $BACKEND_LOCAL_IMAGE = "medsync-backend:local"
 $BACKEND_CONTAINER = "medsync-backend"
 $BACKEND_PORT = 8000
 
-$FACE_REGISTRY_IMAGE = "ghcr.io/dharshankumar988/medsync-face-service:latest"
-$FACE_LOCAL_IMAGE = "medsync-face-service:local"
-$FACE_CONTAINER = "medsync-face-service"
-$FACE_PORT = 8080
-
-function Start-FaceService {
-    Write-Host "`n--- Starting Face Service ---" -ForegroundColor Cyan
-    
-    $FACE_IMAGE = $null
-    Write-Host "Checking for existing Face Service image..." -ForegroundColor Cyan
-    $localReg = docker images -q $FACE_REGISTRY_IMAGE
-    $localBlt = docker images -q $FACE_LOCAL_IMAGE
-    
-    if ($localReg) {
-        $FACE_IMAGE = $FACE_REGISTRY_IMAGE
-        Write-Host "Found registry image locally: $FACE_IMAGE" -ForegroundColor Green
-    } elseif ($localBlt) {
-        $FACE_IMAGE = $FACE_LOCAL_IMAGE
-        Write-Host "Found locally built image: $FACE_IMAGE" -ForegroundColor Green
-    } else {
-        Write-Host "Pulling Face Service image from registry..." -ForegroundColor Cyan
-        $pullArgs = "pull $FACE_REGISTRY_IMAGE"
-        $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
-        if ($pullProcess.ExitCode -eq 0) {
-            $FACE_IMAGE = $FACE_REGISTRY_IMAGE
-            Write-Host "`nUsing registry image: $FACE_IMAGE" -ForegroundColor Green
-        } else {
-            Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
-            $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
-            $FaceDockerfile = Join-Path $RepoRoot "apps\face-service\Dockerfile"
-            if (-not (Test-Path $FaceDockerfile)) {
-                Write-Host "ERROR: Face Service Dockerfile not found and registry image unavailable." -ForegroundColor Red
-                exit 1
-            }
-            docker build -t $FACE_LOCAL_IMAGE -f "$FaceDockerfile" "$RepoRoot\apps\face-service"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "ERROR: Failed to build face service image." -ForegroundColor Red
-                exit 1
-            }
-            $FACE_IMAGE = $FACE_LOCAL_IMAGE
-            Write-Host "Using locally built image: $FACE_IMAGE" -ForegroundColor Green
-        }
-    }
-
-    $existing = docker ps -a -q -f "name=^/${FACE_CONTAINER}$"
-    if ($existing) {
-        docker rm -f $FACE_CONTAINER > $null
-    }
-
-    docker run -d --name $FACE_CONTAINER -p "${FACE_PORT}:${FACE_PORT}" $FACE_IMAGE | Out-Null
-    $FACE_CONTAINER | Out-File -FilePath $ContainersFile -Append -Encoding utf8
-
-    Write-Host "Waiting for Face Service to become healthy (HTTP 200)..."
-    $healthy = $false
-    for ($i = 0; $i -lt 30; $i++) {
-        Start-Sleep -Seconds 2
-        try {
-            $response = Invoke-WebRequest -Uri "http://127.0.0.1:${FACE_PORT}/health" -UseBasicParsing -ErrorAction SilentlyContinue
-            if ($response.StatusCode -eq 200) {
-                $healthy = $true
-                break
-            }
-        } catch {}
-    }
-    
-    if (-not $healthy) {
-        Write-Host "ERROR: Face Service failed health check." -ForegroundColor Red
-        docker logs --tail 30 $FACE_CONTAINER
-        exit 1
-    }
-    Write-Host "Face Service: HEALTHY" -ForegroundColor Green
-    
-    # Open logs in a new PowerShell window
-    Start-Process -FilePath "powershell" -ArgumentList "-NoProfile -Command `"& { Write-Host '--- Face Service Logs ---' -ForegroundColor Cyan; docker logs -f $FACE_CONTAINER }`""
-}
 
 function Start-Backend {
     param ([string]$EnvOverride = "")
@@ -227,74 +151,22 @@ function Start-Backend {
     Start-Process -FilePath "powershell" -ArgumentList "-NoProfile -Command `"& { Write-Host '--- Backend Logs ---' -ForegroundColor Cyan; docker logs -f $BACKEND_CONTAINER }`""
 }
 
-function Verify-Docker-Networking {
-    Write-Host "Verifying backend can reach Face Service via host.docker.internal..."
-    $result = docker exec $BACKEND_CONTAINER curl -s -f http://host.docker.internal:8080/health
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Backend cannot reach host.docker.internal:8080. This usually means Docker Desktop's host networking is disabled or misconfigured." -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "Network Verification: OK" -ForegroundColor Green
-}
-
 
 # ==========================================
 # MODE EXECUTION
 # ==========================================
 
-if ($choice -eq "1") {
-    Start-Backend
-    
-    if (Test-Path ".\start-ngrok.ps1") {
-        .\start-ngrok.ps1 -Mode FaceService
-        .\start-ngrok.ps1 -Mode Backend
-    }
-    
-    Write-Host "`n========================================" -ForegroundColor Magenta
-    Write-Host " BACKEND ONLY" -ForegroundColor Magenta
-    Write-Host "========================================" -ForegroundColor Magenta
-    Write-Host "Backend:"
-    Write-Host "http://127.0.0.1:$BACKEND_PORT"
-    Write-Host "`nFace Service:"
-    Write-Host "NOT RUNNING"
+Start-Backend
+
+if (Test-Path ".\start-ngrok.ps1") {
+    .\start-ngrok.ps1 -Mode Backend
 }
-elseif ($choice -eq "2") {
-    Start-FaceService
-    
-    # Mode 2 overrides FACE_VERIFICATION_URL dynamically
-    Start-Backend -EnvOverride "-e FACE_VERIFICATION_URL=http://host.docker.internal:8080"
-    
-    Verify-Docker-Networking
-    
-    if (Test-Path ".\start-ngrok.ps1") {
-        .\start-ngrok.ps1 -Mode Backend
-    }
-    
-    Write-Host "`n========================================" -ForegroundColor Magenta
-    Write-Host " BACKEND + FACE SERVICE" -ForegroundColor Magenta
-    Write-Host "========================================" -ForegroundColor Magenta
-    Write-Host "Backend:"
-    Write-Host "http://127.0.0.1:$BACKEND_PORT"
-    Write-Host "`nFace Service:"
-    Write-Host "http://127.0.0.1:$FACE_PORT"
-    Write-Host "`nPublic Face Service URL:"
-    Write-Host "NOT USED"
-}
-elseif ($choice -eq "3") {
-    Start-FaceService
-    
-    if (Test-Path ".\start-ngrok.ps1") {
-        .\start-ngrok.ps1 -Mode FaceService
-    }
-    
-    Write-Host "`n========================================" -ForegroundColor Magenta
-    Write-Host " FACE SERVICE ONLY" -ForegroundColor Magenta
-    Write-Host "========================================" -ForegroundColor Magenta
-    Write-Host "Face Service:"
-    Write-Host "http://127.0.0.1:$FACE_PORT"
-    Write-Host "`nBackend:"
-    Write-Host "NOT RUNNING"
-}
+
+Write-Host "`n========================================" -ForegroundColor Magenta
+Write-Host " BACKEND" -ForegroundColor Magenta
+Write-Host "========================================" -ForegroundColor Magenta
+Write-Host "Backend:"
+Write-Host "http://127.0.0.1:$BACKEND_PORT"
 
 
 Write-Host "`nPress Ctrl+C to stop services or run .\stop-medsync.ps1 in another terminal." -ForegroundColor Yellow

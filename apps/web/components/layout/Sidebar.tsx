@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, ShieldCheck, Activity, LogOut, ChevronLeft, ChevronRight, Settings, Moon, Sun, Building2, ShoppingBag, Package, AlertTriangle, Bell, Users, LineChart, Server, UserPlus, RefreshCw, QrCode } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, ShieldCheck, Activity, LogOut, ChevronLeft, ChevronRight, Settings, Moon, Sun, Building2, ShoppingBag, Package, AlertTriangle, Bell, Users, LineChart, Server, UserPlus, RefreshCw, QrCode, ScanLine, Truck } from "lucide-react";
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase";
 import {
@@ -33,8 +33,9 @@ const menuGroups = {
     {
       label: "SERVICES",
       items: [
-        { name: "Scan Pharmacy QR", href: "/patient/scan-qr", icon: ShieldCheck },
         { name: "Orders & Delivery", href: "/patient/orders", icon: ShoppingBag },
+        { name: "Delivery Tracking", href: "/patient/delivery-tracking", icon: Truck },
+        { name: "Scan QR", href: "/patient/scan-qr", icon: ScanLine },
         { name: "Pulse AI", href: "/patient/pulse-ai", icon: Brain, badge: "AI" },
         { name: "Privacy & Security", href: "/patient/privacy", icon: Shield },
       ]
@@ -62,6 +63,7 @@ const menuGroups = {
         { name: "Medical Records", href: "/doctor/records", icon: FileText },
         { name: "AI Analysis", href: "/doctor/ai-analysis", icon: Brain, badge: "AI" },
         { name: "Prescriptions", href: "/doctor/prescriptions", icon: Pill },
+        { name: "Scan QR", href: "/doctor/qr-scanner", icon: ScanLine },
         { name: "Pulse AI", href: "/doctor/pulse-ai", icon: Activity, badge: "AI" },
       ]
     },
@@ -69,7 +71,6 @@ const menuGroups = {
       label: "NETWORK & SECURITY",
       items: [
         { name: "Pharmacies", href: "/doctor/pharmacies", icon: Building2 },
-        { name: "QR Scanner", href: "/doctor/qr-scanner", icon: ShieldCheck },
         { name: "Consent & Security", href: "/doctor/consent", icon: Shield },
       ]
     },
@@ -86,7 +87,7 @@ const menuGroups = {
       label: "OVERVIEW",
       items: [
         { name: "Dashboard", href: "/pharmacy/dashboard", icon: LayoutDashboard },
-        { name: "QR & Verification", href: "/pharmacy/qr-scanner", icon: Shield },
+        { name: "Scan QR", href: "/pharmacy/qr-scanner", icon: ScanLine },
         { name: "Pulse AI", href: "/pharmacy/pulse-ai", icon: Brain, badge: "AI" },
       ]
     },
@@ -126,6 +127,7 @@ const menuGroups = {
       items: [
         { name: "Facilities", href: "/admin/operations", icon: Activity },
         { name: "AI Management", href: "/admin/ai", icon: Brain, badge: "AI" },
+        { name: "Scan QR", href: "/admin/scan-qr", icon: ScanLine },
         { name: "Pulse AI", href: "/admin/pulse-ai", icon: FileText, badge: "AI" },
       ]
     },

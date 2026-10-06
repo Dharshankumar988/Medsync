@@ -1,4 +1,3 @@
-import { IKeyManagementProvider } from '@medsync/core';
 import { openDB, IDBPDatabase } from 'idb';
 
 const DB_NAME = 'medsync_keystore';
@@ -10,7 +9,7 @@ type WrappedKeyEnvelope = {
   ciphertext: number[];
 };
 
-export class WebKeyManagementProvider implements IKeyManagementProvider {
+export class WebKeyManagementProvider {
   private dbPromise: Promise<IDBPDatabase>;
 
   constructor() {

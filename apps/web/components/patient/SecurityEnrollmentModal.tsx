@@ -1,18 +1,18 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSecurityEnrollment } from '@/hooks/useSecurityEnrollment';
 import { SecurityService } from '@/services/security.service';
 import { authService } from '@/services/auth.service';
 import { supabase } from '@/lib/supabase';
-import { ShieldAlert, ShieldCheck, Camera, CheckCircle2, Loader2, Lock, X } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, CheckCircle2, Loader2, Lock, X } from 'lucide-react';
 import { Button, Input } from '@medsync/ui';
 import { useSecurityStore } from '@/store/useSecurityStore';
 
 export default function SecurityEnrollmentModal() {
   const [userId, setUserId] = useState<string>();
   const [role, setRole] = useState<string>();
-  
+
   useEffect(() => {
     authService.me().then(u => {
       setUserId(u.id);
@@ -21,63 +21,16 @@ export default function SecurityEnrollmentModal() {
   }, []);
 
   const { status, isLoading: isStatusLoading } = useSecurityEnrollment(userId, role);
-  
-  const [step, setStep] = useState<number>(1);
+
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinError, setPinError] = useState('');
-  
-  const [faceImages, setFaceImages] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enrollmentSuccess, setEnrollmentSuccess] = useState(false);
-  
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-
-  useEffect(() => {
-    if (status === 'PIN_CREATED') {
-      setStep(2);
-    }
-  }, [status]);
-
-  const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      streamRef.current = mediaStream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-    } catch (err) {
-      console.error("Error accessing camera", err);
-    }
-  };
-
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    const currentVideo = videoRef.current;
-    if (currentVideo && currentVideo.srcObject) {
-      const srcStream = currentVideo.srcObject as MediaStream;
-      srcStream.getTracks().forEach(t => t.stop());
-      currentVideo.srcObject = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (step === 2 && !streamRef.current) {
-      startCamera();
-    }
-    return () => { 
-      stopCamera();
-    };
-  }, [step, stopCamera]);
 
   const { isEnrollmentModalOpen, closeEnrollmentModal, setStatus } = useSecurityStore();
 
-  if (!isEnrollmentModalOpen || role !== 'patient' || isStatusLoading || status === 'COMPLETED') {
+  if (!isEnrollmentModalOpen || role !== 'patient' || isStatusLoading || status === 'PIN_CREATED') {
     return null;
   }
 
@@ -92,12 +45,19 @@ export default function SecurityEnrollmentModal() {
     }
     setPinError('');
     setIsSubmitting(true);
-    
+
     try {
       const { data: session } = await supabase.auth.getSession();
       if (session?.session?.access_token) {
         await SecurityService.enrollPin(session.session.access_token, pin);
-        setStep(2);
+        setEnrollmentSuccess(true);
+        setStatus('PIN_CREATED');
+        setTimeout(() => {
+          closeEnrollmentModal();
+          setEnrollmentSuccess(false);
+          setPin('');
+          setConfirmPin('');
+        }, 2000);
       }
     } catch (err: any) {
       setPinError(err.response?.data?.detail || 'Failed to enroll PIN');
@@ -106,191 +66,67 @@ export default function SecurityEnrollmentModal() {
     }
   };
 
-  const captureFace = () => {
-    if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext('2d');
-      if (context) {
-        canvasRef.current.width = videoRef.current.videoWidth;
-        canvasRef.current.height = videoRef.current.videoHeight;
-        context.drawImage(videoRef.current, 0, 0);
-        
-        canvasRef.current.toBlob(blob => {
-          if (blob) {
-            const file = new File([blob], `face_${faceImages.length + 1}.jpg`, { type: 'image/jpeg' });
-            setFaceImages(prev => [...prev, file]);
-          }
-        }, 'image/jpeg');
-      }
-    }
-  };
-
-  const handleFaceSubmit = async () => {
-    if (faceImages.length < 3) return;
-    setIsSubmitting(true);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      if (session?.session?.access_token) {
-        await SecurityService.enrollFace(session.session.access_token, faceImages);
-        stopCamera();
-        setEnrollmentSuccess(true);
-        setTimeout(() => {
-          setStatus('COMPLETED');
-          closeEnrollmentModal();
-        }, 2000);
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert(err.response?.data?.detail || 'Failed to enroll face. Make sure your face is clearly visible.');
-      setFaceImages([]); // Reset on failure
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-md px-4">
-      <div className="w-full max-w-md bg-card p-6 rounded-2xl shadow-xl border border-border/50 relative overflow-hidden">
-        
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="absolute right-4 top-4"
-          onClick={() => {
-            stopCamera();
-            closeEnrollmentModal();
-          }}
-        >
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-card w-full max-w-md p-6 rounded-2xl shadow-xl relative border border-border/50">
+        <Button variant="ghost" size="icon" className="absolute right-4 top-4" onClick={closeEnrollmentModal}>
           <X className="h-4 w-4" />
         </Button>
 
-        <div className="text-center mb-6">
-          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-            <ShieldAlert className="w-8 h-8 text-primary" />
-          </div>
-          <h2 className="text-2xl font-bold">Secure Your Prescriptions</h2>
-          <p className="text-muted-foreground mt-2 text-sm">
-            We need to securely enroll your Authorization PIN and face to protect sensitive prescription access.
-          </p>
-        </div>
-
-        <div className="flex gap-2 mb-6">
-          <div className={`h-1.5 flex-1 rounded-full ${step >= 1 ? 'bg-primary' : 'bg-muted'}`} />
-          <div className={`h-1.5 flex-1 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
-        </div>
-
         {enrollmentSuccess ? (
-          <div className="flex flex-col items-center justify-center py-12 animate-in zoom-in duration-500 fade-in">
-            <div className="w-24 h-24 bg-emerald-500/10 dark:bg-emerald-500/20 rounded-full flex items-center justify-center mb-6 ring-4 ring-emerald-500/20">
-              <CheckCircle2 className="w-12 h-12 text-emerald-600 dark:text-emerald-400" />
+          <div className="text-center py-8">
+            <div className="mx-auto w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
+              <CheckCircle2 className="w-8 h-8 text-green-500" />
             </div>
-            <h3 className="text-2xl font-bold text-center">Security PIN and Face ID Enrolled</h3>
-            <p className="text-muted-foreground mt-2 text-center">Your secure authentication is now active.</p>
+            <h3 className="text-xl font-bold mb-2">PIN Enrolled Successfully</h3>
+            <p className="text-muted-foreground">Your security PIN has been set up.</p>
           </div>
-        ) : step === 1 ? (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-            <h3 className="font-semibold text-lg flex items-center gap-2">
-              <Lock className="w-5 h-5 text-primary" /> Create 6-Digit Authorization PIN
-            </h3>
-            <p className="text-sm text-muted-foreground">This PIN is used to authorize downloading prescriptions and offline pharmacy dispensing.</p>
-            
-            <div className="relative group">
-              <div className="flex justify-center gap-2">
-                {[0, 1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all ${pin.length === i ? 'border-primary ring-4 ring-primary/20' : pin.length > i ? 'border-primary bg-primary/5 text-primary' : 'border-border/60 bg-muted/30'}`}>
-                    {pin[i] ? '•' : ''}
-                  </div>
-                ))}
-              </div>
-              <input 
-                type="text" 
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={pin}
-                onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-text z-10"
-                autoFocus
-              />
+        ) : (
+          <>
+            <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <ShieldCheck className="w-6 h-6 text-primary" />
             </div>
-            
-            <p className="text-sm font-medium mt-4">Confirm PIN</p>
-            <div className="relative group">
-              <div className="flex justify-center gap-2">
-                {[0, 1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all ${confirmPin.length === i ? 'border-primary ring-4 ring-primary/20' : confirmPin.length > i ? 'border-primary bg-primary/5 text-primary' : 'border-border/60 bg-muted/30'}`}>
-                    {confirmPin[i] ? '•' : ''}
-                  </div>
-                ))}
-              </div>
-              <input 
-                type="text" 
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={confirmPin}
-                onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-text z-10"
-              />
-            </div>
-            
-            {pinError && <p className="text-destructive text-sm text-center">{pinError}</p>}
-            
-            <Button className="w-full" onClick={handlePinSubmit} disabled={isSubmitting || pin.length !== 6 || confirmPin.length !== 6}>
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
-            </Button>
-          </div>
-        ) : null}
-
-        {step === 2 && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-            <h3 className="font-semibold text-lg flex items-center gap-2">
-              <Camera className="w-5 h-5 text-primary" /> Face Verification Enrollment
-            </h3>
-            <p className="text-sm text-muted-foreground mb-2">
-              This protects you from unauthorized online pharmacy orders.
+            <h3 className="text-xl font-bold mb-2">Set Your Security PIN</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Create a 6-digit PIN to authorize sensitive actions like prescription downloads.
             </p>
-            <div className="bg-primary/5 border border-primary/20 p-3 rounded-xl mb-4">
-              <p className="text-xs font-semibold text-primary mb-2 uppercase tracking-wider">Registration Guide</p>
-              <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-                <li>Capture <strong className="text-foreground">3 samples</strong> of your face.</li>
-                <li>Keep your face <strong className="text-foreground">1-2 feet away</strong> from the camera.</li>
-                <li>Sample 1: Keep a <strong className="text-foreground">neutral expression</strong> looking straight.</li>
-                <li>Sample 2: Tilt your head at a <strong className="text-foreground">slight angle</strong>.</li>
-                <li>Sample 3: Provide a <strong className="text-foreground">different expression</strong> (e.g. smile).</li>
-                <li>Ensure you are in a <strong className="text-foreground">well-lit area</strong>.</li>
-              </ul>
-            </div>
-            
-            <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-border">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
-              <canvas ref={canvasRef} className="hidden" />
-              
-              <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center overflow-hidden">
-                <div className="w-[60%] h-[80%] rounded-[50%] border-4 border-dashed border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"></div>
-              </div>
-              
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
-                {[1, 2, 3].map((_, i) => (
-                  <div key={i} className={`w-3 h-3 rounded-full border border-white/50 ${faceImages.length > i ? 'bg-primary border-primary' : 'bg-black/50'}`} />
-                ))}
-              </div>
-            </div>
 
-            <div className="flex gap-2">
-              {faceImages.length < 3 ? (
-                <Button className="w-full flex gap-2" onClick={captureFace}>
-                  <Camera className="w-4 h-4" /> Capture Sample {faceImages.length + 1}/3
-                </Button>
-              ) : (
-                <Button className="w-full flex gap-2" onClick={handleFaceSubmit} disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ShieldCheck className="w-4 h-4" /> Enroll Face</>}
-                </Button>
-              )}
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">New 6-Digit PIN</label>
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                  className="text-center tracking-widest text-xl"
+                  placeholder="•••••••"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Confirm PIN</label>
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                  className="text-center tracking-widest text-xl"
+                  placeholder="•••••••"
+                />
+              </div>
+              {pinError && <p className="text-red-500 text-sm">{pinError}</p>}
+              <Button
+                className="w-full"
+                disabled={isSubmitting || pin.length !== 6 || confirmPin.length !== 6}
+                onClick={handlePinSubmit}
+              >
+                {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
+                Set PIN
+              </Button>
             </div>
-            {faceImages.length > 0 && faceImages.length < 3 && (
-              <Button variant="ghost" className="w-full text-xs" onClick={() => setFaceImages([])}>Reset Captures</Button>
-            )}
-          </div>
+          </>
         )}
       </div>
     </div>

@@ -26,15 +26,21 @@ export default function PharmacyOrdersPage() {
   const [dispensingRxId, setDispensingRxId] = useState<string | null>(null);
   const [dispensingOrder, setDispensingOrder] = useState<string | null>(null);
   const [pinInput, setPinInput] = useState("");
+  const [authPinInput, setAuthPinInput] = useState("");
   const [isDispensing, setIsDispensing] = useState(false);
 
   const handleDispenseWithPin = async () => {
     if (!dispensingRxId || pinInput.length !== 4) return;
+    if (authPinInput.length !== 6) {
+      alert("Please enter a valid 6-digit Pharmacy Authorization PIN");
+      return;
+    }
     setIsDispensing(true);
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const formData = new FormData();
       formData.append("pin", pinInput);
+      formData.append("auth_pin", authPinInput);
       
       const { supabase } = await import("@/lib/supabase");
       const { data: session } = await supabase.auth.getSession();
@@ -53,6 +59,8 @@ export default function PharmacyOrdersPage() {
         setOrders(prev => prev.map(o => o.id === dispensingOrder ? { ...o, status: "DISPENSED" } : o));
         setDispensingRxId(null);
         setDispensingOrder(null);
+        setAuthPinInput("");
+        setPinInput("");
       } else {
         const errorData = await res.json();
         alert(`Failed to dispense: ${errorData.detail || "Invalid PIN"}`);
@@ -243,11 +251,23 @@ export default function PharmacyOrdersPage() {
                 maxLength={4}
                 className="text-center text-2xl tracking-[0.5em] font-mono h-14 uppercase"
               />
+              <div className="space-y-2 border-t border-border/40 pt-4 mt-2">
+                <p className="text-sm font-medium">Pharmacy Authorization PIN</p>
+                <p className="text-xs text-muted-foreground">Enter your 6-digit Pharmacy PIN to authorize dispensing.</p>
+                <Input 
+                  type="password"
+                  placeholder="• • • • • •" 
+                  value={authPinInput}
+                  onChange={(e) => setAuthPinInput(e.target.value)}
+                  maxLength={6}
+                  className="text-center text-xl tracking-[0.5em] font-mono h-12"
+                />
+              </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setDispensingRxId(null)}>Cancel</Button>
                 <Button 
                   className="flex-1 bg-amber-500 hover:bg-amber-600 text-black" 
-                  disabled={pinInput.length !== 4 || isDispensing}
+                  disabled={pinInput.length !== 4 || authPinInput.length !== 6 || isDispensing}
                   onClick={handleDispenseWithPin}
                 >
                   {isDispensing ? "Dispensing..." : "Confirm Dispense"}

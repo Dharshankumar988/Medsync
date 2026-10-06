@@ -129,10 +129,16 @@ class AdminAITools:
                 if not sql_query.upper().startswith("SELECT"):
                     return json.dumps({"error": "Only SELECT queries are allowed."})
                 
-                # Basic PII filtering
-                blocked_terms = ["email", "password_hash", "pin_hash", "biometric", "phone", "contact_number", "contact_email", "emergency_contact"]
+                # Ensure prescriptions are not accessed
+                blocked_terms = ["prescription", "prescriptions", "rx"]
                 query_lower = sql_query.lower()
                 for term in blocked_terms:
+                    if term in query_lower:
+                        return json.dumps({"error": f"Security Policy Violation: Access to '{term}' is restricted."})
+                
+                # Still block password hashes for security
+                security_blocks = ["password_hash", "pin_hash", "security_pin_hash"]
+                for term in security_blocks:
                     if term in query_lower:
                         return json.dumps({"error": f"Security Policy Violation: Access to '{term}' is restricted."})
                 

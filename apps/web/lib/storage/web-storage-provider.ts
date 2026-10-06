@@ -1,10 +1,9 @@
-import { IStorageProvider } from '@medsync/core';
 import { openDB, IDBPDatabase } from 'idb';
 
 const DB_NAME = 'medsync_vault';
 const STORE_NAME = 'files';
 
-export class WebStorageProvider implements IStorageProvider {
+export class WebStorageProvider {
   private dbPromise: Promise<IDBPDatabase>;
 
   constructor() {

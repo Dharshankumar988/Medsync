@@ -10,6 +10,7 @@ import {
 import { pharmacyService } from "@/services/pharmacy.service";
 import { QRScanner } from "@/components/ui/QRScanner";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 
 type FlowType = "IDLE" | "PRESCRIPTION" | "BLOCKCHAIN" | "URL" | "TEXT";
 type PrescriptionStep = "PAYMENT" | "SUCCESS";
@@ -28,6 +29,7 @@ export default function PharmacyQRScannerPage() {
   const [basicData, setBasicData] = useState<any>(null);
   const [fullPrescriptionData, setFullPrescriptionData] = useState<any>(null);
   const [pin, setPin] = useState("");
+  const [authPin, setAuthPin] = useState("");
   const [faceImage, setFaceImage] = useState<File | null>(null);
 
   // Smart Routing Engine
@@ -55,7 +57,12 @@ export default function PharmacyQRScannerPage() {
     
     // If it looks like a URL
     if (data.startsWith("http://") || data.startsWith("https://")) {
-      window.location.href = data;
+      const isMedsync = data.includes("medsync-web.vercel.app") || data.includes("localhost:3000");
+      if (isMedsync) {
+        window.location.href = data;
+        return;
+      }
+      setFlow("URL");
       return;
     }
 
@@ -124,15 +131,20 @@ export default function PharmacyQRScannerPage() {
   
   const handleDispense = async () => {
     if (!basicData?.prescription_id) return;
+    if (authPin.length !== 6) {
+      toast.error("Please enter your 6-digit Pharmacy Authorization PIN.");
+      return;
+    }
     setIsLoading(true);
     try {
-      await pharmacyService.dispensePrescription(basicData.prescription_id);
+      await pharmacyService.dispensePrescription(basicData.prescription_id, authPin, pin);
       
       // Reset
       setFlow("IDLE");
       setBasicData(null);
       setFullPrescriptionData(null);
       setPin("");
+      setAuthPin("");
     } catch (err) {
       alert("Failed to dispense prescription.");
     } finally {
@@ -307,11 +319,7 @@ export default function PharmacyQRScannerPage() {
                 </div>
                 <div className="flex gap-3 justify-center pt-2">
                   <Button variant="outline" onClick={() => setFlow("IDLE")} className="rounded-xl">Close</Button>
-                  {flow === "URL" ? (
-                    <Button onClick={() => window.open(scanData, "_blank")} className="bg-amber-600 hover:bg-amber-500 rounded-xl">Open Link Safely</Button>
-                  ) : (
-                    <Button onClick={() => navigator.clipboard.writeText(scanData)} className="bg-amber-600 hover:bg-amber-500 rounded-xl">Copy Text</Button>
-                  )}
+                  <Button onClick={() => navigator.clipboard.writeText(scanData)} className="bg-amber-600 hover:bg-amber-500 rounded-xl">Copy Text</Button>
                 </div>
               </CardContent>
              </Card>
@@ -451,9 +459,22 @@ export default function PharmacyQRScannerPage() {
                         ))}
                         </ul>
                       </div>
+                      </div>
+
+                    <div className="bg-muted/30 p-5 rounded-2xl border border-border/60">
+                      <h4 className="font-semibold mb-3 border-b border-border/60 pb-2">Pharmacy Authorization</h4>
+                      <p className="text-sm text-muted-foreground mb-4">Enter your 6-digit Pharmacy PIN to authorize dispensing.</p>
+                      <Input
+                        type="password"
+                        value={authPin}
+                        onChange={(e) => setAuthPin(e.target.value)}
+                        placeholder="• • • • • •"
+                        maxLength={6}
+                        className="text-center tracking-[0.5em] rounded-xl text-lg h-12"
+                      />
                     </div>
                     
-                    <Button onClick={handleDispense} className="w-full h-14 text-md rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-500/20" size="lg" disabled={isLoading}>
+                    <Button onClick={handleDispense} className="w-full h-14 text-md rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-500/20" size="lg" disabled={isLoading || authPin.length !== 6}>
                       {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Dispense Medications & Complete Order"}
                     </Button>
                   </motion.div>

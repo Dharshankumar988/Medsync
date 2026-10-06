@@ -1,6 +1,4 @@
 import uuid
-import shutil
-import tempfile
 import os
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Response
@@ -10,9 +8,7 @@ from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.schemas.session import AuthenticatedPrincipal
 from app.models.user import User, UserRole
-from app.services.security_service import enroll_patient_pin, validate_patient_pin, get_security_status
-from app.services.face_auth_service import face_auth_service
-from app.models.security import PatientBiometricProfile
+from app.services.security_service import enroll_patient_pin, validate_patient_pin, get_security_status, enroll_doctor_pin, validate_doctor_pin, get_doctor_security_status, enroll_pharmacy_pin, validate_pharmacy_pin, get_pharmacy_security_status
 from app.models.audit_log import AuditLog
 from app.schemas.response import APIResponse
 
@@ -22,346 +18,107 @@ router = APIRouter()
 async def get_status(
     response: Response,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR]))
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY]))
 ):
     """
-    Returns the security enrollment status of the patient:
-    NOT_STARTED, PIN_CREATED, COMPLETED
+    Returns the security enrollment status:
+    - For patients: NOT_STARTED, PIN_CREATED, COMPLETED
+    - For doctors: has_pin boolean
     """
-    if current_user.role.upper() not in [UserRole.PATIENT.value, UserRole.DOCTOR.value]:
-        raise HTTPException(status_code=403, detail="Only patients and doctors require security enrollment.")
-        
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    status_val = await get_security_status(db, current_user.id)
-    return {"status": status_val}
+    
+    if current_user.role.upper() == UserRole.DOCTOR.value:
+        status_val = await get_doctor_security_status(db, current_user.id)
+        return {"status": status_val}
+    elif current_user.role.upper() == UserRole.PATIENT.value:
+        status_val = await get_security_status(db, current_user.id)
+        return {"status": status_val}
+    elif current_user.role.upper() == UserRole.PHARMACY.value:
+        status_val = await get_pharmacy_security_status(db, current_user.id)
+        return {"status": status_val}
+    else:
+        raise HTTPException(status_code=403, detail="Only patients, doctors, and pharmacies require security enrollment.")
 
 @router.post("/enroll-pin", response_model=APIResponse)
 async def enroll_pin(
     pin: str = Form(...),
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR]))
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY]))
 ):
     """
     Enrolls or updates the 6-digit Authorization PIN.
+    - For patients: stored in PatientSecurityCredential
+    - For doctors: stored in Doctor.security_pin_hash
     """
-    if current_user.role.upper() not in [UserRole.PATIENT.value, UserRole.DOCTOR.value]:
-        raise HTTPException(status_code=403, detail="Only patients and doctors can enroll a PIN.")
-        
     try:
-        await enroll_patient_pin(db, current_user.id, pin)
+        if current_user.role.upper() == UserRole.DOCTOR.value:
+            await enroll_doctor_pin(db, current_user.id, pin)
+        elif current_user.role.upper() == UserRole.PATIENT.value:
+            await enroll_patient_pin(db, current_user.id, pin)
+        elif current_user.role.upper() == UserRole.PHARMACY.value:
+            await enroll_pharmacy_pin(db, current_user.id, pin)
+        else:
+            raise HTTPException(status_code=403, detail="Only patients, doctors, and pharmacies can enroll a PIN.")
         return {"message": "PIN enrolled successfully."}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/enroll-face")
-async def enroll_face_endpoint(
-    images: List[UploadFile] = File(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Enrolls the patient's face using multiple sample images.
-    """
-    if current_user.role.upper() != UserRole.PATIENT.value.upper():
-        raise HTTPException(status_code=403, detail="Only patients can enroll face biometrics.")
-        
-    if len(images) < 1 or len(images) > 3:
-        raise HTTPException(status_code=400, detail="Please provide 1 to 3 face samples.")
-        
-    temp_files = []
-    try:
-        for img in images:
-            suffix = f".{img.filename.split('.')[-1]}" if '.' in img.filename else ".jpg"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                shutil.copyfileobj(img.file, tmp)
-                temp_files.append(tmp.name)
-                
-        # Running face enrollment which might block the event loop in thread pool
-        import asyncio
-        encrypted_template = await asyncio.to_thread(face_auth_service.enroll_patient, temp_files)
-        
-        # Save to DB
-        result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id))
-        existing_profile = result.scalar_one_or_none()
-        
-        if existing_profile:
-            existing_profile.encrypted_template = encrypted_template
-            existing_profile.model_name = "buffalo_l"
-            existing_profile.enrollment_status = "COMPLETED"
-        else:
-            profile = PatientBiometricProfile(
-                patient_id=current_user.id,
-                encrypted_template=encrypted_template,
-                model_name="buffalo_l"
-            )
-            db.add(profile)
-            
-        # Upload as profile image if none exists
-        user_result = await db.execute(select(User).where(User.id == current_user.id))
-        user_obj = user_result.scalar_one_or_none()
-        if user_obj and not getattr(user_obj, 'profile_image_url', None) and temp_files:
-            try:
-                from app.services.storage import StorageService, StorageServiceError
-                with open(temp_files[0], 'rb') as f:
-                    first_img_bytes = f.read()
-                public_url = await StorageService.upload_profile_image(
-                    user_id=str(current_user.id),
-                    file_bytes=first_img_bytes,
-                    filename="face_enroll.jpg",
-                    content_type="image/jpeg"
-                )
-                user_obj.profile_image_url = public_url
-            except Exception as se:
-                import logging
-                logging.getLogger("medsync.security").warning(f"Could not upload profile image during face enrollment: {se}")
-            
-        # Audit
-        audit = AuditLog(
-            user_id=current_user.id,
-            action="FACE_ENROLLMENT_COMPLETED",
-            entity_type="PatientBiometricProfile",
-            entity_id=current_user.id
-        )
-        db.add(audit)
-        await db.commit()
-        
-        return {"message": "Face enrolled successfully."}
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        import logging
-        logging.getLogger("medsync.security").error(f"Error during face enrollment: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="An error occurred during face enrollment.")
-    finally:
-        for tmp_file in temp_files:
-            if os.path.exists(tmp_file):
-                os.remove(tmp_file)
-
-@router.post("/verify-face")
-async def verify_face_endpoint(
-    image: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Verifies the patient's identity using Face ID.
-    The patient identity is derived from the authenticated token, not the frontend.
-    """
-    if current_user.role.upper() != UserRole.PATIENT.value.upper():
-        raise HTTPException(status_code=403, detail="Only patients can use Face ID verification.")
-
-    result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id))
-    profile = result.scalar_one_or_none()
-    if not profile or not profile.encrypted_template:
-        raise HTTPException(status_code=400, detail="Face ID not enrolled.")
-
-    suffix = f".{image.filename.split('.')[-1]}" if '.' in image.filename else ".jpg"
-    tmp_file = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            shutil.copyfileobj(image.file, tmp)
-            tmp_file = tmp.name
-        
-        import asyncio
-        verification_result = await asyncio.to_thread(face_auth_service.verify_patient, profile.encrypted_template, tmp_file)
-        
-        is_verified = verification_result.get("verified", False)
-        match_score = verification_result.get("score", 0.0)
-        
-        # Audit log for verification attempt
-        audit = AuditLog(
-            user_id=current_user.id,
-            action="FACE_VERIFICATION_SUCCESS" if is_verified else "FACE_VERIFICATION_FAILED",
-            entity_type="PatientBiometricProfile",
-            entity_id=current_user.id,
-            details={"match_score": match_score, "source": verification_result.get("source", "unknown")}
-        )
-        db.add(audit)
-        await db.commit()
-
-        if is_verified:
-            return {"verified": True, "match_score": match_score, "message": "Face verified successfully."}
-        else:
-            return {"verified": False, "match_score": match_score, "message": "Face verification failed."}
-            
-    except ValueError as e:
-        if str(e) == "FACE_SERVICE_UNAVAILABLE":
-            raise HTTPException(status_code=503, detail="Face Verification Service is currently unavailable. Please try again later.")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="An error occurred during face verification.")
-    finally:
-        if tmp_file and os.path.exists(tmp_file):
-            os.remove(tmp_file)
-
-@router.post("/change-pin-face")
-async def change_pin_face(
-    image: UploadFile = File(...),
+@router.post("/reset-pin-with-password")
+async def reset_pin_with_password(
+    current_password: str = Form(...),
     new_pin: str = Form(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Allows a patient to change their PIN using Face ID as authorization.
+    Reset PIN using account password for authorization.
     """
-    if current_user.role.upper() != UserRole.PATIENT.value.upper():
-        raise HTTPException(status_code=403, detail="Only patients can change their PIN.")
-        
-    result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id))
-    profile = result.scalar_one_or_none()
-    if not profile or not profile.encrypted_template:
-        raise HTTPException(status_code=400, detail="Face ID not enrolled.")
+    if current_user.role.upper() not in (UserRole.PATIENT.value.upper(), UserRole.DOCTOR.value.upper(), UserRole.PHARMACY.value.upper()):
+        raise HTTPException(status_code=403, detail="Only patients, doctors, and pharmacies can reset their PIN.")
 
-    suffix = f".{image.filename.split('.')[-1]}" if '.' in image.filename else ".jpg"
-    tmp_file = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            shutil.copyfileobj(image.file, tmp)
-            tmp_file = tmp.name
-        
-        import asyncio
-        verification_result = await asyncio.to_thread(face_auth_service.verify_patient, profile.encrypted_template, tmp_file)
-        
-        is_verified = verification_result.get("verified", False)
-        match_score = verification_result.get("score", 0.0)
-        
-        if not is_verified:
-            # Audit log for failed change
-            audit = AuditLog(
-                user_id=current_user.id,
-                action="FACE_CHANGE_PIN_FAILED",
-                entity_type="PatientBiometricProfile",
-                entity_id=current_user.id,
-                details={"match_score": match_score, "source": verification_result.get("source", "unknown")}
-            )
-            db.add(audit)
-            await db.commit()
-            raise HTTPException(status_code=401, detail="Face verification failed.")
-            
-        # If authorized, change the PIN
-        await enroll_patient_pin(db, current_user.id, new_pin)
-        
-        audit = AuditLog(
-            user_id=current_user.id,
-            action="FACE_CHANGE_PIN_SUCCESS",
-            entity_type="PatientBiometricProfile",
-            entity_id=current_user.id
-        )
-        db.add(audit)
-        await db.commit()
-        
-        return {"message": "PIN changed successfully using Face ID."}
-        
-    except ValueError as e:
-        if str(e) == "FACE_SERVICE_UNAVAILABLE":
-            raise HTTPException(status_code=503, detail="Face Verification Service is currently unavailable. Please try again later.")
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="An error occurred during PIN change.")
-    finally:
-        if tmp_file and os.path.exists(tmp_file):
-            os.remove(tmp_file)
+    if len(new_pin) != 6 or not new_pin.isdigit():
+        raise HTTPException(status_code=400, detail="PIN must be exactly 6 digits.")
 
-@router.post("/change-face-pin")
-async def change_face_pin(
-    pin: str = Form(...),
-    images: List[UploadFile] = File(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Allows a patient to re-enroll their Face using their PIN as authorization.
-    """
-    if current_user.role.upper() != UserRole.PATIENT.value.upper():
-        raise HTTPException(status_code=403, detail="Only patients can change their Face ID.")
-        
-    # Verify PIN first
-    is_valid = await validate_patient_pin(db, current_user.id, pin)
-    if not is_valid:
-        # Audit log for failed change
-        audit = AuditLog(
-            user_id=current_user.id,
-            action="PIN_CHANGE_FACE_FAILED",
-            entity_type="PatientBiometricProfile",
-            entity_id=current_user.id
-        )
-        db.add(audit)
-        await db.commit()
-        raise HTTPException(status_code=401, detail="Invalid PIN.")
-        
-    if len(images) < 1 or len(images) > 3:
-        raise HTTPException(status_code=400, detail="Please provide 1 to 3 face samples.")
-        
-    temp_files = []
+    # Verify current password via Supabase
     try:
-        import tempfile
-        import shutil
-        import os
-        for img in images:
-            suffix = f".{img.filename.split('.')[-1]}" if '.' in img.filename else ".jpg"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                shutil.copyfileobj(img.file, tmp)
-                temp_files.append(tmp.name)
-                
-        # Running face enrollment
-        import asyncio
-        encrypted_template = await asyncio.to_thread(face_auth_service.enroll_patient, temp_files)
-        
-        # Save to DB
-        result = await db.execute(select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id))
-        existing_profile = result.scalar_one_or_none()
-        
-        if existing_profile:
-            existing_profile.encrypted_template = encrypted_template
-            existing_profile.enrollment_status = "COMPLETED"
-        else:
-            profile = PatientBiometricProfile(
-                patient_id=current_user.id,
-                encrypted_template=encrypted_template,
-                model_name="buffalo_l",
-                enrollment_status="COMPLETED"
-            )
-            db.add(profile)
-            
-        # Upload as profile image if none exists
-        user_result = await db.execute(select(User).where(User.id == current_user.id))
-        user_obj = user_result.scalar_one_or_none()
-        if user_obj and not getattr(user_obj, 'profile_image_url', None) and temp_files:
-            try:
-                from app.services.storage import StorageService
-                with open(temp_files[0], 'rb') as f:
-                    first_img_bytes = f.read()
-                public_url = await StorageService.upload_profile_image(
-                    user_id=str(current_user.id),
-                    file_bytes=first_img_bytes,
-                    filename="face_enroll.jpg",
-                    content_type="image/jpeg"
-                )
-                user_obj.profile_image_url = public_url
-            except Exception as se:
-                import logging
-                logging.getLogger("medsync.security").warning(f"Could not upload profile image during change face ID: {se}")
-            
+        from supabase import create_client
+        supabase = create_client(
+            os.getenv("SUPABASE_URL"),
+            os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        )
+
+        # Re-authenticate with current password
+        auth_result = supabase.auth.sign_in_with_password({
+            "email": current_user.email,
+            "password": current_password
+        })
+
+        if not auth_result.user:
+            raise HTTPException(status_code=401, detail="Current password is incorrect.")
+
+        # Password verified, update PIN
+        if current_user.role.upper() == UserRole.PATIENT.value.upper():
+            await enroll_patient_pin(db, current_user.id, new_pin)
+        elif current_user.role.upper() == UserRole.DOCTOR.value.upper():
+            await enroll_doctor_pin(db, current_user.id, new_pin)
+        elif current_user.role.upper() == UserRole.PHARMACY.value.upper():
+            await enroll_pharmacy_pin(db, current_user.id, new_pin)
+
+        # Audit log
         audit = AuditLog(
             user_id=current_user.id,
-            action="PIN_CHANGE_FACE_SUCCESS",
-            entity_type="PatientBiometricProfile",
+            action="PIN_RESET_WITH_PASSWORD",
+            entity_type="User",
             entity_id=current_user.id
         )
         db.add(audit)
         await db.commit()
-        
-        return {"message": "Face ID changed successfully using PIN."}
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+
+        return {"message": "PIN reset successfully."}
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail="An error occurred during Face ID change.")
-    finally:
-        import os
-        for tmp_file in temp_files:
-            if os.path.exists(tmp_file):
-                os.remove(tmp_file)
+        import logging
+        logging.getLogger("medsync.security").error(f"Error during PIN reset: {e}", exc_info=True)
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail="Failed to reset PIN.")

@@ -213,13 +213,13 @@ async def verify_qr(
         payload = build_prescription_payload(str(rx.doctor_id), str(rx.patient_id), str(rx.diagnosis), items)
         
     current_hash = generate_canonical_hash(payload)
-    
+
     if current_hash != rx.hash:
         status_msg = "TAMPERED"
-    elif rx.blockchain_status != "CONFIRMED":
-        status_msg = "PENDING"
-    else:
+    elif rx.blockchain_status in ("SYNCED", "CONFIRMED"):
         status_msg = "VERIFIED"
+    else:
+        status_msg = "PENDING"
         
     # Authorization Rules
     authorized_for_details = False

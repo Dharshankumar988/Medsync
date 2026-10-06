@@ -37,6 +37,11 @@ export default function DoctorQRScannerPage() {
     
     // Web URL
     if (data.startsWith("http://") || data.startsWith("https://")) {
+      const isMedsync = data.includes("medsync-web.vercel.app") || data.includes("localhost:3000");
+      if (isMedsync) {
+        window.location.href = data;
+        return;
+      }
       setFlow("URL");
       return;
     }
@@ -238,11 +243,7 @@ export default function DoctorQRScannerPage() {
                 </div>
                 <div className="flex gap-3 justify-center pt-2">
                   <Button variant="outline" onClick={() => setFlow("IDLE")} className="rounded-xl">Close</Button>
-                  {flow === "URL" ? (
-                    <Button onClick={() => window.open(scanData, "_blank")} className="rounded-xl">Open Link Safely</Button>
-                  ) : (
-                    <Button onClick={() => navigator.clipboard.writeText(scanData)} className="rounded-xl">Copy Text</Button>
-                  )}
+                  <Button onClick={() => navigator.clipboard.writeText(scanData)} className="rounded-xl">Copy Text</Button>
                 </div>
               </CardContent>
              </Card>

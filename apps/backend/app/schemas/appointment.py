@@ -15,6 +15,7 @@ class AppointmentCreate(BaseModel):
     appointment_date: date
     start_time: time
     end_time: time
+    pin: str
     notes: Optional[str] = None
     location_id: Optional[uuid.UUID] = None
 

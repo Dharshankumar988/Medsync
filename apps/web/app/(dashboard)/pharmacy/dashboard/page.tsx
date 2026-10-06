@@ -68,9 +68,19 @@ export default function PharmacyDashboardPage() {
 
   const handleDispense = async (prescriptionId: string, orderId: string) => {
     if (verificationResult?.valid && verifiedRxHash === prescriptionId) {
-      await pharmacyService.dispensePrescription(prescriptionId);
-      queryClient.invalidateQueries({ queryKey: ["pharmacyOrders"] });
-      setDispensingOrderId(orderId);
+      const authPin = window.prompt("Enter your 6-digit Pharmacy Authorization PIN to dispense:");
+      if (!authPin || authPin.length !== 6) {
+        toast.error("Valid 6-digit Authorization PIN is required.");
+        return;
+      }
+      const success = await pharmacyService.dispensePrescription(prescriptionId, authPin);
+      if (success) {
+        queryClient.invalidateQueries({ queryKey: ["pharmacyOrders"] });
+        setDispensingOrderId(orderId);
+        toast.success("Prescription dispensed.");
+      } else {
+        toast.error("Failed to dispense prescription. Check your PIN.");
+      }
     } else {
       alert("SECURITY BLOCK: You must scan and verify the QR code for this prescription before dispensing medication.");
     }

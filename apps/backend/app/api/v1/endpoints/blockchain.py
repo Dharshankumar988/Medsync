@@ -650,7 +650,9 @@ async def get_contract_details(
     
     # Use requests to fetch data from PolygonScan as requested by the user
     import requests
-    polygonscan_api_key = os.getenv("POLYGONSCAN_API_KEY", "YourApiKeyToken")
+    from app.blockchain.config import blockchain_settings
+    
+    polygonscan_api_key = blockchain_settings.POLYGONSCAN_API_KEY or "YourApiKeyToken"
     balance = "0.0000 POL"
     tx_count = 0
     recent_txs = []
@@ -756,12 +758,15 @@ async def get_wallet_details(
     request: Request,
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
-    """Get backend wallet details."""
+    """Get backend wallet details using configured MedSync wallet address."""
     try:
+        from app.blockchain.config import blockchain_settings
+        from app.blockchain.client import blockchain_client
+        
         w3 = blockchain_client.w3
         
-        # Use the configured backend wallet address dynamically
-        address = blockchain_client.wallet_address
+        # Use the configured MedSync wallet address from environment
+        address = blockchain_settings.MEDSYNC_WALLET_ADDRESS or blockchain_client.wallet_address
         
         if w3 is None or not w3.is_connected():
             data = {
@@ -784,8 +789,9 @@ async def get_wallet_details(
         }
         return APIResponse(message="Wallet details retrieved", data=data)
     except Exception as e:
+        from app.blockchain.config import blockchain_settings
         data = {
-            "address": blockchain_client.wallet_address,
+            "address": blockchain_settings.MEDSYNC_WALLET_ADDRESS or blockchain_client.wallet_address,
             "balance_eth": 0.0,
             "nonce": 0,
             "status": "degraded"

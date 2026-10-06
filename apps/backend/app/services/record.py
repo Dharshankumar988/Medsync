@@ -8,7 +8,7 @@ from app.services.storage import StorageService
 
 class MedicalRecordService:
     @staticmethod
-    async def upload_record(db: AsyncSession, req: MedicalRecordCreate, file: UploadFile, patient_id: uuid.UUID, uploader_id: uuid.UUID):
+    async def upload_record(db: AsyncSession, req: MedicalRecordCreate, file: UploadFile, patient_id: uuid.UUID, uploader_id: uuid.UUID, is_prescription: bool = False):
         record_in = {
             "title": req.title,
             "description": req.description,
@@ -19,6 +19,20 @@ class MedicalRecordService:
         record = await record_repo.create(db, obj_in=record_in)
 
         version_number = 1
+        
+        file_ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+        if is_prescription and file_ext == "pdf":
+            file.file.seek(0)
+            pdf_bytes = file.file.read()
+            from app.services.qr_pdf_service import QRPdfService
+            token = QRPdfService.generate_verification_token(str(record.id), str(patient_id))
+            qr_image = QRPdfService.generate_qr_code(token)
+            stamped_pdf = QRPdfService.stamp_qr_on_pdf(pdf_bytes, qr_image, token)
+            
+            # create new UploadFile-like object
+            import io
+            file = UploadFile(filename=file.filename, file=io.BytesIO(stamped_pdf))
+
         storage_path, mime_type, file_size_bytes, file_hash = await StorageService.upload_record_file(
             file,
             patient_id=str(patient_id),

@@ -19,12 +19,15 @@ export default function MedicalRecordsPage() {
   
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [isPrescription, setIsPrescription] = useState(false);
+  const [pin, setPin] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
+  const [sharePin, setSharePin] = useState("");
   const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
@@ -108,6 +111,11 @@ export default function MedicalRecordsPage() {
       return;
     }
 
+    if (pin.length !== 6) {
+      toast.error("Please enter your 6-digit Authorization PIN");
+      return;
+    }
+
     setIsUploading(true);
     try {
       const formData = new FormData();
@@ -115,6 +123,8 @@ export default function MedicalRecordsPage() {
       formData.append("title", title);
       formData.append("description", description || "");
       formData.append("patient_id", userId);
+      formData.append("is_prescription", String(isPrescription));
+      formData.append("pin", pin);
       
       const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
       const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
@@ -125,6 +135,8 @@ export default function MedicalRecordsPage() {
       setIsDialogOpen(false);
       setTitle("");
       setDescription("");
+      setIsPrescription(false);
+      setPin("");
       if (fileInputRef.current) fileInputRef.current.value = "";
       
       loadRecords();
@@ -139,16 +151,22 @@ export default function MedicalRecordsPage() {
   const handleShare = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRecordId || !selectedDoctorId) return;
+    if (sharePin.length !== 6) {
+      toast.error("Please enter your 6-digit Authorization PIN");
+      return;
+    }
     
     setIsSharing(true);
     try {
       await api.post(`/api/v1/records/${selectedRecordId}/permissions`, {
         granted_to: selectedDoctorId,
+        pin: sharePin
       });
       toast.success("Record shared successfully with Doctor");
       setIsShareDialogOpen(false);
       setSelectedRecordId(null);
       setSelectedDoctorId("");
+      setSharePin("");
     } catch (err) {
       console.error(err);
       toast.error("Failed to share record");
@@ -193,7 +211,29 @@ export default function MedicalRecordsPage() {
                 <label className="text-sm font-medium">File *</label>
                 <Input type="file" ref={fileInputRef} required />
               </div>
-              <Button type="submit" className="w-full" disabled={isUploading}>
+              <div className="flex items-center gap-2 pt-2">
+                <input 
+                  type="checkbox" 
+                  id="is_prescription" 
+                  checked={isPrescription}
+                  onChange={(e) => setIsPrescription(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <label htmlFor="is_prescription" className="text-sm font-medium">This is a personal prescription (generates QR code)</label>
+              </div>
+              <div className="space-y-2 border-t border-border/40 pt-4 mt-2">
+                <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
+                <Input 
+                  type="password" 
+                  value={pin} 
+                  onChange={e => setPin(e.target.value)} 
+                  placeholder="• • • • • •" 
+                  maxLength={6}
+                  className="text-center tracking-[0.5em]"
+                  required 
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={isUploading || pin.length !== 6}>
                 {isUploading ? "Uploading..." : "Upload Document"}
               </Button>
             </form>
@@ -224,7 +264,19 @@ export default function MedicalRecordsPage() {
                   <p className="text-xs text-muted-foreground">You don&apos;t have any past or upcoming appointments with doctors yet.</p>
                 )}
               </div>
-              <Button type="submit" className="w-full" disabled={isSharing || !selectedDoctorId}>
+              <div className="space-y-2 border-t border-border/40 pt-4 mt-2">
+                <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
+                <Input 
+                  type="password" 
+                  value={sharePin} 
+                  onChange={e => setSharePin(e.target.value)} 
+                  placeholder="• • • • • •" 
+                  maxLength={6}
+                  className="text-center tracking-[0.5em]"
+                  required 
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={isSharing || !selectedDoctorId || sharePin.length !== 6}>
                 {isSharing ? "Sharing..." : "Grant Access"}
               </Button>
             </form>

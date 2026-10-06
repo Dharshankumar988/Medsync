@@ -34,6 +34,12 @@ class Pharmacy(Base, UUIDMixin, TimestampMixin):
     description: Mapped[str] = mapped_column(String, nullable=True)
     qr_identifier: Mapped[str] = mapped_column(String(255), unique=True, nullable=True)
     qr_status: Mapped[str] = mapped_column(String(50), default='ACTIVE', nullable=True)
+    # Blockchain Audit Fields
+    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
+    blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
     
+    # Security
+    security_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     user = relationship("User", back_populates="pharmacy_profile")
 

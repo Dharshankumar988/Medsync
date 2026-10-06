@@ -27,4 +27,7 @@ class Patient(Base, UUIDMixin, TimestampMixin):
     chronic_diseases: Mapped[str] = mapped_column(String, nullable=True)
     primary_physician_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("doctors.id"), index=True, nullable=True)
     pin_hash: Mapped[str] = mapped_column(String(255), nullable=True)
+    # Blockchain Audit Fields
+    blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
+    blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
     user = relationship("User", back_populates="patient_profile")

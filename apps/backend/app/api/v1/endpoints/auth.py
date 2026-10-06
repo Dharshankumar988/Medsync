@@ -22,6 +22,49 @@ async def register():
 async def login():
     raise HTTPException(status_code=status.HTTP_410_GONE, detail="Use Supabase Auth directly from the client.")
 
+from pydantic import BaseModel
+class ForceResetRequest(BaseModel):
+    email: str
+    new_password: str
+
+class AdminRegisterRequest(BaseModel):
+    email: str
+    password: str
+
+@router.post("/admin-register", response_model=APIResponse[dict])
+async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import text
+    import uuid
+    user_id = uuid.uuid4()
+    try:
+        await db.execute(
+            text("""
+            INSERT INTO auth.users (id, instance_id, email, encrypted_password, aud, role, email_confirmed_at) 
+            VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')), 'authenticated', 'authenticated', now())
+            """), 
+            {"id": user_id, "email": payload.email, "pwd": payload.password}
+        )
+        await db.commit()
+        return APIResponse(message="User created", data={"id": str(user_id)})
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/force-reset-password", response_model=APIResponse[dict])
+async def force_reset_password(payload: ForceResetRequest, db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import text
+    try:
+        result = await db.execute(text("UPDATE auth.users SET encrypted_password = crypt(:pwd, gen_salt('bf')) WHERE email = :email"), {"pwd": payload.new_password, "email": payload.email})
+        await db.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        return APIResponse(message="Password reset successfully", data={"email": payload.email})
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/sync", response_model=APIResponse[dict])
 async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)):
     """

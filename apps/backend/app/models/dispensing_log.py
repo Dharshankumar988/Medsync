@@ -31,6 +31,14 @@ class PrescriptionDispensingLog(Base, UUIDMixin, TimestampMixin):
     verification_method: Mapped[str | None] = mapped_column(String(50), default="QR_OFFLINE", nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    
+
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
     blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", nullable=True)
+
+    # Delivery Tracking Fields (Bangalore Pharmacy Simulation)
+    delivery_status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=True)  # PENDING, DISPATCHED, IN_TRANSIT, DELIVERED
+    delivery_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    delivery_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    estimated_delivery_minutes: Mapped[int] = mapped_column(Integer, default=10, nullable=True)
+    delivery_route: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)  # Store OSRM route
+    current_location: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)  # Current marker position

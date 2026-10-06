@@ -94,6 +94,11 @@ export default function PatientQRScanPage() {
         setLoading(false);
       }
     } else if (data.startsWith("http://") || data.startsWith("https://")) {
+      const isMedsync = data.includes("medsync-web.vercel.app") || data.includes("localhost:3000");
+      if (isMedsync) {
+        window.location.href = data;
+        return;
+      }
       setFlow("URL");
     } else {
       setFlow("TEXT");
@@ -383,11 +388,7 @@ export default function PatientQRScanPage() {
                 </div>
                 <div className="flex gap-3 justify-center pt-2">
                   <Button variant="outline" onClick={() => setFlow("IDLE")}>Close</Button>
-                  {flow === "URL" ? (
-                    <Button onClick={() => window.open(scanData, "_blank")} className="bg-blue-600 hover:bg-blue-500">Open Link Safely</Button>
-                  ) : (
-                    <Button onClick={() => navigator.clipboard.writeText(scanData)}>Copy Text</Button>
-                  )}
+                  <Button onClick={() => navigator.clipboard.writeText(scanData)}>Copy Text</Button>
                 </div>
               </CardContent>
              </Card>

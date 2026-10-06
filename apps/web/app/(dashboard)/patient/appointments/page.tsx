@@ -67,6 +67,7 @@ export default function AppointmentsPage() {
     end_time: "",
     notes: "",
     location_id: "",
+    pin: "",
   });
   const [isBooking, setIsBooking] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -220,6 +221,7 @@ export default function AppointmentsPage() {
         end_time: endTime,
         notes: bookingData.notes || undefined,
         location_id: bookingData.location_id || undefined,
+        pin: bookingData.pin,
       });
 
       toast.success("Appointment booked successfully!");
@@ -262,6 +264,7 @@ export default function AppointmentsPage() {
       end_time: "",
       notes: "",
       location_id: "",
+      pin: "",
     });
   };
 
@@ -613,7 +616,22 @@ export default function AppointmentsPage() {
                         placeholder="e.g. Follow-up checkup, fever, headache..."
                       />
                     </div>
-                    <Button type="submit" className="w-full rounded-xl" disabled={isBooking}>
+                    <div className="space-y-2 border-t border-border/40 pt-4 mt-4">
+                      <label className="text-sm font-medium text-blue-600 flex items-center gap-1.5">
+                        <Building2 className="h-4 w-4" /> Authorization PIN *
+                      </label>
+                      <Input
+                        type="password"
+                        value={bookingData.pin}
+                        onChange={(e) => setBookingData({ ...bookingData, pin: e.target.value })}
+                        placeholder="• • • • • •"
+                        maxLength={6}
+                        className="text-center text-xl tracking-[0.5em]"
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">Enter your 6-digit PIN to authorize this booking.</p>
+                    </div>
+                    <Button type="submit" className="w-full rounded-xl" disabled={isBooking || bookingData.pin.length !== 6}>
                       {isBooking ? "Booking..." : "Confirm Booking"}
                     </Button>
                   </form>

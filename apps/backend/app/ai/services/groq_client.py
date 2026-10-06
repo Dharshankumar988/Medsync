@@ -124,6 +124,7 @@ class GroqClient:
         max_tokens: int = 1024,
         json_mode: bool = False,
         tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
     ) -> Any:
         """Standard chat completion with Groq."""
         self._check_client()
@@ -144,8 +145,14 @@ class GroqClient:
             if json_mode:
                 params["response_format"] = {"type": "json_object"}
             if tools:
-                params["tools"] = tools
-                params["tool_choice"] = "auto"
+                if tool_choice == "none":
+                    pass
+                else:
+                    params["tools"] = tools
+                    if tool_choice:
+                        params["tool_choice"] = tool_choice
+                    else:
+                        params["tool_choice"] = "auto"
 
             response = await self.client.chat.completions.create(**params)
 
@@ -183,7 +190,8 @@ class GroqClient:
                         temperature=temperature,
                         max_tokens=max_tokens,
                         json_mode=json_mode,
-                        tools=tools
+                        tools=tools,
+                        tool_choice=tool_choice
                     )
             logger.error(f"Groq API call failed: {e}")
             raise GroqProviderException(str(e))

@@ -50,15 +50,9 @@ $AuthToken = ""
 $Url = ""
 $TargetPort = 8000
 
-if ($Mode -eq "FaceService") {
-    $TokenVar = "^FACE_SERVICE_NGROK_AUTHTOKEN=(.*)"
-    $UrlVar = "^FACE_SERVICE_NGROK_URL=(.*)"
-    $TargetPort = 8080
-} else {
-    $TokenVar = "^BACKEND_NGROK_AUTHTOKEN=(.*)"
-    $UrlVar = "^BACKEND_NGROK_URL=(.*)"
-    $TargetPort = 8000
-}
+$TokenVar = "^BACKEND_NGROK_AUTHTOKEN=(.*)"
+$UrlVar = "^BACKEND_NGROK_URL=(.*)"
+$TargetPort = 8000
 
 if (Test-Path -LiteralPath $EnvPath) {
     $envContent = Get-Content $EnvPath

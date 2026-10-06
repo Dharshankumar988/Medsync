@@ -48,84 +48,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
     }
   }, []);
 
-  // Auto-zoom detection: uses canvas to analyze video frames for QR-like patterns
-  const startAutoZoomDetection = useCallback(() => {
-    if (autoZoomIntervalRef.current) return;
-    
-    const checkForQRPattern = () => {
-      try {
-        const videoEl = document.querySelector('#qr-reader video') as HTMLVideoElement;
-        if (!videoEl || videoEl.videoWidth === 0) return;
 
-        if (!canvasRef.current) {
-          canvasRef.current = document.createElement('canvas');
-        }
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) return;
-
-        // Sample center region of the video
-        const sampleSize = 200;
-        canvas.width = sampleSize;
-        canvas.height = sampleSize;
-        
-        const sx = (videoEl.videoWidth - sampleSize) / 2;
-        const sy = (videoEl.videoHeight - sampleSize) / 2;
-        
-        ctx.drawImage(videoEl, sx, sy, sampleSize, sampleSize, 0, 0, sampleSize, sampleSize);
-        const imageData = ctx.getImageData(0, 0, sampleSize, sampleSize);
-        const data = imageData.data;
-
-        // Analyze for high-contrast patterns (QR codes have sharp black/white transitions)
-        let transitions = 0;
-        const step = 4; // Check every 4th pixel for performance
-        for (let y = 0; y < sampleSize; y += step) {
-          let prevBright = false;
-          for (let x = 0; x < sampleSize; x += step) {
-            const idx = (y * sampleSize + x) * 4;
-            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-            const isBright = brightness > 128;
-            if (x > 0 && isBright !== prevBright) transitions++;
-            prevBright = isBright;
-          }
-        }
-
-        // QR codes typically have many transitions (high frequency patterns)
-        const transitionDensity = transitions / (sampleSize * sampleSize / (step * step));
-        
-        if (transitionDensity > 0.15) {
-          // Likely a QR code detected in frame - apply zoom
-          detectionCountRef.current++;
-          
-          if (detectionCountRef.current >= 3) {
-            // Confirmed pattern - auto-zoom to lock on
-            setScanStatus("detected");
-            setIsAutoZooming(true);
-            
-            if (maxZoom > 1 && zoomLevel < Math.min(2.5, maxZoom)) {
-              // Gradually zoom in
-              const targetZoom = Math.min(zoomLevel + 0.3, Math.min(2.5, maxZoom));
-              applyZoom(targetZoom);
-            }
-          }
-        } else {
-          detectionCountRef.current = Math.max(0, detectionCountRef.current - 1);
-          if (detectionCountRef.current === 0) {
-            setScanStatus("searching");
-            setIsAutoZooming(false);
-            // Reset zoom if we lost the pattern
-            if (zoomLevel > 1.2) {
-              applyZoom(1);
-            }
-          }
-        }
-      } catch (e) {
-        // Silently ignore frame analysis errors
-      }
-    };
-
-    autoZoomIntervalRef.current = setInterval(checkForQRPattern, 300);
-  }, [applyZoom, maxZoom, zoomLevel]);
 
   useEffect(() => {
     let mounted = true;
@@ -147,25 +70,15 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
             await scannerRef.current.start(
               { facingMode: "environment" },
               {
-                fps: 15,
-                qrbox: { width: 250, height: 250 },
+                fps: 10,
                 aspectRatio: 1.0,
-                // @ts-ignore: experimentalFeatures is valid but not typed
-                experimentalFeatures: {
-                  useBarCodeDetectorIfSupported: true
-                }
               },
               (decodedText) => {
+                console.log("QR Code scanned:", decodedText);
                 // Ignore multiple scans while processing
                 if (isScanningRef.current) return;
                 isScanningRef.current = true;
                 setScanStatus("processing");
-                
-                // Stop auto-zoom
-                if (autoZoomIntervalRef.current) {
-                  clearInterval(autoZoomIntervalRef.current);
-                  autoZoomIntervalRef.current = null;
-                }
                 
                 // Stop scanner and call onScan
                 if (scannerRef.current?.isScanning) {
@@ -181,27 +94,10 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
               }
             );
 
-            // After scanner starts, get video track for zoom control
-            try {
-              const videoEl = document.querySelector('#qr-reader video') as HTMLVideoElement;
-              if (videoEl?.srcObject instanceof MediaStream) {
-                const track = videoEl.srcObject.getVideoTracks()[0];
-                videoTrackRef.current = track;
-                
-                // Check zoom capabilities
-                const caps = track.getCapabilities?.() as any;
-                if (caps?.zoom) {
-                  setMaxZoom(caps.zoom.max);
-                }
-              }
-            } catch (e) {
-              console.warn("Could not get video track for zoom:", e);
+            // Set searching status
+            if (mounted) {
+               setScanStatus("searching");
             }
-
-            // Start auto-zoom detection after a short delay
-            setTimeout(() => {
-              if (mounted) startAutoZoomDetection();
-            }, 1000);
           }
         }
       } catch (err) {
@@ -214,10 +110,6 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
 
     return () => {
       mounted = false;
-      if (autoZoomIntervalRef.current) {
-        clearInterval(autoZoomIntervalRef.current);
-        autoZoomIntervalRef.current = null;
-      }
       if (scannerRef.current && scannerRef.current.isScanning) {
         scannerRef.current.stop().then(() => {
           if (scannerRef.current) {
@@ -237,7 +129,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
       }
       scannerRef.current = null;
     };
-  }, [startAutoZoomDetection]);
+  }, []);
 
   const handleClose = () => {
     if (autoZoomIntervalRef.current) {

@@ -191,6 +191,9 @@ export default function LoginPage() {
                   <label htmlFor="password" className="text-sm font-medium text-foreground/80">
                     Password
                   </label>
+                  <Link href="/reset-password" className="text-xs font-medium text-blue-500 hover:text-blue-400 transition-colors">
+                    Forgot password?
+                  </Link>
                 </div>
                 <div className="relative">
                   <LockKeyhole className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />

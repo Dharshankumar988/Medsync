@@ -81,42 +81,64 @@ export const authService = {
     google_maps_url?: string;
   }) => {
     const normalizedRole = normalizeRole(data.role);
+    let userId = "";
+    let authSession = null;
+    let needsVerification = false;
 
-    const { data: authData, error } = await supabase.auth.signUp({
-      email: data.email,
-      password: data.password,
-      options: {
-        data: {
-          full_name: data.full_name,
-          role: normalizedRole.toUpperCase(),
-          hospital_id: data.hospital_id,
-          hospital_name: data.hospital_name,
-          hospital_address: data.hospital_address,
-          clinic_name: data.clinic_name,
-          clinic_address: data.clinic_address,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          license_number: data.license_number,
-          gst_number: data.gst_number,
-          business_name: data.business_name,
-          contact_number: data.contact_number,
-          blood_group: data.blood_group,
-          gender: data.gender,
-          date_of_birth: data.date_of_birth,
-          facility_type: data.facility_type,
-          google_maps_url: data.google_maps_url,
+    if (normalizedRole === "doctor" || normalizedRole === "pharmacy") {
+      // Bypass Supabase Auth completely for Doctor and Pharmacy as requested
+      const { default: api } = await import('@/lib/api');
+      try {
+        const response = await api.post('/api/v1/auth/admin-register', {
+          email: data.email,
+          password: data.password
+        });
+        userId = response.data.data.id;
+        needsVerification = false; // Bypass verification
+      } catch (err: any) {
+        throw new Error(err.response?.data?.detail || "Failed to create user account.");
+      }
+    } else {
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: {
+            full_name: data.full_name,
+            role: normalizedRole.toUpperCase(),
+            hospital_id: data.hospital_id,
+            hospital_name: data.hospital_name,
+            hospital_address: data.hospital_address,
+            clinic_name: data.clinic_name,
+            clinic_address: data.clinic_address,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            license_number: data.license_number,
+            gst_number: data.gst_number,
+            business_name: data.business_name,
+            contact_number: data.contact_number,
+            blood_group: data.blood_group,
+            gender: data.gender,
+            date_of_birth: data.date_of_birth,
+            facility_type: data.facility_type,
+            google_maps_url: data.google_maps_url,
+          },
         },
-      },
-    });
+      });
 
-    if (error) throw error;
-    if (!authData.user) throw new Error("Signup failed");
+      if (error) throw error;
+      if (!authData.user) throw new Error("Signup failed");
+      
+      userId = authData.user.id;
+      authSession = authData.session;
+      needsVerification = !authData.session;
+    }
 
     // Sync with backend database
     try {
       const { default: api } = await import('@/lib/api');
       await api.post('/api/v1/auth/sync', {
-        id: authData.user.id,
+        id: userId,
         email: data.email,
         role: normalizedRole.toUpperCase(),
         full_name: data.full_name,
@@ -154,14 +176,12 @@ export const authService = {
       throw new Error(message);
     }
 
-    const user = getUserProfile(authData.user);
-    
     return {
       data: {
-        user,
-        session: authData.session,
-        role: user?.role ?? normalizedRole,
-        needsEmailVerification: !authData.session,
+        user: { id: userId, email: data.email, role: normalizedRole },
+        session: authSession,
+        role: normalizedRole,
+        needsEmailVerification: needsVerification,
       },
     };
   },

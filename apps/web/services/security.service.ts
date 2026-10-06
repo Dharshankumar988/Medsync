@@ -23,24 +23,10 @@ export class SecurityService {
     return response.data;
   }
 
-  static async enrollFace(token: string, images: File[]) {
-    const formData = new FormData();
-    images.forEach(img => {
-      formData.append('images', img);
-    });
-    const response = await axios.post(`${API_URL}/security/enroll-face`, formData, {
-      headers: { 
-        Authorization: `Bearer ${token}`
-      }
-    });
-    return response.data;
-  }
-
-  static async authorizeDownload(token: string, prescriptionId: string, pin: string, password: string, faceImage: File) {
+  static async authorizeDownload(token: string, prescriptionId: string, pin: string, password: string) {
     const formData = new FormData();
     formData.append('pin', pin);
     formData.append('password', password);
-    formData.append('face_image', faceImage);
     const response = await axios.post(`${API_URL}/prescriptions/${prescriptionId}/authorize-download`, formData, {
       headers: { 
         Authorization: `Bearer ${token}`
@@ -49,36 +35,11 @@ export class SecurityService {
     return response.data;
   }
 
-  static async verifyFace(token: string, faceImage: File) {
+  static async resetPinWithPassword(token: string, currentPassword: string, newPin: string) {
     const formData = new FormData();
-    formData.append('image', faceImage);
-    const response = await axios.post(`${API_URL}/security/verify-face`, formData, {
-      headers: { 
-        Authorization: `Bearer ${token}`
-      }
-    });
-    return response.data;
-  }
-
-  static async changePinWithFace(token: string, newPin: string, faceImage: File) {
-    const formData = new FormData();
+    formData.append('current_password', currentPassword);
     formData.append('new_pin', newPin);
-    formData.append('image', faceImage);
-    const response = await axios.post(`${API_URL}/security/change-pin-face`, formData, {
-      headers: { 
-        Authorization: `Bearer ${token}`
-      }
-    });
-    return response.data;
-  }
-
-  static async changeFaceWithPin(token: string, pin: string, faceImages: File[]) {
-    const formData = new FormData();
-    formData.append('pin', pin);
-    faceImages.forEach(img => {
-      formData.append('images', img);
-    });
-    const response = await axios.post(`${API_URL}/security/change-face-pin`, formData, {
+    const response = await axios.post(`${API_URL}/security/reset-pin-with-password`, formData, {
       headers: { 
         Authorization: `Bearer ${token}`
       }

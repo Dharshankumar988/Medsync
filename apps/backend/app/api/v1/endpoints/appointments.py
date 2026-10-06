@@ -25,6 +25,13 @@ async def book_appointment(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(require_patient),
 ):
+    from app.services.security_service import validate_patient_pin
+    from fastapi import HTTPException
+    
+    is_valid = await validate_patient_pin(db, current_user.id, req.pin)
+    if not is_valid:
+        raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+        
     appointment = await AppointmentService.book_appointment(db, current_user.id, req)
     return APIResponse(message="Appointment booked", data=appointment)
 

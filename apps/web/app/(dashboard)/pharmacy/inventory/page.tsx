@@ -20,6 +20,7 @@ export default function PharmacyInventoryPage() {
   const [restockOrders, setRestockOrders] = useState<any[]>([]);
   const [selectedMedicine, setSelectedMedicine] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("50");
+  const [pin, setPin] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchInventory = () => {
@@ -51,13 +52,18 @@ export default function PharmacyInventoryPage() {
 
   const handlePlaceOrder = async () => {
     if (!selectedMedicine || !orderQuantity) return;
+    if (pin.length !== 6) {
+      toast.error("Please enter your 6-digit Authorization PIN");
+      return;
+    }
     setIsSubmitting(true);
-    const success = await pharmacyService.placeRestockOrder(selectedMedicine, parseInt(orderQuantity));
+    const success = await pharmacyService.placeRestockOrder(selectedMedicine, parseInt(orderQuantity), pin);
     if (success) {
       toast.success("Order placed! It will be delivered in 2 minutes.");
       setIsRestockModalOpen(false);
       setSelectedMedicine("");
       setOrderQuantity("50");
+      setPin("");
     } else {
       toast.error("Failed to place order.");
     }
@@ -266,8 +272,20 @@ export default function PharmacyInventoryPage() {
                   className="rounded-xl p-3"
                 />
               </div>
+              <div className="space-y-1.5 border-t border-border/40 pt-4 mt-2">
+                <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
+                <Input 
+                  type="password" 
+                  value={pin} 
+                  onChange={e => setPin(e.target.value)} 
+                  placeholder="• • • • • •" 
+                  maxLength={6}
+                  className="text-center tracking-[0.5em] rounded-xl"
+                  required 
+                />
+              </div>
               
-              <Button className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isSubmitting || !selectedMedicine || !orderQuantity} onClick={handlePlaceOrder}>
+              <Button className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" disabled={isSubmitting || !selectedMedicine || !orderQuantity || pin.length !== 6} onClick={handlePlaceOrder}>
                 {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Package className="w-4 h-4 mr-2" />} 
                 Place Order
               </Button>

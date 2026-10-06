@@ -133,14 +133,15 @@ class AdminAIService:
                 kwargs = json.loads(tool_call.function.arguments)
             except:
                 kwargs = {}
-                
+
             tool_result = await AdminAITools.execute_tool(db, admin_id, session.id, function_name, kwargs)
-            
+
             # Send the tool result back to the model
             messages.append({"role": "assistant", "content": None, "tool_calls": [tool_call]})
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "name": function_name, "content": tool_result})
-            
-            reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1)
+
+            # When sending tool result, set tool_choice to "none" to prevent further tool calls
+            reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1, tool_choice="none")
         
         reply_content = AIOrchestrator.filter_output(reply_content, "admin")
         inference_time = int((time.time() - start_time) * 1000)

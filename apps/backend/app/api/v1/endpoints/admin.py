@@ -111,27 +111,6 @@ async def reject_verification(
     req = await VerificationService.reject_request(db, request_id, current_admin.id, "Rejected by admin")
     return APIResponse(message="Rejected successfully", data={"request_id": str(req.id)})
 
-@router.get("/patients", response_model=APIResponse[list[dict]])
-async def get_patients(
-    db: AsyncSession = Depends(get_db),
-    current_admin: AuthenticatedPrincipal = Depends(require_admin),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200)
-):
-    stmt = select(User, Patient).join(Patient, User.id == Patient.user_id).where(User.role == UserRole.PATIENT).offset(skip).limit(limit)
-    result = await db.execute(stmt)
-    rows = result.all()
-    
-    data = [{
-        "user_id": str(user.id),
-        "email": user.email,
-        "full_name": patient.full_name,
-        "status": user.status.value,
-        "created_at": user.created_at.isoformat()
-    } for user, patient in rows]
-    
-    return APIResponse(message="Patients retrieved", data=data)
-
 @router.delete("/users/{user_id}", response_model=APIResponse[dict])
 async def delete_user(
     user_id: uuid.UUID,
@@ -185,6 +164,30 @@ async def reset_user_security(
     await db.commit()
     return APIResponse(message="User security credentials reset successfully", data={})
 
+@router.get("/patients", response_model=APIResponse[list[dict]])
+async def get_patients(
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200)
+):
+    stmt = select(Patient, User).join(User, Patient.user_id == User.id).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    rows = result.all()
+    
+    data = [{
+        "id": str(patient.id),
+        "user_id": str(patient.user_id),
+        "full_name": patient.full_name,
+        "email": user.email,
+        "date_of_birth": patient.date_of_birth.isoformat() if patient.date_of_birth else None,
+        "blood_group": patient.blood_group,
+        "gender": patient.gender,
+        "created_at": patient.created_at.isoformat()
+    } for patient, user in rows]
+    
+    return APIResponse(message="Patients retrieved", data=data)
+
 @router.get("/admins", response_model=APIResponse[list[dict]])
 async def get_admins(
     db: AsyncSession = Depends(get_db),
@@ -219,72 +222,35 @@ async def create_admin(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    # Register in Supabase using the admin API
-    async with await get_supabase_client() as client:
-        res = await client.post("/admin/users", json={
-            "email": payload.email,
-            "password": payload.password,
-            "email_confirm": True
-        })
-        
-        if res.status_code not in (200, 201):
-            raise HTTPException(status_code=res.status_code, detail=f"Failed to create admin in Auth: {res.text}")
-            
-        data = res.json()
-        user_id_str = data.get("id")
-        if not user_id_str:
-            raise HTTPException(status_code=400, detail="No user ID returned from Auth")
-        
-        auth_user_id = uuid.UUID(user_id_str)
-        
-        # Check if already in DB
-        stmt = select(User).where(User.id == auth_user_id)
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none():
-            await client.delete(f"/admin/users/{auth_user_id}")
-            raise HTTPException(status_code=400, detail="User already exists in DB")
-            
-        try:
-            new_user = User(
-                id=auth_user_id,
-                email=payload.email,
-                role=UserRole.ADMIN,
-                status=UserStatus.ACTIVE,
-                is_verified=True,
-                profile_completion_percentage=100
-            )
-            db.add(new_user)
-            await db.commit()
-        except Exception as e:
-            await db.rollback()
-            await client.delete(f"/admin/users/{auth_user_id}")
-            raise HTTPException(status_code=500, detail=f"Database error. Rolled back auth user. {str(e)}")
-            
-    return APIResponse(message="Admin created successfully", data={"email": payload.email, "id": str(auth_user_id)})
+    # Supabase auth-free admin creation - direct SQL injection like doctor/pharmacy
+    from sqlalchemy import text
+    user_id = uuid.uuid4()
+    try:
+        await db.execute(
+            text("""
+            INSERT INTO auth.users (id, instance_id, email, encrypted_password, aud, role, email_confirmed_at)
+            VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')), 'authenticated', 'authenticated', now())
+            """),
+            {"id": user_id, "email": payload.email, "pwd": payload.password}
+        )
+        await db.commit()
 
-@router.get("/doctors", response_model=APIResponse[list[dict]])
-async def get_doctors(
-    db: AsyncSession = Depends(get_db),
-    current_admin: AuthenticatedPrincipal = Depends(require_admin),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200)
-):
-    stmt = select(Doctor, User).join(User, Doctor.user_id == User.id).offset(skip).limit(limit)
-    result = await db.execute(stmt)
-    rows = result.all()
-    
-    data = [{
-        "id": str(doctor.id),
-        "user_id": str(doctor.user_id),
-        "full_name": doctor.full_name,
-        "email": user.email,
-        "license_number": doctor.license_number,
-        "hospital_name": doctor.hospital_name,
-        "clinic_name": doctor.clinic_name,
-        "status": doctor.doctor_status
-    } for doctor, user in rows]
-    
-    return APIResponse(message="Doctors retrieved", data=data)
+        # Create local DB user record
+        new_user = User(
+            id=user_id,
+            email=payload.email,
+            role=UserRole.ADMIN,
+            status=UserStatus.ACTIVE,
+            is_verified=True,
+            profile_completion_percentage=100
+        )
+        db.add(new_user)
+        await db.commit()
+
+        return APIResponse(message="Admin created successfully", data={"email": payload.email, "id": str(user_id)})
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 from pydantic import BaseModel
 from typing import Optional
@@ -749,47 +715,174 @@ async def get_relationship_graph(
 ):
     nodes = []
     edges = []
-    
-    from sqlalchemy import func
+
+    from sqlalchemy import func, desc
     from app.models.user import User
     from app.models.patient import Patient
     from app.models.doctor import Doctor, Hospital
     from app.models.pharmacy import Pharmacy
 
-    # Get patients count
-    patients_count = (await db.execute(select(func.count(Patient.user_id)))).scalar()
-    
-    # Get doctors count (approved / pending)
-    doctors_approved = (await db.execute(select(func.count(Doctor.user_id)).where(Doctor.doctor_status == "VERIFIED"))).scalar()
-    doctors_pending = (await db.execute(select(func.count(Doctor.user_id)).where(Doctor.doctor_status == "PENDING"))).scalar()
-    
-    # Get pharmacies count
-    pharmacies_count = (await db.execute(select(func.count(Pharmacy.user_id)))).scalar()
-    
-    # Get hospitals count
-    hospitals_count = (await db.execute(select(func.count(Hospital.id)))).scalar()
-    
-    # Get admins count
-    admins_count = (await db.execute(select(func.count(User.id)).where(User.role == "ADMIN"))).scalar()
-    
-    # Create central node
-    nodes.append({"id": "SYS", "label": "MedSync Platform", "type": "System", "hasError": False, "details": "The core MedSync System"})
-    
-    # Create entity nodes
-    nodes.append({"id": "PATIENTS", "label": f"Patients: {patients_count}", "type": "Patient", "hasError": False, "details": f"Total registered patients: {patients_count}"})
-    nodes.append({"id": "DOC_APP", "label": f"Doctors (Approved): {doctors_approved}", "type": "Doctor", "hasError": False, "details": f"Approved doctors: {doctors_approved}"})
-    nodes.append({"id": "DOC_PEN", "label": f"Doctors (Pending): {doctors_pending}", "type": "Doctor", "hasError": doctors_pending > 0, "details": f"Pending doctors requiring verification: {doctors_pending}"})
-    nodes.append({"id": "PHARMACIES", "label": f"Pharmacies: {pharmacies_count}", "type": "Pharmacy", "hasError": False, "details": f"Registered pharmacies: {pharmacies_count}"})
-    nodes.append({"id": "HOSPITALS", "label": f"Hospitals: {hospitals_count}", "type": "Hospital", "hasError": False, "details": f"Registered hospitals: {hospitals_count}"})
-    nodes.append({"id": "ADMINS", "label": f"Admins: {admins_count}", "type": "Admin", "hasError": False, "details": f"System administrators: {admins_count}"})
-    
-    # Create links
-    edges.append({"source": "SYS", "target": "PATIENTS", "type": "Has"})
-    edges.append({"source": "SYS", "target": "DOC_APP", "type": "Has"})
-    edges.append({"source": "SYS", "target": "DOC_PEN", "type": "Has"})
-    edges.append({"source": "SYS", "target": "PHARMACIES", "type": "Has"})
-    edges.append({"source": "SYS", "target": "HOSPITALS", "type": "Has"})
-    edges.append({"source": "SYS", "target": "ADMINS", "type": "Manages"})
+    # Create central golden node (Medicine/System)
+    nodes.append({
+        "id": "MEDICINE",
+        "label": "Medicine",
+        "type": "Medicine",
+        "hasError": False,
+        "details": "Central hub connecting all healthcare entities",
+        "isCentral": True
+    })
+
+    # Get top 10 recent patients
+    patients_stmt = select(Patient, User).join(
+        User, Patient.user_id == User.id
+    ).order_by(desc(Patient.created_at)).limit(10)
+    patients_result = await db.execute(patients_stmt)
+    patients = patients_result.all()
+
+    for patient, user in patients:
+        location_str = f"{patient.city}, {patient.state}" if patient.city else "Location not set"
+        google_maps_link = f"https://www.google.com/maps/search/?api=1&query={patient.address.replace(' ', '+')}" if patient.address else None
+
+        nodes.append({
+            "id": f"PATIENT_{patient.id}",
+            "label": patient.full_name,
+            "type": "Patient",
+            "hasError": False,
+            "details": f"Patient | {location_str}",
+            "entityData": {
+                "name": patient.full_name,
+                "email": user.email,
+                "phone": patient.phone_number,
+                "address": patient.address,
+                "city": patient.city,
+                "state": patient.state,
+                "country": patient.country,
+                "pincode": patient.pincode,
+                "bloodGroup": patient.blood_group,
+                "googleMapsLink": google_maps_link
+            }
+        })
+        edges.append({"source": "MEDICINE", "target": f"PATIENT_{patient.id}", "type": "serves"})
+
+    # Get top 10 recent doctors (verified)
+    doctors_stmt = select(Doctor, User).join(
+        User, Doctor.user_id == User.id
+    ).where(Doctor.doctor_status == "VERIFIED").order_by(desc(Doctor.created_at)).limit(10)
+    doctors_result = await db.execute(doctors_stmt)
+    doctors = doctors_result.all()
+
+    for doctor, user in doctors:
+        location_str = f"{doctor.city}, {doctor.state}" if doctor.city else "Location not set"
+        google_maps_link = f"https://www.google.com/maps/search/?api=1&query={doctor.clinic_address.replace(' ', '+')}" if doctor.clinic_address else None
+
+        nodes.append({
+            "id": f"DOCTOR_{doctor.id}",
+            "label": doctor.full_name,
+            "type": "Doctor",
+            "hasError": False,
+            "details": f"Doctor | {doctor.specialization or 'General'} | {location_str}",
+            "entityData": {
+                "name": doctor.full_name,
+                "email": user.email,
+                "specialization": doctor.specialization,
+                "licenseNumber": doctor.license_number,
+                "clinicName": doctor.clinic_name,
+                "clinicAddress": doctor.clinic_address,
+                "city": doctor.city,
+                "state": doctor.state,
+                "country": doctor.country,
+                "pincode": doctor.pincode,
+                "phone": doctor.clinic_phone,
+                "experience": doctor.experience_years,
+                "consultationFee": doctor.consultation_fee,
+                "googleMapsLink": google_maps_link
+            }
+        })
+        edges.append({"source": "MEDICINE", "target": f"DOCTOR_{doctor.id}", "type": "prescribes"})
+
+    # Get top 10 recent pharmacies
+    pharmacies_stmt = select(Pharmacy, User).join(
+        User, Pharmacy.user_id == User.id
+    ).order_by(desc(Pharmacy.created_at)).limit(10)
+    pharmacies_result = await db.execute(pharmacies_stmt)
+    pharmacies = pharmacies_result.all()
+
+    for pharmacy, user in pharmacies:
+        location_str = f"{pharmacy.city}, {pharmacy.state}" if pharmacy.city else "Location not set"
+        google_maps_link = f"https://www.google.com/maps/search/?api=1&query={pharmacy.address.replace(' ', '+')}" if pharmacy.address else None
+
+        nodes.append({
+            "id": f"PHARMACY_{pharmacy.id}",
+            "label": pharmacy.business_name,
+            "type": "Pharmacy",
+            "hasError": False,
+            "details": f"Pharmacy | {location_str}",
+            "entityData": {
+                "name": pharmacy.business_name,
+                "email": user.email,
+                "licenseNumber": pharmacy.license_number,
+                "address": pharmacy.address,
+                "city": pharmacy.city,
+                "state": pharmacy.state,
+                "country": pharmacy.country,
+                "pincode": pharmacy.pincode,
+                "phone": pharmacy.contact_number,
+                "operatingHours": pharmacy.operating_hours,
+                "is24x7": pharmacy.is_24x7,
+                "googleMapsLink": google_maps_link
+            }
+        })
+        edges.append({"source": "MEDICINE", "target": f"PHARMACY_{pharmacy.id}", "type": "dispenses"})
+
+    # Get top 10 recent hospitals
+    hospitals_stmt = select(Hospital).order_by(desc(Hospital.created_at)).limit(10)
+    hospitals_result = await db.execute(hospitals_stmt)
+    hospitals = hospitals_result.scalars().all()
+
+    for hospital in hospitals:
+        location_str = f"{hospital.city}, {hospital.state}" if hospital.city else "Location not set"
+        google_maps_link = f"https://www.google.com/maps/search/?api=1&query={hospital.address.replace(' ', '+')}" if hospital.address else None
+
+        nodes.append({
+            "id": f"HOSPITAL_{hospital.id}",
+            "label": hospital.name,
+            "type": "Hospital",
+            "hasError": False,
+            "details": f"Hospital | {location_str}",
+            "entityData": {
+                "name": hospital.name,
+                "address": hospital.address,
+                "city": hospital.city,
+                "state": hospital.state,
+                "country": hospital.country,
+                "pincode": hospital.pincode,
+                "phone": hospital.contact_number,
+                "type": hospital.hospital_type,
+                "googleMapsLink": google_maps_link
+            }
+        })
+        edges.append({"source": "MEDICINE", "target": f"HOSPITAL_{hospital.id}", "type": "hosts"})
+
+    # Get top 10 recent admins
+    admins_stmt = select(User).where(User.role == "ADMIN").order_by(desc(User.created_at)).limit(10)
+    admins_result = await db.execute(admins_stmt)
+    admins = admins_result.scalars().all()
+
+    for admin in admins:
+        nodes.append({
+            "id": f"ADMIN_{admin.id}",
+            "label": admin.email.split('@')[0],
+            "type": "Admin",
+            "hasError": False,
+            "details": f"Admin | {admin.email}",
+            "entityData": {
+                "email": admin.email,
+                "role": admin.role,
+                "status": admin.status,
+                "isVerified": admin.is_verified
+            }
+        })
+        edges.append({"source": "MEDICINE", "target": f"ADMIN_{admin.id}", "type": "manages"})
 
     return APIResponse(message="Graph retrieved", data={"nodes": nodes, "links": edges})
 

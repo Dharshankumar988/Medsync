@@ -1,6 +1,4 @@
-import { IEncryptionProvider } from '@medsync/core';
-
-export class WebEncryptionProvider implements IEncryptionProvider {
+export class WebEncryptionProvider {
   private toBufferSource(value: Uint8Array): ArrayBuffer {
     return Uint8Array.from(value).buffer;
   }

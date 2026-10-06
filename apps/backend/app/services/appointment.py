@@ -110,8 +110,8 @@ class AppointmentService:
                 "updated_at": appt.updated_at,
             }
 
-            # Fetch doctor info
-            doc_stmt = select(Doctor).where(Doctor.user_id == appt.doctor_id)
+            # Fetch doctor info (doctor_id could be user_id or doctor.id)
+            doc_stmt = select(Doctor).where((Doctor.user_id == appt.doctor_id) | (Doctor.id == appt.doctor_id))
             doc_result = await db.execute(doc_stmt)
             doc = doc_result.scalar_one_or_none()
             if doc:
@@ -174,7 +174,7 @@ class AppointmentService:
         }
 
         # Enrich
-        doc_stmt = select(Doctor).where(Doctor.user_id == appt.doctor_id)
+        doc_stmt = select(Doctor).where((Doctor.user_id == appt.doctor_id) | (Doctor.id == appt.doctor_id))
         doc_result = await db.execute(doc_stmt)
         doc = doc_result.scalar_one_or_none()
         if doc:

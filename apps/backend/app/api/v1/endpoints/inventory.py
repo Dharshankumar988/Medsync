@@ -123,6 +123,7 @@ import datetime
 class RestockRequest(BaseModel):
     medicine_id: uuid.UUID
     quantity: int
+    pin: str
 
 @router.post("/restock", response_model=APIResponse)
 async def place_restock_order(
@@ -130,6 +131,11 @@ async def place_restock_order(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_pharmacy)
 ):
+    from app.services.security_service import validate_pharmacy_pin
+    is_valid = await validate_pharmacy_pin(db, current_user.id, req.pin)
+    if not is_valid:
+        raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+
     from app.models.pharmacy_system import PharmacyRestockOrder
     
     if req.quantity <= 0:

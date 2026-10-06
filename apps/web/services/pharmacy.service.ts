@@ -47,9 +47,12 @@ export const pharmacyService = {
     }
   },
 
-  dispensePrescription: async (prescriptionId: string): Promise<boolean> => {
+  dispensePrescription: async (prescriptionId: string, authPin: string, prescriptionPin?: string): Promise<boolean> => {
     try {
-      await api.post(`/api/v1/prescriptions/${prescriptionId}/dispense`);
+      const formData = new FormData();
+      formData.append("auth_pin", authPin);
+      if (prescriptionPin) formData.append("pin", prescriptionPin);
+      await api.post(`/api/v1/prescriptions/${prescriptionId}/dispense`, formData);
       return true;
     } catch {
       return false;
@@ -111,9 +114,9 @@ export const pharmacyService = {
     }
   },
 
-  placeRestockOrder: async (medicineId: string, quantity: number): Promise<boolean> => {
+  placeRestockOrder: async (medicineId: string, quantity: number, pin: string): Promise<boolean> => {
     try {
-      await api.post(`/api/v1/inventory/restock`, { medicine_id: medicineId, quantity });
+      await api.post(`/api/v1/inventory/restock`, { medicine_id: medicineId, quantity, pin });
       return true;
     } catch {
       return false;

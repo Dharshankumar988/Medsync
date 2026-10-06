@@ -185,28 +185,28 @@ class BlockchainSyncService:
             result = await self.db.execute(select(Patient).filter(Patient.user_id == task.entity_id))
             entity = result.scalar_one_or_none()
             if entity:
-                entity.blockchain_status = "SYNCED"
+                entity.blockchain_status = "CONFIRMED"
                 entity.blockchain_tx_hash = tx_hash
-                
+
         elif task.entity_type == SyncEntityType.DOCTOR:
             result = await self.db.execute(select(Doctor).filter(Doctor.user_id == task.entity_id))
             entity = result.scalar_one_or_none()
             if entity:
-                entity.blockchain_status = "SYNCED"
+                entity.blockchain_status = "CONFIRMED"
                 entity.blockchain_tx_hash = tx_hash
-                
+
         elif task.entity_type == SyncEntityType.PHARMACY:
             result = await self.db.execute(select(Pharmacy).filter(Pharmacy.user_id == task.entity_id))
             entity = result.scalar_one_or_none()
             if entity:
-                entity.blockchain_status = "SYNCED"
+                entity.blockchain_status = "CONFIRMED"
                 entity.blockchain_tx_hash = tx_hash
-                
+
         elif task.entity_type == SyncEntityType.PRESCRIPTION:
             result = await self.db.execute(select(Prescription).filter(Prescription.id == task.entity_id))
             entity = result.scalar_one_or_none()
             if entity:
-                entity.blockchain_status = "SYNCED"
+                entity.blockchain_status = "CONFIRMED"
                 entity.blockchain_tx_hash = tx_hash
                 entity.block_number = block_number
                 
@@ -215,7 +215,7 @@ class BlockchainSyncService:
             result = await self.db.execute(select(MedicalRecordVersion).filter(MedicalRecordVersion.id == task.entity_id))
             version = result.scalar_one_or_none()
             if version:
-                version.blockchain_status = "SYNCED"
+                version.blockchain_status = "CONFIRMED"
                 version.blockchain_tx_hash = tx_hash
                 version.block_number = block_number
             else:
@@ -223,7 +223,7 @@ class BlockchainSyncService:
                 result = await self.db.execute(select(AIAnalysis).filter(AIAnalysis.version_id == task.entity_id))
                 ai = result.scalar_one_or_none()
                 if ai:
-                    ai.blockchain_status = "SYNCED"
+                    ai.blockchain_status = "CONFIRMED"
                     ai.blockchain_tx_hash = tx_hash
                     ai.block_number = block_number
 

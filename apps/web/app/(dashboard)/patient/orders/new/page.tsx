@@ -77,7 +77,7 @@ export default function NewOnlineOrderPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
       
-      // In a real app we'd capture the face image, but here we just pass a dummy or require PIN
+      // Append required fields
       const formData = new FormData();
       formData.append('pharmacy_id', selectedPharmacy.id);
       formData.append('delivery_address', deliveryAddress);
@@ -246,7 +246,7 @@ export default function NewOnlineOrderPage() {
               <CardHeader className="text-center pb-2 bg-emerald-500/5">
                 <Lock className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
                 <CardTitle>Authorization Required</CardTitle>
-                <CardDescription>Enter PIN or use Face ID to authorize this order</CardDescription>
+                <CardDescription>Enter PIN to authorize this order</CardDescription>
               </CardHeader>
               <CardContent className="p-8 space-y-6">
                 
@@ -284,10 +284,6 @@ export default function NewOnlineOrderPage() {
                     className="text-center text-xl tracking-widest h-12 rounded-xl"
                     maxLength={6}
                   />
-                  <div className="text-xs text-muted-foreground">OR</div>
-                  <Button variant="outline" className="w-full h-12 rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10">
-                    Use Face ID
-                  </Button>
                 </div>
                 
                 <div className="flex justify-center gap-3 pt-4">
