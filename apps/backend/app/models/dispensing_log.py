@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Text, Boolean
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Text, Boolean, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 from app.database.base_class import Base
@@ -16,8 +16,8 @@ class PrescriptionDispensingLog(Base, UUIDMixin, TimestampMixin):
     dispensed_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dispensed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True, nullable=False)
     
-    medicines_prescribed: Mapped[list] = mapped_column(JSONB, default=list, server_default='[]', nullable=False)
-    medicines_dispensed: Mapped[list] = mapped_column(JSONB, default=list, server_default='[]', nullable=False)
+    medicines_prescribed: Mapped[list] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), default=list, server_default='[]', nullable=False)
+    medicines_dispensed: Mapped[list] = mapped_column(JSON().with_variant(JSONB, 'postgresql'), default=list, server_default='[]', nullable=False)
     
     prescribed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     dispensed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
