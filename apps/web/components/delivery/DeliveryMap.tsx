@@ -44,7 +44,7 @@ const patientIcon = L.divIcon({
   iconAnchor: [12, 12]
 });
 
-function DeliveryMarker({ position, status }) {
+function DeliveryMarker({ position, status }: { position: any, status: string }) {
   if (!position || status === 'DELIVERED') return null;
 
   return (
@@ -56,7 +56,7 @@ function DeliveryMarker({ position, status }) {
   );
 }
 
-function MapBounds({ route, currentLocation }) {
+function MapBounds({ route, currentLocation }: { route: any[], currentLocation: any }) {
   const map = useMap();
 
   useEffect(() => {
