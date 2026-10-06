@@ -7,6 +7,7 @@ import { Store, FileText, CheckCircle2, ChevronRight, Lock, Loader2, ArrowRight,
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
+import api from "@/lib/api";
 
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 
@@ -37,20 +38,14 @@ export default function NewOnlineOrderPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       
-      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
-      const res = await fetch(`${baseUrl}/api/v1/pharmacy/network`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
-      if (res.ok) {
-        const json = await res.json();
-        // The API returns pharmacy_id as the user ID for the pharmacy
-        const mapped = json.data.map((p: any) => ({
-            id: p.pharmacy_id,
-            full_name: p.business_name,
-            address: p.address
-        }));
-        setPharmacies(mapped || []);
-      }
+      const res = await api.get('/api/v1/pharmacy/network');
+      // The API returns pharmacy_id as the user ID for the pharmacy
+      const mapped = res.data.data.map((p: any) => ({
+          id: p.pharmacy_id,
+          full_name: p.business_name,
+          address: p.address
+      }));
+      setPharmacies(mapped || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -90,20 +85,8 @@ export default function NewOnlineOrderPage() {
       formData.append('delivery_longitude', longitude.toString());
       formData.append('pin', authPin);
       
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/prescriptions/${selectedPrescription}/order-online`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: formData
-      });
-      
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.detail || "Authorization failed");
-      }
-      
-      const resData = await res.json();
+      const res = await api.post(`/api/v1/prescriptions/${selectedPrescription}/order-online`, formData);
+      const resData = res.data;
       
       // Now we need the order ID, but the endpoint only returns prescription_id.
       // So we'll have to fetch the latest order.
@@ -122,7 +105,7 @@ export default function NewOnlineOrderPage() {
       setStep("payment");
     } catch (e: any) {
       console.error(e);
-      alert(e.message || "Authorization failed");
+      alert(e.response?.data?.detail || e.message || "Authorization failed");
     } finally {
       setLoading(false);
     }
@@ -139,28 +122,16 @@ export default function NewOnlineOrderPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/payments/process`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          order_id: createdOrderId,
-          amount: 45.00,
-          method: "CARD"
-        })
+      const res = await api.post('/api/v1/payments/process', {
+        order_id: createdOrderId,
+        amount: 45.00,
+        method: "CARD"
       });
-      
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.detail || "Payment failed");
-      }
       
       setStep("success");
     } catch (e: any) {
       console.error(e);
-      alert(e.message || "Payment failed");
+      alert(e.response?.data?.detail || e.message || "Payment failed");
     } finally {
       setLoading(false);
     }

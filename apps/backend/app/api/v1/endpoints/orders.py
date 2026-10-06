@@ -176,22 +176,26 @@ from app.database.session import AsyncSessionLocal
 async def simulate_delivery(order_id: uuid.UUID):
     # Simulate delivery taking 10 minutes
     await asyncio.sleep(600)
-    async with AsyncSessionLocal() as db:
-        stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
-        result = await db.execute(stmt)
-        order = result.scalar_one_or_none()
-        if order and order.status != OrderStatus.DELIVERED:
-            order.status = OrderStatus.DELIVERED
-            
-            # Update tracking if it exists
-            tracking_stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
-            tracking_res = await db.execute(tracking_stmt)
-            tracking = tracking_res.scalar_one_or_none()
-            if tracking:
-                tracking.current_status = "DELIVERED"
-                tracking.delivery_completed_at = datetime.utcnow()
-                tracking.delivery_progress = 100
-            await db.commit()
+    try:
+        async with AsyncSessionLocal() as db:
+            stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
+            result = await db.execute(stmt)
+            order = result.scalar_one_or_none()
+            if order and order.status != OrderStatus.DELIVERED:
+                order.status = OrderStatus.DELIVERED
+                
+                # Update tracking if it exists
+                tracking_stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
+                tracking_res = await db.execute(tracking_stmt)
+                tracking = tracking_res.scalar_one_or_none()
+                if tracking:
+                    tracking.current_status = "DELIVERED"
+                    tracking.delivery_completed_at = datetime.utcnow()
+                    tracking.delivery_progress = 100
+                await db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to update delivery status for order {order_id}: {e}")
 
 @router.post("/{order_id}/pay", response_model=APIResponse)
 async def pay_order(

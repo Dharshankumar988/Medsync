@@ -910,15 +910,14 @@ async def get_system_health(
 
     # 3. Blockchain Network Health
     try:
-        from app.blockchain.gateway import BlockchainGateway
+        from app.blockchain.client import blockchain_client
         import os
-        gw = BlockchainGateway()
         is_mock = os.getenv("BLOCKCHAIN_MODE", "mock").lower() == "mock"
         
         if is_mock:
             services.append({"name": "Polygon Amoy Testnet", "status": "HEALTHY", "reason": "Running in MOCK mode (Skipping RPC check)"})
         else:
-            if gw.w3 and gw.w3.is_connected():
+            if blockchain_client.w3 and blockchain_client.w3.is_connected():
                 services.append({"name": "Polygon Amoy Testnet", "status": "HEALTHY", "reason": "RPC connected successfully"})
             else:
                 services.append({"name": "Polygon Amoy Testnet", "status": "ERROR", "reason": "RPC disconnected or invalid"})

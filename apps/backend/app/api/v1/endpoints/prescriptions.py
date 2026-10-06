@@ -100,6 +100,8 @@ async def authorize_prescription_download(
                     cred.failed_attempts += 1
                     cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
                     await db.commit()
+                else:
+                    await db.rollback()
                 raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
             pin_verified = True
 
@@ -346,8 +348,9 @@ async def verify_prescription_auth(
             }
         )
         await db.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to enqueue blockchain sync for prescription {rx.id}: {e}")
         
     from app.models.prescription import PrescriptionItem
     items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == rx.id)
@@ -702,8 +705,9 @@ async def verify_offline_prescription(
             payload=payload
         )
         await db.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to enqueue blockchain sync for prescription {rx.id}: {e}")
     
     return APIResponse(message="Offline prescription verified successfully")
 

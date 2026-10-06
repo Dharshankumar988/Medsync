@@ -7,7 +7,7 @@ import { SecurityService } from "@/services/security.service";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import axios from "axios";
+import api from "@/lib/api";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
@@ -49,11 +49,7 @@ export default function SettingsPage() {
     
     async function loadProfile() {
       try {
-        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/users/me`, {
-          headers: {
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-          }
-        });
+        const response = await api.get('/api/v1/users/me');
         if (response.data?.data?.profile_image_url) {
           setProfileImage(response.data.data.profile_image_url);
         }
@@ -124,10 +120,7 @@ export default function SettingsPage() {
     setIsExporting(true);
     
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
-      
-      const response = await axios.get(`${apiUrl}/fhir/Patient/${userId}/$export`, {
+      const response = await api.get(`/api/v1/fhir/Patient/${userId}/$export`, {
         responseType: 'blob'
       });
       
@@ -163,12 +156,11 @@ export default function SettingsPage() {
       const formData = new FormData();
       formData.append("file", file);
       try {
-        const response = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/users/me/profile-image`, 
+        const response = await api.post(
+          '/api/v1/users/me/profile-image', 
           formData, 
           {
             headers: {
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
               'Content-Type': 'multipart/form-data'
             }
           }

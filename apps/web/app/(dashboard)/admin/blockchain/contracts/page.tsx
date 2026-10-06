@@ -29,6 +29,15 @@ export default function SmartContractsList() {
     c.address.toLowerCase().includes(search.toLowerCase())
   );
 
+  const contractDescriptions: Record<string, string> = {
+    ConsentManagement: "Manages patient consent preferences and data sharing authorizations.",
+    PatientRegistry: "Decentralized identity and profile registry for patients.",
+    DoctorRegistry: "Verified credential and license registry for medical professionals.",
+    PharmacyRegistry: "Licensed pharmacy and dispensary verification registry.",
+    MedicalRecordRegistry: "Secure, encrypted electronic health records mapping.",
+    PrescriptionRegistry: "Tamper-proof prescription issuance and fulfillment ledger."
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -70,22 +79,41 @@ export default function SmartContractsList() {
               </tr>
             ) : (
               filteredContracts.map((c) => (
-                <tr key={c.name} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-5 py-4 font-semibold">{c.name}</td>
-                  <td className="px-5 py-4 text-muted-foreground">v{c.version}</td>
-                  <td className="px-5 py-4 font-mono text-xs text-primary">{c.address}</td>
+                <tr key={c.name} className="hover:bg-muted/10 transition-colors">
                   <td className="px-5 py-4">
+                    <div className="font-semibold text-base text-foreground">{c.name}</div>
+                    <div className="text-xs text-muted-foreground mt-1 max-w-[250px] leading-relaxed">
+                      {contractDescriptions[c.name] || "Core MedSync protocol contract."}
+                    </div>
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground whitespace-nowrap">v{c.version}</td>
+                  <td className="px-5 py-4 font-mono text-xs">
+                    <a href={c.explorer_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                      {c.address}
+                    </a>
+                  </td>
+                  <td className="px-5 py-4 whitespace-nowrap">
                     <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
                       {c.health}
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    <Link
-                      href={`/admin/blockchain/contracts/${c.name}`}
-                      className="text-primary hover:underline font-medium text-sm"
-                    >
-                      View Details →
-                    </Link>
+                    <div className="flex flex-col gap-2 whitespace-nowrap">
+                      <Link
+                        href={`/admin/blockchain/contracts/${c.name}`}
+                        className="text-primary hover:underline font-medium text-sm w-fit"
+                      >
+                        View Details →
+                      </Link>
+                      <a 
+                        href={`${c.explorer_url}#code`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-muted-foreground hover:text-primary hover:underline text-xs w-fit"
+                      >
+                        View Features on PolygonScan ↗
+                      </a>
+                    </div>
                   </td>
                 </tr>
               ))

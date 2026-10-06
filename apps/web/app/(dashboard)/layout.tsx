@@ -18,11 +18,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     authService.me().then(user => {
       const roleValue = String(user.role).toLowerCase();
       setAuthRole(roleValue);
-      if (pathname.includes('/patient') && roleValue !== 'patient') router.push('/unauthorized');
-      if (pathname.includes('/doctor') && roleValue !== 'doctor') router.push('/unauthorized');
-      if (pathname.includes('/admin') && roleValue !== 'admin') router.push('/unauthorized');
-      if (pathname.includes('/hospital') && roleValue !== 'hospital') router.push('/unauthorized');
-      if (pathname.includes('/pharmacy') && roleValue !== 'pharmacy') router.push('/unauthorized');
+      if (pathname.startsWith('/patient') && roleValue !== 'patient') router.push('/unauthorized');
+      if (pathname.startsWith('/doctor') && roleValue !== 'doctor') router.push('/unauthorized');
+      if (pathname.startsWith('/admin') && roleValue !== 'admin') router.push('/unauthorized');
+      if (pathname.startsWith('/hospital') && roleValue !== 'hospital') router.push('/unauthorized');
+      if (pathname.startsWith('/pharmacy') && roleValue !== 'pharmacy') router.push('/unauthorized');
     }).catch(() => {
       router.push('/login');
     });

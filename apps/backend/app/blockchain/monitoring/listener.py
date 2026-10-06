@@ -14,7 +14,7 @@ logger = logging.getLogger("blockchain.listener")
 # List of all known contracts to listen to
 TRACKED_CONTRACTS = ["PatientRegistry", "DoctorRegistry", "PrescriptionRegistry", "MedicalRecordRegistry", "PharmacyRegistry"]
 
-async def fetch_and_enqueue_events(contract_name: str, from_block: int, to_block: int):
+async def fetch_and_enqueue_events(contract_name: str, from_block: int, to_block: int, db):
     # Retrieve all events for this contract by using the web3 get_logs with topics or just iterating contract events
     # We will use the existing get_past_events for each event in the contract, or a generalized get_logs.
     
@@ -25,36 +25,35 @@ async def fetch_and_enqueue_events(contract_name: str, from_block: int, to_block
         logger.error(f"Failed to load contract {contract_name} for listening: {e}")
         return
 
-    async with AsyncSessionLocal() as db:
-        for event_abi in contract.events:
-            event_name = event_abi.event_name
-            try:
-                events = await asyncio.to_thread(
-                    event_listener.get_past_events,
-                    contract_name, event_name, from_block, to_block
+    for event_abi in contract.events:
+        event_name = event_abi.event_name
+        try:
+            events = await asyncio.to_thread(
+                event_listener.get_past_events,
+                contract_name, event_name, from_block, to_block
+            )
+            for e in events:
+                # Enqueue event
+                queue_item = BlockchainEventQueue(
+                    event_name=e["event"],
+                    contract_name=contract_name,
+                    contract_address=contract.address,
+                    transaction_hash=e["transactionHash"],
+                    block_number=e["blockNumber"],
+                    log_index=e.get("logIndex", 0), # Fallback to 0 if not provided by get_past_events
+                    event_data=e["args"]
                 )
-                for e in events:
-                    # Enqueue event
-                    queue_item = BlockchainEventQueue(
-                        event_name=e["event"],
-                        contract_name=contract_name,
-                        contract_address=contract.address,
-                        transaction_hash=e["transactionHash"],
-                        block_number=e["blockNumber"],
-                        log_index=e.get("logIndex", 0), # Fallback to 0 if not provided by get_past_events
-                        event_data=e["args"]
-                    )
-                    db.add(queue_item)
-                    
-                    try:
-                        await db.commit()
-                        logger.info(f"Enqueued {event_name} event from {contract_name} tx {e['transactionHash']}")
-                    except IntegrityError:
-                        await db.rollback()
-                        # Duplicate event (tx_hash, log_index)
-                        pass
-            except Exception as e:
-                logger.error(f"Error fetching {event_name} from {contract_name}: {e}")
+                db.add(queue_item)
+                
+                try:
+                    await db.commit()
+                    logger.info(f"Enqueued {event_name} event from {contract_name} tx {e['transactionHash']}")
+                except IntegrityError:
+                    await db.rollback()
+                    # Duplicate event (tx_hash, log_index)
+                    pass
+        except Exception as e:
+            logger.error(f"Error fetching {event_name} from {contract_name}: {e}")
                 
 import os
 
@@ -90,7 +89,7 @@ async def block_listener_loop():
                         to_block = min(latest_block, from_block + MAX_BLOCKS - 1)
                         
                         logger.debug(f"Syncing {contract_name} from {from_block} to {to_block}")
-                        await fetch_and_enqueue_events(contract_name, from_block, to_block)
+                        await fetch_and_enqueue_events(contract_name, from_block, to_block, db)
                         
                         sync_state.last_processed_block = to_block
                         await db.commit()

@@ -48,7 +48,24 @@ export default function ContractDetail() {
         </button>
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><FileCode2 className="w-6 h-6 text-primary" /> {contract.name}</h1>
-          <p className="text-muted-foreground mt-1 font-mono text-sm">{contract.address}</p>
+          <a href={contract.explorer_url} target="_blank" rel="noreferrer" className="text-muted-foreground mt-1 font-mono text-sm hover:text-primary hover:underline transition-colors">{contract.address}</a>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Network Balance</p>
+          <p className="text-2xl font-bold mt-2 font-mono text-primary">{contract.balance || "0.0000 POL"}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Transactions</p>
+          <p className="text-2xl font-bold mt-2 font-mono">{contract.transaction_count ?? "0"}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between md:col-span-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Block Explorer</p>
+          <a href={contract.explorer_url} target="_blank" rel="noreferrer" className="text-lg font-bold mt-2 text-primary hover:underline truncate">
+            View on PolygonScan →
+          </a>
         </div>
       </div>
 
@@ -85,6 +102,42 @@ export default function ContractDetail() {
           </div>
         </div>
       </div>
+
+      {/* Recent Transactions */}
+      {contract.recent_transactions && contract.recent_transactions.length > 0 && (
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden mt-6">
+          <div className="p-4 border-b border-border bg-muted/30">
+            <h3 className="font-semibold text-sm uppercase tracking-wide">Recent Transactions</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-muted/10 border-b border-border">
+                <tr>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">Tx Hash</th>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">Block</th>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">Time</th>
+                  <th className="px-5 py-3 font-medium text-muted-foreground">From</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {contract.recent_transactions.map((tx: any, idx: number) => {
+                  const date = tx.time ? new Date(parseInt(tx.time) * 1000).toLocaleString() : "Unknown";
+                  return (
+                    <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-5 py-4 font-mono text-xs text-primary truncate max-w-[150px]">
+                        <a href={`https://amoy.polygonscan.com/tx/${tx.hash}`} target="_blank" rel="noreferrer" className="hover:underline">{tx.hash}</a>
+                      </td>
+                      <td className="px-5 py-4 text-xs font-mono">{tx.block}</td>
+                      <td className="px-5 py-4 text-xs text-muted-foreground">{date}</td>
+                      <td className="px-5 py-4 font-mono text-xs truncate max-w-[150px]">{tx.from}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

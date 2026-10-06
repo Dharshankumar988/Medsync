@@ -648,13 +648,50 @@ async def get_contract_details(
     else:
         deployment_status = "CONFIGURED_RPC_UNAVAILABLE"
     
+    # Use requests to fetch data from PolygonScan as requested by the user
+    import requests
+    polygonscan_api_key = os.getenv("POLYGONSCAN_API_KEY", "YourApiKeyToken")
+    balance = "0.0000 POL"
+    tx_count = 0
+    recent_txs = []
+    try:
+        # Fetch Balance
+        bal_url = f"https://api-amoy.polygonscan.com/api?module=account&action=balance&address={address}&tag=latest&apikey={polygonscan_api_key}"
+        bal_res = requests.get(bal_url, timeout=5)
+        bal_data = bal_res.json()
+        if bal_data.get("status") == "1":
+            wei_bal = int(bal_data.get("result", 0))
+            balance = f"{wei_bal / 1e18:.4f} POL"
+            
+        # Fetch TxList to get transaction count and recent txs (sort=desc for most recent)
+        tx_url = f"https://api-amoy.polygonscan.com/api?module=account&action=txlist&address={address}&startblock=0&endblock=99999999&page=1&offset=10000&sort=desc&apikey={polygonscan_api_key}"
+        tx_res = requests.get(tx_url, timeout=5)
+        tx_data = tx_res.json()
+        if tx_data.get("status") == "1":
+            all_txs = tx_data.get("result", [])
+            tx_count = len(all_txs)
+            # Grab top 5 most recent
+            for tx in all_txs[:5]:
+                recent_txs.append({
+                    "hash": tx.get("hash"),
+                    "block": tx.get("blockNumber"),
+                    "time": tx.get("timeStamp"),
+                    "from": tx.get("from"),
+                    "to": tx.get("to")
+                })
+    except Exception as e:
+        logger.error(f"PolygonScan API fetch failed: {e}")
+
     data = {
         "name": name,
         "address": address,
         "events": abi_events,
         "functions": abi_functions,
         "health": deployment_status,
-        "explorer_url": address_url(address)
+        "explorer_url": address_url(address),
+        "balance": balance,
+        "transaction_count": tx_count,
+        "recent_transactions": recent_txs
     }
     return APIResponse(message="Contract details retrieved", data=data)
 
