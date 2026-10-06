@@ -11,7 +11,7 @@ from app.models.prescription_transfer import PrescriptionTransfer
 from app.models.record import MedicalRecord, MedicalRecordVersion, RecordPermission
 from app.models.ai_chat import AIChatSession, AIChatMessage
 from app.models.payment import Payment, PaymentStatus, PaymentMethod
-from app.models.pharmacy_system import Medicine, MedicineInventory, MedicineOrder, MedicineOrderItem
+from app.models.pharmacy_system import Medicine, MedicineInventory, MedicineOrder, MedicineOrderItem, PharmacyRestockOrder
 from app.models.notification import Notification
 from app.models.verification import VerificationRequest
 from app.models.blockchain import BlockchainSyncTask, BlockchainTransaction, BlockchainAuditLog
@@ -26,6 +26,8 @@ from app.models.medical_history_share import MedicalHistoryShare
 from app.models.audit_log import AuditLog
 from app.models.security import PatientSecurityCredential, PatientBiometricProfile, PrescriptionDownloadAuthorization
 from app.models.system import SystemSetting
+from app.models.dispensing_log import PrescriptionDispensingLog
+from app.models.download_audit_log import DownloadAuditLog
 
 __all__ = [
     "Base",
@@ -55,6 +57,7 @@ __all__ = [
     "MedicineInventory",
     "MedicineOrder",
     "MedicineOrderItem",
+    "PharmacyRestockOrder",
     "Notification",
     "VerificationRequest",
     "BlockchainSyncTask",
@@ -77,4 +80,6 @@ __all__ = [
     "PatientBiometricProfile",
     "PrescriptionDownloadAuthorization",
     "SystemSetting",
+    "PrescriptionDispensingLog",
+    "DownloadAuditLog",
 ]

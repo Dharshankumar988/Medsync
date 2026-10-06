@@ -71,6 +71,7 @@ export const authService = {
     latitude?: number;
     longitude?: number;
     license_number?: string;
+    gst_number?: string;
     business_name?: string; 
     contact_number?: string;
     blood_group?: string;
@@ -96,6 +97,7 @@ export const authService = {
           latitude: data.latitude,
           longitude: data.longitude,
           license_number: data.license_number,
+          gst_number: data.gst_number,
           business_name: data.business_name,
           contact_number: data.contact_number,
           blood_group: data.blood_group,
@@ -126,6 +128,7 @@ export const authService = {
         latitude: data.latitude,
         longitude: data.longitude,
         license_number: data.license_number,
+        gst_number: data.gst_number,
         business_name: data.business_name,
         contact_number: data.contact_number,
         blood_group: data.blood_group,

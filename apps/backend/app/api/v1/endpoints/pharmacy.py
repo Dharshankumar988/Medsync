@@ -24,11 +24,9 @@ router = APIRouter()
 require_pharmacy = RoleChecker([UserRole.PHARMACY])
 
 def _generate_qr_identifier(pharmacy_id: uuid.UUID) -> str:
-    """Generate a persistent, HMAC-signed opaque QR identifier for a pharmacy."""
-    secret = os.getenv("JWT_SECRET_KEY", "medsync-default-qr-key")
-    payload = str(pharmacy_id)
-    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
-    return f"QR-PHM-{signature}"
+    """Generate a persistent, JWT-signed QR identifier for a pharmacy."""
+    from app.services.qr_pdf_service import QRPdfService
+    return QRPdfService.generate_dynamic_token(pharmacy_id, pharmacy_id, "PHARMACY_IDENTIFIER", expires_in_minutes=525600)
 
 @router.get("/my-qr")
 async def get_my_qr(

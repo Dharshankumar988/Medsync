@@ -45,8 +45,7 @@ async def place_order(
     order = await PharmacyService.place_order(db, current_user.id, req)
     return APIResponse(message="Order placed successfully", data=order)
 
-class VerifyDeliveryRequest(BaseModel):
-    otp: str
+
 
 @router.post("/{order_id}/dispatch", response_model=APIResponse)
 async def dispatch_order(
@@ -174,9 +173,9 @@ import asyncio
 from app.database.session import AsyncSessionLocal
 
 async def simulate_delivery(order_id: uuid.UUID):
-    # Simulate delivery taking 10 minutes
-    await asyncio.sleep(600)
     try:
+        # Simulate delivery taking 10 minutes
+        await asyncio.sleep(600)
         async with AsyncSessionLocal() as db:
             stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
             result = await db.execute(stmt)

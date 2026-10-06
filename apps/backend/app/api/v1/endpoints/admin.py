@@ -403,6 +403,10 @@ async def get_admin_dashboard(
     total_prescriptions = await db.scalar(select(func.count(Prescription.id)))
     total_orders = await db.scalar(select(func.count(MedicineOrder.id)))
     
+    total_tx = await db.scalar(select(func.count(BlockchainTransaction.transaction_hash)))
+    avg_gas = await db.scalar(select(func.avg(BlockchainTransaction.gas_used)))
+    avg_latency = await db.scalar(select(func.avg(BlockchainTransaction.execution_time_ms)))
+    
     stmt = select(VerificationRequest, User).join(
         User, VerificationRequest.user_id == User.id
     ).where(
@@ -431,6 +435,12 @@ async def get_admin_dashboard(
             "appointments": total_appointments or 0,
             "prescriptions": total_prescriptions or 0,
             "orders": total_orders or 0
+        },
+        "blockchain_activity": {
+            "total_tx": total_tx or 0,
+            "avg_gas_used": int(avg_gas) if avg_gas else 0,
+            "network_latency_ms": int(avg_latency) if avg_latency else 0,
+            "block_time_s": 2.1 # Typical Amoy block time
         },
         "recent_pending_verifications": recent_pending
     }
@@ -724,99 +734,63 @@ async def create_doctor(
             
     return APIResponse(message="Doctor created", data={"id": str(auth_user_id)})
 
+from fastapi import Request
+from app.dependencies.rate_limit import limiter
+from sqlalchemy.orm import selectinload
+
 @router.get("/graph", response_model=APIResponse[dict])
+@limiter.limit("10/minute")
 async def get_relationship_graph(
+    request: Request,
+    skip: int = 0,
+    limit: int = 100,
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
     nodes = []
     edges = []
     
-    node_ids = set()
-    
-    # Add patients
+    from sqlalchemy import func
     from app.models.user import User
-    patients_data = (await db.execute(select(Patient, User).join(User, Patient.user_id == User.id))).all()
-    for p, u in patients_data:
-        has_error = u.status == "SUSPENDED" or u.status == "BANNED"
-        nodes.append({"id": f"PAT_{p.id}", "label": p.full_name, "type": "Patient", "hasError": has_error})
-        node_ids.add(f"PAT_{p.id}")
-        
-    # Add doctors
-    doctors_data = (await db.execute(select(Doctor, User).join(User, Doctor.user_id == User.id))).all()
-    for d, u in doctors_data:
-        has_error = d.doctor_status == "SUSPENDED" or u.status == "BANNED"
-        nodes.append({"id": f"DOC_{d.id}", "label": d.full_name, "type": "Doctor", "hasError": has_error})
-        node_ids.add(f"DOC_{d.id}")
-        
-    from app.models.doctor import Hospital, DoctorLocation
-    # Add hospitals
-    hospitals = (await db.execute(select(Hospital))).scalars().all()
-    for h in hospitals:
-        nodes.append({"id": f"HOS_{h.id}", "label": h.name, "type": "Hospital", "hasError": False})
-        node_ids.add(f"HOS_{h.id}")
-        
-    # Add pharmacies
-    pharmacies_data = (await db.execute(select(Pharmacy, User).join(User, Pharmacy.user_id == User.id))).all()
-    for ph, u in pharmacies_data:
-        has_error = ph.blockchain_status == "FAILED" or u.status == "BANNED"
-        nodes.append({"id": f"PHA_{ph.id}", "label": ph.business_name, "type": "Pharmacy", "hasError": has_error})
-        node_ids.add(f"PHA_{ph.id}")
-        
-    # Doctor -> Hospital relationships (using DoctorLocation)
-    doc_locs = (await db.execute(select(DoctorLocation).where(DoctorLocation.hospital_id.isnot(None)))).scalars().all()
-    for loc in doc_locs:
-        src = f"DOC_{loc.doctor_id}"
-        tgt = f"HOS_{loc.hospital_id}"
-        if src in node_ids and tgt in node_ids:
-            edges.append({"source": src, "target": tgt, "type": "WORKS_AT"})
-        
-    # Add appointments
-    from app.models.appointment import Appointment
-    appointments = (await db.execute(select(Appointment))).scalars().all()
-    for a in appointments:
-        src = f"PAT_{a.patient_id}"
-        tgt = f"DOC_{a.doctor_id}"
-        if src in node_ids and tgt in node_ids:
-            edges.append({"source": src, "target": tgt, "type": "APPOINTMENT"})
-        
-        if a.hospital_id:
-            tgt_h = f"HOS_{a.hospital_id}"
-            if src in node_ids and tgt_h in node_ids:
-                edges.append({"source": src, "target": tgt_h, "type": "APPOINTMENT_AT"})
-                
-    # Add prescriptions
-    from app.models.prescription import Prescription
-    prescriptions = (await db.execute(select(Prescription))).scalars().all()
-    for p in prescriptions:
-        nodes.append({"id": f"RX_{p.id}", "label": f"RX: {p.id.hex[:8]}", "type": "Prescription", "hasError": False})
-        node_ids.add(f"RX_{p.id}")
-        
-        doc_src = f"DOC_{p.doctor_id}"
-        if doc_src in node_ids:
-            edges.append({"source": doc_src, "target": f"RX_{p.id}", "type": "ISSUED"})
-            
-        pat_tgt = f"PAT_{p.patient_id}"
-        if pat_tgt in node_ids:
-            edges.append({"source": f"RX_{p.id}", "target": pat_tgt, "type": "BELONGS_TO"})
-            
-    # Add medicine orders
-    from app.models.pharmacy_system import MedicineOrder
-    orders = (await db.execute(select(MedicineOrder))).scalars().all()
-    for o in orders:
-        has_error = o.status.value in ["CANCELLED", "FAILED"] if hasattr(o.status, "value") else str(o.status) in ["CANCELLED", "FAILED"]
-        nodes.append({"id": f"ORD_{o.id}", "label": f"Order: {o.id.hex[:8]}", "type": "Order", "hasError": has_error})
-        node_ids.add(f"ORD_{o.id}")
-        
-        pat_src = f"PAT_{o.patient_id}"
-        if pat_src in node_ids:
-            edges.append({"source": pat_src, "target": f"ORD_{o.id}", "type": "PLACED_ORDER"})
-            
-        if o.pharmacy_id:
-            pha_tgt = f"PHA_{o.pharmacy_id}"
-            if pha_tgt in node_ids:
-                edges.append({"source": f"ORD_{o.id}", "target": pha_tgt, "type": "FULFILLED_BY"})
-                
+    from app.models.patient import Patient
+    from app.models.doctor import Doctor, Hospital
+    from app.models.pharmacy import Pharmacy
+
+    # Get patients count
+    patients_count = (await db.execute(select(func.count(Patient.user_id)))).scalar()
+    
+    # Get doctors count (approved / pending)
+    doctors_approved = (await db.execute(select(func.count(Doctor.user_id)).where(Doctor.doctor_status == "VERIFIED"))).scalar()
+    doctors_pending = (await db.execute(select(func.count(Doctor.user_id)).where(Doctor.doctor_status == "PENDING"))).scalar()
+    
+    # Get pharmacies count
+    pharmacies_count = (await db.execute(select(func.count(Pharmacy.user_id)))).scalar()
+    
+    # Get hospitals count
+    hospitals_count = (await db.execute(select(func.count(Hospital.id)))).scalar()
+    
+    # Get admins count
+    admins_count = (await db.execute(select(func.count(User.id)).where(User.role == "ADMIN"))).scalar()
+    
+    # Create central node
+    nodes.append({"id": "SYS", "label": "MedSync Platform", "type": "System", "hasError": False, "details": "The core MedSync System"})
+    
+    # Create entity nodes
+    nodes.append({"id": "PATIENTS", "label": f"Patients: {patients_count}", "type": "Patient", "hasError": False, "details": f"Total registered patients: {patients_count}"})
+    nodes.append({"id": "DOC_APP", "label": f"Doctors (Approved): {doctors_approved}", "type": "Doctor", "hasError": False, "details": f"Approved doctors: {doctors_approved}"})
+    nodes.append({"id": "DOC_PEN", "label": f"Doctors (Pending): {doctors_pending}", "type": "Doctor", "hasError": doctors_pending > 0, "details": f"Pending doctors requiring verification: {doctors_pending}"})
+    nodes.append({"id": "PHARMACIES", "label": f"Pharmacies: {pharmacies_count}", "type": "Pharmacy", "hasError": False, "details": f"Registered pharmacies: {pharmacies_count}"})
+    nodes.append({"id": "HOSPITALS", "label": f"Hospitals: {hospitals_count}", "type": "Hospital", "hasError": False, "details": f"Registered hospitals: {hospitals_count}"})
+    nodes.append({"id": "ADMINS", "label": f"Admins: {admins_count}", "type": "Admin", "hasError": False, "details": f"System administrators: {admins_count}"})
+    
+    # Create links
+    edges.append({"source": "SYS", "target": "PATIENTS", "type": "Has"})
+    edges.append({"source": "SYS", "target": "DOC_APP", "type": "Has"})
+    edges.append({"source": "SYS", "target": "DOC_PEN", "type": "Has"})
+    edges.append({"source": "SYS", "target": "PHARMACIES", "type": "Has"})
+    edges.append({"source": "SYS", "target": "HOSPITALS", "type": "Has"})
+    edges.append({"source": "SYS", "target": "ADMINS", "type": "Manages"})
+
     return APIResponse(message="Graph retrieved", data={"nodes": nodes, "links": edges})
 
 class AdminSettingsPayload(BaseModel):

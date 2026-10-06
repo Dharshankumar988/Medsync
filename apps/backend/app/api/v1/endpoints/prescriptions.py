@@ -350,7 +350,7 @@ async def verify_prescription_auth(
         await db.commit()
     except Exception as e:
         import logging
-        logging.getLogger(__name__).error(f"Failed to enqueue blockchain sync for prescription {rx.id}: {e}")
+        logging.getLogger(__name__).error(f"Blockchain sync failed for prescription {rx.id}: {e}")
         
     from app.models.prescription import PrescriptionItem
     items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == rx.id)
@@ -653,7 +653,8 @@ async def verify_offline_prescription(
     import secrets
     from app.services.storage import StorageService
     
-    qr_token = f"MS-{secrets.token_hex(8).upper()}"
+    import secrets
+    qr_token = f"MS-{secrets.token_urlsafe(16)}"
     rx.qr_token = qr_token
     
     # Process PDF stamping
@@ -707,7 +708,7 @@ async def verify_offline_prescription(
         await db.commit()
     except Exception as e:
         import logging
-        logging.getLogger(__name__).error(f"Failed to enqueue blockchain sync for prescription {rx.id}: {e}")
+        logging.getLogger(__name__).error(f"Blockchain sync failed for prescription {rx.id}: {e}")
     
     return APIResponse(message="Offline prescription verified successfully")
 

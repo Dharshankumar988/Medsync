@@ -117,7 +117,12 @@ class QRAuthorizationService:
         # 3. Server-side validation
         now = datetime.now(timezone.utc)
 
-        if token_record.status == QRTokenStatus.REVOKED:
+        if now >= token_record.expires_at.replace(tzinfo=timezone.utc):
+            token_record.status = QRTokenStatus.EXPIRED
+            await db.commit()
+            return {"valid": False, "error": "QR token has expired"}
+
+        if token_record.status == QRTokenStatus.REVOKED or token_record.revoked_at is not None:
             return {"valid": False, "error": "QR token has been revoked"}
 
         if token_record.status == QRTokenStatus.USED:
@@ -125,14 +130,6 @@ class QRAuthorizationService:
 
         if token_record.status == QRTokenStatus.EXPIRED:
             return {"valid": False, "error": "QR token has expired"}
-
-        if now >= token_record.expires_at.replace(tzinfo=timezone.utc):
-            token_record.status = QRTokenStatus.EXPIRED
-            await db.commit()
-            return {"valid": False, "error": "QR token has expired"}
-
-        if token_record.revoked_at is not None:
-            return {"valid": False, "error": "QR token has been revoked"}
 
         if token_record.use_count >= token_record.max_uses:
             token_record.status = QRTokenStatus.USED

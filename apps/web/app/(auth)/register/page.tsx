@@ -61,6 +61,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState("PATIENT");
+  const [gstNumber, setGstNumber] = useState("");
   
   // Patient fields
   const [bloodGroup, setBloodGroup] = useState("");
@@ -119,6 +120,11 @@ export default function RegisterPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (!email.match(/^[^\s@]+@[^\s@]+\.(com|in|org|net|edu|gov|co\.in)$/i)) {
+      setError("Please enter a valid email address (e.g. ending in .com, .in).");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
@@ -186,6 +192,7 @@ export default function RegisterPage() {
         role,
         full_name: fullName,
         license_number: role === "DOCTOR" || role === "PHARMACY" ? licenseNumber : undefined,
+        gst_number: role === "DOCTOR" || role === "PHARMACY" ? gstNumber : undefined,
         hospital_id: isFacilityMode && !isRegisteringNewHospital ? selectedHospitalId : undefined,
         hospital_name: isHospitalMode && isRegisteringNewHospital ? newHospitalName : undefined,
         hospital_address: isHospitalMode && isRegisteringNewHospital ? newHospitalAddress : undefined,
@@ -496,24 +503,30 @@ export default function RegisterPage() {
                     <div className="space-y-4">
                       <div className="space-y-2 relative">
                         <label className="text-sm font-medium text-foreground/80">Search & Select {doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</label>
-                        <div className="relative">
-                          <Building className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
-                          <Input
-                            type="text"
-                            placeholder={`Search ${doctorPracticeType === "HOSPITAL" ? "hospital" : "clinic"}...`}
-                            value={hospitalSearch}
-                            onChange={(e) => {
-                              setHospitalSearch(e.target.value);
-                              setShowHospitalDropdown(true);
-                              setIsRegisteringNewHospital(false);
-                              setSelectedHospitalId("");
-                            }}
-                            onFocus={() => setShowHospitalDropdown(true)}
-                            className="h-12 pl-10 pr-4 bg-background border-input"
-                          />
-                        </div>
+                        {!isRegisteringNewHospital ? (
+                          <div className="relative">
+                            <Building className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                            <Input
+                              type="text"
+                              placeholder={`Search ${doctorPracticeType === "HOSPITAL" ? "hospital" : "clinic"}...`}
+                              value={hospitalSearch}
+                              onChange={(e) => {
+                                setHospitalSearch(e.target.value);
+                                setShowHospitalDropdown(true);
+                                setSelectedHospitalId("");
+                              }}
+                              onFocus={() => setShowHospitalDropdown(true)}
+                              className="h-12 pl-10 pr-4 bg-background border-input"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between p-3 border border-blue-500/30 rounded-lg bg-blue-500/10">
+                            <span className="text-sm font-medium text-blue-700 dark:text-blue-400">Registering New {doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</span>
+                            <Button variant="ghost" size="sm" className="h-8 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20" onClick={() => { setIsRegisteringNewHospital(false); setHospitalSearch(""); }}>Cancel</Button>
+                          </div>
+                        )}
                         
-                        {showHospitalDropdown && (
+                        {!isRegisteringNewHospital && showHospitalDropdown && (
                           <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
                             {hospitals.filter(h => h.name.toLowerCase().includes(hospitalSearch.toLowerCase())).map(h => (
                               <div 
@@ -536,7 +549,7 @@ export default function RegisterPage() {
                                 setIsRegisteringNewHospital(true);
                                 setShowHospitalDropdown(false);
                                 setSelectedHospitalId("");
-                                setHospitalSearch(`Registering New ${doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}`);
+                                setHospitalSearch("");
                               }}
                             >
                               + Register New {doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}
@@ -566,6 +579,25 @@ export default function RegisterPage() {
                           <div className="space-y-2">
                             <label className="text-sm font-medium text-foreground/80">Google Maps URL (Optional)</label>
                             <Input value={newHospitalGmapsUrl} onChange={e => setNewHospitalGmapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 bg-background border-input" />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {doctorPracticeType === "CLINIC" && isRegisteringNewHospital && (
+                        <div className="space-y-2">
+                          <label htmlFor="docGst" className="text-sm font-medium text-foreground/80">Clinic GST No.</label>
+                          <div className="relative">
+                            <BriefcaseMedical className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                            <Input
+                              id="docGst"
+                              type="text"
+                              placeholder="e.g. 22AAAAA0000A1Z5"
+                              value={gstNumber}
+                              onChange={(e) => setGstNumber(e.target.value)}
+                              required
+                              disabled={isLoading}
+                              className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+                            />
                           </div>
                         </div>
                       )}
@@ -609,6 +641,21 @@ export default function RegisterPage() {
                             value={licenseNumber}
                             onChange={(e) => setLicenseNumber(e.target.value)}
                             required
+                            disabled={isLoading}
+                            className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label htmlFor="pharmaGst" className="text-sm font-medium text-foreground/80">GST No.</label>
+                        <div className="relative">
+                          <BriefcaseMedical className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                          <Input
+                            id="pharmaGst"
+                            type="text"
+                            placeholder="e.g. 22AAAAA0000A1Z5"
+                            value={gstNumber}
+                            onChange={(e) => setGstNumber(e.target.value)}
                             disabled={isLoading}
                             className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
                           />
@@ -661,24 +708,30 @@ export default function RegisterPage() {
                         >
                           <div className="space-y-2 relative">
                             <label className="text-sm font-medium text-foreground/80">Search & Select {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</label>
-                            <div className="relative">
-                              <Building className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
-                              <Input
-                                type="text"
-                                placeholder={`Search ${pharmacyPracticeType === "HOSPITAL" ? "hospital" : "clinic"}...`}
-                                value={hospitalSearch}
-                                onChange={(e) => {
-                                  setHospitalSearch(e.target.value);
-                                  setShowHospitalDropdown(true);
-                                  setIsRegisteringNewHospital(false);
-                                  setSelectedHospitalId("");
-                                }}
-                                onFocus={() => setShowHospitalDropdown(true)}
-                                className="h-12 pl-10 pr-4 bg-background border-input"
-                              />
-                            </div>
+                            {!isRegisteringNewHospital ? (
+                              <div className="relative">
+                                <Building className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
+                                <Input
+                                  type="text"
+                                  placeholder={`Search ${pharmacyPracticeType === "HOSPITAL" ? "hospital" : "clinic"}...`}
+                                  value={hospitalSearch}
+                                  onChange={(e) => {
+                                    setHospitalSearch(e.target.value);
+                                    setShowHospitalDropdown(true);
+                                    setSelectedHospitalId("");
+                                  }}
+                                  onFocus={() => setShowHospitalDropdown(true)}
+                                  className="h-12 pl-10 pr-4 bg-background border-input"
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between p-3 border border-blue-500/30 rounded-lg bg-blue-500/10">
+                                <span className="text-sm font-medium text-blue-700 dark:text-blue-400">Registering New {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</span>
+                                <Button variant="ghost" size="sm" className="h-8 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20" onClick={() => { setIsRegisteringNewHospital(false); setHospitalSearch(""); }}>Cancel</Button>
+                              </div>
+                            )}
                             
-                            {showHospitalDropdown && (
+                            {!isRegisteringNewHospital && showHospitalDropdown && (
                               <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
                                 {hospitals.filter(h => h.name.toLowerCase().includes(hospitalSearch.toLowerCase())).map(h => (
                                   <div 
@@ -701,7 +754,7 @@ export default function RegisterPage() {
                                     setIsRegisteringNewHospital(true);
                                     setShowHospitalDropdown(false);
                                     setSelectedHospitalId("");
-                                    setHospitalSearch(`Registering New ${pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}`);
+                                    setHospitalSearch("");
                                   }}
                                 >
                                   + Register New {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}

@@ -8,11 +8,11 @@ class Token(BaseModel):
     status: str
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 class UserRegistration(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     role: UserRole
     full_name: str

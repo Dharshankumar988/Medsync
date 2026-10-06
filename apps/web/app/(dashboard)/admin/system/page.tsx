@@ -10,6 +10,7 @@ const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false 
 
 function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
   const fgRef = useRef<any>();
+  const [selectedNode, setSelectedNode] = useState<any>(null);
   
   const graphData = {
     nodes: nodes.map(n => ({ ...n })),
@@ -24,10 +25,7 @@ function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
       case 'Pharmacy': return '#facc15'; // Yellow
       case 'Hospital': return '#a855f7'; // Purple
       case 'Admin': return '#f87171'; // Red
-      case 'Prescription': return '#ec4899'; // Pink
-      case 'Order': return '#14b8a6'; // Teal
-      case 'Blockchain': return '#6366f1'; // Indigo
-      case 'SmartContract': return '#f43f5e'; // Rose
+      case 'System': return '#6366f1'; // Indigo
       default: return '#9ca3af';
     }
   };
@@ -39,11 +37,13 @@ function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
         graphData={graphData}
         nodeLabel="label"
         nodeColor={getNodeColor}
-        nodeRelSize={6}
+        nodeRelSize={8}
         linkColor={() => 'var(--border)'}
         linkDirectionalArrowLength={3.5}
         linkDirectionalArrowRelPos={1}
+        enableNodeDrag={true}
         onNodeClick={node => {
+          setSelectedNode(node);
           // Aim at node from outside it
           const distance = 40;
           const distRatio = 1 + distance/Math.hypot(node.x || 0, node.y || 0, node.z || 0);
@@ -59,15 +59,33 @@ function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
         backgroundColor="#00000000" // transparent to match theme
         d3VelocityDecay={0.3}
       />
-      <div className="absolute top-4 left-4 p-3 rounded-lg bg-card/80 backdrop-blur-sm border shadow-sm text-xs space-y-1 z-10">
+      
+      {/* Legend at bottom right */}
+      <div className="absolute bottom-4 right-4 p-3 rounded-lg bg-card/80 backdrop-blur-sm border shadow-sm text-xs space-y-1 z-10">
         <p className="font-semibold mb-2">Role & Entity Legend</p>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3b82f6]"></div> Patient</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#22c55e]"></div> Doctor</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#facc15]"></div> Pharmacy</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#a855f7]"></div> Hospital</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#f87171]"></div> Admin</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#6366f1]"></div> Blockchain</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#6366f1] shadow-[0_0_8px_#6366f1]"></div> System</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3b82f6] shadow-[0_0_8px_#3b82f6]"></div> Patient</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#22c55e] shadow-[0_0_8px_#22c55e]"></div> Doctor</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#facc15] shadow-[0_0_8px_#facc15]"></div> Pharmacy</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#a855f7] shadow-[0_0_8px_#a855f7]"></div> Hospital</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#f87171] shadow-[0_0_8px_#f87171]"></div> Admin</div>
       </div>
+
+      {/* Details Popup */}
+      {selectedNode && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card p-6 rounded-xl border border-border shadow-2xl z-50 min-w-[300px]">
+          <div className="flex justify-between items-start mb-4">
+            <h3 className="font-bold text-lg">{selectedNode.label}</h3>
+            <button onClick={() => setSelectedNode(null)} className="text-muted-foreground hover:text-foreground">
+              <XCircle className="w-5 h-5"/>
+            </button>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Type: <span style={{color: getNodeColor(selectedNode)}}>{selectedNode.type}</span></p>
+            <p className="text-sm text-muted-foreground">{selectedNode.details || "No additional details available."}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

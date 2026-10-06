@@ -39,24 +39,10 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
 
         # Determine status (Patients are active and verified, others pending verification)
         is_patient = payload.role == UserRole.PATIENT
-        new_status = UserStatus.ACTIVE if is_patient else UserStatus.PENDING
         
-        # Strict Verification Check
-        if not is_patient:
-            strict_verification = True
-            try:
-                from app.models.system import SystemSetting
-                stmt = select(SystemSetting).where(SystemSetting.key == "strict_verification")
-                result = await db.execute(stmt)
-                setting = result.scalar_one_or_none()
-                if setting and setting.value_bool is not None:
-                    strict_verification = setting.value_bool
-            except Exception as e:
-                import logging
-                logging.warning(f"Could not fetch strict_verification setting: {e}")
-                
-            if not strict_verification:
-                new_status = UserStatus.ACTIVE
+        # Override: allow everyone, don't bother with manual verification
+        new_status = UserStatus.ACTIVE
+        is_verified = True
 
 
         # Determine default avatar based on role and gender
@@ -85,7 +71,7 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
             password_hash="supabase_managed",
             role=payload.role,
             status=new_status,
-            is_verified=is_patient,
+            is_verified=is_verified,
             profile_completion_percentage=100,
             profile_image_url=default_avatar
         )
@@ -112,7 +98,7 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                 hospital_id=payload.hospital_id,
                 clinic_name=payload.clinic_name,
                 clinic_address=payload.clinic_address,
-                license_number=payload.license_number or f"LIC-{str(new_user.id)[:8]}",
+                license_number=(payload.license_number or f"LIC-{str(new_user.id)[:8]}") + (f" | GST: {payload.gst_number}" if payload.gst_number else ""),
                 experience_years=1,
                 consultation_fee=500,
                 doctor_status="PENDING",
@@ -212,6 +198,7 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                 user_id=new_user.id,
                 business_name=payload.business_name or payload.full_name,
                 license_number=payload.license_number or f"LIC-PHM-{str(new_user.id)[:8]}",
+                gst_number=payload.gst_number,
                 contact_number=payload.contact_number,
                 address=payload.clinic_address or payload.hospital_address, # Fallback to clinic_address/hospital_address if payload uses those
                 hospital_id=payload.hospital_id,

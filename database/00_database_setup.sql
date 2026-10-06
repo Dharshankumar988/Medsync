@@ -205,6 +205,8 @@ CREATE TABLE IF NOT EXISTS pharmacies (
     state VARCHAR(100),
     country VARCHAR(100),
     pincode VARCHAR(20),
+    hospital_id UUID REFERENCES hospitals(id) ON DELETE SET NULL,
+    clinic_name VARCHAR(255),
     description TEXT,
     operating_hours TEXT,
     working_days TEXT,
@@ -225,6 +227,8 @@ CREATE TABLE IF NOT EXISTS pharmacies (
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_pharmacies_hospital_id ON public.pharmacies(hospital_id);
 
 -- Doctor Locations Table
 CREATE TABLE IF NOT EXISTS doctor_locations (
@@ -768,6 +772,23 @@ CREATE TABLE IF NOT EXISTS medicine_order_items (
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
+
+-- Pharmacy Restock Orders Table
+CREATE TABLE IF NOT EXISTS pharmacy_restock_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pharmacy_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    medicine_id UUID NOT NULL REFERENCES medicines(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL,
+    status VARCHAR(50) DEFAULT 'PENDING',
+    expected_delivery TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_pharmacy_restock_orders_pharmacy_id ON pharmacy_restock_orders(pharmacy_id);
+CREATE INDEX IF NOT EXISTS ix_pharmacy_restock_orders_medicine_id ON pharmacy_restock_orders(medicine_id);
+CREATE INDEX IF NOT EXISTS ix_pharmacy_restock_orders_status ON pharmacy_restock_orders(status);
+CREATE INDEX IF NOT EXISTS ix_pharmacy_restock_orders_expected_delivery ON pharmacy_restock_orders(expected_delivery);
 
 -- Delivery Tracking Table
 CREATE TABLE IF NOT EXISTS delivery_tracking (

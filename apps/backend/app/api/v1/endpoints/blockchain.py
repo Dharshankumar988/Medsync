@@ -618,8 +618,8 @@ async def get_contract_details(
     abi_functions = []
     try:
         # Construct absolute path to the workspace root then to the abis folder
-        # apps/backend/app/api/v1/endpoints/blockchain.py -> 5 levels up to Medsync root
-        project_root = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+        # apps/backend/app/api/v1/endpoints/blockchain.py -> 6 levels up to Medsync root
+        project_root = Path(__file__).resolve().parent.parent.parent.parent.parent.parent.parent
         abi_path = project_root / "apps" / "blockchain" / "abis" / f"{name}.json"
         
         if abi_path.exists():

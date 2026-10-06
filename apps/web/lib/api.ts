@@ -91,14 +91,7 @@ api.get = async function(url: string, config?: any) {
   // 2. Check Pending Requests (Deduplication)
   if (!pendingRequests.has(cacheKey)) {
     const reqPromise = originalGet.call(this, url, config) as Promise<AxiosResponse>;
-    const handledPromise = reqPromise.catch((e: any) => {
-      pendingRequests.delete(cacheKey);
-      if (e.isAxiosError) {
-        e.message = `[FAILED URL: ${url}] ` + e.message;
-      }
-      throw e;
-    });
-    pendingRequests.set(cacheKey, handledPromise);
+    pendingRequests.set(cacheKey, reqPromise);
   }
   return pendingRequests.get(cacheKey);
 };

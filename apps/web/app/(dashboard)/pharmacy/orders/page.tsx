@@ -72,7 +72,7 @@ export default function PharmacyOrdersPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        alert(`Order dispatched! Simulation started. OTP: ${data.data.otp}`);
+        alert(`Order dispatched! Simulation started.`);
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "OUT_FOR_DELIVERY" } : o));
       } else {
         alert("Failed to dispatch order.");

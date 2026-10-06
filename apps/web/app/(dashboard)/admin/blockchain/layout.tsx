@@ -22,7 +22,6 @@ const sidebarLinks = [
   { name: "Wallet Management", href: "/admin/blockchain/wallet", icon: Wallet },
   { name: "Smart Contracts", href: "/admin/blockchain/contracts", icon: FileCode2 },
   { name: "Transactions", href: "/admin/blockchain/transactions", icon: ListOrdered },
-  { name: "Event Explorer", href: "/admin/blockchain/events", icon: ActivitySquare },
   { name: "Analytics", href: "/admin/blockchain/analytics", icon: LineChart }
 ];
 

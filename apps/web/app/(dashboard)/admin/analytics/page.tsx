@@ -10,11 +10,16 @@ export default function AdminAnalytics() {
   const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
+    const defaultStats = { 
+      users: { total: 1, patients: 0, doctors: 0, pharmacies: 0, pending_verification: 0 }, 
+      operations: { appointments: 0, prescriptions: 0, orders: 0 },
+      blockchain_activity: { total_tx: 0, avg_gas_used: 0, network_latency_ms: 0, block_time_s: 0 }
+    };
     dashboardService.getAdminDashboard().then(data => {
-      setStats(data || { users: { total: 1, patients: 0, doctors: 0, pharmacies: 0, pending_verification: 0 }, operations: { appointments: 0, prescriptions: 0, orders: 0 } });
+      setStats(data || defaultStats);
     }).catch(err => {
       console.error(err);
-      setStats({ users: { total: 1, patients: 0, doctors: 0, pharmacies: 0, pending_verification: 0 }, operations: { appointments: 0, prescriptions: 0, orders: 0 } });
+      setStats(defaultStats);
     });
   }, []);
 
@@ -28,6 +33,7 @@ export default function AdminAnalytics() {
 
   const userStats = stats.users || { total: 1, patients: 0, doctors: 0, pharmacies: 0, pending_verification: 0 };
   const opStats = stats.operations || { appointments: 0, prescriptions: 0, orders: 0 };
+  const blockchainStats = stats.blockchain_activity || { total_tx: 0, avg_gas_used: 0, network_latency_ms: 0, block_time_s: 0 };
 
   const totalUsers = userStats.total || 1;
   const patientPct = Math.round((userStats.patients / totalUsers) * 100);
@@ -129,19 +135,19 @@ export default function AdminAnalytics() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 rounded-xl bg-muted/30 border border-border">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total On-Chain Tx</p>
-                <p className="text-2xl font-mono mt-1 font-bold">14,293</p>
+                <p className="text-2xl font-mono mt-1 font-bold">{blockchainStats.total_tx.toLocaleString()}</p>
               </div>
               <div className="p-4 rounded-xl bg-muted/30 border border-border">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Average Gas Used</p>
-                <p className="text-2xl font-mono mt-1 font-bold">~120,540</p>
+                <p className="text-2xl font-mono mt-1 font-bold">~{blockchainStats.avg_gas_used.toLocaleString()}</p>
               </div>
               <div className="p-4 rounded-xl bg-muted/30 border border-border">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Network Latency</p>
-                <p className="text-2xl font-mono mt-1 font-bold">840ms</p>
+                <p className="text-2xl font-mono mt-1 font-bold">{blockchainStats.network_latency_ms}ms</p>
               </div>
               <div className="p-4 rounded-xl bg-muted/30 border border-border">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Block Time</p>
-                <p className="text-2xl font-mono mt-1 font-bold">2.1s</p>
+                <p className="text-2xl font-mono mt-1 font-bold">{blockchainStats.block_time_s}s</p>
               </div>
             </div>
           </CardContent>

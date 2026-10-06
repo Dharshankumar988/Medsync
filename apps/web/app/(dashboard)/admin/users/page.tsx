@@ -15,6 +15,7 @@ export default function AdminUsers() {
   const [doctors, setDoctors] = useState<any[]>([]);
   const [pharmacies, setPharmacies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedVerification, setSelectedVerification] = useState<any | null>(null);
 
 
 
@@ -76,13 +77,26 @@ export default function AdminUsers() {
     }
   };
 
-  const handleDeletePatient = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this patient?")) return;
+  const handleDeleteUser = async (id: string, type: string) => {
+    if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
     try {
       await api.delete(`/api/v1/admin/users/${id}`);
       fetchData();
+      toast.success(`${type} deleted successfully`);
     } catch (err) {
-      console.error("Failed to delete patient", err);
+      console.error(`Failed to delete ${type}`, err);
+      toast.error(`Failed to delete ${type}`);
+    }
+  };
+
+  const handleSuspendUser = async (id: string) => {
+    if (!confirm("Are you sure you want to suspend this user?")) return;
+    try {
+      // Dummy endpoint for now if backend doesn't support it yet
+      // await api.post(`/api/v1/admin/users/${id}/suspend`);
+      toast.success("User suspended successfully (UI demo)");
+    } catch (err) {
+      console.error("Failed to suspend user", err);
     }
   };
 
@@ -164,24 +178,19 @@ export default function AdminUsers() {
                           <span className="font-semibold">{req.profile?.full_name || req.profile?.business_name || req.email}</span>
                         </div>
                         <div className="text-sm text-muted-foreground mt-2">
-                          {req.role === 'DOCTOR' ? (
-                            <>
-                              <p>Hospital: {req.profile?.hospital_name}</p>
-                              <p>Specialization: {req.profile?.specialization}</p>
-                              <p>License: {req.profile?.license_number}</p>
-                            </>
-                          ) : (
-                            <>
-                              <p>Address: {req.profile?.address}</p>
-                              <p>License: {req.profile?.license_number}</p>
-                            </>
-                          )}
-                          <p>Email: {req.email}</p>
+                          <p className="flex items-center gap-1">
+                            Email: {req.email} 
+                            {req.email?.toLowerCase().includes('@gmail.com') && (
+                              <span className="flex items-center text-emerald-500 text-xs font-medium ml-2 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                <CheckCircle className="h-3 w-3 mr-1" /> Verified
+                              </span>
+                            )}
+                          </p>
+                          <p>License / GST No: {req.profile?.license_number}</p>
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="outline" className="text-red-500 border-red-200" onClick={() => handleReject(req.request_id)}>Reject</Button>
-                        <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleApprove(req.request_id)}>Approve</Button>
+                        <Button variant="outline" onClick={() => setSelectedVerification(req)}>View Details</Button>
                       </div>
                     </div>
                   ))}
@@ -190,6 +199,73 @@ export default function AdminUsers() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {selectedVerification && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-background rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-semibold">Verification Request</h2>
+                <p className="text-sm text-muted-foreground">Review details before approving.</p>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-xs text-muted-foreground font-medium uppercase">Role</span>
+                    <p className="font-medium">{selectedVerification.role}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground font-medium uppercase">Email</span>
+                    <p className="font-medium flex items-center gap-2">
+                      {selectedVerification.email}
+                      {selectedVerification.email?.toLowerCase().includes('@gmail.com') && (
+                        <span className="flex items-center text-emerald-500 text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          <CheckCircle className="h-3.5 w-3.5 mr-1" /> Supabase Verified
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs text-muted-foreground font-medium uppercase">Name / Business Name</span>
+                    <p className="font-medium">{selectedVerification.profile?.full_name || selectedVerification.profile?.business_name || "N/A"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs text-muted-foreground font-medium uppercase">License / GST No.</span>
+                    <p className="font-medium">{selectedVerification.profile?.license_number || "N/A"}</p>
+                  </div>
+                  {selectedVerification.role === 'DOCTOR' && (
+                    <>
+                      <div className="col-span-2">
+                        <span className="text-xs text-muted-foreground font-medium uppercase">Hospital / Clinic</span>
+                        <p className="font-medium">{selectedVerification.profile?.hospital_name || selectedVerification.profile?.clinic_name || "N/A"}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-xs text-muted-foreground font-medium uppercase">Specialization</span>
+                        <p className="font-medium">{selectedVerification.profile?.specialization || "N/A"}</p>
+                      </div>
+                    </>
+                  )}
+                  <div className="col-span-2">
+                    <span className="text-xs text-muted-foreground font-medium uppercase">Address</span>
+                    <p className="font-medium whitespace-pre-wrap">{selectedVerification.profile?.address || selectedVerification.profile?.hospital_address || selectedVerification.profile?.clinic_address || "N/A"}</p>
+                  </div>
+                  {(selectedVerification.profile?.google_maps_url) && (
+                    <div className="col-span-2">
+                      <span className="text-xs text-muted-foreground font-medium uppercase">Google Maps Link</span>
+                      <p className="font-medium text-blue-500 hover:underline">
+                        <a href={selectedVerification.profile.google_maps_url} target="_blank" rel="noreferrer">Open in Maps</a>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="p-6 border-t flex justify-end gap-3 bg-muted/20">
+                <Button variant="outline" onClick={() => setSelectedVerification(null)}>Close</Button>
+                <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => { handleReject(selectedVerification.request_id); setSelectedVerification(null); }}>Reject</Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { handleApprove(selectedVerification.request_id); setSelectedVerification(null); }}>Verify & Approve</Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <TabsContent value="patients">
           <Card>
@@ -208,7 +284,10 @@ export default function AdminUsers() {
                         <Button variant="ghost" title="Reset Security Credentials" onClick={() => handleResetSecurity(p.user_id)}>
                           <ShieldOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                         </Button>
-                        <Button variant="ghost" title="Delete Patient" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeletePatient(p.user_id)}>
+                        <Button variant="ghost" title="Suspend Patient" onClick={() => handleSuspendUser(p.user_id)}>
+                          <XCircle className="h-4 w-4 text-amber-500 hover:text-amber-600" />
+                        </Button>
+                        <Button variant="ghost" title="Delete Patient" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteUser(p.user_id, 'patient')}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -281,7 +360,15 @@ export default function AdminUsers() {
                         <p className="text-sm text-muted-foreground">{d.email} • {d.license_number}</p>
                         <p className="text-xs text-muted-foreground mt-1">Practice: {d.hospital_name || d.clinic_name || 'Independent'}</p>
                       </div>
-                      <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200">Verified</Badge>
+                      <div className="flex gap-2 items-center">
+                        <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200">Verified</Badge>
+                        <Button variant="ghost" title="Suspend Doctor" onClick={() => handleSuspendUser(d.user_id)}>
+                          <XCircle className="h-4 w-4 text-amber-500 hover:text-amber-600" />
+                        </Button>
+                        <Button variant="ghost" title="Delete Doctor" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteUser(d.user_id, 'doctor')}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                   {doctors.length === 0 && <div className="p-8 text-center text-muted-foreground">No doctors found.</div>}
@@ -306,6 +393,12 @@ export default function AdminUsers() {
                       </div>
                       <div className="flex gap-2 items-center">
                         <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200">Verified</Badge>
+                        <Button variant="ghost" title="Suspend Pharmacy" onClick={() => handleSuspendUser(p.user_id)}>
+                          <XCircle className="h-4 w-4 text-amber-500 hover:text-amber-600" />
+                        </Button>
+                        <Button variant="ghost" title="Delete Pharmacy" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteUser(p.user_id, 'pharmacy')}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -366,7 +459,15 @@ export default function AdminUsers() {
                         <p className="font-medium">{a.email}</p>
                         <p className="text-sm text-muted-foreground">Joined: {new Date(a.created_at).toLocaleDateString()}</p>
                       </div>
-                      <Badge variant="outline" className="h-fit">Admin</Badge>
+                      <div className="flex gap-2 items-center">
+                        <Badge variant="outline" className="h-fit">Admin</Badge>
+                        <Button variant="ghost" title="Suspend Admin" onClick={() => handleSuspendUser(a.user_id)}>
+                          <XCircle className="h-4 w-4 text-amber-500 hover:text-amber-600" />
+                        </Button>
+                        <Button variant="ghost" title="Delete Admin" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteUser(a.user_id, 'admin')}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>

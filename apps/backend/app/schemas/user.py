@@ -5,7 +5,7 @@ from datetime import datetime
 from app.models.user import UserRole, UserStatus
 
 class UserBase(BaseModel):
-    email: EmailStr
+    email: str
     role: UserRole
     status: UserStatus
 
@@ -14,7 +14,7 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     id: uuid.UUID
-    email: EmailStr
+    email: str
     role: UserRole
     status: UserStatus
     created_at: datetime
@@ -26,7 +26,7 @@ class UserResponse(UserBase):
 
 class UserSyncRequest(BaseModel):
     id: uuid.UUID
-    email: EmailStr
+    email: str
     role: UserRole
     full_name: str
     hospital_id: Optional[uuid.UUID] = None
@@ -37,6 +37,7 @@ class UserSyncRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     license_number: Optional[str] = None
+    gst_number: Optional[str] = None
     business_name: Optional[str] = None
     contact_number: Optional[str] = None
     blood_group: Optional[str] = None

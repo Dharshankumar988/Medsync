@@ -122,7 +122,7 @@ export default function PharmacyDashboardPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        alert(`Order dispatched! Simulation started. OTP: ${data.data.otp}`);
+        alert(`Order dispatched! Simulation started.`);
         queryClient.invalidateQueries({ queryKey: ["pharmacyOrders"] });
       } else {
         alert("Failed to dispatch order.");

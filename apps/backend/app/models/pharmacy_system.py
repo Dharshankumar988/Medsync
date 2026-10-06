@@ -113,12 +113,7 @@ class DeliveryTracking(Base, UUIDMixin, TimestampMixin):
     end_latitude: Mapped[float | None] = mapped_column(Numeric(10, 8), nullable=True)
     end_longitude: Mapped[float | None] = mapped_column(Numeric(11, 8), nullable=True)
 
-class DeliveryOTP(Base, UUIDMixin, TimestampMixin):
-    __tablename__ = "delivery_otps"
-    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medicine_orders.id", ondelete="CASCADE"), index=True, unique=True, nullable=False)
-    otp_code: Mapped[str] = mapped_column(String(4), nullable=False)
-    is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
 
 class PharmacyRestockOrder(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "pharmacy_restock_orders"

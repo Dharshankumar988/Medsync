@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 class AuthenticatedPrincipal(BaseModel):
     id: uuid.UUID
-    email: EmailStr | None = None
+    email: str | None = None
     role: str = "patient"
     status: str = "ACTIVE"
     full_name: str | None = None
