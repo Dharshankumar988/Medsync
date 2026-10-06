@@ -4,11 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@medsync/ui';
 import { Button } from '@medsync/ui';
 import { Input } from '@medsync/ui';
-import { Store, Lock, KeyRound, Loader2, Camera, UserSquare2, CheckCircle2 } from 'lucide-react';
+import { Store, Lock, KeyRound, Loader2, UserSquare2, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import axios from 'axios';
-import { FaceVerification } from '../FaceVerification';
 import dynamic from 'next/dynamic';
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
