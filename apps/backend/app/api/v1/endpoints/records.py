@@ -20,7 +20,7 @@ router = APIRouter()
 require_patient = RoleChecker([UserRole.PATIENT])
 require_doctor = RoleChecker([UserRole.DOCTOR])
 
-@router.post("/", response_model=APIResponse[MedicalRecordResponse], status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=APIResponse[MedicalRecordResponse], status_code=status.HTTP_201_CREATED)
 async def upload_record(
     title: str = Form(...),
     description: str = Form(None),
@@ -32,7 +32,7 @@ async def upload_record(
     record = await MedicalRecordService.upload_record(db, req, file, current_user.id, current_user.id)
     return APIResponse(message="Record uploaded successfully", data=record)
 
-@router.get("/", response_model=APIResponse[List[MedicalRecordResponse]])
+@router.get("", response_model=APIResponse[List[MedicalRecordResponse]])
 async def list_my_records(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(require_patient)

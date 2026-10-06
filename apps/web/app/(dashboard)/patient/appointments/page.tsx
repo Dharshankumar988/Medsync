@@ -312,7 +312,7 @@ export default function AppointmentsPage() {
             onClick={() => {
               if (user?.role === "PATIENT" && (user.profile_completion_percentage || 0) < 100) {
                 toast.error("Please complete your profile first.");
-                router.push("/patient/profile");
+                router.push("/patient/my-health");
                 return;
               }
               if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {

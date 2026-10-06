@@ -209,6 +209,11 @@ export default function RegisterPage() {
         date_of_birth: role === "PATIENT" ? dateOfBirth : undefined,
       });
 
+      if (role === "PATIENT") {
+        router.push(`/register/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
       if (response.data?.needsEmailVerification) {
         router.push("/login?registered=true&verification=true");
         return;

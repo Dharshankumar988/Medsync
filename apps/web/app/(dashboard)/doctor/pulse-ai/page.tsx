@@ -6,7 +6,7 @@ import { PulseAIIcon } from "@/components/pulse-ai/PulseAIIcon";
 
 export default function DoctorAIPage() {
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-background">
+    <div className="flex h-[calc(100vh-140px)] w-full flex-col overflow-hidden bg-background">
       <div className="flex-1 h-full">
         <PulseAIChat role="doctor" fullPage={true} />
       </div>

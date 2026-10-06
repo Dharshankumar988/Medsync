@@ -24,7 +24,7 @@ export default function ProfileCompletionModal() {
     }
 
     // Do not show if already on the profile page
-    if (pathname?.includes("/profile")) {
+    if (pathname?.includes("/my-health")) {
       return;
     }
 
@@ -65,7 +65,7 @@ export default function ProfileCompletionModal() {
             className="w-full" 
             onClick={() => {
               setIsOpen(false);
-              router.push("/patient/profile");
+              router.push("/patient/my-health");
             }}
           >
             <User className="w-4 h-4 mr-2" /> Complete Profile Now
