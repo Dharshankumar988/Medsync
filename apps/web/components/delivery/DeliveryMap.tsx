@@ -4,6 +4,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Truck, Clock, CheckCircle, Loader2 } from 'lucide-react';
 
+type Coordinate = [number, number];
+
 // Fix for default marker icon in Leaflet with React
 const truckIcon = L.divIcon({
   html: `<div style="background: #3b82f6; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
@@ -61,9 +63,9 @@ function MapBounds({ route, currentLocation }: { route: any, currentLocation: an
 
   useEffect(() => {
     if (route && route.geometry && route.geometry.coordinates) {
-      const coordinates = route.geometry.coordinates;
+      const coordinates: [number, number][] = route.geometry.coordinates;
       const bounds = L.latLngBounds(
-        coordinates.map((coord: any) => [coord[1], coord[0]])
+        coordinates.map((coord: [number, number]) => [coord[1], coord[0]])
       );
       map.fitBounds(bounds, { padding: [50, 50] });
     }
@@ -95,10 +97,10 @@ export default function DeliveryMap({
     );
   }
 
-  const routeCoordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+  const routeCoordinates: Coordinate[] = (route.geometry.coordinates as [number, number][]).map((coord: [number, number]) => [coord[1], coord[0]]);
 
   // Bangalore center coordinates
-  const center = [12.9716, 77.5946];
+  const center: Coordinate = [12.9716, 77.5946];
 
   return (
     <MapContainer

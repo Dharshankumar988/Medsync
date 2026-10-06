@@ -17,6 +17,11 @@ interface Delivery {
   current_location: any;
 }
 
+interface Location {
+  lat: number;
+  lon: number;
+}
+
 export default function DeliveryTracking() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,9 +72,9 @@ export default function DeliveryTracking() {
     }
   };
 
-  const getBangaloreLocations = (delivery: Delivery) => {
+  const getBangaloreLocations = (delivery: Delivery): { pharmacy: Location; patient: Location } => {
     // Simulate predefined Bangalore locations
-    const pharmacies = [
+    const pharmacies: { lat: number; lon: number }[] = [
       { lat: 12.9784, lon: 77.6408 },
       { lat: 12.9352, lon: 77.6245 },
       { lat: 12.9307, lon: 77.5801 },
@@ -77,7 +82,7 @@ export default function DeliveryTracking() {
       { lat: 12.9215, lon: 77.6372 },
     ];
 
-    const patients = [
+    const patients: { lat: number; lon: number }[] = [
       { lat: 12.9820, lon: 77.6450 },
       { lat: 12.9280, lon: 77.6100 },
       { lat: 12.9180, lon: 77.5600 },
