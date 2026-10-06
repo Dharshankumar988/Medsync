@@ -9,6 +9,8 @@ import { Header } from "@/components/layout/Header";
 import { PulseAIFloating } from "@/components/pulse-ai/PulseAIFloating";
 import SecurityEnrollmentModal from "@/components/patient/SecurityEnrollmentModal";
 
+export const dynamic = 'force-dynamic';
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [authRole, setAuthRole] = useState<string | null>(null);
   const router = useRouter();

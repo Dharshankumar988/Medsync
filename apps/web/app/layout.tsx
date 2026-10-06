@@ -5,7 +5,9 @@ import { Providers } from "@/providers/query-provider";
 import { RoleProvider } from "@/providers/role-provider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 
-const inter = Inter({ 
+export const dynamic = 'force-dynamic';
+
+const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
 });

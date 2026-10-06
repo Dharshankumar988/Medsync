@@ -2,6 +2,8 @@
 
 import DeliveryTracking from '@/components/delivery/DeliveryTracking';
 
+export const dynamic = 'force-dynamic';
+
 export default function DeliveryTrackingPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto pt-4 pb-12">
