@@ -103,7 +103,7 @@ $IsHealthy = $false
 while ($RetryCount -lt $MaxRetries) {
     try {
         if ($Mode -eq "Backend") {
-            $response = Invoke-WebRequest -Uri "http://127.0.0.1:$TargetPort/api/v1/health" -UseBasicParsing -ErrorAction Stop
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:$TargetPort/health" -UseBasicParsing -ErrorAction Stop
         } else {
             $response = Invoke-WebRequest -Uri "http://127.0.0.1:$TargetPort/" -UseBasicParsing -ErrorAction Stop
         }
