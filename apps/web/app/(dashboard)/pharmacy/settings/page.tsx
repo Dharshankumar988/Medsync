@@ -84,11 +84,7 @@ export default function PharmacySettingsPage() {
     }
   };
 
-    pharmacyService.getProfile().then(data => {
-      setProfile(data);
-      setLoading(false);
-    });
-  }, []);
+
 
   if (loading) {
     return <div className="p-8 flex items-center justify-center h-[50vh]"><div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div>;
