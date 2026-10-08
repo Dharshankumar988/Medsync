@@ -17,6 +17,7 @@ export interface PharmacyOrder {
   patient_address?: string;
   medication: string;
   status: "PENDING" | "DISPENSED" | "REJECTED" | "OUT_FOR_DELIVERY" | "DELIVERED" | string;
+  order_type?: string;
   created_at: string;
 }
 

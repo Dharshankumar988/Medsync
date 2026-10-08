@@ -46,13 +46,7 @@ export default function NetworkMonitoring() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
         <div className="rounded-xl border border-border bg-card p-5 md:p-6 shadow-sm flex flex-col justify-between min-w-0">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2"><Server className="w-4 h-4 shrink-0" /> RPC Provider</p>
-          {(network?.rpc_provider?.startsWith('http') || network?.rpc_provider?.startsWith('ws')) ? (
-            <a href={network.rpc_provider_full || network.rpc_provider} target="_blank" rel="noreferrer" className="text-base xl:text-lg font-bold mt-2 text-primary hover:underline flex items-center gap-1.5 overflow-hidden">
-              <span className="truncate">View Endpoint</span> <ExternalLink className="w-4 h-4 shrink-0" />
-            </a>
-          ) : (
-            <p className="text-base xl:text-lg font-bold mt-2 truncate" title={network?.rpc_provider || "Unknown"}>{network?.rpc_provider || "Unknown"}</p>
-          )}
+          <p className="text-base xl:text-lg font-bold mt-2 truncate" title={network?.rpc_provider || "Unknown"}>{network?.rpc_provider || "Unknown"}</p>
         </div>
         
         <div className="rounded-xl border border-border bg-card p-5 md:p-6 shadow-sm flex flex-col justify-between min-w-0">

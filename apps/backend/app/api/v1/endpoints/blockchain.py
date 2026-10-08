@@ -622,6 +622,12 @@ async def get_contract_details(
         project_root = Path(__file__).resolve().parent.parent.parent.parent.parent.parent.parent
         abi_path = project_root / "apps" / "blockchain" / "abis" / f"{name}.json"
         
+        if not abi_path.exists():
+            # In Docker, abis are copied to /app/app/blockchain/artifacts/abis
+            docker_abi_path = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "abis" / f"{name}.json"
+            if docker_abi_path.exists():
+                abi_path = docker_abi_path
+        
         if abi_path.exists():
             with open(abi_path, 'r') as f:
                 abi_data = json.load(f)

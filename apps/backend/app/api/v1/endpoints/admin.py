@@ -180,7 +180,7 @@ async def get_patients(
         "user_id": str(patient.user_id),
         "full_name": patient.full_name,
         "email": user.email,
-        "date_of_birth": patient.date_of_birth.isoformat() if patient.date_of_birth else None,
+        "date_of_birth": patient.date_of_birth if patient.date_of_birth else None,
         "blood_group": patient.blood_group,
         "gender": patient.gender,
         "created_at": patient.created_at.isoformat()
@@ -719,7 +719,8 @@ async def get_relationship_graph(
     from sqlalchemy import func, desc
     from app.models.user import User
     from app.models.patient import Patient
-    from app.models.doctor import Doctor, Hospital
+    from app.models.doctor import Doctor
+    from app.models.hospital import Hospital
     from app.models.pharmacy import Pharmacy
 
     # Create central golden node (Medicine/System)

@@ -101,6 +101,19 @@ class PrescriptionService:
             item["prescription_id"] = prescription.id
             await prescription_item_repo.create(db, obj_in=item)
             
+        if req.routed_pharmacy_id:
+            from app.models.pharmacy_system import MedicineOrder, OrderStatus
+            order = MedicineOrder(
+                id=uuid.uuid4(),
+                patient_id=req.patient_id,
+                pharmacy_id=req.routed_pharmacy_id,
+                prescription_id=prescription.id,
+                status=OrderStatus.PENDING,
+                order_type="ROUTED_BY_DOCTOR",
+                total_amount=0.0
+            )
+            db.add(order)
+            
         # Enqueue blockchain task (best-effort, non-blocking)
         try:
             from app.services.blockchain_sync import BlockchainSyncService

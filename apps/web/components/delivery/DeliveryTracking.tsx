@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@medsync/ui';
 import { Truck, Clock, CheckCircle, Loader2, MapPin, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
-import DeliveryMap from './DeliveryMap';
+import dynamic from 'next/dynamic';
+
+const DeliveryMap = dynamic(() => import('./DeliveryMap'), { ssr: false });
 
 interface Delivery {
   dispensing_log_id: string;

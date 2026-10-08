@@ -10,7 +10,12 @@ import axios from "axios";
 import { Share2 } from "lucide-react";
 import api from "@/lib/api";
 
+import { useAuth } from "@/components/providers/AuthProvider";
+import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
+import { useSecurityStore } from "@/store/useSecurityStore";
+
 export default function MedicalRecordsPage() {
+  const { user } = useAuth();
   const [userId, setUserId] = useState<string>("");
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +34,15 @@ export default function MedicalRecordsPage() {
   const [selectedDoctorId, setSelectedDoctorId] = useState("");
   const [sharePin, setSharePin] = useState("");
   const [isSharing, setIsSharing] = useState(false);
+
+  const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
+  const [downloadRecordId, setDownloadRecordId] = useState<string | null>(null);
+  const [downloadPin, setDownloadPin] = useState("");
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // Security
+  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(userId, user?.role?.toLowerCase());
+  const { openEnrollmentModal } = useSecurityStore();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -126,10 +140,7 @@ export default function MedicalRecordsPage() {
       formData.append("is_prescription", String(isPrescription));
       formData.append("pin", pin);
       
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
-      
-      await axios.post(`${apiUrl}/records`, formData);
+      await api.post(`/api/v1/records`, formData);
       
       toast.success("Record uploaded successfully");
       setIsDialogOpen(false);
@@ -175,6 +186,34 @@ export default function MedicalRecordsPage() {
     }
   };
 
+  const handleDownload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!downloadRecordId) return;
+    if (downloadPin.length !== 6) {
+      toast.error("Please enter your 6-digit Authorization PIN");
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const res = await api.post(`/api/v1/records/${downloadRecordId}/download`, {
+        pin: downloadPin
+      });
+      const url = res.data.data.signed_url;
+      window.open(url, "_blank");
+      
+      toast.success("Download started successfully");
+      setIsDownloadDialogOpen(false);
+      setDownloadRecordId(null);
+      setDownloadPin("");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.detail || "Failed to download record");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="relative space-y-8 pb-12">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -190,7 +229,15 @@ export default function MedicalRecordsPage() {
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="shrink-0">
+            <Button 
+              className="shrink-0"
+              onClick={(e) => {
+                if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
+                  e.preventDefault();
+                  openEnrollmentModal();
+                }
+              }}
+            >
               <FilePlus className="mr-2 h-4 w-4" /> Upload Record
             </Button>
           </DialogTrigger>
@@ -282,6 +329,32 @@ export default function MedicalRecordsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        
+        {/* Download Dialog */}
+        <Dialog open={isDownloadDialogOpen} onOpenChange={setIsDownloadDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Download Medical Record</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleDownload} className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
+                <Input 
+                  type="password" 
+                  value={downloadPin} 
+                  onChange={e => setDownloadPin(e.target.value)} 
+                  placeholder="• • • • • •" 
+                  maxLength={6}
+                  className="text-center tracking-[0.5em]"
+                  required 
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={isDownloading || downloadPin.length !== 6}>
+                {isDownloading ? "Preparing Download..." : "Download Record"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </motion.div>
 
       {loading ? (
@@ -349,6 +422,10 @@ export default function MedicalRecordsPage() {
                           size="sm" 
                           className="h-8 text-xs hover:bg-muted" 
                           onClick={() => {
+                            if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
+                              openEnrollmentModal();
+                              return;
+                            }
                             setSelectedRecordId(record.id);
                             setIsShareDialogOpen(true);
                           }}
@@ -356,7 +433,14 @@ export default function MedicalRecordsPage() {
                           <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share
                         </Button>
                         {currentVersion && (
-                          <Button variant="ghost" size="sm" className="h-8 text-xs text-blue-500 hover:text-blue-600" onClick={() => window.open(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/medical-records/${currentVersion.ipfs_cid}`)}>
+                          <Button variant="ghost" size="sm" className="h-8 text-xs text-blue-500 hover:text-blue-600" onClick={() => {
+                            if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
+                              openEnrollmentModal();
+                              return;
+                            }
+                            setDownloadRecordId(record.id);
+                            setIsDownloadDialogOpen(true);
+                          }}>
                             <Download className="mr-1.5 h-3.5 w-3.5" /> Download
                           </Button>
                         )}

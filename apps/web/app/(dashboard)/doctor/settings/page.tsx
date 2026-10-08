@@ -10,7 +10,7 @@ import axios from "axios";
 
 export default function DoctorSettingsPage() {
   const [pin, setPin] = useState("");
-  const [confirmPin, setConfirmPin] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [isEnrollingPin, setIsEnrollingPin] = useState(false);
   const [pinStatus, setPinStatus] = useState<string>("NOT_STARTED");
   const [isAcceptingAppointments, setIsAcceptingAppointments] = useState<boolean>(true);
@@ -81,8 +81,13 @@ export default function DoctorSettingsPage() {
   };
 
   const handleEnrollPin = async () => {
-    if (pin.length !== 6 || pin !== confirmPin) {
-      toast.error("PINs must be exactly 6 digits and match.");
+    if (pin.length !== 6) {
+      toast.error("PIN must be exactly 6 digits.");
+      return;
+    }
+    
+    if (!currentPassword) {
+      toast.error("Please enter your current account password to update your PIN.");
       return;
     }
     
@@ -96,15 +101,16 @@ export default function DoctorSettingsPage() {
       const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
       
       const formData = new FormData();
-      formData.append('pin', pin);
+      formData.append('new_pin', pin);
+      formData.append('current_password', currentPassword);
 
-      await axios.post(`${apiUrl}/security/enroll-pin`, formData, {
+      await axios.post(`${apiUrl}/security/reset-pin-with-password`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       toast.success(pinStatus === "NOT_STARTED" ? "PIN enrolled successfully!" : "PIN updated successfully!");
       setPin("");
-      setConfirmPin("");
+      setCurrentPassword("");
       fetchPinStatus();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Failed to enroll PIN");
@@ -183,6 +189,16 @@ export default function DoctorSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Current Account Password</label>
+              <Input 
+                type="password" 
+                className="text-lg" 
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Required for authorization"
+              />
+            </div>
+            <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">New 6-Digit PIN</label>
               <Input 
                 type="password" 
@@ -192,17 +208,7 @@ export default function DoctorSettingsPage() {
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Confirm New PIN</label>
-              <Input 
-                type="password" 
-                maxLength={6} 
-                className="tracking-widest font-mono text-center text-lg" 
-                value={confirmPin}
-                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-              />
-            </div>
-            <Button onClick={handleEnrollPin} disabled={isEnrollingPin || pin.length !== 6 || pin !== confirmPin} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button onClick={handleEnrollPin} disabled={isEnrollingPin || pin.length !== 6} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
               {isEnrollingPin && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {pinStatus !== "NOT_STARTED" ? "Update PIN" : "Enroll PIN"}
             </Button>

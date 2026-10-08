@@ -17,6 +17,7 @@ class PrescriptionCreate(BaseModel):
     notes: Optional[str] = None
     items: List[PrescriptionItemBase]
     pin: Optional[str] = None
+    routed_pharmacy_id: Optional[uuid.UUID] = None
 
 class PrescriptionItemResponse(PrescriptionItemBase):
     id: uuid.UUID

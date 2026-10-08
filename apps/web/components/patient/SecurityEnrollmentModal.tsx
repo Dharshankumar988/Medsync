@@ -23,7 +23,7 @@ export default function SecurityEnrollmentModal() {
   const { status, isLoading: isStatusLoading } = useSecurityEnrollment(userId, role);
 
   const [pin, setPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [pinError, setPinError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enrollmentSuccess, setEnrollmentSuccess] = useState(false);
@@ -39,28 +39,44 @@ export default function SecurityEnrollmentModal() {
       setPinError('PIN must be 6 digits.');
       return;
     }
-    if (pin !== confirmPin) {
-      setPinError('PINs do not match.');
+    if (!currentPassword) {
+      setPinError('Please enter your account password.');
       return;
     }
+    
     setPinError('');
     setIsSubmitting(true);
 
     try {
       const { data: session } = await supabase.auth.getSession();
       if (session?.session?.access_token) {
-        await SecurityService.enrollPin(session.session.access_token, pin);
+        const formData = new FormData();
+        formData.append('new_pin', pin);
+        formData.append('current_password', currentPassword);
+        
+        const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+        const res = await fetch(`${baseUrl}/api/v1/security/reset-pin-with-password`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.session.access_token}` },
+          body: formData
+        });
+        
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.detail || "Failed to enroll PIN");
+        }
+        
         setEnrollmentSuccess(true);
         setStatus('PIN_CREATED');
         setTimeout(() => {
           closeEnrollmentModal();
           setEnrollmentSuccess(false);
           setPin('');
-          setConfirmPin('');
+          setCurrentPassword('');
         }, 2000);
       }
     } catch (err: any) {
-      setPinError(err.response?.data?.detail || 'Failed to enroll PIN');
+      setPinError(err.message || 'Failed to enroll PIN');
     } finally {
       setIsSubmitting(false);
     }
@@ -93,6 +109,16 @@ export default function SecurityEnrollmentModal() {
 
             <div className="space-y-4">
               <div className="space-y-1.5">
+                <label className="text-sm font-medium">Current Account Password</label>
+                <Input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full"
+                  placeholder="Enter your current password"
+                />
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-sm font-medium">New 6-Digit PIN</label>
                 <Input
                   type="password"
@@ -101,25 +127,13 @@ export default function SecurityEnrollmentModal() {
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                   className="text-center tracking-widest text-xl"
-                  placeholder="•••••••"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Confirm PIN</label>
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                  className="text-center tracking-widest text-xl"
-                  placeholder="•••••••"
+                  placeholder="••••••"
                 />
               </div>
               {pinError && <p className="text-red-500 text-sm">{pinError}</p>}
               <Button
                 className="w-full"
-                disabled={isSubmitting || pin.length !== 6 || confirmPin.length !== 6}
+                disabled={isSubmitting || pin.length !== 6 || !currentPassword}
                 onClick={handlePinSubmit}
               >
                 {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}

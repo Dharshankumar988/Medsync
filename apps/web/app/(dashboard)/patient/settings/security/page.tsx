@@ -12,7 +12,6 @@ export default function SecuritySettingsPage() {
   
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPin, setNewPin] = useState("");
-  const [confirmPin, setConfirmPin] = useState("");
   const [savingPin, setSavingPin] = useState(false);
   const [pinError, setPinError] = useState("");
 
@@ -21,7 +20,6 @@ export default function SecuritySettingsPage() {
     setPinError("");
     setCurrentPassword("");
     setNewPin("");
-    setConfirmPin("");
   };
 
   const handleChangePin = async () => {
@@ -32,13 +30,8 @@ export default function SecuritySettingsPage() {
       return;
     }
     
-    if (newPin.length !== 6 || confirmPin.length !== 6) {
+    if (newPin.length !== 6) {
       setPinError("PIN must be exactly 6 digits.");
-      return;
-    }
-    
-    if (newPin !== confirmPin) {
-      setPinError("PINs do not match.");
       return;
     }
     
@@ -131,17 +124,6 @@ export default function SecuritySettingsPage() {
                       className="text-center text-2xl tracking-[0.5em] h-14 rounded-xl"
                     />
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Confirm PIN</label>
-                    <Input 
-                      type="password" 
-                      placeholder="• • • • • •" 
-                      value={confirmPin}
-                      onChange={(e) => setConfirmPin(e.target.value)}
-                      maxLength={6}
-                      className="text-center text-2xl tracking-[0.5em] h-14 rounded-xl"
-                    />
-                  </div>
                 </div>
 
                 {pinError && (
@@ -155,7 +137,7 @@ export default function SecuritySettingsPage() {
                   <Button 
                     className="w-full h-12 bg-blue-600 hover:bg-blue-500 rounded-xl"
                     onClick={handleChangePin}
-                    disabled={newPin.length < 6 || confirmPin.length < 6 || !currentPassword || savingPin}
+                    disabled={newPin.length < 6 || !currentPassword || savingPin}
                   >
                     {savingPin ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : <Lock className="h-5 w-5 mr-2" />}
                     Save New PIN

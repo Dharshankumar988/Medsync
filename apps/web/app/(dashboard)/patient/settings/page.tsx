@@ -23,7 +23,6 @@ export default function SettingsPage() {
 
   // Security Reset State
   const [pin, setPin] = useState("");
-  const [confirmPin, setConfirmPin] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -115,10 +114,6 @@ export default function SettingsPage() {
   const handleResetPin = async () => {
     if (pin.length !== 6 || !/^\d+$/.test(pin)) {
       setErrorMsg('PIN must be 6 digits.');
-      return;
-    }
-    if (pin !== confirmPin) {
-      setErrorMsg('PINs do not match.');
       return;
     }
     if (!currentPassword) {
@@ -295,15 +290,6 @@ export default function SettingsPage() {
                   maxLength={6}
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                  className="w-full bg-muted/30 border border-border p-3 rounded-xl text-center tracking-widest text-xl"
-                />
-                <label className="text-sm font-medium">Confirm New PIN</label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
                   className="w-full bg-muted/30 border border-border p-3 rounded-xl text-center tracking-widest text-xl"
                 />
               </div>

@@ -18,6 +18,8 @@ class BlockchainTransactionBase(BaseModel):
     confirmation_count: int = 0
     status: str = "PENDING"
     wallet_address: Optional[str] = None
+    failure_reason: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 class BlockchainTransactionResponse(BlockchainTransactionBase):
     model_config = ConfigDict(from_attributes=True)

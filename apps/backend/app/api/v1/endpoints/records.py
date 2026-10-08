@@ -101,9 +101,13 @@ async def add_doctor_note(
     note = await DoctorNoteService.add_note(db, version_id, current_user.id, req)
     return APIResponse(message="Note added", data=note)
 
-@router.get("/{record_id}/download", response_model=APIResponse[dict])
+class DownloadRecordReq(BaseModel):
+    pin: str
+
+@router.post("/{record_id}/download", response_model=APIResponse[dict])
 async def download_record(
     record_id: uuid.UUID,
+    req: DownloadRecordReq,
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user)
 ):
@@ -113,6 +117,13 @@ async def download_record(
 
     is_owner = record.patient_id == current_user.id
     is_doctor = current_user.role == UserRole.DOCTOR
+    
+    if current_user.role == UserRole.PATIENT:
+        from app.services.security_service import validate_patient_pin
+        is_valid = await validate_patient_pin(db, current_user.id, req.pin)
+        if not is_valid:
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+            
     if not is_owner and is_doctor:
         has_permission = await PermissionService.check_permission(db, record_id, current_user.id)
         if not has_permission:

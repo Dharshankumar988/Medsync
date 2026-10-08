@@ -225,6 +225,7 @@ async def get_orders(db: AsyncSession = Depends(get_db), current_user: User = De
             "patient_address": order.delivery_address,
             "medication": medication_str,
             "status": order.status,
+            "order_type": order.order_type,
             "created_at": str(order.created_at)
         })
         

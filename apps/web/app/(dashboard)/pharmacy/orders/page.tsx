@@ -169,7 +169,14 @@ export default function PharmacyOrdersPage() {
               <Card className="overflow-hidden rounded-2xl border-border/60 hover:border-amber-500/30 transition-colors group">
                 <CardHeader className="bg-muted/20 pb-4 border-b border-border/40">
                   <div className="flex justify-between items-start mb-2">
-                    <Badge variant="outline" className="font-mono text-[10px] uppercase">{order.id.slice(0, 8)}</Badge>
+                    <div className="flex gap-2 items-center">
+                      <Badge variant="outline" className="font-mono text-[10px] uppercase">{order.id.slice(0, 8)}</Badge>
+                      {order.order_type === "ROUTED_BY_DOCTOR" && (
+                        <Badge variant="outline" className="text-[10px] uppercase bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                          Routed by Doctor
+                        </Badge>
+                      )}
+                    </div>
                     <Badge className={`
                       ${order.status === "PENDING" ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" : ""}
                       ${order.status === "DISPENSED" ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" : ""}

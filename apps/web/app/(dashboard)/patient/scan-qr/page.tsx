@@ -30,6 +30,8 @@ export default function PatientQRScanPage() {
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [selectedPrescription, setSelectedPrescription] = useState<string | null>(null);
   const [authPin, setAuthPin] = useState("");
+  const [hasPin, setHasPin] = useState<boolean | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -124,7 +126,8 @@ export default function PatientQRScanPage() {
       });
 
       if (!res.ok && res.status !== 403) {
-        throw new Error("Failed to reach verification endpoint");
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || "Failed to reach verification endpoint");
       }
       
       const json = await res.json();
@@ -146,7 +149,7 @@ export default function PatientQRScanPage() {
       
     } catch (e: any) {
       console.error(e);
-      alert("Failed to process pharmacy QR code.");
+      toast.error(e.message || "Failed to process pharmacy QR code.");
       setFlow("IDLE");
     } finally {
       setLoading(false);
@@ -166,6 +169,16 @@ export default function PatientQRScanPage() {
         setPrescriptions([{ id: "rx-98765", purpose: "Amoxicillin 500mg - 10 Days" }]);
       }
       setPharmacyStep("SELECT_PRESCRIPTION");
+      
+      // Also check PIN status in background
+      try {
+        const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+        const res = await fetch(`${baseUrl}/api/v1/security/status`, {
+          headers: { 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` }
+        });
+        const json = await res.json();
+        setHasPin(json.data?.has_pin || false);
+      } catch (err) {}
     } finally {
       setLoading(false);
     }
@@ -178,12 +191,34 @@ export default function PatientQRScanPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
+      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+
+      // Setup PIN first if they don't have one
+      if (hasPin === false) {
+        if (!currentPassword) {
+          throw new Error("Please enter your account password to setup your PIN");
+        }
+        const pinFormData = new FormData();
+        pinFormData.append('new_pin', authPin);
+        pinFormData.append('current_password', currentPassword);
+        
+        const pinRes = await fetch(`${baseUrl}/api/v1/security/reset-pin-with-password`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+          body: pinFormData
+        });
+        
+        if (!pinRes.ok) {
+          const error = await pinRes.json();
+          throw new Error(error.detail || "Failed to setup PIN");
+        }
+        setHasPin(true);
+      }
 
       const formData = new FormData();
       formData.append('pharmacy_id', pharmacy.id);
       formData.append('pin', authPin);
 
-      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
       const res = await fetch(`${baseUrl}/api/v1/prescriptions/${selectedPrescription}/physical-pickup`, {
         method: 'POST',
         headers: {
@@ -492,11 +527,14 @@ export default function PatientQRScanPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-4 justify-center">
-                      <Button variant="outline" onClick={() => setFlow("IDLE")} className="min-w-[140px] rounded-xl h-12">Cancel</Button>
-                      <Button onClick={() => setPharmacyStep("CONFIRM")} className="bg-primary hover:bg-primary/90 text-white min-w-[140px] rounded-xl h-12">
-                        Continue to Check-in <ArrowRight className="ml-2 h-4 w-4" />
+                    <div className="flex flex-col gap-3 max-w-sm mx-auto">
+                      <Button onClick={() => setPharmacyStep("CONFIRM")} className="bg-primary hover:bg-primary/90 text-white w-full rounded-xl h-12">
+                        Order / Pickup Prescription <ArrowRight className="ml-2 h-4 w-4" />
                       </Button>
+                      <Button variant="outline" onClick={() => toast.info("Booking form coming soon")} className="w-full rounded-xl h-12 border-primary/20 text-primary hover:bg-primary/5">
+                        Book Service / Delivery
+                      </Button>
+                      <Button variant="ghost" onClick={() => setFlow("IDLE")} className="w-full rounded-xl">Cancel</Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -620,9 +658,22 @@ export default function PatientQRScanPage() {
                   </CardHeader>
                   <CardContent className="p-8 text-center space-y-6">
                     <div className="max-w-xs mx-auto space-y-4">
+                      {hasPin === false && (
+                        <div className="space-y-4 mb-6 bg-blue-500/5 p-4 rounded-xl border border-blue-500/20 text-left">
+                          <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Set up your PIN</p>
+                          <p className="text-xs text-blue-600/80 mb-2">You need to set up a 6-digit Authorization PIN for future transactions.</p>
+                          <Input 
+                            type="password" 
+                            placeholder="Current Account Password" 
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            className="rounded-lg shadow-sm bg-background border-blue-500/30 focus-visible:ring-blue-500/30"
+                          />
+                        </div>
+                      )}
                       <Input 
                         type="password" 
-                        placeholder="Enter 6-digit PIN" 
+                        placeholder={hasPin === false ? "Enter New 6-digit PIN" : "Enter 6-digit PIN"} 
                         value={authPin}
                         onChange={(e) => setAuthPin(e.target.value)}
                         className="text-center text-xl tracking-widest h-14 rounded-xl shadow-sm"

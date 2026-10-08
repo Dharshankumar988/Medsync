@@ -19,11 +19,13 @@ export default function CreatePrescriptionPage() {
   const [userId, setUserId] = useState<string>("");
   const [patients, setPatients] = useState<any[]>([]);
   const [catalog, setCatalog] = useState<any[]>([]);
+  const [linkedPharmacies, setLinkedPharmacies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Form State
   const [patientId, setPatientId] = useState<string>(preselectedPatientId || "");
+  const [routedPharmacyId, setRoutedPharmacyId] = useState<string>("");
   const [diagnosis, setDiagnosis] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [items, setItems] = useState<any[]>([
@@ -41,6 +43,7 @@ export default function CreatePrescriptionPage() {
   const [pin, setPin] = useState("");
   const [pinMode, setPinMode] = useState<"create" | "verify">("verify");
   const [hasPin, setHasPin] = useState<boolean | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -99,7 +102,51 @@ export default function CreatePrescriptionPage() {
       }
     }
 
+    async function fetchPharmacies() {
+      try {
+        const { data: doctorProfile } = await supabase
+          .from("doctors")
+          .select("hospital_id, clinic_name")
+          .eq("user_id", userId)
+          .single();
+
+        const { data: pharmacyProfiles, error } = await supabase
+          .from("pharmacies")
+          .select("*");
+          
+        if (error) throw error;
+        
+        if (pharmacyProfiles && pharmacyProfiles.length > 0) {
+          const userIds = pharmacyProfiles.map(p => p.user_id);
+          const { data: usersData } = await supabase
+            .from("users")
+            .select("id, full_name, status")
+            .in("id", userIds)
+            .eq("status", "ACTIVE");
+            
+          const mapped = pharmacyProfiles
+            .map(profile => {
+               const user = usersData?.find(u => u.id === profile.user_id);
+               if (!user) return null;
+               
+               const isLinked = doctorProfile && (
+                 (profile.hospital_id && doctorProfile.hospital_id && profile.hospital_id === doctorProfile.hospital_id) ||
+                 (profile.clinic_name && doctorProfile.clinic_name && profile.clinic_name === doctorProfile.clinic_name)
+               );
+               
+               return { ...profile, ...user, isLinked };
+            })
+            .filter(Boolean);
+            
+          setLinkedPharmacies(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to fetch pharmacies", err);
+      }
+    }
+
     fetchPatients();
+    fetchPharmacies();
   }, [userId, preselectedPatientId]);
 
   const handleAddItem = () => {
@@ -192,15 +239,22 @@ export default function CreatePrescriptionPage() {
     try {
       // If creating PIN for first time, enroll it first
       if (pinMode === "create") {
+        if (!currentPassword) {
+          toast.error("Please enter your account password");
+          setSaving(false);
+          return;
+        }
+        
         const { data: session } = await supabase.auth.getSession();
         const token = session?.session?.access_token;
         const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
         const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
 
         const formData = new FormData();
-        formData.append('pin', pin);
+        formData.append('new_pin', pin);
+        formData.append('current_password', currentPassword);
 
-        await axios.post(`${apiUrl}/security/enroll-pin`, formData, {
+        await axios.post(`${apiUrl}/security/reset-pin-with-password`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -223,7 +277,8 @@ export default function CreatePrescriptionPage() {
         diagnosis,
         notes,
         items: validItems,
-        pin: pin
+        pin: pin,
+        routed_pharmacy_id: routedPharmacyId || undefined
       };
 
       const { data: session } = await supabase.auth.getSession();
@@ -295,9 +350,34 @@ export default function CreatePrescriptionPage() {
                 <Input placeholder="e.g. Acute Viral Pharyngitis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Additional Notes</label>
-              <Input placeholder="e.g. Drink plenty of fluids, rest for 3 days" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Additional Notes</label>
+                <Input placeholder="e.g. Drink plenty of fluids, rest for 3 days" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex justify-between">
+                  Route to Pharmacy
+                  <Badge variant="outline" className="text-[10px] h-4 py-0 px-1 border-emerald-500/30 text-emerald-600 bg-emerald-500/5">Optional</Badge>
+                </label>
+                <select 
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={routedPharmacyId}
+                  onChange={(e) => setRoutedPharmacyId(e.target.value)}
+                >
+                  <option value="">Give patient physical/digital copy only</option>
+                  <optgroup label="Linked Partners">
+                    {linkedPharmacies.filter(p => p.isLinked).map(p => (
+                      <option key={p.user_id} value={p.user_id}>{p.full_name || p.business_name} (Linked)</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Other Network Pharmacies">
+                    {linkedPharmacies.filter(p => !p.isLinked).map(p => (
+                      <option key={p.user_id} value={p.user_id}>{p.full_name || p.business_name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -440,6 +520,15 @@ export default function CreatePrescriptionPage() {
             </p>
 
             <div className="space-y-6">
+              {pinMode === "create" && (
+                <Input
+                  type="password"
+                  placeholder="Current Account Password"
+                  className="h-12 rounded-xl"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
+              )}
               <Input
                 type="password"
                 placeholder="••••••"

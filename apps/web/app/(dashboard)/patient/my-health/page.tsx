@@ -128,11 +128,26 @@ export default function MyHealthPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Gender</label>
-                  <Input name="gender" value={formData.gender} onChange={handleChange} placeholder="e.g. Male, Female, Other" />
+                  <select name="gender" value={formData.gender} onChange={handleChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Blood Group</label>
-                  <Input name="blood_group" value={formData.blood_group} onChange={handleChange} placeholder="e.g. O+" />
+                  <select name="blood_group" value={formData.blood_group} onChange={handleChange as any} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <option value="">Select Blood Group</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                  </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Phone Number</label>
@@ -153,53 +168,6 @@ export default function MyHealthPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border border-border/60 bg-card/50">
-            <CardHeader>
-              <CardTitle>Authorization PIN</CardTitle>
-              <p className="text-sm text-muted-foreground">Set a 6-digit PIN to authorize prescription claims at the pharmacy.</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">New 6-Digit PIN</label>
-                  <Input type="password" maxLength={6} placeholder="******" id="new_pin" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Confirm PIN</label>
-                  <Input type="password" maxLength={6} placeholder="******" id="confirm_pin" />
-                </div>
-              </div>
-              <div className="flex justify-end pt-4">
-                <Button onClick={async () => {
-                  const newPin = (document.getElementById('new_pin') as HTMLInputElement).value;
-                  const confirmPin = (document.getElementById('confirm_pin') as HTMLInputElement).value;
-                  if (newPin.length !== 6 || !/^\d+$/.test(newPin)) {
-                    toast.error("PIN must be exactly 6 digits.");
-                    return;
-                  }
-                  if (newPin !== confirmPin) {
-                    toast.error("PINs do not match.");
-                    return;
-                  }
-                  try {
-                    setSaving(true);
-                    await api.post(`/api/v1/profile/${userId}/pin`, { pin: newPin });
-                    toast.success("Authorization PIN updated successfully");
-                    (document.getElementById('new_pin') as HTMLInputElement).value = "";
-                    (document.getElementById('confirm_pin') as HTMLInputElement).value = "";
-                  } catch (err) {
-                    console.error("Error setting PIN", err);
-                    toast.error("Failed to update Authorization PIN");
-                  } finally {
-                    setSaving(false);
-                  }
-                }} disabled={saving}>
-                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Update PIN
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       )}
     </div>

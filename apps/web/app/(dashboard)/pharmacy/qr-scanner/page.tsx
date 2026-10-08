@@ -401,6 +401,14 @@ export default function PharmacyQRScannerPage() {
                           <span className="text-amber-600">$34.00</span>
                         </div>
                       </div>
+
+                      <div className="pt-4 flex flex-col items-center border-t border-dashed mt-4 space-y-3">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Scan to Pay via UPI</span>
+                        <div className="p-2 bg-white rounded-xl border border-border shadow-sm">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=pharmacy@upi&pn=Pharmacy&am=34.00" alt="Payment QR" className="w-32 h-32" />
+                        </div>
+                      </div>
                     </div>
                     
                     <div className="flex gap-3 pt-2">
