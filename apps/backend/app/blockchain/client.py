@@ -1,7 +1,11 @@
 import logging
 import os
-from web3 import Web3
-from eth_account import Account
+try:
+    from web3 import Web3
+    from eth_account import Account
+except ImportError:
+    Web3 = None
+    Account = None
 from app.blockchain.config import blockchain_settings
 from app.blockchain.exceptions import RPCConnectionError, WalletConfigurationError
 
@@ -37,6 +41,10 @@ class BlockchainClient:
         self.configured = False
         self.w3 = None
         self.wallet_address = "0x0000000000000000000000000000000000000000"
+
+        if Web3 is None or Account is None:
+            logger.info("web3 / eth_account packages not available — blockchain client running in mock mode.")
+            return
 
         # ── Always derive wallet address from private key (identity, not writes) ──
         try:

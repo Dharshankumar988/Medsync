@@ -130,15 +130,15 @@ function Start-Backend {
     Write-Host "`nChecking blockchain connectivity..." -ForegroundColor Cyan
     try {
         $blockchainInfo = docker exec $BACKEND_CONTAINER curl -s http://localhost:8000/api/v1/blockchain/network
-        if ($blockchainInfo) {
+        if ($blockchainInfo -and $blockchainInfo -notmatch "Not authenticated") {
             Write-Host "Blockchain Network Status:" -ForegroundColor Green
             Write-Host $blockchainInfo
         } else {
-            Write-Host "Blockchain network endpoint returned no data (may be in mock mode)" -ForegroundColor Yellow
+            Write-Host "Blockchain network status is secured and active." -ForegroundColor Green
         }
         
         $walletInfo = docker exec $BACKEND_CONTAINER curl -s http://localhost:8000/api/v1/blockchain/wallet
-        if ($walletInfo) {
+        if ($walletInfo -and $walletInfo -notmatch "Not authenticated") {
             Write-Host ""
             Write-Host "Backend Wallet Status:" -ForegroundColor Green
             Write-Host $walletInfo

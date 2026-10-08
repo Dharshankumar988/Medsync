@@ -17,8 +17,6 @@ from app.models.api_log import ApiRequestLog
 from app.models.ai_chat import AIChatMessage
 from app.models.blockchain import BlockchainTransaction, BlockchainSyncTask, SyncStatus
 import asyncio
-from app.blockchain.provider import blockchain_gateway
-from app.blockchain.client import blockchain_client
 from app.schemas.response import APIResponse
 from app.schemas.session import AuthenticatedPrincipal
 from app.services.verification import VerificationService
@@ -530,6 +528,8 @@ async def get_admin_blockchain(
     gas_price_gwei = None
     rpc_url = None
     try:
+        from app.blockchain.provider import blockchain_gateway
+        from app.blockchain.client import blockchain_client
         health = await asyncio.to_thread(blockchain_gateway.get_health_status)
         is_healthy = health.get("status") in ("healthy", "healthy (mock)")
         status_text = "Healthy" if is_healthy else "Degraded"
@@ -702,9 +702,9 @@ async def create_doctor(
 
 from fastapi import Request
 from app.dependencies.rate_limit import limiter
-from sqlalchemy.orm import selectinload
+from app.schemas.admin import RelationshipGraphResponse
 
-@router.get("/graph", response_model=APIResponse[dict])
+@router.get("/graph", response_model=APIResponse[RelationshipGraphResponse])
 @limiter.limit("10/minute")
 async def get_relationship_graph(
     request: Request,
@@ -857,15 +857,15 @@ async def get_relationship_graph(
                 "state": hospital.state,
                 "country": hospital.country,
                 "pincode": hospital.pincode,
-                "phone": hospital.contact_number,
-                "type": hospital.hospital_type,
+                "phone": hospital.phone_number,
+                "type": hospital.type,
                 "googleMapsLink": google_maps_link
             }
         })
         edges.append({"source": "MEDICINE", "target": f"HOSPITAL_{hospital.id}", "type": "hosts"})
 
     # Get top 10 recent admins
-    admins_stmt = select(User).where(User.role == "ADMIN").order_by(desc(User.created_at)).limit(10)
+    admins_stmt = select(User).where(User.role == UserRole.ADMIN).order_by(desc(User.created_at)).limit(10)
     admins_result = await db.execute(admins_stmt)
     admins = admins_result.scalars().all()
 
@@ -878,14 +878,17 @@ async def get_relationship_graph(
             "details": f"Admin | {admin.email}",
             "entityData": {
                 "email": admin.email,
-                "role": admin.role,
-                "status": admin.status,
+                "role": admin.role.value if hasattr(admin.role, "value") else admin.role,
+                "status": admin.status.value if hasattr(admin.status, "value") else admin.status,
                 "isVerified": admin.is_verified
             }
         })
         edges.append({"source": "MEDICINE", "target": f"ADMIN_{admin.id}", "type": "manages"})
 
-    return APIResponse(message="Graph retrieved", data={"nodes": nodes, "links": edges})
+    return APIResponse(
+        message="Graph retrieved",
+        data=RelationshipGraphResponse(nodes=nodes, links=edges)
+    )
 
 class AdminSettingsPayload(BaseModel):
     maintenance_mode: bool

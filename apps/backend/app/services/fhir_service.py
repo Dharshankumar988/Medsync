@@ -154,7 +154,7 @@ class FHIRService:
                 id=str(hospital_model.id),
                 name=hospital_model.name,
                 address=[Address(text=hospital_model.address, city=hospital_model.city, state=hospital_model.state, postalCode=hospital_model.pincode)],
-                telecom=[ContactPoint(system="phone", value=hospital_model.contact_number, use="work")]
+                telecom=[ContactPoint(system="phone", value=hospital_model.phone_number, use="work")]
             )
             
         stmt = select(Pharmacy).where(Pharmacy.user_id == org_id)

@@ -31,3 +31,13 @@ class Patient(Base, UUIDMixin, TimestampMixin):
     blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
     user = relationship("User", back_populates="patient_profile")
+
+    # Defensive property alias to prevent cross-entity naming errors
+    @property
+    def contact_number(self) -> str | None:
+        """Alias for phone_number to prevent cross-entity attribute errors."""
+        return self.phone_number
+
+    @contact_number.setter
+    def contact_number(self, value: str | None) -> None:
+        self.phone_number = value

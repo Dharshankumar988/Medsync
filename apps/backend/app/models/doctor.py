@@ -57,3 +57,22 @@ class Doctor(Base, UUIDMixin, TimestampMixin):
 
     user = relationship("User", foreign_keys=[user_id], back_populates="doctor_profile")
     hospital = relationship("Hospital", back_populates="doctors")
+
+    # Defensive property aliases to prevent cross-entity naming errors
+    @property
+    def phone_number(self) -> str | None:
+        """Alias for clinic_phone to prevent cross-entity attribute errors."""
+        return self.clinic_phone
+
+    @phone_number.setter
+    def phone_number(self, value: str | None) -> None:
+        self.clinic_phone = value
+
+    @property
+    def contact_number(self) -> str | None:
+        """Alias for clinic_phone to prevent cross-entity attribute errors."""
+        return self.clinic_phone
+
+    @contact_number.setter
+    def contact_number(self, value: str | None) -> None:
+        self.clinic_phone = value

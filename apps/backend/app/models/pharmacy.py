@@ -43,3 +43,13 @@ class Pharmacy(Base, UUIDMixin, TimestampMixin):
 
     user = relationship("User", back_populates="pharmacy_profile")
 
+    # Defensive property alias to prevent cross-entity naming errors
+    @property
+    def phone_number(self) -> str | None:
+        """Alias for contact_number to prevent cross-entity attribute errors."""
+        return self.contact_number
+
+    @phone_number.setter
+    def phone_number(self, value: str | None) -> None:
+        self.contact_number = value
+
