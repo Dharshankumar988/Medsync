@@ -138,7 +138,6 @@ export default function SettingsPage() {
         toast.success('PIN reset successfully');
         setResetModal(null);
         setPin('');
-        setConfirmPin('');
         setCurrentPassword('');
       }
     } catch (err: any) {

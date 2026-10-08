@@ -10,6 +10,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRScanner } from "@/components/ui/QRScanner";
+import { toast } from "sonner";
 
 type FlowType = "IDLE" | "PHARMACY" | "BLOCKCHAIN" | "URL" | "TEXT";
 type PharmacyStep = "VERIFYING_BLOCKCHAIN" | "VERIFICATION_RESULT" | "CONFIRM" | "SELECT_PRESCRIPTION" | "PAYMENT" | "AUTHORIZE" | "SUCCESS";

@@ -196,7 +196,6 @@ export default function PharmacySettingsPage() {
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
               />
             </div>
-            </div>
             <Button onClick={handleEnrollPin} disabled={isEnrollingPin || pin.length !== 6} className="w-full bg-amber-600 hover:bg-amber-700 text-white">
               {isEnrollingPin && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {pinStatus !== "NOT_STARTED" ? "Update PIN" : "Enroll PIN"}
