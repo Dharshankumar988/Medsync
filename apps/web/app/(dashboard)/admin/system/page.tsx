@@ -2,205 +2,21 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
-import { Server, Database, CheckCircle, Brain, XCircle, Loader2, Box } from "lucide-react";
+import { Server, Database, CheckCircle, Brain, XCircle, Loader2, Sparkles } from "lucide-react";
 import { Badge } from "@medsync/ui";
 import api from "@/lib/api";
 
-const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
-
-function EntityGraph({ nodes, edges }: { nodes: any[], edges: any[] }) {
-  const fgRef = useRef<any>();
-  const [selectedNode, setSelectedNode] = useState<any>(null);
-  const [hoveredNode, setHoveredNode] = useState<any>(null);
-
-  const graphData = {
-    nodes: nodes.map(n => ({ ...n })),
-    links: edges.map(e => ({ source: e.source, target: e.target, name: e.type }))
-  };
-
-  const getNodeColor = (node: any) => {
-    if (node.isCentral) return '#FFD700'; // Golden color for central medicine node
-    if (node.hasError || node.status === 'ERROR' || node.status === 'FAILED') return '#ef4444';
-    switch(node.type) {
-      case 'Patient': return '#3b82f6'; // Blue
-      case 'Doctor': return '#22c55e'; // Green
-      case 'Pharmacy': return '#facc15'; // Yellow
-      case 'Hospital': return '#a855f7'; // Purple
-      case 'Admin': return '#f87171'; // Red
-      case 'Medicine': return '#FFD700'; // Golden
-      default: return '#9ca3af';
-    }
-  };
-
-  const getNodeSize = (node: any): number => {
-    if (node.isCentral) return 15; // Larger for central node
-    return 8;
-  };
-
-  const renderEntityDetails = (data: any) => {
-    if (!data) return null;
-
-    return (
-      <div className="space-y-3">
-        {data.name && (
-          <div>
-            <p className="text-xs text-muted-foreground">Name</p>
-            <p className="text-sm font-medium">{data.name}</p>
-          </div>
-        )}
-        {data.email && (
-          <div>
-            <p className="text-xs text-muted-foreground">Email</p>
-            <p className="text-sm">{data.email}</p>
-          </div>
-        )}
-        {data.phone && (
-          <div>
-            <p className="text-xs text-muted-foreground">Phone</p>
-            <p className="text-sm">{data.phone}</p>
-          </div>
-        )}
-        {data.address && (
-          <div>
-            <p className="text-xs text-muted-foreground">Address</p>
-            <p className="text-sm">{data.address}</p>
-          </div>
-        )}
-        {data.city && data.state && (
-          <div>
-            <p className="text-xs text-muted-foreground">Location</p>
-            <p className="text-sm">{data.city}, {data.state}, {data.country || ''}</p>
-          </div>
-        )}
-        {data.pincode && (
-          <div>
-            <p className="text-xs text-muted-foreground">Pincode</p>
-            <p className="text-sm">{data.pincode}</p>
-          </div>
-        )}
-        {data.specialization && (
-          <div>
-            <p className="text-xs text-muted-foreground">Specialization</p>
-            <p className="text-sm">{data.specialization}</p>
-          </div>
-        )}
-        {data.licenseNumber && (
-          <div>
-            <p className="text-xs text-muted-foreground">License Number</p>
-            <p className="text-sm">{data.licenseNumber}</p>
-          </div>
-        )}
-        {data.operatingHours && (
-          <div>
-            <p className="text-xs text-muted-foreground">Operating Hours</p>
-            <p className="text-sm">{data.operatingHours}</p>
-          </div>
-        )}
-        {data.is24x7 !== undefined && (
-          <div>
-            <p className="text-xs text-muted-foreground">24/7 Service</p>
-            <p className="text-sm">{data.is24x7 ? 'Yes' : 'No'}</p>
-          </div>
-        )}
-        {data.experience !== undefined && (
-          <div>
-            <p className="text-xs text-muted-foreground">Experience</p>
-            <p className="text-sm">{data.experience} years</p>
-          </div>
-        )}
-        {data.consultationFee !== undefined && (
-          <div>
-            <p className="text-xs text-muted-foreground">Consultation Fee</p>
-            <p className="text-sm">₹{data.consultationFee}</p>
-          </div>
-        )}
-        {data.bloodGroup && (
-          <div>
-            <p className="text-xs text-muted-foreground">Blood Group</p>
-            <p className="text-sm">{data.bloodGroup}</p>
-          </div>
-        )}
-        {data.googleMapsLink && (
-          <div>
-            <a
-              href={data.googleMapsLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-blue-500 hover:text-blue-600 mt-2"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-              </svg>
-              View on Google Maps
-            </a>
-          </div>
-        )}
+const ConstellationGraph = dynamic(() => import('@/components/admin/ConstellationGraph'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full w-full border rounded-2xl border-dashed border-border/50 bg-[#070a12]">
+      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+        <div className="animate-spin h-8 w-8 border-3 border-cyan-500 border-t-transparent rounded-full" />
+        <span className="text-xs font-mono">Initializing Celestial Constellation Engine...</span>
       </div>
-    );
-  };
-
-  return (
-    <div className="w-full h-full border rounded-xl overflow-hidden bg-background relative flex items-center justify-center">
-      <ForceGraph3D
-        ref={fgRef}
-        graphData={graphData}
-        nodeLabel="label"
-        nodeColor={getNodeColor}
-        nodeRelSize={8}
-        linkColor={() => 'rgba(100, 100, 100, 0.3)'}
-        linkDirectionalArrowLength={3.5}
-        linkDirectionalArrowRelPos={1}
-        linkWidth={1}
-        enableNodeDrag={true}
-        onNodeHover={node => setHoveredNode(node || null)}
-        onNodeClick={node => {
-          setSelectedNode(node);
-          // Aim at node from outside it
-          const distance = 40;
-          const distRatio = 1 + distance/Math.hypot(node.x || 0, node.y || 0, node.z || 0);
-
-          fgRef.current?.cameraPosition(
-            { x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio },
-            node,
-            3000
-          );
-        }}
-        width={typeof window !== 'undefined' ? (document.getElementById("graph-container")?.offsetWidth || 800) : 800}
-        height={500}
-        backgroundColor="#00000000"
-        d3VelocityDecay={0.3}
-      />
-
-      {/* Hover tooltip */}
-      {hoveredNode && !selectedNode && (
-        <div className="absolute top-4 left-4 bg-card/90 backdrop-blur-sm p-3 rounded-lg border shadow-lg z-20 max-w-xs">
-          <p className="font-semibold text-sm">{hoveredNode.label}</p>
-          <p className="text-xs text-muted-foreground mt-1">{hoveredNode.details}</p>
-        </div>
-      )}
-
-      {/* Details Popup */}
-      {selectedNode && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card p-6 rounded-xl border border-border shadow-2xl z-50 min-w-[350px] max-w-md max-h-[80vh] overflow-y-auto">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="font-bold text-lg">{selectedNode.label}</h3>
-              <p className="text-xs text-muted-foreground" style={{color: getNodeColor(selectedNode)}}>{selectedNode.type}</p>
-            </div>
-            <button onClick={() => setSelectedNode(null)} className="text-muted-foreground hover:text-foreground">
-              <XCircle className="w-5 h-5"/>
-            </button>
-          </div>
-          {selectedNode.entityData ? (
-            renderEntityDetails(selectedNode.entityData)
-          ) : (
-            <p className="text-sm text-muted-foreground">{selectedNode.details || "No additional details available."}</p>
-          )}
-        </div>
-      )}
     </div>
-  );
-}
+  )
+});
 
 export default function AdminSystem() {
   const [services, setServices] = useState<any[]>([]);
@@ -295,54 +111,77 @@ export default function AdminSystem() {
       </div>
       
       <div className="grid gap-6 mt-6">
-        <Card className="col-span-full" id="graph-container">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Box className="h-5 w-5 text-primary"/> MedSync Entity Constellation (3D)</CardTitle>
-            <CardDescription>Interactive 3D constellation view of healthcare entities. Golden central node represents Medicine. Hover to preview, click for details including location and Google Maps link. Drag to rotate, scroll to zoom.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[550px] w-full p-6">
-            {graphLoading ? (
-              <div className="flex items-center justify-center h-full w-full border rounded-xl border-dashed">
-                <div className="animate-spin h-8 w-8 border-4 border-amber-500 border-t-transparent rounded-full" />
+        <Card className="col-span-full border-border/80 shadow-xl overflow-hidden" id="graph-container">
+          <CardHeader className="pb-3 border-b border-border/50 bg-card/60 backdrop-blur-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2.5 text-xl">
+                  <Sparkles className="h-5 w-5 text-amber-400" /> MedSync Healthcare Constellation
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Interactive celestial knowledge graph inspired by deep space constellations. Features mouse proximity sensing, organic clusters, and real-time physics. Hover near any star to illuminate connected pathways.
+                </CardDescription>
               </div>
-            ) : graphData && graphData.nodes.length > 0 ? (
-              <EntityGraph nodes={graphData.nodes} edges={graphData.edges || (graphData as any).links || []} />
+            </div>
+          </CardHeader>
+          <CardContent className="p-3 sm:p-5 bg-background/50">
+            {graphLoading ? (
+              <div className="flex items-center justify-center h-[540px] w-full border rounded-2xl border-dashed border-border/60 bg-[#070a12]">
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                  <div className="animate-spin h-8 w-8 border-3 border-amber-400 border-t-transparent rounded-full" />
+                  <span className="text-xs font-mono">Charting Healthcare Stars & Clusters...</span>
+                </div>
+              </div>
+            ) : graphData && graphData.nodes && graphData.nodes.length > 0 ? (
+              <ConstellationGraph
+                nodes={graphData.nodes}
+                edges={graphData.edges || (graphData as any).links || []}
+              />
             ) : (
-              <div className="flex items-center justify-center h-full w-full border rounded-xl border-dashed text-muted-foreground">
-                No relationship data available.
+              <div className="flex items-center justify-center h-[540px] w-full border rounded-2xl border-dashed text-muted-foreground bg-[#070a12]">
+                No constellation relationship data available.
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Legend below the graph */}
-        <Card className="col-span-full">
-          <CardContent className="p-6">
-            <p className="font-semibold mb-4 text-sm">Role & Entity Legend</p>
-            <div className="flex flex-wrap gap-6">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-[#FFD700] shadow-[0_0_10px_#FFD700]"></div>
-                <span className="text-sm">Medicine (Central Hub)</span>
+        {/* Constellation Role & Star Legend */}
+        <Card className="col-span-full border-border/70 bg-card/70 backdrop-blur-sm shadow-md">
+          <CardContent className="p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold text-sm tracking-wide text-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-cyan-400" /> Celestial Role & Entity Legend
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Stars illuminate in vivid cyan neon and vibrant magenta when hovered or approached by cursor.
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-[#3b82f6] shadow-[0_0_10px_#3b82f6]"></div>
-                <span className="text-sm">Patient</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-[#22c55e] shadow-[0_0_10px_#22c55e]"></div>
-                <span className="text-sm">Doctor</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-[#facc15] shadow-[0_0_10px_#facc15]"></div>
-                <span className="text-sm">Pharmacy</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-[#a855f7] shadow-[0_0_10px_#a855f7]"></div>
-                <span className="text-sm">Hospital</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-[#f87171] shadow-[0_0_10px_#f87171]"></div>
-                <span className="text-sm">Admin</span>
+              <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
+                <div className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded-full bg-[#fbbf24] shadow-[0_0_10px_#fbbf24]"></div>
+                  <span className="text-xs font-medium text-foreground/90">Medicine (Core)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded-full bg-[#c084fc] shadow-[0_0_10px_#c084fc]"></div>
+                  <span className="text-xs font-medium text-foreground/90">Hospital</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded-full bg-[#34d399] shadow-[0_0_10px_#34d399]"></div>
+                  <span className="text-xs font-medium text-foreground/90">Doctor</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded-full bg-[#38bdf8] shadow-[0_0_10px_#38bdf8]"></div>
+                  <span className="text-xs font-medium text-foreground/90">Patient</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded-full bg-[#fb923c] shadow-[0_0_10px_#fb923c]"></div>
+                  <span className="text-xs font-medium text-foreground/90">Pharmacy</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded-full bg-[#fb7185] shadow-[0_0_10px_#fb7185]"></div>
+                  <span className="text-xs font-medium text-foreground/90">Admin</span>
+                </div>
               </div>
             </div>
           </CardContent>

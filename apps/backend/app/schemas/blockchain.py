@@ -89,3 +89,27 @@ class VerificationResponse(BaseModel):
     blockchain_hash: Optional[str] = None
     match: bool
     timestamp: datetime = datetime.utcnow()
+
+class BlockchainVerifyResult(BaseModel):
+    verified: bool
+    status: str  # FINALIZED, CONFIRMED, PENDING, REVERTED, NOT_FOUND, UNVERIFIED
+    item_type: str  # TRANSACTION, CONTRACT, ADDRESS, PRESCRIPTION, RECORD, PHARMACY
+    identifier: str
+    network: str = "Polygon Amoy Testnet"
+    chain_id: int = 80002
+    block_number: Optional[int] = None
+    confirmations: Optional[int] = None
+    gas_used: Optional[int] = None
+    gas_price_gwei: Optional[float] = None
+    from_address: Optional[str] = None
+    to_address: Optional[str] = None
+    contract_name: Optional[str] = None
+    contract_address: Optional[str] = None
+    explorer_url: Optional[str] = None
+    contract_explorer_url: Optional[str] = None
+    timestamp: Optional[str] = None
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+

@@ -33,14 +33,14 @@ export default function BlockchainAdminLayout({
   const pathname = usePathname();
 
   return (
-    <div className="flex flex-col md:flex-row h-full min-h-screen">
+    <div className="flex flex-col md:flex-row w-full min-w-0">
       {/* Secondary Sidebar for Blockchain DevOps */}
-      <aside className="w-full md:w-64 border-r border-border bg-card flex-shrink-0">
-        <div className="p-6">
+      <aside className="w-full md:w-56 lg:w-60 border-r border-border bg-card flex-shrink-0">
+        <div className="p-5">
           <h2 className="text-lg font-bold tracking-tight text-primary">DevOps Console</h2>
           <p className="text-xs text-muted-foreground mt-1">MedSync Blockchain Subsystem</p>
         </div>
-        <nav className="space-y-1 px-3">
+        <nav className="space-y-1 px-3 pb-4">
           {sidebarLinks.map((link) => {
             const isActive = pathname === link.href || (link.href !== "/admin/blockchain" && pathname.startsWith(link.href));
             const Icon = link.icon;
@@ -71,13 +71,13 @@ export default function BlockchainAdminLayout({
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-6 md:p-8 bg-background overflow-y-auto">
-        <div className="mx-auto max-w-7xl">
+      <div className="flex-1 min-w-0 p-4 md:p-6 bg-background">
+        <div className="w-full min-w-0 max-w-7xl">
           <Web3Provider>
             {children}
           </Web3Provider>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

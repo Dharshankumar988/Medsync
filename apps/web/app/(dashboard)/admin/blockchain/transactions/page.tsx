@@ -78,9 +78,9 @@ export default function TransactionsExplorer() {
             className="px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             <option value="ALL">All Statuses</option>
-            <option value="success">Confirmed</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="PENDING">Pending</option>
+            <option value="FAILED">Failed</option>
           </select>
           <select 
             value={contract} 
@@ -109,22 +109,22 @@ export default function TransactionsExplorer() {
         </form>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-        <table className="min-w-full text-left text-sm whitespace-nowrap">
+      <div className="w-full overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+        <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="border-b border-border bg-muted/50">
             <tr>
-              <th className="px-5 py-3 font-medium text-muted-foreground">Tx Hash</th>
-              <th className="px-5 py-3 font-medium text-muted-foreground">Status</th>
-              <th className="px-5 py-3 font-medium text-muted-foreground">Contract</th>
-              <th className="px-5 py-3 font-medium text-muted-foreground">Block</th>
-              <th className="px-5 py-3 font-medium text-muted-foreground">Timestamp</th>
-              <th className="px-5 py-3 font-medium text-muted-foreground">Action</th>
+              <th className="px-4 lg:px-5 py-3 font-medium text-muted-foreground">Tx Hash</th>
+              <th className="px-3 lg:px-4 py-3 font-medium text-muted-foreground">Status</th>
+              <th className="px-4 lg:px-5 py-3 font-medium text-muted-foreground">Contract</th>
+              <th className="px-3 lg:px-4 py-3 font-medium text-muted-foreground">Block</th>
+              <th className="px-4 lg:px-5 py-3 font-medium text-muted-foreground">Timestamp</th>
+              <th className="px-4 lg:px-5 py-3 font-medium text-muted-foreground text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center"><div className="animate-pulse h-4 w-24 bg-muted mx-auto rounded"></div></td>
+                <td colSpan={6} className="px-5 py-10 text-center"><div className="animate-pulse h-4 w-28 bg-muted mx-auto rounded"></div></td>
               </tr>
             ) : transactions.length === 0 ? (
               <tr>
@@ -132,18 +132,24 @@ export default function TransactionsExplorer() {
               </tr>
             ) : (
               transactions.map((tx) => (
-                <tr key={tx.transaction_hash} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setSelectedTx(tx)}>
-                  <td className="px-5 py-4 font-mono text-xs text-primary">{tx.transaction_hash?.slice(0, 16)}...</td>
-                  <td className="px-5 py-4">
+                <tr key={tx.transaction_hash} className="hover:bg-muted/20 transition-colors cursor-pointer group" onClick={() => setSelectedTx(tx)}>
+                  <td className="px-4 lg:px-5 py-4 font-mono text-xs">
+                    <span className="text-primary group-hover:underline">
+                      {tx.transaction_hash?.slice(0, 10)}…{tx.transaction_hash?.slice(-6)}
+                    </span>
+                  </td>
+                  <td className="px-3 lg:px-4 py-4">
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${getStatusBadge(tx.status)}`}>
                       {tx.status}
                     </span>
                   </td>
-                  <td className="px-5 py-4 font-medium">{tx.contract_name || "Unknown"}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{tx.block_number || "—"}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</td>
-                  <td className="px-5 py-4">
-                    <button className="text-primary hover:underline text-xs font-medium">Details</button>
+                  <td className="px-4 lg:px-5 py-4 font-medium text-foreground">{tx.contract_name || "Protocol Core"}</td>
+                  <td className="px-3 lg:px-4 py-4 text-muted-foreground font-mono text-xs">{tx.block_number || "—"}</td>
+                  <td className="px-4 lg:px-5 py-4 text-muted-foreground text-xs">{new Date(tx.created_at).toLocaleString()}</td>
+                  <td className="px-4 lg:px-5 py-4 text-right">
+                    <button className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors">
+                      Details →
+                    </button>
                   </td>
                 </tr>
               ))

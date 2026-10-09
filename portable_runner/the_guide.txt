@@ -71,16 +71,46 @@ You must configure the face verification service in your `.env` file:
 
 ## Start MedSync
 
-To start the backend, open PowerShell and navigate to your portable_runner folder, then run the start script:
+### 1. Interactive Desktop (Windows)
+Open PowerShell and run:
 
 cd "YOUR_INSTALLATION_PATH\portable_runner"
 .\start-medsync.ps1
 
 Or using CMD:
-
 cd /d "YOUR_INSTALLATION_PATH\portable_runner"
 start-medsync.bat
 
+### 2. Remote Server Start (Headless / SSH / Windows Server)
+If running on a remote Windows server over SSH or in headless/daemon mode:
+
+cd "YOUR_INSTALLATION_PATH\portable_runner"
+.\start-medsync.ps1 -Remote -Daemon
+
+Options:
+- `-Remote`: Runs without opening desktop popup windows.
+- `-Daemon`: Starts backend in the background and exits cleanly.
+- `-NoNgrok`: Skips ngrok when server has a public IP/domain.
+- `-Port 8000`: Specifies a custom backend port.
+- `-FollowLogs`: Streams backend container logs directly.
+
+### 3. Remote Server Start (Linux VPS: Ubuntu / Debian / Cloud)
+If running on a remote Linux server:
+
+cd portable_runner
+chmod +x *.sh
+./start-medsync.sh -d
+
+Options:
+- `-d` or `--daemon`: Runs in background.
+- `-f` or `--logs`: Streams container logs.
+- `-p 8000`: Sets custom port.
+
+To check status:
+./medsync-status.sh
+
+To stop:
+./stop-medsync.sh
 
 Docker will:
 1. Download the MedSync backend image if necessary.

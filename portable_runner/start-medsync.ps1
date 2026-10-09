@@ -1,4 +1,14 @@
 # MedSync Portable Runner (PowerShell)
+[CmdletBinding()]
+param (
+    [switch]$Remote,
+    [switch]$Headless,
+    [switch]$NoNgrok,
+    [string]$Port = "8000",
+    [switch]$FollowLogs,
+    [switch]$Daemon
+)
+
 $ErrorActionPreference = "Stop"
 $ScriptPath = $PSScriptRoot
 Set-Location -LiteralPath $ScriptPath
@@ -16,9 +26,13 @@ if (Test-Path "VERSION") {
 }
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "           MEDSYNC PORTABLE RUNNER      " -ForegroundColor Cyan
+Write-Host "       MEDSYNC PORTABLE RUNNER (v$VERSION)       " -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Starting: Backend" -ForegroundColor Green
+if ($Remote -or $Headless) {
+    Write-Host "Mode: Remote / Headless Server" -ForegroundColor Magenta
+} else {
+    Write-Host "Mode: Interactive Desktop Runner" -ForegroundColor Green
+}
 Write-Host ""
 
 # 1. Check if Docker is installed and running
@@ -52,7 +66,7 @@ if (-not (Test-Path -LiteralPath $ENV_FILE)) {
 $BACKEND_REGISTRY_IMAGE = "ghcr.io/dharshankumar988/medsync-backend:latest"
 $BACKEND_LOCAL_IMAGE = "medsync-backend:local"
 $BACKEND_CONTAINER = "medsync-backend"
-$BACKEND_PORT = 8000
+$BACKEND_PORT = if ($Port) { [int]$Port } elseif ($env:PORT) { [int]$env:PORT } else { 8000 }
 
 
 function Start-Backend {
@@ -147,8 +161,23 @@ function Start-Backend {
         Write-Host "Blockchain connectivity check failed (endpoint may not be available in current mode)" -ForegroundColor Yellow
     }
     
-    # Open logs in a new PowerShell window
-    Start-Process -FilePath "powershell" -ArgumentList "-NoProfile -Command `"& { Write-Host '--- Backend Logs ---' -ForegroundColor Cyan; docker logs -f $BACKEND_CONTAINER }`""
+    # Handle logs display based on environment
+    $isRemoteSession = $Remote -or $Headless -or ($env:SSH_CONNECTION -ne $null) -or ($env:CI -ne $null)
+    if ($FollowLogs) {
+        Write-Host "`nStreaming backend logs (Ctrl+C to exit log stream)..." -ForegroundColor Cyan
+        docker logs -f $BACKEND_CONTAINER
+    } elseif ($isRemoteSession) {
+        Write-Host "`n[Remote Server Mode] Container is running in background." -ForegroundColor Green
+        Write-Host "View live backend logs anytime with:" -ForegroundColor Cyan
+        Write-Host "  docker logs -f $BACKEND_CONTAINER" -ForegroundColor White
+    } else {
+        # Open logs in a new PowerShell window when running interactively on local desktop
+        try {
+            Start-Process -FilePath "powershell" -ArgumentList "-NoProfile -Command `"& { Write-Host '--- Backend Logs ---' -ForegroundColor Cyan; docker logs -f $BACKEND_CONTAINER }`"" -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "Could not spawn separate window. View logs with: docker logs -f $BACKEND_CONTAINER" -ForegroundColor Yellow
+        }
+    }
 }
 
 
@@ -158,16 +187,22 @@ function Start-Backend {
 
 Start-Backend
 
-if (Test-Path ".\start-ngrok.ps1") {
+if (-not $NoNgrok -and -not $Remote -and (Test-Path ".\start-ngrok.ps1")) {
     .\start-ngrok.ps1 -Mode Backend
+} elseif ($NoNgrok -or $Remote) {
+    Write-Host "`nNgrok tunnel skipped (Direct server mode active)." -ForegroundColor Cyan
 }
 
 Write-Host "`n========================================" -ForegroundColor Magenta
-Write-Host " BACKEND" -ForegroundColor Magenta
+Write-Host " MEDSYNC BACKEND READY" -ForegroundColor Magenta
 Write-Host "========================================" -ForegroundColor Magenta
-Write-Host "Backend:"
+Write-Host "Local / Server Endpoint:"
 Write-Host "http://127.0.0.1:$BACKEND_PORT"
 
+if ($Daemon) {
+    Write-Host "`nBackend is running in background (Daemon mode). Exiting starter process." -ForegroundColor Green
+    exit 0
+}
 
 Write-Host "`nPress Ctrl+C to stop services or run .\stop-medsync.ps1 in another terminal." -ForegroundColor Yellow
 while ($true) { Start-Sleep -Seconds 3600 }

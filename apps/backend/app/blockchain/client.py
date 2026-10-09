@@ -47,16 +47,18 @@ class BlockchainClient:
             return
 
         # ── Always derive wallet address from private key (identity, not writes) ──
-        try:
-            pk = blockchain_settings.BACKEND_PRIVATE_KEY
-            if not pk.startswith("0x"):
-                pk = "0x" + pk
-            self.account = Account.from_key(pk)
-            self.wallet_address = self.account.address
-            logger.info(f"Blockchain client: derived wallet address {self.wallet_address}")
-        except Exception as e:
-            logger.warning(f"Failed to derive wallet from private key: {e}. Using mock address.")
-            # Keep default zero address if derivation fails
+        pk = (blockchain_settings.BACKEND_PRIVATE_KEY or "").strip()
+        if pk and len(pk.lstrip("0x")) == 64:
+            try:
+                if not pk.startswith("0x"):
+                    pk = "0x" + pk
+                self.account = Account.from_key(pk)
+                self.wallet_address = self.account.address
+                logger.info(f"Blockchain client: derived wallet address {self.wallet_address}")
+            except Exception as e:
+                logger.warning(f"Failed to derive wallet from private key: {e}. Using mock address.")
+        else:
+            logger.info("Using configured or default wallet address for blockchain client.")
 
         # ── Always connect to RPC for reads, even in mock mode, to show true network status ──
         if RESOLVED_BLOCKCHAIN_MODE not in ("production", "real"):
@@ -66,7 +68,6 @@ class BlockchainClient:
             blockchain_settings.validate()
         except ValueError as e:
             logger.warning(f"Blockchain configuration missing: {e}. Blockchain features disabled.")
-            # Don't return - still try to connect to RPC for status display
             self.configured = True  # Mark as configured even if missing private key (for mock mode)
             return
 
@@ -82,7 +83,6 @@ class BlockchainClient:
             import certifi
             ssl_verify = certifi.where()
         except ImportError:
-            # certifi not installed — try system default first
             pass
 
         # Setup robust session with retries for the HTTP Provider
@@ -93,21 +93,40 @@ class BlockchainClient:
         session.mount('https://', adapter)
 
         # Test connectivity with current ssl_verify setting
-        rpc_url = blockchain_settings.BLOCKCHAIN_RPC_URL
+        rpc_url = blockchain_settings.BLOCKCHAIN_RPC_URL or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
         try:
-            session.post(rpc_url, json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
+            res = session.post(rpc_url, json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
                          verify=ssl_verify, timeout=5)
+            if res.status_code != 200:
+                raise requests.exceptions.RequestException(f"RPC returned {res.status_code}")
         except requests.exceptions.SSLError:
             logger.warning("SSL certificate verification failed — falling back to unverified mode for RPC.")
             ssl_verify = False
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         except requests.exceptions.RequestException as e:
-            logger.warning(f"RPC connection test failed: {e}")
-            # Do not crash; we will handle is_connected() check below
+            logger.warning(f"RPC connection test failed ({rpc_url}): {e}")
+            fallback_url = os.getenv("NEXT_PUBLIC_POLYGON_RPC_URL") or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
+            if fallback_url and fallback_url != rpc_url:
+                try:
+                    logger.info(f"Retrying connection with fallback RPC: {fallback_url}")
+                    rpc_url = fallback_url
+                    session.post(rpc_url, json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
+                                 verify=ssl_verify, timeout=5)
+                except requests.exceptions.SSLError:
+                    ssl_verify = False
+                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                except Exception as ex:
+                    logger.warning(f"Fallback RPC test failed: {ex}")
 
         session.verify = ssl_verify
 
-        self.w3 = Web3(Web3.HTTPProvider(rpc_url, session=session, request_kwargs={'timeout': 10, 'verify': ssl_verify}))
+        req_kwargs = {'timeout': 10}
+        if not ssl_verify:
+            req_kwargs['verify'] = False
+        elif isinstance(ssl_verify, str):
+            req_kwargs['verify'] = ssl_verify
+
+        self.w3 = Web3(Web3.HTTPProvider(rpc_url, session=session, request_kwargs=req_kwargs))
 
         # Inject POA middleware for Polygon compatibility
         self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
@@ -116,20 +135,17 @@ class BlockchainClient:
             if RESOLVED_BLOCKCHAIN_MODE in ("production", "real"):
                 logger.error(
                     f"BLOCKCHAIN_MODE=production but RPC node is unreachable: "
-                    f"{_redact_url(blockchain_settings.BLOCKCHAIN_RPC_URL)}  — "
-                    f"blockchain features will be unavailable until the node is reachable."
+                    f"{_redact_url(rpc_url)} — blockchain features will be unavailable until the node is reachable."
                 )
             else:
                 logger.warning(
-                    f"RPC node is unreachable (mock mode): "
-                    f"{_redact_url(blockchain_settings.BLOCKCHAIN_RPC_URL)}"
+                    f"RPC node is unreachable (mock mode): {_redact_url(rpc_url)}"
                 )
-            # Do not raise here so app doesn't crash on boot; wait until invoked
-            self.configured = True  # Still mark as configured so we can show status
+            self.configured = True
             return
 
         self.configured = True
-        logger.info(f"Blockchain client: RPC connected and wallet configured")
+        logger.info(f"Blockchain client: RPC connected to {rpc_url} and wallet configured")
 
     def _ensure_configured(self):
         if not getattr(self, 'configured', False):

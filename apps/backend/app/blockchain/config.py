@@ -5,15 +5,15 @@ def _clean(value: str | None) -> str:
     return value.strip() if value else ""
 
 def _resolve_rpc_url() -> str:
-    """Resolve RPC URL: BLOCKCHAIN_RPC_URL takes priority, then network-specific RPC, falls back to localhost."""
+    """Resolve RPC URL: BLOCKCHAIN_RPC_URL takes priority, then network-specific RPC, falls back to Amoy/Alchemy."""
     url = os.getenv("BLOCKCHAIN_RPC_URL")
     if not url:
         network = os.getenv("BLOCKCHAIN_NETWORK", "amoy").lower()
         if network == "amoy":
-            url = os.getenv("POLYGON_AMOY_RPC_URL") or os.getenv("POLYGON_RPC_URL")
+            url = os.getenv("POLYGON_AMOY_RPC_URL") or os.getenv("NEXT_PUBLIC_POLYGON_RPC_URL") or os.getenv("POLYGON_RPC_URL")
         else:
             url = os.getenv("POLYGON_RPC_URL")
-    return (url or "http://127.0.0.1:8545").strip()
+    return (url or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c").strip()
 
 class BlockchainSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -33,10 +33,6 @@ class BlockchainSettings(BaseSettings):
     def NETWORK_NAME(self) -> str:
         return self.BLOCKCHAIN_NETWORK
     
-    @property
-    def NETWORK_NAME(self) -> str:
-        return self.BLOCKCHAIN_NETWORK
-    
     # Gas & Transactions
     GAS_MULTIPLIER: float = float(os.getenv("GAS_MULTIPLIER", "1.2"))
     MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
@@ -48,9 +44,14 @@ class BlockchainSettings(BaseSettings):
         if not self.BLOCKCHAIN_RPC_URL:
             network = self.BLOCKCHAIN_NETWORK.lower()
             if network == "amoy":
-                self.BLOCKCHAIN_RPC_URL = self.POLYGON_AMOY_RPC_URL or self.POLYGON_RPC_URL or "http://127.0.0.1:8545"
+                self.BLOCKCHAIN_RPC_URL = (
+                    self.POLYGON_AMOY_RPC_URL 
+                    or os.getenv("NEXT_PUBLIC_POLYGON_RPC_URL") 
+                    or self.POLYGON_RPC_URL 
+                    or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
+                )
             else:
-                self.BLOCKCHAIN_RPC_URL = self.POLYGON_RPC_URL or "http://127.0.0.1:8545"
+                self.BLOCKCHAIN_RPC_URL = self.POLYGON_RPC_URL or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
 
         # Log the resolved RPC URL for debugging
         import logging

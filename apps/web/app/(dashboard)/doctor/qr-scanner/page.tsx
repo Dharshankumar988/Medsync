@@ -9,6 +9,8 @@ import {
 import api from "@/lib/api";
 import { QRScanner } from "@/components/ui/QRScanner";
 import { motion, AnimatePresence } from "framer-motion";
+import { blockchainService, BlockchainVerifyResult } from "@/services/blockchain.service";
+import { BlockchainVerificationCard } from "@/components/blockchain/BlockchainVerificationCard";
 
 type FlowType = "IDLE" | "PRESCRIPTION" | "BLOCKCHAIN" | "URL" | "TEXT";
 
@@ -20,6 +22,7 @@ export default function DoctorQRScannerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prescriptionData, setPrescriptionData] = useState<any>(null);
+  const [blockchainData, setBlockchainData] = useState<BlockchainVerifyResult | null>(null);
 
   const handleProcessQR = async (data: string) => {
     if (!data) return;
@@ -31,7 +34,24 @@ export default function DoctorQRScannerPage() {
     if (data.startsWith("0x") || data.startsWith("QR-REC-")) {
       setFlow("BLOCKCHAIN");
       setIsLoading(true);
-      setTimeout(() => setIsLoading(false), 2500);
+      try {
+        const result = await blockchainService.verifyHash(data);
+        setBlockchainData(result);
+      } catch (e: any) {
+        console.error("Blockchain verification error:", e);
+        setBlockchainData({
+          verified: false,
+          status: "NOT_FOUND",
+          item_type: data.startsWith("0x") && data.length === 66 ? "TRANSACTION" : "UNKNOWN",
+          identifier: data,
+          network: "Polygon Amoy Testnet",
+          chain_id: 80002,
+          explorer_url: data.startsWith("0x") ? `https://amoy.polygonscan.com/tx/${data}` : null,
+          error_message: e.message || "Ledger query failed"
+        });
+      } finally {
+        setIsLoading(false);
+      }
       return;
     } 
     
@@ -145,85 +165,16 @@ export default function DoctorQRScannerPage() {
 
         {/* --- BLOCKCHAIN FLOW --- */}
         {flow === "BLOCKCHAIN" && (
-          <motion.div key="blockchain" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-            <Card className="rounded-3xl border border-primary/40 shadow-2xl overflow-hidden relative max-w-lg mx-auto bg-gradient-to-b from-card to-primary/5">
-              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-primary/80 via-blue-500 to-primary/80 bg-[length:200%_auto] animate-[gradient_2s_linear_infinite]"></div>
-              <CardHeader className="text-center pb-6 pt-12 relative z-10">
-                {isLoading ? (
-                  <div className="mx-auto h-28 w-28 relative flex items-center justify-center mb-6">
-                    <motion.div 
-                      className="absolute inset-0 border-[3px] border-primary/30 rounded-[35%] border-t-primary"
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                    />
-                    <motion.div 
-                      className="absolute inset-2 border-[3px] border-blue-500/30 rounded-[40%] border-b-blue-500"
-                      animate={{ rotate: -360 }}
-                      transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                    />
-                    <ShieldCheck className="h-10 w-10 text-primary animate-pulse" />
-                  </div>
-                ) : (
-                  <motion.div 
-                    initial={{ scale: 0 }} 
-                    animate={{ scale: 1 }} 
-                    transition={{ type: "spring", bounce: 0.5 }}
-                    className="mx-auto h-28 w-28 relative flex items-center justify-center mb-6"
-                  >
-                    <div className="absolute inset-0 bg-primary/20 rounded-[35%] animate-[spin_10s_linear_infinite]"></div>
-                    <div className="absolute inset-2 bg-blue-500/20 rounded-[40%] animate-[spin_15s_linear_infinite_reverse]"></div>
-                    <div className="relative bg-gradient-to-br from-primary to-blue-600 text-white rounded-2xl p-5 shadow-xl rotate-3">
-                      <ShieldCheck className="h-12 w-12" />
-                    </div>
-                  </motion.div>
-                )}
-                <CardTitle className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600">
-                  {isLoading ? "Verifying Ledger..." : "Cryptographically Verified"}
-                </CardTitle>
-                <CardDescription className="text-base mt-3">
-                  {isLoading ? "Analyzing cryptographic signatures and network consensus." : "This record is authentic and untampered on the Polygon network."}
-                </CardDescription>
-              </CardHeader>
-              
-              {!isLoading && (
-                <CardContent className="px-10 pb-10 relative z-10">
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="bg-card/80 backdrop-blur-sm rounded-2xl p-6 border shadow-inner space-y-4"
-                  >
-                    <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                      <span className="text-sm text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4 text-purple-500"/> Network</span>
-                      <Badge className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-none px-3 py-1">Polygon Amoy Testnet</Badge>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                      <span className="text-sm text-muted-foreground">Status</span>
-                      <span className="text-sm font-semibold text-emerald-600 flex items-center gap-1.5 bg-emerald-500/10 px-3 py-1 rounded-full"><CheckCircle2 className="h-4 w-4"/> Finalized</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                      <span className="text-sm text-muted-foreground">Block Confirmations</span>
-                      <span className="text-sm font-mono font-medium">1,402 Blocks</span>
-                    </div>
-                    <div className="pt-2">
-                      <span className="text-xs text-muted-foreground block mb-2 font-medium">Transaction Hash / Token</span>
-                      <div className="bg-background rounded-xl p-3 font-mono text-xs flex justify-between items-center border border-border/50 shadow-sm group">
-                        <span className="truncate max-w-[200px] sm:max-w-[300px] text-primary font-semibold">{scanData}</span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-50 group-hover:opacity-100 transition-opacity" onClick={() => navigator.clipboard.writeText(scanData)}><Copy className="h-3.5 w-3.5"/></Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 }}
-                    className="mt-8 flex justify-center"
-                  >
-                    <Button onClick={() => setFlow("IDLE")} variant="outline" className="min-w-[200px] rounded-xl h-12 border-primary/20 hover:bg-primary/10">Scan Another Code</Button>
-                  </motion.div>
-                </CardContent>
-              )}
-            </Card>
+          <motion.div key="blockchain" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}>
+            <BlockchainVerificationCard
+              data={blockchainData}
+              isLoading={isLoading}
+              onScanAnother={() => {
+                setFlow("IDLE");
+                setBlockchainData(null);
+                setScanData("");
+              }}
+            />
           </motion.div>
         )}
 

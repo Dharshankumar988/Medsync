@@ -49,25 +49,44 @@ To expose your local port 8000 securely to the internet (and Vercel), use a Clou
 
 ## C. Starting MedSync
 
-Once Docker is running, your `.env` is ready, and Cloudflare is configured:
-
+### 1. Windows Interactive Mode
+Once Docker is running, your `.env` is ready, and tunnel is configured:
 1. Open PowerShell inside the `portable_runner` folder.
 2. Run the start script:
    ```powershell
    .\start-medsync.ps1
    ```
-3. The script will automatically:
-   - Check if Docker is running.
-   - Pull the latest image (`ghcr.io/dharshankumar988/medsync-backend:latest`).
-   - Start the container on port `8000`.
-   - Wait for the `/health` endpoint to return HTTP 200 OK.
-   - Start the Cloudflare Tunnel locally if `start-cloudflare.ps1` exists.
-   - Verify public connectivity.
 
-4. Verify it's fully running by executing:
-   ```powershell
-   .\medsync-status.ps1
-   ```
+### 2. Remote Windows Server (Headless / SSH / Daemon)
+For remote servers or headless automated environments:
+```powershell
+.\start-medsync.ps1 -Remote -Daemon
+```
+- `-Remote`: Suppresses GUI popup windows and formats logs for remote sessions.
+- `-Daemon`: Starts the container in background and exits launcher immediately.
+- `-NoNgrok`: Skips tunnel if server has a public IP/domain.
+- `-Port 8000`: Overrides backend listening port.
+
+### 3. Remote Linux Server (Ubuntu / Debian VPS)
+On any Linux server:
+```bash
+chmod +x *.sh
+./start-medsync.sh -d
+```
+- `-d` / `--daemon`: Runs in background.
+- `-f` / `--logs`: Streams container logs.
+- `./medsync-status.sh`: Checks health.
+- `./stop-medsync.sh`: Stops services.
+
+### Verification
+Verify it's fully running by executing:
+```powershell
+.\medsync-status.ps1
+```
+Or on Linux:
+```bash
+./medsync-status.sh
+```
 
 ---
 

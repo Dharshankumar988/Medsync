@@ -24,19 +24,23 @@ def _resolve_paths() -> tuple[str, str]:
         return deployments_dir, abis_dir
 
     # Fallback: resolve relative to source tree (local dev without Docker)
-    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    
+    curr = os.path.abspath(__file__)
+    for _ in range(7):
+        curr = os.path.dirname(curr)
+        candidate_deployments = os.path.join(curr, "apps", "blockchain", "deployments", blockchain_settings.NETWORK_NAME)
+        candidate_abis = os.path.join(curr, "apps", "blockchain", "abis")
+        if os.path.isdir(candidate_deployments) or os.path.isdir(candidate_abis):
+            return candidate_deployments, candidate_abis
+
     # Check if artifacts are bundled inside the app (Docker approach)
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     bundled_deployments = os.path.join(backend_dir, "blockchain", "artifacts", "deployments", blockchain_settings.NETWORK_NAME)
     bundled_abis = os.path.join(backend_dir, "blockchain", "artifacts", "abis")
     
     if os.path.isdir(bundled_deployments):
         return bundled_deployments, bundled_abis
         
-    workspace_dir = os.path.dirname(os.path.dirname(backend_dir))
-    deployments_dir = os.path.join(workspace_dir, "apps", "blockchain", "deployments", blockchain_settings.NETWORK_NAME)
-    abis_dir = os.path.join(workspace_dir, "apps", "blockchain", "abis")
-    return deployments_dir, abis_dir
+    return "", ""
 
 class ContractLoader:
     """
@@ -58,18 +62,27 @@ class ContractLoader:
         self._load_addresses()
 
     def _load_addresses(self):
-        address_file = os.path.join(self.deployments_dir, "contract-addresses.json")
+        address_file = os.path.join(self.deployments_dir, "contract-addresses.json") if self.deployments_dir else ""
         try:
-            if os.path.exists(address_file):
+            if address_file and os.path.exists(address_file):
                 with open(address_file, "r") as f:
                     self.addresses = json.load(f)
                 logger.info(f"Loaded {len(self.addresses)} contract addresses from {blockchain_settings.NETWORK_NAME}")
             else:
-                logger.warning(f"Address file not found at {address_file}. Contracts will not be preloaded.")
+                logger.warning(f"Address file not found at {address_file}. Using env/fallback addresses.")
         except Exception as e:
             logger.error(f"Error loading contract addresses: {e}")
 
-        # Fallback to env vars
+        # Fallback to env vars and known Polygon Amoy deployed contracts
+        default_amoy_contracts = {
+            "ConsentManagement": "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+            "PatientRegistry": "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3",
+            "DoctorRegistry": "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+            "PharmacyRegistry": "0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9",
+            "MedicalRecordRegistry": "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+            "PrescriptionRegistry": "0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D"
+        }
+
         env_map = {
             "PatientRegistry": ["PATIENT_REGISTRY_ADDRESS", "PATIENTREGISTRY_ADDRESS"],
             "DoctorRegistry": ["DOCTOR_REGISTRY_ADDRESS", "DOCTORREGISTRY_ADDRESS"],
@@ -85,6 +98,11 @@ class ContractLoader:
                     if v and v != "0x..." and v != "0x0000000000000000000000000000000000000000":
                         self.addresses[name] = v
                         break
+
+        # Fallback to defaults if still missing
+        for name, def_addr in default_amoy_contracts.items():
+            if name not in self.addresses or not self.addresses[name]:
+                self.addresses[name] = def_addr
 
     def get_abi(self, contract_name: str) -> list:
         abi_file = os.path.join(self.abis_dir, f"{contract_name}.json")

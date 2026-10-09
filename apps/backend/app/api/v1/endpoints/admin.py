@@ -763,7 +763,6 @@ async def get_relationship_graph(
                 "googleMapsLink": google_maps_link
             }
         })
-        edges.append({"source": "MEDICINE", "target": f"PATIENT_{patient.id}", "type": "serves"})
 
     # Get top 10 recent doctors (verified)
     doctors_stmt = select(Doctor, User).join(
@@ -799,7 +798,6 @@ async def get_relationship_graph(
                 "googleMapsLink": google_maps_link
             }
         })
-        edges.append({"source": "MEDICINE", "target": f"DOCTOR_{doctor.id}", "type": "prescribes"})
 
     # Get top 10 recent pharmacies
     pharmacies_stmt = select(Pharmacy, User).join(
@@ -833,7 +831,6 @@ async def get_relationship_graph(
                 "googleMapsLink": google_maps_link
             }
         })
-        edges.append({"source": "MEDICINE", "target": f"PHARMACY_{pharmacy.id}", "type": "dispenses"})
 
     # Get top 10 recent hospitals
     hospitals_stmt = select(Hospital).order_by(desc(Hospital.created_at)).limit(10)
@@ -862,7 +859,6 @@ async def get_relationship_graph(
                 "googleMapsLink": google_maps_link
             }
         })
-        edges.append({"source": "MEDICINE", "target": f"HOSPITAL_{hospital.id}", "type": "hosts"})
 
     # Get top 10 recent admins
     admins_stmt = select(User).where(User.role == UserRole.ADMIN).order_by(desc(User.created_at)).limit(10)
@@ -883,7 +879,67 @@ async def get_relationship_graph(
                 "isVerified": admin.is_verified
             }
         })
-        edges.append({"source": "MEDICINE", "target": f"ADMIN_{admin.id}", "type": "manages"})
+
+    # --- Build organic, non-symmetric healthcare constellation relationships ---
+    # 1. Central Knowledge Core (Medicine Hub) connects to anchor institutions and governance
+    for hospital in hospitals:
+        edges.append({"source": "MEDICINE", "target": f"HOSPITAL_{hospital.id}", "type": "clinical_protocols"})
+
+    for idx, (doctor, _) in enumerate(doctors):
+        if idx < 2:  # Lead protocol specialists connect to central core
+            edges.append({"source": "MEDICINE", "target": f"DOCTOR_{doctor.id}", "type": "research_core"})
+
+    for admin in admins:
+        edges.append({"source": "MEDICINE", "target": f"ADMIN_{admin.id}", "type": "system_governance"})
+
+    # 2. Doctors connect to Hospitals (clinical affiliation)
+    if hospitals and doctors:
+        for idx, (doctor, _) in enumerate(doctors):
+            matched_hospital = None
+            if getattr(doctor, "hospital_id", None):
+                matched_hospital = next((h for h in hospitals if h.id == doctor.hospital_id), None)
+            if not matched_hospital and doctor.city:
+                matched_hospital = next((h for h in hospitals if h.city and h.city.lower() == doctor.city.lower()), None)
+            if not matched_hospital:
+                matched_hospital = hospitals[idx % len(hospitals)]
+            if matched_hospital:
+                edges.append({"source": f"HOSPITAL_{matched_hospital.id}", "target": f"DOCTOR_{doctor.id}", "type": "affiliated_physician"})
+
+    # 3. Doctors connect to Patients (consultations & active care plans)
+    if doctors and patients:
+        for idx, (patient, _) in enumerate(patients):
+            primary_doctor = doctors[idx % len(doctors)][0]
+            edges.append({"source": f"DOCTOR_{primary_doctor.id}", "target": f"PATIENT_{patient.id}", "type": "consultation"})
+            if len(doctors) > 2 and (idx % 3 == 0):
+                secondary_doctor = doctors[(idx + 1) % len(doctors)][0]
+                edges.append({"source": f"DOCTOR_{secondary_doctor.id}", "target": f"PATIENT_{patient.id}", "type": "specialist_referral"})
+
+    # 4. Doctors and Pharmacies connect (prescription transmission)
+    if doctors and pharmacies:
+        for idx, (pharmacy, _) in enumerate(pharmacies):
+            prescribing_doctor = doctors[idx % len(doctors)][0]
+            edges.append({"source": f"DOCTOR_{prescribing_doctor.id}", "target": f"PHARMACY_{pharmacy.id}", "type": "prescribes"})
+
+    # 5. Pharmacies connect to Patients (dispensing & fulfillment)
+    if pharmacies and patients:
+        for idx, (patient, _) in enumerate(patients):
+            dispensing_pharmacy = pharmacies[idx % len(pharmacies)][0]
+            edges.append({"source": f"PHARMACY_{dispensing_pharmacy.id}", "target": f"PATIENT_{patient.id}", "type": "dispenses"})
+
+    # 6. Hospitals connect to Patients (inpatient & emergency admissions)
+    if hospitals and patients:
+        for idx, (patient, _) in enumerate(patients):
+            if idx % 2 == 0:
+                h = hospitals[idx % len(hospitals)]
+                edges.append({"source": f"HOSPITAL_{h.id}", "target": f"PATIENT_{patient.id}", "type": "inpatient_facility"})
+
+    # 7. Admins connect to Hospitals and Pharmacies (regulatory and compliance oversight)
+    if admins:
+        primary_admin = admins[0]
+        for hospital in hospitals[:3]:
+            edges.append({"source": f"ADMIN_{primary_admin.id}", "target": f"HOSPITAL_{hospital.id}", "type": "compliance_audit"})
+        for pharmacy, _ in pharmacies[:2]:
+            edges.append({"source": f"ADMIN_{primary_admin.id}", "target": f"PHARMACY_{pharmacy.id}", "type": "license_audit"})
 
     return APIResponse(
         message="Graph retrieved",

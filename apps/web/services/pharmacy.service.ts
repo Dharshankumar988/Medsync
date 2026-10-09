@@ -60,10 +60,16 @@ export const pharmacyService = {
     }
   },
 
-  verifyBlockchainPrescription: async (prescriptionHash: string): Promise<{ valid: boolean; txHash?: string }> => {
+  verifyBlockchainPrescription: async (prescriptionHash: string): Promise<{ valid: boolean; txHash?: string; blockNumber?: number; explorerUrl?: string }> => {
     try {
-      const res = await api.get(`/api/v1/blockchain/prescriptions/verify/${prescriptionHash}`);
-      return res.data.data || { valid: true, txHash: "0x89f2a71c9d201e54a3b811802ef9c71610427389a0b12" };
+      const res = await api.get(`/api/v1/blockchain/verify-hash/${encodeURIComponent(prescriptionHash)}`);
+      const data = res.data?.data;
+      return {
+        valid: data?.verified ?? false,
+        txHash: data?.transaction_hash || data?.identifier,
+        blockNumber: data?.block_number,
+        explorerUrl: data?.explorer_url
+      };
     } catch {
       return { valid: false };
     }

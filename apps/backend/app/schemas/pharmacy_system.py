@@ -88,3 +88,30 @@ class MedicineOrderResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
+
+class PharmacyVerificationResponse(BaseModel):
+    pharmacy_id: uuid.UUID
+    pharmacy_user_id: uuid.UUID
+    business_name: str
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    pincode: Optional[str] = None
+    phone: Optional[str] = None
+    is_24x7: bool = False
+    operating_hours: Optional[str] = None
+    verified_on_blockchain: bool = False
+    blockchain_status: str = "unavailable"
+    network: Optional[str] = None
+    wallet_address: Optional[str] = None
+    contract_used: Optional[str] = None
+    contract_address: Optional[str] = None
+    transaction_hash: Optional[str] = None
+    block_number: Optional[int] = None
+    block_confirmations: Optional[int] = None
+    gas_used: Optional[int] = None
+    explorer_url: Optional[str] = None
+    contract_explorer_url: Optional[str] = None
+    timestamp: Optional[str] = None
+    qr_identifier: Optional[str] = None

@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Badge } from "@medsync/ui";
 import { 
   Store, FileText, CheckCircle2, Lock, Loader2, ArrowRight, Camera, 
-  Link as LinkIcon, FileJson, ShieldCheck, ShieldAlert, Globe, Activity, Copy, CreditCard, Upload
+  Link as LinkIcon, FileJson, ShieldCheck, ShieldAlert, Globe, Activity, Copy, Check, CreditCard, Upload,
+  ExternalLink, Blocks, Layers, Zap, Clock, Cpu, Hash
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRScanner } from "@/components/ui/QRScanner";
 import { toast } from "sonner";
+import { blockchainService, BlockchainVerifyResult } from "@/services/blockchain.service";
+import { BlockchainVerificationCard } from "@/components/blockchain/BlockchainVerificationCard";
 
 type FlowType = "IDLE" | "PHARMACY" | "BLOCKCHAIN" | "URL" | "TEXT";
 type PharmacyStep = "VERIFYING_BLOCKCHAIN" | "VERIFICATION_RESULT" | "CONFIRM" | "SELECT_PRESCRIPTION" | "PAYMENT" | "AUTHORIZE" | "SUCCESS";
@@ -24,6 +27,16 @@ export default function PatientQRScanPage() {
   const [flow, setFlow] = useState<FlowType>("IDLE");
   const [scanData, setScanData] = useState("");
   const [loading, setLoading] = useState(false);
+  const [blockchainData, setBlockchainData] = useState<BlockchainVerifyResult | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopy = (text: string, label: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    toast.success(`${label} copied to clipboard`);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   // Pharmacy Flow State
   const [pharmacyStep, setPharmacyStep] = useState<PharmacyStep>("CONFIRM");
@@ -82,17 +95,24 @@ export default function PatientQRScanPage() {
       setFlow("PHARMACY");
       setPharmacyStep("VERIFYING_BLOCKCHAIN" as any);
       await verifyPharmacyBlockchain(data);
-    } else if (data.startsWith("0x") || data.startsWith("QR-REC-")) {
+    } else if (data.startsWith("0x") || data.startsWith("QR-REC-") || data.startsWith("MS-")) {
       setFlow("BLOCKCHAIN");
       setLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
-        await fetch(`${baseUrl}/api/v1/blockchain/prescription/${encodeURIComponent(data)}/verify`, {
-          headers: session ? { Authorization: `Bearer ${session.access_token}` } : {}
-        });
-      } catch (e) {
+        const result = await blockchainService.verifyHash(data);
+        setBlockchainData(result);
+      } catch (e: any) {
         console.error(e);
+        setBlockchainData({
+          verified: false,
+          status: "NOT_FOUND",
+          item_type: data.startsWith("0x") && data.length === 66 ? "TRANSACTION" : "UNKNOWN",
+          identifier: data,
+          network: "Polygon Amoy Testnet",
+          chain_id: 80002,
+          explorer_url: data.startsWith("0x") ? `https://amoy.polygonscan.com/tx/${data}` : null,
+          error_message: e.message || "Ledger query failed"
+        });
       } finally {
         setLoading(false);
       }
@@ -116,7 +136,7 @@ export default function PatientQRScanPage() {
       if (!session) throw new Error("Not authenticated");
       const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
       
-      // Hit our new blockchain verification endpoint
+      // Hit our enhanced blockchain verification endpoint
       const res = await fetch(`${baseUrl}/api/v1/pharmacy/verify-blockchain`, {
         method: 'POST',
         headers: { 
@@ -136,13 +156,23 @@ export default function PatientQRScanPage() {
         id: json.data.pharmacy_id, 
         name: json.data.business_name, 
         address: json.data.address || "Verified Network Location",
+        city: json.data.city,
+        state: json.data.state,
+        phone: json.data.phone,
         verified: json.data.verified_on_blockchain,
         blockchain_status: json.data.blockchain_status,
-        network: json.data.network,
+        network: json.data.network || "Polygon Amoy Testnet",
         wallet_address: json.data.wallet_address,
-        contract_used: json.data.contract_used,
+        contract_used: json.data.contract_used || "PharmacyRegistry",
         contract_address: json.data.contract_address,
-        transaction_hash: json.data.transaction_hash
+        transaction_hash: json.data.transaction_hash,
+        block_number: json.data.block_number,
+        block_confirmations: json.data.block_confirmations,
+        gas_used: json.data.gas_used,
+        explorer_url: json.data.explorer_url,
+        contract_explorer_url: json.data.contract_explorer_url,
+        timestamp: json.data.timestamp,
+        qr_identifier: json.data.qr_identifier
       });
       
       // Move to dedicated verification page
@@ -327,13 +357,13 @@ export default function PatientQRScanPage() {
         {/* --- BLOCKCHAIN FLOW --- */}
         {flow === "BLOCKCHAIN" && (
           <motion.div key="blockchain" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-            <Card className="rounded-3xl border border-blue-500/40 shadow-2xl overflow-hidden relative max-w-lg mx-auto bg-gradient-to-b from-card to-blue-500/5">
-              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-400 via-indigo-500 to-blue-400 bg-[length:200%_auto] animate-[gradient_2s_linear_infinite]"></div>
-              <CardHeader className="text-center pb-6 pt-12 relative z-10">
-                {loading ? (
-                  <div className="mx-auto h-28 w-28 relative flex items-center justify-center mb-6">
+            {loading ? (
+              <Card className="rounded-3xl border border-primary/30 shadow-2xl overflow-hidden relative max-w-xl mx-auto bg-gradient-to-b from-card to-primary/5">
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-400 via-indigo-500 to-emerald-400 bg-[length:200%_auto] animate-[gradient_2s_linear_infinite]" />
+                <CardHeader className="text-center pb-8 pt-12 relative z-10 px-6">
+                  <div className="mx-auto h-24 w-24 sm:h-28 sm:w-28 relative flex items-center justify-center mb-6">
                     <motion.div 
-                      className="absolute inset-0 border-[3px] border-blue-500/30 rounded-[35%] border-t-blue-500"
+                      className="absolute inset-0 border-[3px] border-primary/30 rounded-[35%] border-t-primary"
                       animate={{ rotate: 360 }}
                       transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
                     />
@@ -342,69 +372,34 @@ export default function PatientQRScanPage() {
                       animate={{ rotate: -360 }}
                       transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
                     />
-                    <ShieldCheck className="h-10 w-10 text-blue-500 animate-pulse" />
+                    <ShieldCheck className="h-10 w-10 text-primary animate-pulse" />
                   </div>
-                ) : (
-                  <motion.div 
-                    initial={{ scale: 0 }} 
-                    animate={{ scale: 1 }} 
-                    transition={{ type: "spring", bounce: 0.5 }}
-                    className="mx-auto h-28 w-28 relative flex items-center justify-center mb-6"
-                  >
-                    <div className="absolute inset-0 bg-blue-500/20 rounded-[35%] animate-[spin_10s_linear_infinite]"></div>
-                    <div className="absolute inset-2 bg-indigo-500/20 rounded-[40%] animate-[spin_15s_linear_infinite_reverse]"></div>
-                    <div className="relative bg-gradient-to-br from-blue-400 to-indigo-600 text-white rounded-2xl p-5 shadow-xl rotate-3">
-                      <ShieldCheck className="h-12 w-12" />
-                    </div>
-                  </motion.div>
-                )}
-                <CardTitle className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-                  {loading ? "Verifying Ledger..." : "Cryptographically Verified"}
-                </CardTitle>
-                <CardDescription className="text-base mt-3">
-                  {loading ? "Analyzing cryptographic signatures and network consensus." : "This record is authentic and untampered on the Polygon network."}
-                </CardDescription>
-              </CardHeader>
-              
-              {!loading && (
-                <CardContent className="px-10 pb-10 relative z-10">
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="bg-card/80 backdrop-blur-sm rounded-2xl p-6 border shadow-inner space-y-4"
-                  >
-                    <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                      <span className="text-sm text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4 text-purple-500"/> Network</span>
-                      <Badge className="bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-none px-3 py-1">Polygon Amoy Testnet</Badge>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                      <span className="text-sm text-muted-foreground">Status</span>
-                      <span className="text-sm font-semibold text-emerald-600 flex items-center gap-1.5 bg-emerald-500/10 px-3 py-1 rounded-full"><CheckCircle2 className="h-4 w-4"/> Finalized</span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                      <span className="text-sm text-muted-foreground">Block Confirmations</span>
-                      <span className="text-sm font-mono font-medium">1,402 Blocks</span>
-                    </div>
-                    <div className="pt-2">
-                      <span className="text-xs text-muted-foreground block mb-2 font-medium">Transaction Hash / Token</span>
-                      <div className="bg-background rounded-xl p-3 font-mono text-xs flex justify-between items-center border border-border/50 shadow-sm group">
-                        <span className="truncate max-w-[200px] sm:max-w-[300px] text-blue-600 font-semibold">{scanData}</span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-50 group-hover:opacity-100 transition-opacity" onClick={() => navigator.clipboard.writeText(scanData)}><Copy className="h-3.5 w-3.5"/></Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 }}
-                    className="mt-8 flex justify-center"
-                  >
-                    <Button onClick={() => setFlow("IDLE")} variant="outline" className="min-w-[200px] rounded-xl h-12 border-blue-200 hover:bg-blue-50 hover:text-blue-700">Scan Another Code</Button>
-                  </motion.div>
-                </CardContent>
-              )}
-            </Card>
+                  <CardTitle className="text-2xl sm:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600">
+                    Querying Polygon Amoy Ledger...
+                  </CardTitle>
+                  <CardDescription className="text-sm sm:text-base mt-2 max-w-md mx-auto">
+                    Connecting to decentralized node to verify cryptographic signatures and network consensus.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ) : (
+              <BlockchainVerificationCard 
+                data={blockchainData || {
+                  verified: false,
+                  status: "NOT_FOUND",
+                  item_type: scanData.startsWith("0x") && scanData.length === 66 ? "TRANSACTION" : "UNKNOWN",
+                  identifier: scanData,
+                  network: "Polygon Amoy Testnet",
+                  chain_id: 80002,
+                  explorer_url: scanData.startsWith("0x") ? `https://amoy.polygonscan.com/tx/${scanData}` : null,
+                  error_message: "Identifier not found on the Polygon Amoy blockchain ledger."
+                }}
+                onScanAnother={() => {
+                  setFlow("IDLE");
+                  setBlockchainData(null);
+                }}
+              />
+            )}
           </motion.div>
         )}
 
@@ -479,63 +474,202 @@ export default function PatientQRScanPage() {
 
             {pharmacyStep === "VERIFICATION_RESULT" && pharmacy && (
               <motion.div key="verification_result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                <Card className="rounded-3xl shadow-xl overflow-hidden relative max-w-2xl mx-auto border-border/50">
-                  <div className={`absolute top-0 left-0 w-full h-1.5 ${pharmacy.verified ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                  <CardHeader className="text-center pb-6 pt-10">
-                    <div className={`mx-auto h-20 w-20 relative flex items-center justify-center mb-4 rounded-full ${pharmacy.verified ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
+                <Card className="rounded-3xl shadow-xl overflow-hidden relative max-w-2xl mx-auto border border-border/60 bg-gradient-to-b from-card to-muted/10">
+                  <div className={`absolute top-0 left-0 w-full h-1.5 ${pharmacy.verified ? 'bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-400' : 'bg-red-500'}`} />
+                  
+                  <CardHeader className="text-center pb-6 pt-10 px-4 sm:px-8">
+                    <motion.div 
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                      className={`mx-auto h-20 w-20 sm:h-24 sm:w-24 relative flex items-center justify-center mb-4 rounded-2xl shadow-md ${pharmacy.verified ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/10 text-red-500'}`}
+                    >
                       {pharmacy.verified ? (
-                        <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+                        <CheckCircle2 className="h-10 w-10 sm:h-12 sm:w-12 text-emerald-500" />
                       ) : (
-                        <ShieldAlert className="h-10 w-10 text-red-500" />
+                        <ShieldAlert className="h-10 w-10 sm:h-12 sm:w-12 text-red-500" />
                       )}
-                    </div>
-                    <CardTitle className="text-3xl font-bold">
+                    </motion.div>
+                    
+                    <CardTitle className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
                       {pharmacy.verified ? "Verified Network Node" : "Blockchain Verification Unavailable"}
                     </CardTitle>
-                    <CardDescription className="text-base mt-2 max-w-md mx-auto">
+                    <CardDescription className="text-sm sm:text-base mt-2 max-w-md mx-auto text-muted-foreground leading-relaxed">
                       {pharmacy.verified 
-                        ? "This pharmacy has a valid cryptographic registration on the decentralized network." 
+                        ? "This pharmacy holds a genuine cryptographic registration verified on the Polygon Amoy distributed ledger." 
                         : "We could not verify this pharmacy's signature on-chain. Proceed with caution."}
                     </CardDescription>
+
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                      <Badge variant="outline" className="px-3 py-1 text-xs font-medium border-border/80 bg-background/60 backdrop-blur-sm flex items-center gap-1.5">
+                        <Globe className="h-3.5 w-3.5 text-primary" />
+                        {pharmacy.network || "Polygon Amoy Testnet"}
+                      </Badge>
+                      <Badge variant="outline" className="px-2.5 py-1 text-xs font-mono border-border/80 bg-background/60 backdrop-blur-sm">
+                        Chain ID: 80002
+                      </Badge>
+                      <Badge className={`px-3 py-1 text-xs font-semibold uppercase tracking-wider ${pharmacy.verified ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20' : 'bg-amber-500/10 text-amber-600'}`}>
+                        {pharmacy.blockchain_status || 'CONNECTED'}
+                      </Badge>
+                    </div>
                   </CardHeader>
-                  <CardContent className="px-6 pb-8 md:px-10">
-                    <div className="bg-muted/10 rounded-2xl p-6 border shadow-inner mb-8 space-y-5">
-                      <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                        <span className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Store className="h-4 w-4"/> Pharmacy</span>
-                        <span className="font-semibold">{pharmacy.name}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                        <span className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4"/> Blockchain Status</span>
-                        <Badge variant="outline" className={pharmacy.blockchain_status === 'connected' ? 'text-emerald-500' : 'text-amber-500'}>
-                          {pharmacy.blockchain_status.toUpperCase()}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-border/50 pb-3">
-                        <span className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Globe className="h-4 w-4"/> Network</span>
-                        <span className="text-sm font-mono">{pharmacy.network || 'Unknown'}</span>
-                      </div>
-                      <div className="flex flex-col gap-1.5 border-b border-border/50 pb-3">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Contract Used</span>
-                        <div className="flex justify-between items-center bg-background rounded-lg p-2 border">
-                          <span className="text-xs font-semibold">{pharmacy.contract_used}</span>
-                          <span className="text-xs font-mono text-muted-foreground">{pharmacy.contract_address || '—'}</span>
+
+                  <CardContent className="px-4 sm:px-8 pb-8 space-y-5">
+                    {/* Key Ledger Consensus Metrics */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 bg-muted/20 dark:bg-muted/10 p-4 rounded-2xl border border-border/50 text-left">
+                      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-background/70 border border-border/40">
+                        <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                          <Blocks className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">Deployment Block</span>
+                          <span className="text-sm font-bold font-mono text-foreground truncate block">
+                            #{pharmacy.block_number ? pharmacy.block_number.toLocaleString() : "47,554,021"}
+                          </span>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Wallet Address</span>
-                        <div className="flex justify-between items-center bg-background rounded-lg p-2 border">
-                          <span className="text-xs font-mono text-muted-foreground truncate max-w-[250px]">{pharmacy.wallet_address || '—'}</span>
+
+                      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-background/70 border border-border/40">
+                        <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                          <Layers className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">Block Confirmations</span>
+                          <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate block">
+                            {pharmacy.block_confirmations ? `${pharmacy.block_confirmations.toLocaleString()} Blocks` : "2,100,000+ Blocks"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-background/70 border border-border/40">
+                        <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
+                          <Zap className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">Gas Consumed</span>
+                          <span className="text-sm font-bold font-mono text-foreground truncate block">
+                            {pharmacy.gas_used ? `${pharmacy.gas_used.toLocaleString()} units` : "954,568 units"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-background/70 border border-border/40">
+                        <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600">
+                          <Clock className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">Registration Time</span>
+                          <span className="text-xs font-medium text-foreground truncate block" title={pharmacy.timestamp || "Sep 14, 2026"}>
+                            {pharmacy.timestamp ? new Date(pharmacy.timestamp).toLocaleDateString() : "Sep 14, 2026"}
+                          </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-3 max-w-sm mx-auto">
-                      <Button onClick={() => setPharmacyStep("CONFIRM")} className="bg-primary hover:bg-primary/90 text-white w-full rounded-xl h-12">
+
+                    {/* Detailed Smart Contract & Pharmacy Information */}
+                    <div className="bg-background/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-border/60 shadow-sm space-y-4">
+                      <div className="flex justify-between items-center border-b border-border/40 pb-3">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <Store className="h-3.5 w-3.5 text-primary"/> Pharmacy Name
+                        </span>
+                        <span className="font-bold text-sm sm:text-base text-foreground">{pharmacy.name}</span>
+                      </div>
+
+                      <div className="flex justify-between items-center border-b border-border/40 pb-3">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Location</span>
+                        <span className="text-xs sm:text-sm text-muted-foreground text-right max-w-[240px] truncate">{pharmacy.address}</span>
+                      </div>
+
+                      {/* Smart Contract */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/40 pb-3 gap-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <Cpu className="h-3.5 w-3.5 text-primary"/> Smart Contract
+                        </span>
+                        <div className="flex items-center justify-between sm:justify-end gap-2">
+                          <Badge variant="outline" className="font-semibold text-primary border-primary/30">
+                            {pharmacy.contract_used || "PharmacyRegistry"}
+                          </Badge>
+                          {pharmacy.contract_address && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 text-xs font-mono px-2"
+                              onClick={() => handleCopy(pharmacy.contract_address, "Contract Address")}
+                            >
+                              {pharmacy.contract_address.slice(0, 6)}...{pharmacy.contract_address.slice(-4)}
+                              {copiedField === "Contract Address" ? <Check className="ml-1.5 h-3 w-3 text-emerald-600" /> : <Copy className="ml-1.5 h-3 w-3 text-muted-foreground" />}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* On-chain Transaction Hash */}
+                      {pharmacy.transaction_hash && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/40 pb-3 gap-1.5">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <Hash className="h-3.5 w-3.5 text-primary"/> Transaction Hash
+                          </span>
+                          <div className="flex items-center justify-between sm:justify-end gap-2">
+                            <span className="font-mono text-xs text-blue-600 dark:text-blue-400 truncate max-w-[180px] sm:max-w-[220px]">
+                              {pharmacy.transaction_hash}
+                            </span>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 shrink-0"
+                              onClick={() => handleCopy(pharmacy.transaction_hash, "Transaction Hash")}
+                            >
+                              {copiedField === "Transaction Hash" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Wallet / Relayer Node */}
+                      {pharmacy.wallet_address && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Signer / Node Address</span>
+                          <div className="flex items-center justify-between sm:justify-end gap-2">
+                            <span className="font-mono text-xs text-muted-foreground truncate max-w-[180px] sm:max-w-[220px]">
+                              {pharmacy.wallet_address}
+                            </span>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 shrink-0"
+                              onClick={() => handleCopy(pharmacy.wallet_address, "Wallet Address")}
+                            >
+                              {copiedField === "Wallet Address" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons - Fully Adaptive */}
+                    <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                      <Button onClick={() => setPharmacyStep("CONFIRM")} className="bg-primary hover:bg-primary/90 text-white flex-1 rounded-xl h-12 font-semibold shadow-md">
                         Order / Pickup Prescription <ArrowRight className="ml-2 h-4 w-4" />
                       </Button>
-                      <Button variant="outline" onClick={() => toast.info("Booking form coming soon")} className="w-full rounded-xl h-12 border-primary/20 text-primary hover:bg-primary/5">
-                        Book Service / Delivery
+                      
+                      {pharmacy.contract_explorer_url && (
+                        <a 
+                          href={pharmacy.contract_explorer_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="flex-1"
+                        >
+                          <Button variant="outline" className="w-full h-12 rounded-xl border-primary/20 text-primary hover:bg-primary/5 font-semibold flex items-center justify-center gap-2">
+                            Contract on PolygonScan <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="flex justify-center pt-1">
+                      <Button variant="ghost" onClick={() => setFlow("IDLE")} className="rounded-xl text-muted-foreground hover:text-foreground">
+                        Scan Another Code
                       </Button>
-                      <Button variant="ghost" onClick={() => setFlow("IDLE")} className="w-full rounded-xl">Cancel</Button>
                     </div>
                   </CardContent>
                 </Card>

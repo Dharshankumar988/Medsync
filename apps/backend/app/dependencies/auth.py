@@ -167,6 +167,20 @@ async def get_current_user(
         user_metadata=user_metadata,
     )
 
+security_optional = HTTPBearer(auto_error=False)
+
+async def get_current_user_optional(
+    token: HTTPAuthorizationCredentials | None = Depends(security_optional),
+    db: AsyncSession = Depends(get_db)
+) -> AuthenticatedPrincipal | None:
+    """Optional authentication: returns AuthenticatedPrincipal if valid token provided, else None."""
+    if not token or not token.credentials:
+        return None
+    try:
+        return await get_current_user(token, db)
+    except Exception:
+        return None
+
 class RoleChecker:
     def __init__(self, allowed_roles: list):
         self.allowed_roles = allowed_roles
