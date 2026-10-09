@@ -81,29 +81,10 @@ async def authorize_prescription_download(
         pin_verified = False
         face_verified = False
         
-        # Check lockout status first
-        from app.models.security import PatientSecurityCredential
-        cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
-        cred_res = await db.execute(cred_stmt)
-        cred = cred_res.scalar_one_or_none()
-        
-        is_locked_out = cred and cred.locked_until and cred.locked_until > datetime.utcnow()
-
         if pin and not face_image:
-            if is_locked_out:
-                raise HTTPException(status_code=403, detail="PIN is locked. Face Verification is strictly required.")
-            
             pin_valid = await validate_patient_pin(db, current_user.id, pin)
             if not pin_valid:
-                # Security service handles the increment/lockout. But rule says if it fails once, session locked.
-                # Let's ensure it locks out immediately.
-                if cred:
-                    cred.failed_attempts += 1
-                    cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
-                    await db.commit()
-                else:
-                    await db.rollback()
-                raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
+                raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
             pin_verified = True
 
         if face_image:
@@ -342,6 +323,30 @@ async def dispense_prescription(
     db.add(dispensing_log)
     await db.commit()
     
+    # Broadcast state-changing dispensing event to PrescriptionRegistry on Polygon Amoy
+    try:
+        from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
+        from app.models.blockchain import SyncEntityType, SyncActionType
+        dispense_task = await BlockchainSyncService.enqueue_sync_task(
+            db=db,
+            entity_type=SyncEntityType.PRESCRIPTION,
+            entity_id=rx.id,
+            action_type=SyncActionType.VERIFY,
+            payload={
+                "prescription_id": str(rx.id),
+                "prescription_hash": rx.hash,
+                "hash": rx.hash,
+                "patient_id": str(rx.patient_id),
+                "doctor_id": str(rx.doctor_id),
+                "diagnosis": rx.diagnosis
+            }
+        )
+        await db.commit()
+        trigger_background_sync(dispense_task.id)
+    except Exception as b_err:
+        import logging
+        logging.getLogger("medsync.dispense").warning(f"Error queueing blockchain dispensing task: {b_err}")
+    
     return APIResponse(
         message="Prescription dispensed successfully",
         data={
@@ -380,24 +385,11 @@ async def verify_prescription_auth(
     if not pin and not face_image:
         raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
 
-    from app.models.security import PatientSecurityCredential
-    cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == rx.patient_id)
-    cred_res = await db.execute(cred_stmt)
-    cred = cred_res.scalar_one_or_none()
-    is_locked_out = cred and cred.locked_until and cred.locked_until > datetime.utcnow()
-
     # Authorize using either PIN or Face
     if pin and not face_image:
-        if is_locked_out:
-            raise HTTPException(status_code=403, detail="PIN is locked. Face Verification is strictly required.")
-            
         pin_valid = await validate_patient_pin(db, rx.patient_id, pin)
         if not pin_valid:
-            if cred:
-                cred.failed_attempts += 1
-                cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
-                await db.commit()
-            raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
             
     if face_image:
         bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == rx.patient_id)
@@ -503,24 +495,11 @@ async def order_prescription_online(
     if not pin and not face_image:
         raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
 
-    from app.models.security import PatientSecurityCredential
-    cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
-    cred_res = await db.execute(cred_stmt)
-    cred = cred_res.scalar_one_or_none()
-    is_locked_out = cred and cred.locked_until and cred.locked_until > datetime.utcnow()
-
     # Validate PIN
     if pin and not face_image:
-        if is_locked_out:
-            raise HTTPException(status_code=403, detail="PIN is locked. Face Verification is strictly required.")
-            
         pin_valid = await validate_patient_pin(db, current_user.id, pin)
         if not pin_valid:
-            if cred:
-                cred.failed_attempts += 1
-                cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
-                await db.commit()
-            raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
 
     # Validate Face
     if face_image:
@@ -611,24 +590,11 @@ async def physical_pickup_prescription(
     if not pin and not face_image:
         raise HTTPException(status_code=400, detail="Either PIN or Face Image is required")
 
-    from app.models.security import PatientSecurityCredential
-    cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
-    cred_res = await db.execute(cred_stmt)
-    cred = cred_res.scalar_one_or_none()
-    is_locked_out = cred and cred.locked_until and cred.locked_until > datetime.utcnow()
-
     # Authorize using either PIN or Face
     if pin and not face_image:
-        if is_locked_out:
-            raise HTTPException(status_code=403, detail="PIN is locked. Face Verification is strictly required.")
-            
         pin_valid = await validate_patient_pin(db, current_user.id, pin)
         if not pin_valid:
-            if cred:
-                cred.failed_attempts += 1
-                cred.locked_until = datetime.utcnow() + timedelta(minutes=15)
-                await db.commit()
-            raise HTTPException(status_code=401, detail="Invalid Authorization PIN. Face Verification is now required.")
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
             
     if face_image:
         bio_stmt = select(PatientBiometricProfile).where(PatientBiometricProfile.patient_id == current_user.id)

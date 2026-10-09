@@ -111,8 +111,8 @@ export default function AdminSystem() {
       </div>
       
       <div className="grid gap-6 mt-6">
-        <Card className="col-span-full border-border/80 shadow-xl overflow-hidden" id="graph-container">
-          <CardHeader className="pb-3 border-b border-border/50 bg-card/60 backdrop-blur-sm">
+        <Card className="col-span-full border-neutral-900 shadow-2xl overflow-hidden bg-black" id="graph-container">
+          <CardHeader className="pb-3 border-b border-neutral-900 bg-black">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <CardTitle className="flex items-center gap-2.5 text-xl">
@@ -124,9 +124,9 @@ export default function AdminSystem() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="p-3 sm:p-5 bg-background/50">
+          <CardContent className="p-3 sm:p-5 bg-black">
             {graphLoading ? (
-              <div className="flex items-center justify-center h-[540px] w-full border rounded-2xl border-dashed border-border/60 bg-[#070a12]">
+              <div className="flex items-center justify-center h-[540px] w-full border rounded-2xl border-dashed border-neutral-800 bg-black">
                 <div className="flex flex-col items-center gap-3 text-muted-foreground">
                   <div className="animate-spin h-8 w-8 border-3 border-amber-400 border-t-transparent rounded-full" />
                   <span className="text-xs font-mono">Charting Healthcare Stars & Clusters...</span>
@@ -138,7 +138,7 @@ export default function AdminSystem() {
                 edges={graphData.edges || (graphData as any).links || []}
               />
             ) : (
-              <div className="flex items-center justify-center h-[540px] w-full border rounded-2xl border-dashed text-muted-foreground bg-[#070a12]">
+              <div className="flex items-center justify-center h-[540px] w-full border rounded-2xl border-dashed text-muted-foreground bg-black border-neutral-800">
                 No constellation relationship data available.
               </div>
             )}
@@ -146,7 +146,7 @@ export default function AdminSystem() {
         </Card>
 
         {/* Constellation Role & Star Legend */}
-        <Card className="col-span-full border-border/70 bg-card/70 backdrop-blur-sm shadow-md">
+        <Card className="col-span-full border-neutral-900 bg-black shadow-md">
           <CardContent className="p-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -160,7 +160,7 @@ export default function AdminSystem() {
               <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
                 <div className="flex items-center gap-2">
                   <div className="w-3.5 h-3.5 rounded-full bg-[#fbbf24] shadow-[0_0_10px_#fbbf24]"></div>
-                  <span className="text-xs font-medium text-foreground/90">Medicine (Core)</span>
+                  <span className="text-xs font-medium text-foreground/90">MedSync (Core)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3.5 h-3.5 rounded-full bg-[#c084fc] shadow-[0_0_10px_#c084fc]"></div>

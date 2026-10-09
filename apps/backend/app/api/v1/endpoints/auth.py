@@ -262,15 +262,23 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         # Enqueue Blockchain Sync for Patient
         if payload.role == UserRole.PATIENT:
             try:
-                from app.services.blockchain_sync import BlockchainSyncService
+                from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
                 from app.models.blockchain import SyncEntityType, SyncActionType
-                await BlockchainSyncService.enqueue_sync_task(
+                from app.blockchain.client import blockchain_client
+                task = await BlockchainSyncService.enqueue_sync_task(
                     db=db,
                     entity_type=SyncEntityType.PATIENT,
                     entity_id=new_user.id,
-                    action_type=SyncActionType.CREATE
+                    action_type=SyncActionType.CREATE,
+                    payload={
+                        "patient_id": str(new_user.id),
+                        "email": payload.email,
+                        "full_name": payload.full_name,
+                        "wallet_address": blockchain_client.wallet_address
+                    }
                 )
                 await db.commit()
+                trigger_background_sync(task.id)
             except Exception as e:
                 import logging
                 logging.getLogger("medsync.auth").error(f"Error enqueueing blockchain task for patient: {e}")

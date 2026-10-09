@@ -114,20 +114,27 @@ class PrescriptionService:
             )
             db.add(order)
             
-        # Enqueue blockchain task (best-effort, non-blocking)
+        task = None
         try:
-            from app.services.blockchain_sync import BlockchainSyncService
+            from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
             from app.models.blockchain import SyncEntityType, SyncActionType
             
-            await BlockchainSyncService.enqueue_sync_task(
+            task = await BlockchainSyncService.enqueue_sync_task(
                 db=db,
                 entity_type=SyncEntityType.PRESCRIPTION,
                 entity_id=prescription.id,
                 action_type=SyncActionType.CREATE,
                 payload=payload
             )
-            await db.commit()
         except Exception:
-            pass  # Blockchain sync is best-effort
+            pass
+            
+        await db.commit()
+        if task:
+            try:
+                from app.services.blockchain_sync import trigger_background_sync
+                trigger_background_sync(task.id)
+            except Exception:
+                pass
             
         return prescription

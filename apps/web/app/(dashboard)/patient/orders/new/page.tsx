@@ -254,12 +254,13 @@ export default function NewOnlineOrderPage() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground">Delivery Location</label>
                     <LocationPickerMap 
+                      initialLocation={latitude && longitude ? { lat: latitude, lng: longitude } : null}
                       onLocationSelect={(lat, lng) => {
                         setLatitude(lat);
                         setLongitude(lng);
                       }}
                       onAddressFound={(addr) => {
-                        if (!deliveryAddress) setDeliveryAddress(addr);
+                        setDeliveryAddress(addr);
                       }}
                     />
                   </div>

@@ -48,15 +48,17 @@ class BlockchainClient:
 
         # ── Always derive wallet address from private key (identity, not writes) ──
         pk = (blockchain_settings.BACKEND_PRIVATE_KEY or "").strip()
-        if pk and len(pk.lstrip("0x")) == 64:
+        clean_pk = pk[2:] if pk.startswith("0x") else pk
+        if clean_pk and len(clean_pk) == 64:
             try:
-                if not pk.startswith("0x"):
-                    pk = "0x" + pk
-                self.account = Account.from_key(pk)
+                self.account = Account.from_key("0x" + clean_pk)
                 self.wallet_address = self.account.address
                 logger.info(f"Blockchain client: derived wallet address {self.wallet_address}")
             except Exception as e:
                 logger.warning(f"Failed to derive wallet from private key: {e}. Using mock address.")
+        elif blockchain_settings.MEDSYNC_WALLET_ADDRESS:
+            self.wallet_address = blockchain_settings.MEDSYNC_WALLET_ADDRESS
+            logger.info(f"Blockchain client: using configured wallet address {self.wallet_address}")
         else:
             logger.info("Using configured or default wallet address for blockchain client.")
 
@@ -71,14 +73,21 @@ class BlockchainClient:
             self.configured = True  # Mark as configured even if missing private key (for mock mode)
             return
 
-        from web3.middleware import geth_poa_middleware
-        from requests.adapters import HTTPAdapter
-        from urllib3.util.retry import Retry
-        import requests
-        import urllib3
+        try:
+            from web3.middleware import geth_poa_middleware
+            from requests.adapters import HTTPAdapter
+            from urllib3.util.retry import Retry
+            import requests
+            import urllib3
+        except ImportError as ie:
+            logger.warning(f"Optional web3/requests dependencies not available: {ie}")
+            return
+
+        # Disable warnings for fallback non-verified SSL on Windows
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         # Resolve SSL CA bundle: prefer certifi, then system default, then disable
-        ssl_verify: str | bool = True
+        ssl_verify: str | bool = False
         try:
             import certifi
             ssl_verify = certifi.where()
@@ -99,32 +108,11 @@ class BlockchainClient:
                          verify=ssl_verify, timeout=5)
             if res.status_code != 200:
                 raise requests.exceptions.RequestException(f"RPC returned {res.status_code}")
-        except requests.exceptions.SSLError:
-            logger.warning("SSL certificate verification failed — falling back to unverified mode for RPC.")
+        except Exception:
             ssl_verify = False
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"RPC connection test failed ({rpc_url}): {e}")
-            fallback_url = os.getenv("NEXT_PUBLIC_POLYGON_RPC_URL") or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
-            if fallback_url and fallback_url != rpc_url:
-                try:
-                    logger.info(f"Retrying connection with fallback RPC: {fallback_url}")
-                    rpc_url = fallback_url
-                    session.post(rpc_url, json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
-                                 verify=ssl_verify, timeout=5)
-                except requests.exceptions.SSLError:
-                    ssl_verify = False
-                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                except Exception as ex:
-                    logger.warning(f"Fallback RPC test failed: {ex}")
 
         session.verify = ssl_verify
-
-        req_kwargs = {'timeout': 10}
-        if not ssl_verify:
-            req_kwargs['verify'] = False
-        elif isinstance(ssl_verify, str):
-            req_kwargs['verify'] = ssl_verify
+        req_kwargs = {'timeout': 10, 'verify': ssl_verify}
 
         self.w3 = Web3(Web3.HTTPProvider(rpc_url, session=session, request_kwargs=req_kwargs))
 

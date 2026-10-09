@@ -40,7 +40,10 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     }
   }
 
-  // We only keep the token logic here. Deduplication is handled entirely by the api.get wrapper.
+  // When sending FormData, remove Content-Type so browser/axios sets multipart/form-data with the correct boundary
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
 
   return config;
 });

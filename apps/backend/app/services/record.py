@@ -20,18 +20,27 @@ class MedicalRecordService:
 
         version_number = 1
         
-        file_ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
-        if is_prescription and file_ext == "pdf":
-            file.file.seek(0)
-            pdf_bytes = file.file.read()
-            from app.services.qr_pdf_service import QRPdfService
-            token = QRPdfService.generate_verification_token(str(record.id), str(patient_id))
-            qr_image = QRPdfService.generate_qr_code(token)
-            stamped_pdf = QRPdfService.stamp_qr_on_pdf(pdf_bytes, qr_image, token)
-            
-            # create new UploadFile-like object
-            import io
-            file = UploadFile(filename=file.filename, file=io.BytesIO(stamped_pdf))
+        # Read uploaded file bytes
+        file.file.seek(0)
+        raw_bytes = await file.read() if hasattr(file, "read") else file.file.read()
+
+        from app.services.qr_pdf_service import QRPdfService
+        import io, os
+
+        # 1. Convert any input format (image, text, doc, pdf) into standard A4 PDF
+        pdf_bytes = QRPdfService.convert_to_pdf(raw_bytes, file.filename or "record")
+
+        # 2. Generate verifiable on-chain QR identifier and QR code
+        token = f"QR-REC-{record.id}"
+        qr_image = QRPdfService.generate_qr_code(token)
+
+        # 3. Stamp QR code at bottom-right with verified badge
+        stamped_pdf = QRPdfService.stamp_qr_on_pdf(pdf_bytes, qr_image, token, title=req.title)
+
+        # 4. Wrap into clean .pdf UploadFile
+        base_name = os.path.splitext(file.filename)[0] if file.filename else "medical_record"
+        clean_filename = f"{base_name}.pdf"
+        file = UploadFile(filename=clean_filename, file=io.BytesIO(stamped_pdf), headers={"content-type": "application/pdf"})
 
         storage_path, mime_type, file_size_bytes, file_hash = await StorageService.upload_record_file(
             file,
@@ -40,9 +49,8 @@ class MedicalRecordService:
             version_number=version_number,
         )
         
-        file_ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
-        file_type_map = {"pdf": FileType.PDF, "png": FileType.IMAGE, "jpg": FileType.IMAGE, "jpeg": FileType.IMAGE, "dcm": FileType.DICOM}
-        f_type = file_type_map.get(file_ext, FileType.PDF)
+        # All records are normalized and stored as PDF
+        f_type = FileType.PDF
         
         version_in = {
             "record_id": record.id,
@@ -60,20 +68,27 @@ class MedicalRecordService:
             mime_type=mime_type,
         ))
         
+        task = None
         try:
-            from app.services.blockchain_sync import BlockchainSyncService
+            from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
             from app.models.blockchain import SyncEntityType, SyncActionType
             
-            await BlockchainSyncService.enqueue_sync_task(
+            task = await BlockchainSyncService.enqueue_sync_task(
                 db=db,
                 entity_type=SyncEntityType.MEDICAL_RECORD,
                 entity_id=version.id,
                 action_type=SyncActionType.CREATE,
-                payload={"patient_id": str(patient_id), "file_hash": file_hash, "file_type": f_type.value, "file_size_bytes": file_size_bytes}
+                payload={"record_id": str(record.id), "patient_id": str(patient_id), "file_hash": file_hash, "file_type": f_type.value, "file_size_bytes": file_size_bytes}
             )
         except Exception as e:
             print(f"Error enqueueing blockchain task for medical record: {e}")
             
         await db.commit()
+        if task:
+            try:
+                from app.services.blockchain_sync import trigger_background_sync
+                trigger_background_sync(task.id)
+            except Exception as e:
+                print(f"Error triggering blockchain sync for medical record: {e}")
         
         return record

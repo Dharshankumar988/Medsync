@@ -61,7 +61,8 @@ class TransactionManager:
                     "status": receipt.status,
                     "fromAddress": receipt['from'],
                     "toAddress": receipt.to,
-                    "logs": list(receipt.logs)
+                    "logs": list(receipt.logs),
+                    "effectiveGasPrice": getattr(receipt, 'effectiveGasPrice', tx.get('gasPrice', tx.get('maxFeePerGas', 35000000000)))
                 }
 
             except (TimeExhausted, ConnectionError, TimeoutError) as e:

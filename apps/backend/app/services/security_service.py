@@ -120,7 +120,7 @@ async def get_security_status(db: AsyncSession, patient_id: uuid.UUID) -> str:
     has_pin = pin_obj is not None and getattr(pin_obj, 'is_active', True)
 
     if has_pin:
-        return "PIN_CREATED"
+        return "COMPLETED"
     else:
         return "NOT_STARTED"
 

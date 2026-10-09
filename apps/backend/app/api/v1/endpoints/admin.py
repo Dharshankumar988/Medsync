@@ -723,13 +723,13 @@ async def get_relationship_graph(
     from app.models.hospital import Hospital
     from app.models.pharmacy import Pharmacy
 
-    # Create central golden node (Medicine/System)
+    # Create central golden node (MedSync Platform Hub)
     nodes.append({
-        "id": "MEDICINE",
-        "label": "Medicine",
-        "type": "Medicine",
+        "id": "MEDSYNC",
+        "label": "MedSync",
+        "type": "MedSync",
         "hasError": False,
-        "details": "Central hub connecting all healthcare entities",
+        "details": "Central MedSync platform connecting all healthcare entities",
         "isCentral": True
     })
 
@@ -880,19 +880,24 @@ async def get_relationship_graph(
             }
         })
 
-    # --- Build organic, non-symmetric healthcare constellation relationships ---
-    # 1. Central Knowledge Core (Medicine Hub) connects to anchor institutions and governance
+    # --- Build unified MedSync constellation network (Single Cohesive Cluster) ---
+    # 1. MedSync Central Hub connects directly to EVERY entity category
     for hospital in hospitals:
-        edges.append({"source": "MEDICINE", "target": f"HOSPITAL_{hospital.id}", "type": "clinical_protocols"})
+        edges.append({"source": "MEDSYNC", "target": f"HOSPITAL_{hospital.id}", "type": "network_facility"})
 
-    for idx, (doctor, _) in enumerate(doctors):
-        if idx < 2:  # Lead protocol specialists connect to central core
-            edges.append({"source": "MEDICINE", "target": f"DOCTOR_{doctor.id}", "type": "research_core"})
+    for doctor, _ in doctors:
+        edges.append({"source": "MEDSYNC", "target": f"DOCTOR_{doctor.id}", "type": "verified_practitioner"})
+
+    for pharmacy, _ in pharmacies:
+        edges.append({"source": "MEDSYNC", "target": f"PHARMACY_{pharmacy.id}", "type": "accredited_dispensary"})
+
+    for patient, _ in patients:
+        edges.append({"source": "MEDSYNC", "target": f"PATIENT_{patient.id}", "type": "health_record_holder"})
 
     for admin in admins:
-        edges.append({"source": "MEDICINE", "target": f"ADMIN_{admin.id}", "type": "system_governance"})
+        edges.append({"source": "MEDSYNC", "target": f"ADMIN_{admin.id}", "type": "system_governance"})
 
-    # 2. Doctors connect to Hospitals (clinical affiliation)
+    # 2. Doctors connect to their affiliated Hospitals
     if hospitals and doctors:
         for idx, (doctor, _) in enumerate(doctors):
             matched_hospital = None
@@ -905,41 +910,21 @@ async def get_relationship_graph(
             if matched_hospital:
                 edges.append({"source": f"HOSPITAL_{matched_hospital.id}", "target": f"DOCTOR_{doctor.id}", "type": "affiliated_physician"})
 
-    # 3. Doctors connect to Patients (consultations & active care plans)
+    # 3. Doctors connect to Patients (Active Consultations & Care Plans)
     if doctors and patients:
         for idx, (patient, _) in enumerate(patients):
-            primary_doctor = doctors[idx % len(doctors)][0]
-            edges.append({"source": f"DOCTOR_{primary_doctor.id}", "target": f"PATIENT_{patient.id}", "type": "consultation"})
-            if len(doctors) > 2 and (idx % 3 == 0):
-                secondary_doctor = doctors[(idx + 1) % len(doctors)][0]
-                edges.append({"source": f"DOCTOR_{secondary_doctor.id}", "target": f"PATIENT_{patient.id}", "type": "specialist_referral"})
+            patient_city = (patient.city or "").lower()
+            matching_doctor = next((d[0] for d in doctors if (d[0].city or "").lower() == patient_city), None)
+            primary_doctor = matching_doctor or doctors[idx % len(doctors)][0]
+            edges.append({"source": f"DOCTOR_{primary_doctor.id}", "target": f"PATIENT_{patient.id}", "type": "active_care_plan"})
 
-    # 4. Doctors and Pharmacies connect (prescription transmission)
-    if doctors and pharmacies:
-        for idx, (pharmacy, _) in enumerate(pharmacies):
-            prescribing_doctor = doctors[idx % len(doctors)][0]
-            edges.append({"source": f"DOCTOR_{prescribing_doctor.id}", "target": f"PHARMACY_{pharmacy.id}", "type": "prescribes"})
-
-    # 5. Pharmacies connect to Patients (dispensing & fulfillment)
+    # 4. Pharmacies connect to Patients in the same city (Prescription Dispensing)
     if pharmacies and patients:
-        for idx, (patient, _) in enumerate(patients):
-            dispensing_pharmacy = pharmacies[idx % len(pharmacies)][0]
-            edges.append({"source": f"PHARMACY_{dispensing_pharmacy.id}", "target": f"PATIENT_{patient.id}", "type": "dispenses"})
-
-    # 6. Hospitals connect to Patients (inpatient & emergency admissions)
-    if hospitals and patients:
-        for idx, (patient, _) in enumerate(patients):
-            if idx % 2 == 0:
-                h = hospitals[idx % len(hospitals)]
-                edges.append({"source": f"HOSPITAL_{h.id}", "target": f"PATIENT_{patient.id}", "type": "inpatient_facility"})
-
-    # 7. Admins connect to Hospitals and Pharmacies (regulatory and compliance oversight)
-    if admins:
-        primary_admin = admins[0]
-        for hospital in hospitals[:3]:
-            edges.append({"source": f"ADMIN_{primary_admin.id}", "target": f"HOSPITAL_{hospital.id}", "type": "compliance_audit"})
-        for pharmacy, _ in pharmacies[:2]:
-            edges.append({"source": f"ADMIN_{primary_admin.id}", "target": f"PHARMACY_{pharmacy.id}", "type": "license_audit"})
+        for patient, _ in patients:
+            patient_city = (patient.city or "").lower()
+            matching_ph = next((ph[0] for ph in pharmacies if (ph[0].city or "").lower() == patient_city), None)
+            if matching_ph:
+                edges.append({"source": f"PHARMACY_{matching_ph.id}", "target": f"PATIENT_{patient.id}", "type": "dispenses"})
 
     return APIResponse(
         message="Graph retrieved",

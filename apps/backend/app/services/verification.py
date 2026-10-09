@@ -58,26 +58,32 @@ class VerificationService:
         
         # Enqueue Blockchain Sync
         if user:
-            # Need to get role properly
             role = user.role
             try:
-                from app.services.blockchain_sync import BlockchainSyncService
+                from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
                 from app.models.blockchain import SyncEntityType, SyncActionType
                 
                 entity_type = None
+                payload = {}
                 if role == "DOCTOR" or role.value == "DOCTOR":
                     entity_type = SyncEntityType.DOCTOR
+                    doc_lic = getattr(doctor, "license_number", None) if "doctor" in locals() and doctor else str(user.id)
+                    payload = {"doctor_id": str(user.id), "license_hash": doc_lic, "license_number": doc_lic}
                 elif role == "PHARMACY" or role.value == "PHARMACY":
                     entity_type = SyncEntityType.PHARMACY
+                    phm_lic = getattr(pharmacy, "license_number", None) if "pharmacy" in locals() and pharmacy else str(user.id)
+                    payload = {"pharmacy_id": str(user.id), "license_hash": phm_lic, "license_number": phm_lic}
                 
                 if entity_type:
-                    await BlockchainSyncService.enqueue_sync_task(
+                    task = await BlockchainSyncService.enqueue_sync_task(
                         db=db,
                         entity_type=entity_type,
                         entity_id=user.id,
-                        action_type=SyncActionType.CREATE
+                        action_type=SyncActionType.VERIFY,
+                        payload=payload
                     )
                     await db.commit()
+                    trigger_background_sync(task.id)
             except Exception as e:
                 print(f"Error enqueueing blockchain task for verification: {e}")
         

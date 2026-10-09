@@ -117,7 +117,8 @@ def test_admin_graph_success(mock_admin):
     assert len(nodes) == 6
 
     # Verify central node
-    assert nodes[0]["id"] == "MEDICINE"
+    assert nodes[0]["id"] == "MEDSYNC"
+    assert nodes[0]["label"] == "MedSync"
     assert nodes[0]["isCentral"] is True
 
     # Verify hospital node attributes

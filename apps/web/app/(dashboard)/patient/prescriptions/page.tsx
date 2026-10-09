@@ -168,8 +168,12 @@ export default function PrescriptionsPage() {
                     size="sm" 
                     className="flex-1" 
                     onClick={() => {
-                      if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
-                        openEnrollmentModal();
+                      const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
+                      if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
+                        openEnrollmentModal(() => {
+                          setSelectedPrescriptionId(prescription.id);
+                          setDownloadDialogOpen(true);
+                        });
                         return;
                       }
                       setSelectedPrescriptionId(prescription.id);
@@ -185,8 +189,12 @@ export default function PrescriptionsPage() {
                       size="sm" 
                       className="flex-1"
                       onClick={() => {
-                        if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
-                          openEnrollmentModal();
+                        const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
+                        if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
+                          openEnrollmentModal(() => {
+                            setSelectedPrescriptionId(prescription.id);
+                            setOrderDialogOpen(true);
+                          });
                           return;
                         }
                         setSelectedPrescriptionId(prescription.id);

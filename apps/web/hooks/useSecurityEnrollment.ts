@@ -19,7 +19,8 @@ export function useSecurityEnrollment(userId: string | undefined, role: string |
         const { data: session } = await supabase.auth.getSession();
         if (session?.session?.access_token) {
           const res = await SecurityService.getStatus(session.session.access_token);
-          setStatus(res.status);
+          const statusVal = res?.data?.status || res?.status || 'NOT_STARTED';
+          setStatus(statusVal);
         }
       } catch (err) {
         console.error('Error fetching security status:', err);

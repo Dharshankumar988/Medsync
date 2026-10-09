@@ -12,9 +12,11 @@ from app.services.security_service import enroll_patient_pin, validate_patient_p
 from app.models.audit_log import AuditLog
 from app.schemas.response import APIResponse
 
+from app.schemas.security import SecurityStatusResponse, SecurityStatusData, SecurityActionResponse
+
 router = APIRouter()
 
-@router.get("/status", response_model=APIResponse)
+@router.get("/status", response_model=SecurityStatusResponse)
 async def get_status(
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -29,17 +31,20 @@ async def get_status(
     
     if current_user.role.upper() == UserRole.DOCTOR.value:
         status_val = await get_doctor_security_status(db, current_user.id)
-        return {"status": status_val}
     elif current_user.role.upper() == UserRole.PATIENT.value:
         status_val = await get_security_status(db, current_user.id)
-        return {"status": status_val}
     elif current_user.role.upper() == UserRole.PHARMACY.value:
         status_val = await get_pharmacy_security_status(db, current_user.id)
-        return {"status": status_val}
     else:
         raise HTTPException(status_code=403, detail="Only patients, doctors, and pharmacies require security enrollment.")
 
-@router.post("/enroll-pin", response_model=APIResponse)
+    return SecurityStatusResponse(
+        status=status_val,
+        message="Security status retrieved",
+        data=SecurityStatusData(status=status_val)
+    )
+
+@router.post("/enroll-pin", response_model=SecurityActionResponse)
 async def enroll_pin(
     pin: str = Form(...),
     db: AsyncSession = Depends(get_db),
@@ -59,7 +64,7 @@ async def enroll_pin(
             await enroll_pharmacy_pin(db, current_user.id, pin)
         else:
             raise HTTPException(status_code=403, detail="Only patients, doctors, and pharmacies can enroll a PIN.")
-        return {"message": "PIN enrolled successfully."}
+        return SecurityActionResponse(status="success", message="PIN enrolled successfully.")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

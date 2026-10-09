@@ -8,7 +8,7 @@ import {
 } from "@medsync/ui";
 import {
   Calendar, Clock, User, Plus, MapPin, Building2, Search,
-  Stethoscope, Star, ChevronRight, X, Filter, RefreshCw
+  Stethoscope, Star, ChevronRight, X, Filter, RefreshCw, Lock
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
@@ -229,7 +229,7 @@ export default function AppointmentsPage() {
       resetBooking();
       loadAppointments();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || "Failed to book appointment";
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || "Failed to book appointment";
       toast.error(msg);
     } finally {
       setIsBooking(false);
@@ -318,8 +318,9 @@ export default function AppointmentsPage() {
                 router.push("/patient/my-health");
                 return;
               }
-              if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
-                openEnrollmentModal();
+              const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
+              if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
+                openEnrollmentModal(() => setIsDialogOpen(true));
                 return;
               }
               setIsDialogOpen(true);
@@ -617,8 +618,8 @@ export default function AppointmentsPage() {
                       />
                     </div>
                     <div className="space-y-2 border-t border-border/40 pt-4 mt-4">
-                      <label className="text-sm font-medium text-blue-600 flex items-center gap-1.5">
-                        <Building2 className="h-4 w-4" /> Authorization PIN *
+                      <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                        <Lock className="h-4 w-4 text-primary" /> Authorization PIN *
                       </label>
                       <Input
                         type="password"

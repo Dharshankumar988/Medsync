@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, status, HTTPExce
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
-from typing import List
+from typing import List, Optional, Any
 from pydantic import BaseModel
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
@@ -24,10 +24,11 @@ require_doctor = RoleChecker([UserRole.DOCTOR])
 @router.post("", response_model=APIResponse[MedicalRecordResponse], status_code=status.HTTP_201_CREATED)
 async def upload_record(
     title: str = Form(...),
-    description: str = Form(None),
-    is_prescription: bool = Form(False),
+    description: Optional[str] = Form(None),
+    is_prescription: Any = Form(False),
     pin: str = Form(...),
     file: UploadFile = File(...),
+    patient_id: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(require_patient)
 ):
@@ -37,20 +38,20 @@ async def upload_record(
     is_valid = await validate_patient_pin(db, current_user.id, pin)
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
-    req = MedicalRecordCreate(title=title, description=description)
-    record = await MedicalRecordService.upload_record(db, req, file, current_user.id, current_user.id, is_prescription=is_prescription)
-    
-    if is_prescription:
-        # QR token generated internally in upload_record
-        from app.services.qr_pdf_service import QRPdfService
-        token = QRPdfService.generate_verification_token(str(record.id), str(current_user.id))
-        
-        # We can dynamically add qr_token to the response object
-        response_data = MedicalRecordResponse.model_validate(record)
-        response_data.qr_token = token
-        return APIResponse(message="Record uploaded successfully", data=response_data)
 
-    return APIResponse(message="Record uploaded successfully", data=MedicalRecordResponse.model_validate(record))
+    parsed_is_prescription = False
+    if isinstance(is_prescription, str):
+        parsed_is_prescription = is_prescription.lower() in ("true", "1", "yes")
+    elif isinstance(is_prescription, bool):
+        parsed_is_prescription = is_prescription
+
+    clean_desc = description.strip() if description and isinstance(description, str) else None
+    req = MedicalRecordCreate(title=title, description=clean_desc)
+    record = await MedicalRecordService.upload_record(db, req, file, current_user.id, current_user.id, is_prescription=parsed_is_prescription)
+    
+    response_data = MedicalRecordResponse.model_validate(record)
+    response_data.qr_token = f"QR-REC-{record.id}"
+    return APIResponse(message="Record uploaded successfully", data=response_data)
 
 @router.get("", response_model=APIResponse[List[MedicalRecordResponse]])
 async def list_my_records(

@@ -151,9 +151,9 @@ export default function MedicalRecordsPage() {
       if (fileInputRef.current) fileInputRef.current.value = "";
       
       loadRecords();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Upload error:", err);
-      toast.error("Failed to upload record");
+      toast.error(err.response?.data?.detail || "Failed to upload record");
     } finally {
       setIsUploading(false);
     }
@@ -178,9 +178,9 @@ export default function MedicalRecordsPage() {
       setSelectedRecordId(null);
       setSelectedDoctorId("");
       setSharePin("");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to share record");
+      toast.error(err?.response?.data?.detail || err?.response?.data?.message || "Failed to share record");
     } finally {
       setIsSharing(false);
     }
@@ -232,9 +232,10 @@ export default function MedicalRecordsPage() {
             <Button 
               className="shrink-0"
               onClick={(e) => {
-                if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
+                const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
+                if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
                   e.preventDefault();
-                  openEnrollmentModal();
+                  openEnrollmentModal(() => setIsDialogOpen(true));
                 }
               }}
             >
@@ -422,8 +423,12 @@ export default function MedicalRecordsPage() {
                           size="sm" 
                           className="h-8 text-xs hover:bg-muted" 
                           onClick={() => {
-                            if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
-                              openEnrollmentModal();
+                            const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
+                            if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
+                              openEnrollmentModal(() => {
+                                setSelectedRecordId(record.id);
+                                setIsShareDialogOpen(true);
+                              });
                               return;
                             }
                             setSelectedRecordId(record.id);
@@ -434,8 +439,12 @@ export default function MedicalRecordsPage() {
                         </Button>
                         {currentVersion && (
                           <Button variant="ghost" size="sm" className="h-8 text-xs text-blue-500 hover:text-blue-600" onClick={() => {
-                            if (user?.role === "PATIENT" && status !== 'COMPLETED' && !isSecurityLoading) {
-                              openEnrollmentModal();
+                            const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
+                            if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
+                              openEnrollmentModal(() => {
+                                setDownloadRecordId(record.id);
+                                setIsDownloadDialogOpen(true);
+                              });
                               return;
                             }
                             setDownloadRecordId(record.id);

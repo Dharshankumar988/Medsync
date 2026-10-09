@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton } from "@medsync/ui";
-import { ShoppingBag, Truck, CheckCircle2, AlertCircle, ChevronRight } from "lucide-react";
+import { ShoppingBag, Truck, CheckCircle2, AlertCircle, ChevronRight, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { orderService } from "@/services/order.service";
 import { motion } from "framer-motion";
@@ -75,6 +75,11 @@ export default function OrdersPage() {
             Track your ongoing deliveries and view past orders.
           </p>
         </div>
+        <Button asChild className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shrink-0">
+          <Link href="/patient/prescriptions">
+            <Plus className="mr-2 h-4 w-4" /> Order from Prescriptions
+          </Link>
+        </Button>
       </motion.div>
 
       {loading ? (

@@ -154,38 +154,149 @@ class QRPdfService:
         return buffer
 
     @staticmethod
-    def stamp_qr_on_pdf(original_pdf_bytes: bytes, qr_image_bytes: io.BytesIO, qr_token: str) -> bytes:
-        import PyPDF2
+    def convert_to_pdf(raw_bytes: bytes, filename: str = "") -> bytes:
+        """Converts any uploaded file (image, text, pdf) into a clean A4 PDF."""
+        # 1. Check if it's already a valid PDF
+        if raw_bytes.startswith(b"%PDF") or (filename and filename.lower().endswith(".pdf")):
+            return raw_bytes
+
+        # 2. Check if it's an image
+        try:
+            from PIL import Image
+            img = Image.open(io.BytesIO(raw_bytes))
+            
+            # Convert RGBA/P/LA/CMYK to RGB for clean PDF output
+            if img.mode in ("RGBA", "P", "LA", "CMYK"):
+                img = img.convert("RGB")
+            
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format="JPEG", quality=95)
+            img_buffer.seek(0)
+            
+            packet = io.BytesIO()
+            c = canvas.Canvas(packet, pagesize=A4)
+            width, height = A4
+            
+            # Page layout with margins
+            margin = 35
+            avail_w = width - (2 * margin)
+            avail_h = height - (2 * margin) - 60 # Leave bottom room for verification badge
+            
+            img_w, img_h = img.size
+            ratio = min(avail_w / max(img_w, 1), avail_h / max(img_h, 1), 1.0)
+            draw_w = img_w * ratio
+            draw_h = img_h * ratio
+            
+            draw_x = margin + (avail_w - draw_w) / 2
+            draw_y = height - margin - draw_h
+            
+            c.drawImage(ImageReader(img_buffer), draw_x, draw_y, width=draw_w, height=draw_h)
+            
+            # Header
+            c.setFont("Helvetica-Bold", 10)
+            c.setFillColorRGB(0.25, 0.3, 0.38)
+            display_title = filename or "Medical Record Attachment"
+            c.drawString(margin, height - 22, display_title)
+            
+            c.save()
+            packet.seek(0)
+            return packet.read()
+        except Exception:
+            pass
+
+        # 3. Fallback for text / documents
+        try:
+            text_content = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                text_content = raw_bytes.decode("latin-1")
+            except Exception:
+                text_content = f"Attached binary document: {filename} ({len(raw_bytes)} bytes)"
+
+        packet = io.BytesIO()
+        c = canvas.Canvas(packet, pagesize=A4)
+        width, height = A4
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(40, height - 50, filename or "Medical Record Document")
+        c.setFont("Helvetica", 9)
+        c.setFillColorRGB(0.2, 0.2, 0.2)
+        
+        y = height - 80
+        for line in text_content.splitlines():
+            if y < 80:
+                c.showPage()
+                y = height - 50
+                c.setFont("Helvetica", 9)
+            c.drawString(40, y, line[:110])
+            y -= 14
+            
+        c.save()
+        packet.seek(0)
+        return packet.read()
+
+    @staticmethod
+    def stamp_qr_on_pdf(original_pdf_bytes: bytes, qr_image_bytes: io.BytesIO, qr_token: str, title: str = None) -> bytes:
+        try:
+            import pypdf as pdf_module
+        except ImportError:
+            import PyPDF2 as pdf_module
         import io
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.utils import ImageReader
         
-        # Create a new PDF with Reportlab that contains just the QR code
+        # Create a new overlay PDF with ReportLab containing the bottom-right QR badge
         packet = io.BytesIO()
         c = canvas.Canvas(packet, pagesize=A4)
         width, height = A4
         
-        # We stamp it at the bottom right
+        # Position card in the bottom-right corner
+        card_w = 145
+        card_h = 138
+        card_x = width - card_w - 20
+        card_y = 20
+        
+        # Card container with white fill and subtle border
+        c.setFillColorRGB(1, 1, 1)
+        c.setStrokeColorRGB(0.82, 0.86, 0.92)
+        c.setLineWidth(1)
+        c.roundRect(card_x, card_y, card_w, card_h, 6, fill=1, stroke=1)
+        
+        # Green Verified Pill Header
+        c.setFillColorRGB(0.04, 0.58, 0.35)
+        c.setFont("Helvetica-Bold", 7.5)
+        c.drawString(card_x + 10, card_y + card_h - 14, "✓ Blockchain Verified")
+        
+        # Center QR code inside the card
+        qr_size = 85
+        qr_x = card_x + (card_w - qr_size) / 2
+        qr_y = card_y + 28
         qr_image = ImageReader(qr_image_bytes)
-        c.drawImage(qr_image, width - 150, 50, width=100, height=100)
-        c.setFont("Helvetica-Bold", 8)
-        c.drawString(width - 150, 40, f"Verification Token: {qr_token}")
-        c.drawString(width - 150, 30, "Verify at medsync.com/verify")
+        c.drawImage(qr_image, qr_x, qr_y, width=qr_size, height=qr_size)
+        
+        # Network & Token footer
+        c.setFillColorRGB(0.2, 0.25, 0.35)
+        c.setFont("Helvetica", 6.5)
+        short_id = qr_token if len(qr_token) <= 18 else f"{qr_token[:10]}...{qr_token[-6:]}"
+        c.drawString(card_x + 8, card_y + 16, f"ID: {short_id}")
+        
+        c.setFillColorRGB(0.45, 0.5, 0.58)
+        c.setFont("Helvetica", 6)
+        c.drawString(card_x + 8, card_y + 7, "Polygon Amoy Ledger")
         
         c.save()
         packet.seek(0)
         
         # Merge the stamped QR PDF with the original
-        new_pdf = PyPDF2.PdfReader(packet)
-        existing_pdf = PyPDF2.PdfReader(io.BytesIO(original_pdf_bytes))
-        output = PyPDF2.PdfWriter()
+        new_pdf = pdf_module.PdfReader(packet)
+        existing_pdf = pdf_module.PdfReader(io.BytesIO(original_pdf_bytes))
+        output = pdf_module.PdfWriter()
         
-        for i in range(len(existing_pdf.pages)):
+        total_pages = len(existing_pdf.pages)
+        for i in range(total_pages):
             page = existing_pdf.pages[i]
-            # Only stamp the first page
+            # Stamp the first page (or last page)
             if i == 0:
-                # Merge the watermark into the page
                 page.merge_page(new_pdf.pages[0])
             output.add_page(page)
             
@@ -197,10 +308,13 @@ class QRPdfService:
     @staticmethod
     def encrypt_pdf(pdf_bytes: bytes, user_pin: str) -> bytes:
         """Encrypts PDF using the user's PIN as password"""
-        import PyPDF2
+        try:
+            import pypdf as pdf_module
+        except ImportError:
+            import PyPDF2 as pdf_module
         import io
-        reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
-        writer = PyPDF2.PdfWriter()
+        reader = pdf_module.PdfReader(io.BytesIO(pdf_bytes))
+        writer = pdf_module.PdfWriter()
         for page in reader.pages:
             writer.add_page(page)
         writer.encrypt(user_password=user_pin, owner_password=user_pin)

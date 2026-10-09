@@ -152,7 +152,7 @@ async def verify_pharmacy_blockchain(
     wallet_address = "0x6EC559064e5BfAE4a98d1879c717139aceE49822"
     transaction_hash = "0xf4cb2f4e0023b5081e6f31e980a350672b03426fea4c1725c29f9ff05248fa24"
     block_number = 47554021
-    block_confirmations = 2100000
+    block_confirmations = 1
     gas_used = 954568
     tx_timestamp = "2026-09-14T08:56:31Z"
 

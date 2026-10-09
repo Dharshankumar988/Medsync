@@ -39,17 +39,20 @@ class PermissionService:
         await permission_repo.create(db, obj_in=perm_in)
         await ConsentService.log_consent_change(db, patient_id, doctor_id, "GRANTED")
         
-        await BlockchainSyncService.enqueue_sync_task(
+        task = await BlockchainSyncService.enqueue_sync_task(
             db,
             entity_type=SyncEntityType.MEDICAL_RECORD,
             entity_id=record_id,
             action_type=SyncActionType.GRANT_ACCESS,
             payload={
+                "record_id": str(record_id),
                 "patient_id": str(patient_id),
                 "doctor_id": str(doctor_id)
             }
         )
         await db.commit()
+        from app.services.blockchain_sync import trigger_background_sync
+        trigger_background_sync(task.id)
         return {"status": "Permission granted"}
         
     @staticmethod
@@ -59,17 +62,20 @@ class PermissionService:
             await permission_repo.update(db, db_obj=perm, obj_in={"is_revoked": True})
             await ConsentService.log_consent_change(db, patient_id, doctor_id, "REVOKED")
             
-            await BlockchainSyncService.enqueue_sync_task(
+            task = await BlockchainSyncService.enqueue_sync_task(
                 db,
                 entity_type=SyncEntityType.MEDICAL_RECORD,
                 entity_id=record_id,
                 action_type=SyncActionType.REVOKE_ACCESS,
                 payload={
+                    "record_id": str(record_id),
                     "patient_id": str(patient_id),
                     "doctor_id": str(doctor_id)
                 }
             )
             await db.commit()
+            from app.services.blockchain_sync import trigger_background_sync
+            trigger_background_sync(task.id)
         return {"status": "Permission revoked"}
         
     @staticmethod

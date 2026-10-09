@@ -37,3 +37,15 @@ class BlockchainSyncService:
         
         result = await db.execute(stmt)
         return result.scalars().first()
+
+def trigger_background_sync(task_id: uuid.UUID):
+    """Fire-and-forget immediate background execution of a sync task on Polygon Amoy."""
+    import asyncio
+    import logging
+    from app.api.v1.endpoints.blockchain import _execute_sync_task_bg
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_execute_sync_task_bg(task_id))
+    except Exception as e:
+        logging.getLogger("blockchain.sync").warning(f"Could not spawn immediate sync task: {e}")
+

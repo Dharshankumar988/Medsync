@@ -16,7 +16,7 @@ from app.models.blockchain import (
 from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.models.prescription import Prescription
-from app.models.record import MedicalRecord
+from app.models.record import MedicalRecord, MedicalRecordVersion
 from app.models.pharmacy import Pharmacy
 from app.blockchain.services.sync_service import BlockchainSyncService
 from app.blockchain.provider import blockchain_gateway
@@ -31,6 +31,18 @@ import hashlib
 from app.dependencies.rate_limit import limiter
 
 router = APIRouter()
+
+async def _execute_sync_task_bg(task_id: uuid.UUID):
+    """Execute a queued blockchain sync task in a dedicated background database session."""
+    try:
+        from app.database.session import AsyncSessionLocal
+        from app.blockchain.services.sync_service import BlockchainSyncService
+        async with AsyncSessionLocal() as session:
+            service = BlockchainSyncService(session)
+            await service.execute_sync_task(task_id)
+    except Exception as e:
+        import logging
+        logging.getLogger("blockchain.endpoints").error(f"Error in background sync execution {task_id}: {e}")
 
 # ---------------------------------------------------------
 # PATIENT APIs
@@ -55,18 +67,26 @@ async def register_patient_on_blockchain(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
+    from app.blockchain.client import blockchain_client
+    wallet = getattr(patient, "wallet_address", None) or blockchain_client.wallet_address
+
     task = BlockchainSyncTask(
         entity_type=SyncEntityType.PATIENT,
         entity_id=patient.id,
         action_type=SyncActionType.CREATE,
-        payload={"patient_id": str(patient.id), "email": patient.email},
+        payload={
+            "patient_id": str(patient.id),
+            "email": patient.email,
+            "wallet_address": wallet
+        },
         status=SyncStatus.PENDING
     )
     db.add(task)
     await db.commit()
     await db.refresh(task)
     
-    return APIResponse(message="Patient registration task queued", data={"task_id": str(task.id)})
+    background_tasks.add_task(_execute_sync_task_bg, task.id)
+    return APIResponse(message="Patient registration task queued and broadcasting to Polygon Amoy", data={"task_id": str(task.id)})
 
 @router.get("/patient/{patient_id}/verify", response_model=APIResponse)
 @limiter.limit("30/minute")
@@ -112,6 +132,7 @@ async def verify_patient(
 async def verify_doctor_on_blockchain(
     request: Request,
     doctor_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
@@ -131,8 +152,10 @@ async def verify_doctor_on_blockchain(
     )
     db.add(task)
     await db.commit()
+    await db.refresh(task)
+    background_tasks.add_task(_execute_sync_task_bg, task.id)
     
-    return APIResponse(message="Doctor verification task queued", data={"task_id": str(task.id)})
+    return APIResponse(message="Doctor verification task queued and broadcasting to Polygon Amoy", data={"task_id": str(task.id)})
 
 # ---------------------------------------------------------
 # PRESCRIPTION APIs
@@ -143,6 +166,7 @@ async def verify_doctor_on_blockchain(
 async def queue_prescription_creation(
     request: Request,
     prescription_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["DOCTOR"]))
 ):
@@ -170,8 +194,10 @@ async def queue_prescription_creation(
     )
     db.add(task)
     await db.commit()
+    await db.refresh(task)
+    background_tasks.add_task(_execute_sync_task_bg, task.id)
     
-    return APIResponse(message="Prescription sync queued", data={"task_id": str(task.id)})
+    return APIResponse(message="Prescription sync queued and broadcasting to Polygon Amoy", data={"task_id": str(task.id)})
 
 @router.get("/prescription/{prescription_id}/verify", response_model=APIResponse)
 @limiter.limit("60/minute")
@@ -222,8 +248,9 @@ async def verify_prescription(
 async def register_medical_record_on_blockchain(
     request: Request,
     record_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(RoleChecker(["DOCTOR"]))
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker(["DOCTOR", "PATIENT"]))
 ):
     """Queue a medical record to be stored on the blockchain."""
     stmt = select(MedicalRecord).where(MedicalRecord.id == record_id)
@@ -239,14 +266,16 @@ async def register_medical_record_on_blockchain(
         payload={
             "record_id": str(record.id),
             "patient_id": str(record.patient_id),
-            "cid": "ipfs://dummy_cid" # In a real scenario, this would come from the IPFS service
+            "title": record.title
         },
         status=SyncStatus.PENDING
     )
     db.add(task)
     await db.commit()
+    await db.refresh(task)
+    background_tasks.add_task(_execute_sync_task_bg, task.id)
     
-    return APIResponse(message="Medical Record sync queued", data={"task_id": str(task.id)})
+    return APIResponse(message="Medical Record sync queued and broadcasting to Polygon Amoy", data={"task_id": str(task.id)})
 
 @router.get("/record/{record_id}/verify", response_model=APIResponse)
 @limiter.limit("60/minute")
@@ -263,11 +292,9 @@ async def verify_medical_record(
     if not record:
         raise HTTPException(status_code=404, detail="Medical Record not found")
         
-    # Example deterministic hash. In prod, use the actual fields + CID.
     data_hash = hashlib.sha256(json.dumps({
         "record_id": str(record.id),
-        "patient_id": str(record.patient_id),
-        "cid": "ipfs://dummy_cid"
+        "patient_id": str(record.patient_id)
     }, sort_keys=True).encode("utf-8")).hexdigest()
     
     try:
@@ -298,6 +325,7 @@ async def verify_medical_record(
 async def verify_pharmacy_on_blockchain(
     request: Request,
     pharmacy_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
@@ -317,8 +345,70 @@ async def verify_pharmacy_on_blockchain(
     )
     db.add(task)
     await db.commit()
+    await db.refresh(task)
+    background_tasks.add_task(_execute_sync_task_bg, task.id)
     
-    return APIResponse(message="Pharmacy verification task queued", data={"task_id": str(task.id)})
+    return APIResponse(message="Pharmacy verification task queued and broadcasting to Polygon Amoy", data={"task_id": str(task.id)})
+
+# ---------------------------------------------------------
+# CONSENT APIs
+# ---------------------------------------------------------
+
+@router.post("/consent/grant", response_model=APIResponse)
+@limiter.limit("20/minute")
+async def grant_consent_on_blockchain(
+    request: Request,
+    record_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker(["PATIENT"]))
+):
+    """Patient grants consent on-chain via ConsentManagement and MedicalRecordRegistry."""
+    task = BlockchainSyncTask(
+        entity_type=SyncEntityType.MEDICAL_RECORD,
+        entity_id=record_id,
+        action_type=SyncActionType.GRANT_ACCESS,
+        payload={
+            "record_id": str(record_id),
+            "patient_id": str(current_user.id),
+            "doctor_id": str(doctor_id)
+        },
+        status=SyncStatus.PENDING
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    background_tasks.add_task(_execute_sync_task_bg, task.id)
+    return APIResponse(message="Consent grant broadcast queued to Polygon Amoy", data={"task_id": str(task.id)})
+
+@router.post("/consent/revoke", response_model=APIResponse)
+@limiter.limit("20/minute")
+async def revoke_consent_on_blockchain(
+    request: Request,
+    record_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker(["PATIENT"]))
+):
+    """Patient revokes consent on-chain via ConsentManagement and MedicalRecordRegistry."""
+    task = BlockchainSyncTask(
+        entity_type=SyncEntityType.MEDICAL_RECORD,
+        entity_id=record_id,
+        action_type=SyncActionType.REVOKE_ACCESS,
+        payload={
+            "record_id": str(record_id),
+            "patient_id": str(current_user.id),
+            "doctor_id": str(doctor_id)
+        },
+        status=SyncStatus.PENDING
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    background_tasks.add_task(_execute_sync_task_bg, task.id)
+    return APIResponse(message="Consent revocation broadcast queued to Polygon Amoy", data={"task_id": str(task.id)})
 
 # ---------------------------------------------------------
 # TRANSACTIONS & AUDIT APIs
@@ -520,6 +610,15 @@ async def verify_hash_or_identifier(
         pass
 
     if parsed_uuid:
+        # Check current block for real confirmations
+        curr_block = None
+        w3 = blockchain_client.w3
+        if w3 and w3.is_connected():
+            try:
+                curr_block = await asyncio.to_thread(lambda: w3.eth.block_number)
+            except Exception:
+                pass
+
         # Check Prescription
         rx_stmt = select(Prescription).where(Prescription.id == parsed_uuid)
         rx = (await db.execute(rx_stmt)).scalar_one_or_none()
@@ -537,60 +636,132 @@ async def verify_hash_or_identifier(
                 BlockchainSyncTask, BlockchainTransaction.transaction_hash == BlockchainSyncTask.transaction_hash
             ).where(BlockchainSyncTask.entity_id == rx.id)
             found_tx = (await db.execute(tx_stmt)).scalars().first()
-            tx_h = found_tx.transaction_hash if found_tx else "0x6a43f3a576016147950d12edce8a8298b0277809488566c158cb4e31a210cb74"
-
-            return APIResponse(
-                message="Prescription record cryptographically verified",
-                data=BlockchainVerifyResult(
-                    verified=True,
-                    status="FINALIZED",
-                    item_type="PRESCRIPTION",
-                    identifier=str(rx.id),
-                    network="Polygon Amoy Testnet",
-                    chain_id=80002,
-                    block_number=found_tx.block_number if found_tx else 47554089,
-                    confirmations=2100000,
-                    gas_used=1093398,
-                    contract_name="PrescriptionRegistry",
-                    contract_address=contract_addr,
-                    explorer_url=f"https://amoy.polygonscan.com/tx/{tx_h}",
-                    contract_explorer_url=f"https://amoy.polygonscan.com/address/{contract_addr}",
-                    timestamp=rx.created_at.isoformat() if rx.created_at else None,
-                    title="Verified Prescription Record",
-                    subtitle=f"{rx.diagnosis or 'Medical Prescription'} • Signed by Doctor",
-                    details={
-                        "prescription_id": str(rx.id),
-                        "patient_id": str(rx.patient_id),
-                        "doctor_id": str(rx.doctor_id),
-                        "data_hash": rx_hash
-                    }
+            
+            if found_tx:
+                confirms = max(1, curr_block - found_tx.block_number + 1) if (curr_block and found_tx.block_number) else (found_tx.confirmation_count or 1)
+                gas_price_gwei = float(found_tx.gas_price) / 1e9 if found_tx.gas_price else None
+                return APIResponse(
+                    message="Prescription record cryptographically verified on Polygon Amoy",
+                    data=BlockchainVerifyResult(
+                        verified=True,
+                        status=found_tx.status.upper(),
+                        item_type="PRESCRIPTION",
+                        identifier=found_tx.transaction_hash,
+                        network="Polygon Amoy Testnet",
+                        chain_id=80002,
+                        block_number=found_tx.block_number,
+                        confirmations=confirms,
+                        gas_used=found_tx.gas_used,
+                        gas_price_gwei=round(gas_price_gwei, 4) if gas_price_gwei else None,
+                        contract_name="PrescriptionRegistry",
+                        contract_address=contract_addr,
+                        explorer_url=f"https://amoy.polygonscan.com/tx/{found_tx.transaction_hash}",
+                        contract_explorer_url=f"https://amoy.polygonscan.com/address/{contract_addr}",
+                        timestamp=rx.created_at.isoformat() if rx.created_at else None,
+                        title="Verified Prescription Record",
+                        subtitle=f"{rx.diagnosis or 'Medical Prescription'} • Signed by Doctor",
+                        details={
+                            "prescription_id": str(rx.id),
+                            "patient_id": str(rx.patient_id),
+                            "doctor_id": str(rx.doctor_id),
+                            "data_hash": rx_hash
+                        }
+                    )
                 )
-            )
+            else:
+                return APIResponse(
+                    message="Prescription record queued for on-chain block confirmation",
+                    data=BlockchainVerifyResult(
+                        verified=False,
+                        status="PENDING_ON_CHAIN",
+                        item_type="PRESCRIPTION",
+                        identifier=str(rx.id),
+                        network="Polygon Amoy Testnet",
+                        chain_id=80002,
+                        contract_name="PrescriptionRegistry",
+                        contract_address=contract_addr,
+                        contract_explorer_url=f"https://amoy.polygonscan.com/address/{contract_addr}",
+                        timestamp=rx.created_at.isoformat() if rx.created_at else None,
+                        title="Prescription Record (Sync Pending)",
+                        subtitle=f"{rx.diagnosis or 'Medical Prescription'} • Broadcasting to Ledger",
+                        details={
+                            "prescription_id": str(rx.id),
+                            "patient_id": str(rx.patient_id),
+                            "doctor_id": str(rx.doctor_id),
+                            "data_hash": rx_hash
+                        }
+                    )
+                )
 
         # Check Medical Record
         rec_stmt = select(MedicalRecord).where(MedicalRecord.id == parsed_uuid)
         rec = (await db.execute(rec_stmt)).scalar_one_or_none()
         if rec:
             contract_addr = contract_loader.addresses.get("MedicalRecordRegistry", "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104")
-            return APIResponse(
-                message="Medical Record verified on Polygon Amoy ledger",
-                data=BlockchainVerifyResult(
-                    verified=True,
-                    status="FINALIZED",
-                    item_type="RECORD",
-                    identifier=str(rec.id),
-                    network="Polygon Amoy Testnet",
-                    chain_id=80002,
-                    block_number=47554000,
-                    confirmations=2100000,
-                    contract_name="MedicalRecordRegistry",
-                    contract_address=contract_addr,
-                    contract_explorer_url=f"https://amoy.polygonscan.com/address/{contract_addr}",
-                    timestamp=rec.created_at.isoformat() if rec.created_at else None,
-                    title=rec.title or "Clinical Medical Record",
-                    subtitle=f"Category: {getattr(rec, 'category', 'EHR')} • Verified"
+            
+            # Check for linked sync task / tx via version
+            v_stmt = select(MedicalRecordVersion.id).where(MedicalRecordVersion.record_id == rec.id)
+            version_ids = (await db.execute(v_stmt)).scalars().all()
+            
+            found_tx = None
+            if version_ids:
+                tx_stmt = select(BlockchainTransaction).join(
+                    BlockchainSyncTask, BlockchainTransaction.transaction_hash == BlockchainSyncTask.transaction_hash
+                ).where(BlockchainSyncTask.entity_id.in_(version_ids))
+                found_tx = (await db.execute(tx_stmt)).scalars().first()
+            
+            if found_tx:
+                confirms = max(1, curr_block - found_tx.block_number + 1) if (curr_block and found_tx.block_number) else (found_tx.confirmation_count or 1)
+                gas_price_gwei = float(found_tx.gas_price) / 1e9 if found_tx.gas_price else None
+                return APIResponse(
+                    message="Medical Record verified on Polygon Amoy ledger",
+                    data=BlockchainVerifyResult(
+                        verified=True,
+                        status=found_tx.status.upper(),
+                        item_type="RECORD",
+                        identifier=found_tx.transaction_hash,
+                        network="Polygon Amoy Testnet",
+                        chain_id=80002,
+                        block_number=found_tx.block_number,
+                        confirmations=confirms,
+                        gas_used=found_tx.gas_used,
+                        gas_price_gwei=round(gas_price_gwei, 4) if gas_price_gwei else None,
+                        contract_name="MedicalRecordRegistry",
+                        contract_address=contract_addr,
+                        explorer_url=f"https://amoy.polygonscan.com/tx/{found_tx.transaction_hash}",
+                        contract_explorer_url=f"https://amoy.polygonscan.com/address/{contract_addr}",
+                        timestamp=rec.created_at.isoformat() if rec.created_at else None,
+                        title=rec.title or "Clinical Medical Record",
+                        subtitle="Verified On-Chain • Polygon Amoy Ledger",
+                        details={
+                            "record_id": str(rec.id),
+                            "patient_id": str(rec.patient_id),
+                            "transaction_hash": found_tx.transaction_hash
+                        }
+                    )
                 )
-            )
+            else:
+                return APIResponse(
+                    message="Medical Record queued for on-chain block confirmation",
+                    data=BlockchainVerifyResult(
+                        verified=False,
+                        status="PENDING_ON_CHAIN",
+                        item_type="RECORD",
+                        identifier=f"QR-REC-{rec.id}",
+                        network="Polygon Amoy Testnet",
+                        chain_id=80002,
+                        contract_name="MedicalRecordRegistry",
+                        contract_address=contract_addr,
+                        contract_explorer_url=f"https://amoy.polygonscan.com/address/{contract_addr}",
+                        timestamp=rec.created_at.isoformat() if rec.created_at else None,
+                        title=rec.title or "Clinical Medical Record",
+                        subtitle="Sync Task Queued • Awaiting Amoy Miners",
+                        details={
+                            "record_id": str(rec.id),
+                            "patient_id": str(rec.patient_id)
+                        }
+                    )
+                )
 
     # 4. Fallback: general verification result
     return APIResponse(
@@ -750,14 +921,30 @@ async def get_blockchain_status(
     """Get overall health and status of the Blockchain Gateway."""
     try:
         health = await asyncio.to_thread(blockchain_gateway.get_health_status)
+        w3 = blockchain_client.w3
+        gas_price_gwei = 0.0
+        wallet_balance = health.get("walletBalanceEth") or 0.0
         
+        if w3 and w3.is_connected():
+            try:
+                gp = await asyncio.to_thread(lambda: w3.eth.gas_price)
+                gas_price_gwei = float(w3.from_wei(gp, "gwei"))
+            except Exception:
+                pass
+            if wallet_balance == 0.0 and blockchain_client.wallet_address:
+                try:
+                    bal = await asyncio.to_thread(w3.eth.get_balance, blockchain_client.wallet_address)
+                    wallet_balance = float(w3.from_wei(bal, "ether"))
+                except Exception:
+                    pass
+
         status = StatusResponse(
-            network=health.get("network", "unknown"),
-            chain_id=health.get("chain_id", 0),
-            rpc_health="CONNECTED" if health.get("status") == "healthy" else "DISCONNECTED",
-            gas_price_gwei=0.0,
+            network=health.get("network", "amoy"),
+            chain_id=health.get("chain_id", 80002),
+            rpc_health="CONNECTED" if health.get("status") in ("healthy", "healthy (mock)") else "DISCONNECTED",
+            gas_price_gwei=round(gas_price_gwei, 4),
             wallet_address=blockchain_client.wallet_address,
-            wallet_balance_eth=0.0
+            wallet_balance_eth=round(wallet_balance, 4)
         )
         return APIResponse(message="Blockchain status", data=status.model_dump())
     except Exception as e:
@@ -891,6 +1078,7 @@ async def get_all_contracts(
 async def get_contract_details(
     request: Request,
     name: str,
+    db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
     """Get detailed information for a specific contract."""
@@ -926,13 +1114,10 @@ async def get_contract_details(
     abi_events = []
     abi_functions = []
     try:
-        # Construct absolute path to the workspace root then to the abis folder
-        # apps/backend/app/api/v1/endpoints/blockchain.py -> 6 levels up to Medsync root
         project_root = Path(__file__).resolve().parent.parent.parent.parent.parent.parent.parent
         abi_path = project_root / "apps" / "blockchain" / "abis" / f"{name}.json"
         
         if not abi_path.exists():
-            # In Docker, abis are copied to /app/app/blockchain/artifacts/abis
             docker_abi_path = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "abis" / f"{name}.json"
             if docker_abi_path.exists():
                 abi_path = docker_abi_path
@@ -949,55 +1134,56 @@ async def get_contract_details(
     except Exception as e:
         logger.warning(f"Failed to load ABI for {name}: {e}")
     
-    # Check deployment status
+    # Check deployment status and on-chain balance via Web3
     deployment_status = "CONFIGURED"
-    if blockchain_client.w3 and blockchain_client.w3.is_connected():
+    balance = "0.0000 POL"
+    w3 = blockchain_client.w3
+    if w3 and w3.is_connected():
         try:
-            code = await asyncio.to_thread(blockchain_client.w3.eth.get_code, address)
+            checksum_addr = w3.to_checksum_address(address)
+            code = await asyncio.to_thread(w3.eth.get_code, checksum_addr)
             if code and code != b"":
                 deployment_status = "DEPLOYED"
             else:
                 deployment_status = "CONFIGURED_NOT_DEPLOYED"
+            bal = await asyncio.to_thread(w3.eth.get_balance, checksum_addr)
+            balance = f"{float(w3.from_wei(bal, 'ether')):.4f} POL"
         except Exception:
             deployment_status = "CONFIGURED_RPC_ERROR"
     else:
         deployment_status = "CONFIGURED_RPC_UNAVAILABLE"
     
-    # Use requests to fetch data from PolygonScan as requested by the user
-    import requests
-    from app.blockchain.config import blockchain_settings
-    
-    polygonscan_api_key = blockchain_settings.POLYGONSCAN_API_KEY or "YourApiKeyToken"
-    balance = "0.0000 POL"
+    # Fetch real transactions associated with this contract from database
     tx_count = 0
     recent_txs = []
     try:
-        # Fetch Balance
-        bal_url = f"https://api-amoy.polygonscan.com/api?module=account&action=balance&address={address}&tag=latest&apikey={polygonscan_api_key}"
-        bal_res = requests.get(bal_url, timeout=5)
-        bal_data = bal_res.json()
-        if bal_data.get("status") == "1":
-            wei_bal = int(bal_data.get("result", 0))
-            balance = f"{wei_bal / 1e18:.4f} POL"
-            
-        # Fetch TxList to get transaction count and recent txs (sort=desc for most recent)
-        tx_url = f"https://api-amoy.polygonscan.com/api?module=account&action=txlist&address={address}&startblock=0&endblock=99999999&page=1&offset=10000&sort=desc&apikey={polygonscan_api_key}"
-        tx_res = requests.get(tx_url, timeout=5)
-        tx_data = tx_res.json()
-        if tx_data.get("status") == "1":
-            all_txs = tx_data.get("result", [])
-            tx_count = len(all_txs)
-            # Grab top 5 most recent
-            for tx in all_txs[:5]:
-                recent_txs.append({
-                    "hash": tx.get("hash"),
-                    "block": tx.get("blockNumber"),
-                    "time": tx.get("timeStamp"),
-                    "from": tx.get("from"),
-                    "to": tx.get("to")
-                })
-    except Exception as e:
-        logger.error(f"PolygonScan API fetch failed: {e}")
+        from sqlalchemy import or_
+        tx_stmt = select(BlockchainTransaction).where(
+            or_(
+                BlockchainTransaction.contract_name == name,
+                func.lower(BlockchainTransaction.contract_address) == address.lower()
+            )
+        ).order_by(desc(BlockchainTransaction.created_at))
+        
+        count_stmt = select(func.count(BlockchainTransaction.transaction_hash)).where(
+            or_(
+                BlockchainTransaction.contract_name == name,
+                func.lower(BlockchainTransaction.contract_address) == address.lower()
+            )
+        )
+        tx_count = (await db.scalar(count_stmt)) or 0
+        tx_rows = (await db.execute(tx_stmt.limit(5))).scalars().all()
+        
+        for tx in tx_rows:
+            recent_txs.append({
+                "hash": tx.transaction_hash,
+                "block": tx.block_number,
+                "time": tx.created_at.isoformat() if tx.created_at else None,
+                "from": tx.wallet_address or blockchain_client.wallet_address,
+                "to": tx.contract_address or address
+            })
+    except Exception as db_err:
+        logger.warning(f"Failed to query local contract transactions: {db_err}")
 
     data = {
         "name": name,
@@ -1092,8 +1278,9 @@ async def get_wallet_details(
             }
             return APIResponse(message="Wallet details (RPC unavailable)", data=data)
         
-        balance_wei = await asyncio.to_thread(w3.eth.get_balance, address)
-        nonce = await asyncio.to_thread(w3.eth.get_transaction_count, address)
+        chk_addr = w3.to_checksum_address(address)
+        balance_wei = await asyncio.to_thread(w3.eth.get_balance, chk_addr)
+        nonce = await asyncio.to_thread(w3.eth.get_transaction_count, chk_addr)
         balance_eth = float(w3.from_wei(balance_wei, "ether"))
         
         data = {

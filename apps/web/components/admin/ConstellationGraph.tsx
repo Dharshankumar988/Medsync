@@ -6,7 +6,9 @@ import {
   forceManyBody,
   forceLink,
   forceCenter,
-  forceCollide
+  forceCollide,
+  forceX,
+  forceY
 } from "d3-force-3d";
 import {
   Settings,
@@ -14,7 +16,6 @@ import {
   ZoomOut,
   Maximize2,
   RotateCcw,
-  Search,
   Sparkles,
   MapPin,
   Phone,
@@ -35,10 +36,12 @@ import {
 export interface GraphNodeData {
   id: string;
   label: string;
-  type: "Medicine" | "Patient" | "Doctor" | "Pharmacy" | "Hospital" | "Admin" | string;
+  type: "MedSync" | "Medicine" | "Patient" | "Doctor" | "Pharmacy" | "Hospital" | "Admin" | string;
   hasError?: boolean;
   details?: string;
   isCentral?: boolean;
+  targetX?: number;
+  targetY?: number;
   entityData?: {
     name?: string;
     email?: string;
@@ -96,13 +99,21 @@ const ENTITY_CONFIG: Record<
     label: string;
   }
 > = {
-  Medicine: {
-    color: "#fbbf24", // Vibrant gold
-    glow: "rgba(251, 191, 36, 0.45)",
+  MedSync: {
+    color: "#fbbf24", // Celestial radiant gold
+    glow: "rgba(251, 191, 36, 0.55)",
     neighborColor: "#f59e0b",
-    radius: 14,
+    radius: 16,
     icon: Sparkles,
-    label: "Medicine Core"
+    label: "MedSync Core"
+  },
+  Medicine: {
+    color: "#fbbf24", // Core fallback
+    glow: "rgba(251, 191, 36, 0.55)",
+    neighborColor: "#f59e0b",
+    radius: 16,
+    icon: Sparkles,
+    label: "MedSync Core"
   },
   Hospital: {
     color: "#c084fc", // Radiant violet
@@ -181,7 +192,6 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
   const [hoveredNode, setHoveredNode] = useState<GraphNodeData | null>(null);
   const [proximityDistance, setProximityDistance] = useState<number>(0);
-  const [searchQuery, setSearchQuery] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [filterType, setFilterType] = useState<string>("ALL");
   const [labelMode, setLabelMode] = useState<"ALL" | "CONNECTED" | "HOVER_ONLY">("ALL");
@@ -238,54 +248,55 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
       return filteredNodeIds.has(srcId) && filteredNodeIds.has(tgtId);
     });
 
-    // Seed nodes with organic celestial coordinates to guarantee non-symmetric constellation shape
-    const hospitals = filteredNodes.filter((n) => n.type === "Hospital");
-    const numHospitals = Math.max(hospitals.length, 1);
+    // Role cluster sector angles and distances around central MedSync core
+    const ROLE_SECTORS: Record<string, { angle: number; radius: number }> = {
+      Hospital: { angle: -Math.PI / 2, radius: 135 },       // 12 o'clock (North)
+      Doctor: { angle: -Math.PI / 6, radius: 160 },         // ~1:30 o'clock (North-East)
+      Patient: { angle: Math.PI / 4, radius: 195 },         // ~3:30 o'clock (East-Southeast)
+      Pharmacy: { angle: (3 * Math.PI) / 4, radius: 165 },  // ~7:30 o'clock (South-West)
+      Admin: { angle: (-3 * Math.PI) / 4, radius: 125 }     // ~10:30 o'clock (North-West)
+    };
 
-    const clonedNodes: GraphNodeData[] = filteredNodes.map((n, idx) => {
-      let initX = 0;
-      let initY = 0;
-
-      if (n.isCentral || n.id === "MEDICINE") {
-        initX = 0;
-        initY = 0;
-      } else if (n.type === "Hospital") {
-        const hIdx = hospitals.indexOf(n);
-        // Place hospitals at asymmetrical cosmic sectors
-        const baseAngle = (hIdx / numHospitals) * Math.PI * 2 + 0.35;
-        const radius = 170 + (idx % 3) * 35;
-        initX = Math.cos(baseAngle) * radius + (Math.random() - 0.5) * 40;
-        initY = Math.sin(baseAngle) * radius + (Math.random() - 0.5) * 40;
-      } else if (n.type === "Doctor") {
-        // Orbit hospitals or distinct clusters
-        const angle = (idx * 1.37) % (Math.PI * 2);
-        const radius = 100 + (idx % 4) * 30;
-        initX = Math.cos(angle) * radius + (Math.random() - 0.5) * 50;
-        initY = Math.sin(angle) * radius + (Math.random() - 0.5) * 50;
-      } else if (n.type === "Patient") {
-        // Form arms and peripheral constellation clusters
-        const angle = (idx * 0.9 + 1.2) % (Math.PI * 2);
-        const radius = 180 + (idx % 5) * 40;
-        initX = Math.cos(angle) * radius + (Math.random() - 0.5) * 60;
-        initY = Math.sin(angle) * radius + (Math.random() - 0.5) * 60;
-      } else if (n.type === "Pharmacy") {
-        // Bridge between doctors and patients
-        const angle = (idx * 1.8 + 2.4) % (Math.PI * 2);
-        const radius = 140 + (idx % 3) * 45;
-        initX = Math.cos(angle) * radius + (Math.random() - 0.5) * 45;
-        initY = Math.sin(angle) * radius + (Math.random() - 0.5) * 45;
-      } else {
-        // Admins and others
-        const angle = (idx * 2.1) % (Math.PI * 2);
-        const radius = 120 + (idx % 3) * 25;
-        initX = Math.cos(angle) * radius + (Math.random() - 0.5) * 35;
-        initY = Math.sin(angle) * radius + (Math.random() - 0.5) * 35;
+    const clonedNodes: GraphNodeData[] = filteredNodes.map((n) => {
+      const isHub = n.isCentral || n.id === "MEDSYNC" || n.id === "MEDICINE" || n.type === "MedSync" || n.type === "Medicine";
+      if (isHub) {
+        return {
+          ...n,
+          isCentral: true,
+          label: n.label === "Medicine" ? "MedSync" : n.label,
+          type: "MedSync",
+          x: 0,
+          y: 0,
+          fx: 0,
+          fy: 0,
+          targetX: 0,
+          targetY: 0,
+          vx: 0,
+          vy: 0
+        };
       }
+
+      // Group entities of the same role tightly together in their orbital sector
+      const sameRoleNodes = filteredNodes.filter((item) => item.type === n.type);
+      const rIdx = sameRoleNodes.indexOf(n);
+      const count = sameRoleNodes.length;
+      const sector = ROLE_SECTORS[n.type] || { angle: 0, radius: 150 };
+
+      const arcSpread = Math.min(0.65, 0.12 * Math.max(count, 1));
+      const spreadOffset = count > 1 ? ((rIdx / (count - 1)) - 0.5) * arcSpread : 0;
+      const radJitter = (rIdx % 2 === 0 ? 1 : -1) * 12;
+
+      const targetAngle = sector.angle + spreadOffset;
+      const targetRadius = sector.radius + radJitter;
+      const initX = Math.cos(targetAngle) * targetRadius;
+      const initY = Math.sin(targetAngle) * targetRadius;
 
       return {
         ...n,
         x: initX,
         y: initY,
+        targetX: initX,
+        targetY: initY,
         vx: 0,
         vy: 0
       };
@@ -300,41 +311,44 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
     simNodesRef.current = clonedNodes;
     simEdgesRef.current = clonedEdges;
 
-    // Custom link distance based on organic healthcare relationships
-    const getLinkDistance = (link: any) => {
-      const type = link.type || "";
-      if (type.includes("protocol")) return 140;
-      if (type.includes("affiliated")) return 75;
-      if (type.includes("consultation")) return 65;
-      if (type.includes("prescribes")) return 80;
-      if (type.includes("dispenses")) return 70;
-      if (type.includes("governance")) return 110;
-      return 85;
-    };
-
-    // D3 Force Simulation (2D mode with organic tension)
+    // D3 Force Simulation (Single tight cluster with role-based sector clustering)
     const simulation = forceSimulation(clonedNodes, 2)
       .force(
         "charge",
         forceManyBody()
-          .strength((d: any) => (d.isCentral ? -400 : -180))
-          .distanceMax(550)
+          .strength((d: any) => (d.isCentral ? -260 : -85))
+          .distanceMax(360)
+      )
+      .force(
+        "x",
+        forceX((d: any) => (d.isCentral ? 0 : d.targetX || 0)).strength((d: any) => (d.isCentral ? 1 : 0.32))
+      )
+      .force(
+        "y",
+        forceY((d: any) => (d.isCentral ? 0 : d.targetY || 0)).strength((d: any) => (d.isCentral ? 1 : 0.32))
       )
       .force(
         "link",
         forceLink(clonedEdges)
           .id((d: any) => d.id)
-          .distance(getLinkDistance)
-          .strength(0.65)
+          .distance((link: any) => {
+            const type = link.type || "";
+            if (type.includes("network") || type.includes("verified") || type.includes("accredited") || type.includes("holder")) return 105;
+            if (type.includes("affiliated")) return 65;
+            if (type.includes("active") || type.includes("plan")) return 75;
+            if (type.includes("dispenses")) return 70;
+            return 80;
+          })
+          .strength(0.75)
       )
       .force(
         "collide",
         forceCollide()
           .radius((d: any) => {
             const conf = ENTITY_CONFIG[d.type] || DEFAULT_CONFIG;
-            return conf.radius + 18;
+            return conf.radius + 15;
           })
-          .iterations(2)
+          .iterations(3)
       )
       .force("center", forceCenter(0, 0))
       .alphaDecay(0.02)
@@ -376,19 +390,8 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
       // Clear Canvas
       ctx.clearRect(0, 0, width, height);
 
-      // 1. Draw Deep Obsidian Space Atmosphere Gradient
-      const bgGrad = ctx.createRadialGradient(
-        width / 2,
-        height / 2,
-        50,
-        width / 2,
-        height / 2,
-        Math.max(width, height) * 0.8
-      );
-      bgGrad.addColorStop(0, "#0c101a");
-      bgGrad.addColorStop(0.5, "#080c14");
-      bgGrad.addColorStop(1, "#05070c");
-      ctx.fillStyle = bgGrad;
+      // 1. Draw Complete Deep Black Space Background
+      ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, width, height);
 
       // 2. Draw Twinkling Background Celestial Starfield
@@ -962,23 +965,6 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
     }
   };
 
-  // Search filter matches
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    return simNodesRef.current
-      .filter((n) => n.label.toLowerCase().includes(q) || n.type.toLowerCase().includes(q))
-      .slice(0, 5);
-  }, [searchQuery]);
-
-  const handleSelectSearchResult = (node: GraphNodeData) => {
-    if (node.x !== undefined && node.y !== undefined) {
-      smoothAnimateCamera(-node.x * 1.7, -node.y * 1.7, 1.7);
-      setSelectedNode(node);
-      setSearchQuery("");
-    }
-  };
-
   // Render Entity Details Modal/Drawer
   const renderEntityDetails = (data: any) => {
     if (!data) return null;
@@ -1082,7 +1068,7 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-[540px] rounded-2xl overflow-hidden border border-border/60 bg-[#070a12] select-none shadow-2xl"
+      className="relative w-full h-[540px] rounded-2xl overflow-hidden border border-neutral-900 bg-black select-none shadow-2xl"
     >
       {/* Interactive HTML5 Hardware Accelerated Canvas */}
       <canvas
@@ -1229,57 +1215,6 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
           >
             <RotateCcw className="h-4 w-4" />
           </button>
-        </div>
-
-        {/* Search Input for Instant Star Navigation */}
-        <div className="relative">
-          <div className="flex items-center bg-background/80 backdrop-blur-md border border-border/70 rounded-xl px-2.5 py-1.5 shadow-lg w-48 sm:w-56 focus-within:w-64 transition-all">
-            <Search className="h-3.5 w-3.5 text-muted-foreground mr-2 shrink-0" />
-            <input
-              type="text"
-              placeholder="Search celestial star..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent text-xs w-full focus:outline-none placeholder:text-muted-foreground/60 text-foreground"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Search Dropdown matches */}
-          {searchResults.length > 0 && (
-            <div className="absolute top-10 left-0 w-64 bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl p-1.5 shadow-2xl z-40 space-y-1">
-              {searchResults.map((res) => {
-                const conf = ENTITY_CONFIG[res.type] || DEFAULT_CONFIG;
-                return (
-                  <button
-                    key={res.id}
-                    onClick={() => handleSelectSearchResult(res)}
-                    className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-muted/70 text-left transition-colors group"
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <div
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: conf.color }}
-                      />
-                      <span className="text-xs font-medium text-foreground truncate">
-                        {res.label}
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground group-hover:text-primary transition-colors">
-                      {res.type}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
 

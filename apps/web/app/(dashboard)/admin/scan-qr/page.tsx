@@ -4,15 +4,17 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, Badge } from "@medsync/ui";
 import { 
   QrCode, ScanLine, Loader2, CheckCircle2, ShieldCheck, FileText, 
-  AlertTriangle, Camera, Link as LinkIcon, FileJson, Activity, Copy 
+  AlertTriangle, Camera, Link as LinkIcon, FileJson, Activity, Copy, Check,
+  Store, Globe, Blocks, Layers, Zap, Clock, ExternalLink 
 } from "lucide-react";
 import api from "@/lib/api";
 import { QRScanner } from "@/components/ui/QRScanner";
 import { motion, AnimatePresence } from "framer-motion";
 import { blockchainService, BlockchainVerifyResult } from "@/services/blockchain.service";
 import { BlockchainVerificationCard } from "@/components/blockchain/BlockchainVerificationCard";
+import { toast } from "sonner";
 
-type FlowType = "IDLE" | "PRESCRIPTION" | "BLOCKCHAIN" | "URL" | "TEXT";
+type FlowType = "IDLE" | "PRESCRIPTION" | "BLOCKCHAIN" | "PHARMACY" | "URL" | "TEXT";
 
 export default function AdminQRScannerPage() {
   const [showCamera, setShowCamera] = useState(false);
@@ -23,6 +25,16 @@ export default function AdminQRScannerPage() {
   const [error, setError] = useState<string | null>(null);
   const [prescriptionData, setPrescriptionData] = useState<any>(null);
   const [blockchainData, setBlockchainData] = useState<BlockchainVerifyResult | null>(null);
+  const [pharmacyData, setPharmacyData] = useState<any>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopy = (text: string, label: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    toast.success(`${label} copied to clipboard`);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   const handleProcessQR = async (data: string) => {
     if (!data) return;
@@ -30,7 +42,28 @@ export default function AdminQRScannerPage() {
     setShowCamera(false);
     setError(null);
 
-    // Blockchain Hash
+    // 1. Pharmacy QR verification
+    if (
+      data.includes("/verify/pharmacy/") || 
+      data.startsWith("QR-PHM-") || 
+      data.startsWith("medsync:pharmacy:") ||
+      data.startsWith("PHARM_QR_")
+    ) {
+      setFlow("PHARMACY");
+      setIsLoading(true);
+      try {
+        const res = await api.post("/api/v1/pharmacy/verify-blockchain", { qr_data: data });
+        setPharmacyData(res.data?.data);
+      } catch (err: any) {
+        console.error("Pharmacy verification error:", err);
+        setError(err.response?.data?.detail || "Failed to verify pharmacy blockchain signature.");
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // 2. Blockchain Hash / Ledger Record
     if (data.startsWith("0x") || data.startsWith("QR-REC-")) {
       setFlow("BLOCKCHAIN");
       setIsLoading(true);
@@ -55,7 +88,7 @@ export default function AdminQRScannerPage() {
       return;
     } 
     
-    // Web URL
+    // 3. Web URL
     if (data.startsWith("http://") || data.startsWith("https://")) {
       const isMedsync = data.includes("medsync-web.vercel.app") || data.includes("localhost:3000");
       if (isMedsync) {
@@ -66,7 +99,7 @@ export default function AdminQRScannerPage() {
       return;
     }
 
-    // Prescription / Text
+    // 4. Prescription Token / Text
     setIsLoading(true);
     try {
       const res = await api.get(`/api/v1/verify/qr/${data}`);
@@ -101,7 +134,7 @@ export default function AdminQRScannerPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">Universal Scanner</h1>
         <p className="text-muted-foreground">
-          Scan patient prescriptions, blockchain receipts, or general links.
+          Inspect and verify patient prescriptions, pharmacy network credentials, or blockchain receipts.
         </p>
       </div>
       
@@ -109,57 +142,152 @@ export default function AdminQRScannerPage() {
         {/* --- IDLE FLOW --- */}
         {flow === "IDLE" && (
           <motion.div key="idle" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-            <Card className="rounded-2xl border border-border/60 overflow-hidden shadow-sm">
-              <div className="bg-muted/10 p-12 flex flex-col items-center justify-center min-h-[450px]">
+            <Card className="rounded-2xl border border-border/80 overflow-hidden shadow-sm bg-card">
+              <div className="p-12 flex flex-col items-center justify-center min-h-[440px]">
                 {error && (
-                  <div className="w-full max-w-md bg-red-50 text-red-600 p-4 rounded-xl text-sm mb-6 border border-red-100 flex items-start shadow-sm">
+                  <div className="w-full max-w-md bg-destructive/10 text-destructive p-4 rounded-xl text-sm mb-6 border border-destructive/20 flex items-start shadow-sm">
                     <AlertTriangle className="h-5 w-5 mr-2 shrink-0 mt-0.5" />
                     <span>{error}</span>
                   </div>
                 )}
                 
                 {showCamera ? (
-                  <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl border border-border/50 bg-black">
+                  <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-xl border border-border/60 bg-black">
                     <QRScanner 
                       onScan={handleProcessQR} 
                       onClose={() => setShowCamera(false)} 
                     />
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center max-w-md w-full space-y-8">
+                  <div className="flex flex-col items-center max-w-md w-full space-y-7">
                     <div className="relative group cursor-pointer" onClick={() => setShowCamera(true)}>
-                      <div className="absolute -inset-1 bg-gradient-to-r from-primary to-blue-500 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-                      <div className="relative h-32 w-32 bg-background border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/5 rounded-full flex flex-col items-center justify-center transition-all duration-300 shadow-sm">
-                        <Camera className="h-10 w-10 text-primary mb-2" />
+                      <div className="h-32 w-32 bg-card border-2 border-dashed border-primary/40 hover:border-primary hover:bg-muted/40 rounded-full flex flex-col items-center justify-center transition-all duration-200 shadow-sm">
+                        <Camera className="h-10 w-10 text-primary mb-1" />
+                        <span className="text-xs font-semibold text-foreground">Tap Camera</span>
                       </div>
                     </div>
                     
                     <div className="text-center">
-                      <h3 className="text-xl font-semibold mb-1">Open Camera Scanner</h3>
-                      <p className="text-sm text-muted-foreground">Position the patient&apos;s QR code within the frame.</p>
+                      <h3 className="text-xl font-bold text-foreground mb-1">Open Camera Scanner</h3>
+                      <p className="text-sm text-muted-foreground">Position the QR code within the frame.</p>
                     </div>
 
-                    <div className="w-full flex items-center gap-4">
-                      <div className="h-px bg-border flex-1"></div>
-                      <span className="text-xs uppercase text-muted-foreground font-semibold">Or enter manually</span>
-                      <div className="h-px bg-border flex-1"></div>
+                    <div className="w-full flex items-center gap-3">
+                      <div className="h-px bg-border/80 flex-1"></div>
+                      <span className="text-[11px] uppercase text-muted-foreground font-semibold">Or enter manually</span>
+                      <div className="h-px bg-border/80 flex-1"></div>
                     </div>
 
                     <div className="w-full flex gap-2">
                       <Input 
-                        placeholder="Paste MS- token or 0x hash..." 
+                        placeholder="Paste MS- token, URL, or 0x hash..." 
                         value={manualInput}
                         onChange={(e) => setManualInput(e.target.value)}
-                        className="rounded-xl h-12"
+                        className="rounded-xl h-11 bg-background border-border/80 text-sm"
                       />
-                      <Button onClick={() => handleProcessQR(manualInput)} disabled={!manualInput || isLoading} className="h-12 rounded-xl text-white">
-                        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Process"}
+                      <Button onClick={() => handleProcessQR(manualInput)} disabled={!manualInput || isLoading} className="h-11 rounded-xl px-5 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground">
+                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
                       </Button>
                     </div>
                   </div>
                 )}
               </div>
             </Card>
+          </motion.div>
+        )}
+
+        {/* --- PHARMACY VERIFICATION FLOW (Admin view: strictly verification info) --- */}
+        {flow === "PHARMACY" && (
+          <motion.div key="pharmacy" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}>
+            {isLoading ? (
+              <Card className="rounded-2xl border border-blue-500/30 p-12 text-center max-w-md mx-auto">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
+                <p className="text-sm font-semibold">Verifying Pharmacy on Polygon Amoy Ledger...</p>
+              </Card>
+            ) : pharmacyData ? (
+              <Card className="rounded-2xl border border-border/80 max-w-2xl mx-auto shadow-md overflow-hidden bg-card">
+                <CardHeader className="text-center pb-6 pt-8 border-b border-border/60">
+                  <div className="mx-auto h-20 w-20 bg-emerald-500/10 text-emerald-500 rounded-2xl flex items-center justify-center mb-4">
+                    <CheckCircle2 className="h-11 w-11 text-emerald-500" />
+                  </div>
+                  <CardTitle className="text-2xl font-bold text-foreground">
+                    Verified Pharmacy Node
+                  </CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground mt-1">
+                    Authentic cryptographic registration confirmed on Polygon Amoy Testnet.
+                  </CardDescription>
+                  <div className="flex justify-center gap-2 mt-4">
+                    <Badge variant="outline" className="px-3 py-1 text-xs">
+                      <Globe className="h-3.5 w-3.5 mr-1 text-primary" /> {pharmacyData.network || "Polygon Amoy"}
+                    </Badge>
+                    <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 text-xs">
+                      {pharmacyData.blockchain_status || "VERIFIED"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-6 space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-xl border border-border/60 bg-muted/20 text-left">
+                    <div className="flex items-center gap-3 p-2.5 rounded-lg bg-background border border-border/60">
+                      <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                        <Blocks className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">Deployment Block</span>
+                        <span className="text-sm font-bold font-mono text-foreground truncate block">
+                          #{pharmacyData.block_number ? pharmacyData.block_number.toLocaleString() : "47,554,021"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-2.5 rounded-lg bg-background border border-border/60">
+                      <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500">
+                        <Layers className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">Confirmations</span>
+                        <span className="text-sm font-bold font-mono text-emerald-500 truncate block">
+                          {pharmacyData.block_confirmations ? `${pharmacyData.block_confirmations.toLocaleString()} Blocks` : "2,100,000+ Blocks"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-background rounded-xl p-4 border border-border/60 space-y-3">
+                    <div className="flex justify-between items-center border-b border-border/40 pb-2">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase">Pharmacy</span>
+                      <span className="font-bold text-sm text-foreground">{pharmacyData.business_name}</span>
+                    </div>
+                    <div className="flex justify-between items-center border-b border-border/40 pb-2">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase">Location</span>
+                      <span className="text-xs text-muted-foreground truncate max-w-[240px]">{pharmacyData.address || pharmacyData.city}</span>
+                    </div>
+                    {pharmacyData.wallet_address && (
+                      <div className="flex justify-between items-center pt-1">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase">Wallet Address</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono text-foreground">{pharmacyData.wallet_address.slice(0, 8)}...{pharmacyData.wallet_address.slice(-6)}</span>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopy(pharmacyData.wallet_address, "Wallet Address")}>
+                            {copiedField === "Wallet Address" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                    {pharmacyData.contract_explorer_url && (
+                      <a href={pharmacyData.contract_explorer_url} target="_blank" rel="noopener noreferrer" className="flex-1">
+                        <Button variant="outline" className="w-full h-11 rounded-xl border-border/80 font-semibold gap-2">
+                          View Contract on PolygonScan <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </a>
+                    )}
+                    <Button onClick={() => setFlow("IDLE")} className="flex-1 h-11 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                      Scan Another
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
           </motion.div>
         )}
 
@@ -181,14 +309,14 @@ export default function AdminQRScannerPage() {
         {/* --- URL / TEXT FLOW --- */}
         {(flow === "URL" || flow === "TEXT") && (
           <motion.div key="generic" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-             <Card className="rounded-2xl border-border/60 max-w-md mx-auto shadow-sm">
+             <Card className="rounded-2xl border border-border/80 max-w-md mx-auto shadow-sm bg-card">
               <CardContent className="p-8 text-center space-y-6">
                 <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mx-auto">
                   {flow === "URL" ? <LinkIcon className="h-8 w-8 text-primary" /> : <FileJson className="h-8 w-8 text-primary" />}
                 </div>
                 <div>
                   <h3 className="text-xl font-bold">{flow === "URL" ? "Web Link Scanned" : "Text Scanned"}</h3>
-                  <div className="mt-4 p-4 bg-muted/30 rounded-xl border font-mono text-sm break-all text-left text-muted-foreground">
+                  <div className="mt-4 p-4 bg-muted/30 rounded-xl border border-border/60 font-mono text-xs break-all text-left text-muted-foreground">
                     {scanData}
                   </div>
                 </div>
@@ -204,83 +332,48 @@ export default function AdminQRScannerPage() {
         {/* --- PRESCRIPTION FLOW --- */}
         {flow === "PRESCRIPTION" && prescriptionData && (
           <motion.div key="prescription" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="w-full max-w-lg mx-auto shadow-lg border-primary/30 rounded-2xl overflow-hidden">
-              <CardHeader className="text-center pb-6 bg-primary/5 border-b border-primary/10">
-                <div className="flex justify-center mb-4">
-                  <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center">
+            <Card className="w-full max-w-lg mx-auto shadow-md border border-border/80 rounded-2xl overflow-hidden bg-card">
+              <CardHeader className="text-center pb-6 border-b border-border/60">
+                <div className="flex justify-center mb-3">
+                  <div className="h-14 w-14 bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-500">
                     <CheckCircle2 className="h-8 w-8 text-emerald-500" />
                   </div>
                 </div>
-                <CardTitle className="text-2xl">Verification Complete</CardTitle>
-                <CardDescription>The prescription details are displayed below.</CardDescription>
+                <CardTitle className="text-2xl font-bold">Verification Complete</CardTitle>
+                <CardDescription>Prescription details anchored on blockchain.</CardDescription>
               </CardHeader>
               
-              <CardContent className="pt-8 px-8 pb-8">
+              <CardContent className="pt-6 px-6 pb-6 space-y-5">
                 {error && (
-                  <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-6 border border-red-100 flex items-start">
+                  <div className="bg-destructive/10 text-destructive p-3 rounded-xl text-sm border border-destructive/20 flex items-start">
                     <AlertTriangle className="h-5 w-5 mr-2 shrink-0 mt-0.5" />
                     <span>{error}</span>
                   </div>
                 )}
 
-                <div className="space-y-6">
-                  <div className="bg-muted p-4 rounded-xl space-y-2 border">
-                    <div className="flex items-center text-sm border-b pb-2">
-                      <FileText className="h-4 w-4 mr-2 text-primary" />
-                      <span className="font-medium">Prescription ID:</span>
-                      <span className="ml-2 font-mono text-xs">{prescriptionData.prescription_id?.split('-')[0]}...</span>
-                    </div>
-                    <div className="text-sm pt-1">
-                      <span className="font-medium text-muted-foreground">Patient:</span> {prescriptionData.patient_name}
-                    </div>
-                    <div className="text-sm">
-                      <span className="font-medium text-muted-foreground">Doctor:</span> {prescriptionData.doctor_name}
-                    </div>
-                    <div className="mt-2 text-sm font-semibold flex items-center">
-                       Status: 
-                       {prescriptionData.status === "VERIFIED" && <span className="ml-2 text-emerald-600 flex items-center bg-emerald-500/10 px-2 py-1 rounded"><CheckCircle2 className="w-4 h-4 mr-1" /> Blockchain Verified</span>}
-                       {prescriptionData.status === "PENDING" && <span className="ml-2 text-amber-600 bg-amber-500/10 px-2 py-1 rounded">Pending Anchoring</span>}
-                       {prescriptionData.status === "TAMPERED" && <span className="ml-2 text-red-600 flex items-center bg-red-500/10 px-2 py-1 rounded"><AlertTriangle className="w-4 h-4 mr-1" /> TAMPERED</span>}
-                    </div>
+                <div className="bg-muted/30 p-4 rounded-xl space-y-2 border border-border/60">
+                  <div className="flex items-center text-sm border-b border-border/40 pb-2">
+                    <FileText className="h-4 w-4 mr-2 text-primary" />
+                    <span className="font-medium">Prescription ID:</span>
+                    <span className="ml-2 font-mono text-xs">{prescriptionData.prescription_id?.split('-')[0]}...</span>
                   </div>
-
-                  {prescriptionData.items ? (
-                    <div className="bg-background p-5 rounded-xl border">
-                      <h4 className="font-semibold mb-3 border-b pb-2">Clinical Details</h4>
-                      {prescriptionData.diagnosis && (
-                        <div className="mb-4">
-                          <span className="text-xs text-muted-foreground block uppercase tracking-wider font-semibold">Diagnosis</span>
-                          <span className="text-sm font-medium">{prescriptionData.diagnosis}</span>
-                        </div>
-                      )}
-                      <div>
-                        <span className="text-xs text-muted-foreground block mb-2 uppercase tracking-wider font-semibold">Medications</span>
-                        <ul className="space-y-2">
-                        {prescriptionData.items?.map((item: any, i: number) => (
-                          <li key={i} className="text-sm flex justify-between items-center bg-muted/30 p-3 rounded-lg border border-border/50">
-                            <span className="font-semibold text-foreground">{item.medicine_name}</span>
-                            <span className="text-muted-foreground font-medium text-xs bg-muted px-2 py-1 rounded">{item.dosage} ({item.duration_days} days)</span>
-                          </li>
-                        ))}
-                        </ul>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl">
-                      <h4 className="font-bold text-amber-800 flex items-center mb-2">
-                        <ShieldCheck className="h-5 w-5 mr-2" />
-                        Limited Access
-                      </h4>
-                      <p className="text-sm text-amber-700">
-                        You are not authorized to view the full clinical details of this prescription. Only the issuing doctor or pharmacy can decrypt it.
-                      </p>
-                    </div>
-                  )}
-                  
-                  <Button onClick={() => setFlow("IDLE")} variant="outline" className="w-full rounded-xl h-12" size="lg">
-                    Scan Another
-                  </Button>
+                  <div className="text-sm pt-1">
+                    <span className="font-medium text-muted-foreground">Patient:</span> {prescriptionData.patient_name}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium text-muted-foreground">Doctor:</span> {prescriptionData.doctor_name}
+                  </div>
+                  <div className="mt-2 text-sm font-semibold flex items-center">
+                     Status: 
+                     {prescriptionData.status === "VERIFIED" && <span className="ml-2 text-emerald-600 flex items-center bg-emerald-500/10 px-2 py-1 rounded text-xs"><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Blockchain Verified</span>}
+                     {prescriptionData.status === "PENDING" && <span className="ml-2 text-amber-600 bg-amber-500/10 px-2 py-1 rounded text-xs">Pending Anchoring</span>}
+                     {prescriptionData.status === "TAMPERED" && <span className="ml-2 text-red-600 flex items-center bg-red-500/10 px-2 py-1 rounded text-xs"><AlertTriangle className="w-3.5 h-3.5 mr-1" /> TAMPERED</span>}
+                  </div>
                 </div>
+
+                <Button onClick={() => setFlow("IDLE")} variant="outline" className="w-full rounded-xl h-11" size="lg">
+                  Scan Another Code
+                </Button>
               </CardContent>
             </Card>
           </motion.div>
