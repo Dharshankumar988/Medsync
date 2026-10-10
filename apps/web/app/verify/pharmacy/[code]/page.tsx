@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { getBackendBaseUrl } from "@/lib/backend-config";
 import { toast } from "sonner";
 
 interface VerifiedPharmacy {
@@ -101,8 +102,7 @@ export default function PharmacyPublicVerifyPage() {
     setVerificationStatus("VERIFYING");
     setErrorMessage("");
 
-    const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    const baseUrl = rawBaseUrl.replace(/\/api\/v1\/?$/, "");
+    const baseUrl = getBackendBaseUrl();
 
     try {
       // 1. Try backend verification API
@@ -223,8 +223,7 @@ export default function PharmacyPublicVerifyPage() {
       }
 
       // Check PIN status
-      const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
-      const baseUrl = rawBaseUrl.replace(/\/api\/v1\/?$/, "");
+      const baseUrl = getBackendBaseUrl();
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch(`${baseUrl}/api/v1/security/status`, {
@@ -249,8 +248,7 @@ export default function PharmacyPublicVerifyPage() {
     }
 
     setIsSubmittingOrder(true);
-    const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    const baseUrl = rawBaseUrl.replace(/\/api\/v1\/?$/, "");
+    const baseUrl = getBackendBaseUrl();
 
     try {
       const { data: { session } } = await supabase.auth.getSession();

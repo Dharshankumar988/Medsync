@@ -21,6 +21,12 @@ RAG_SIMILARITY_THRESHOLD = float(os.getenv("RAG_SIMILARITY_THRESHOLD", 0.3))
 class RAGService:
     def __init__(self):
         self.embedding_model = None
+        self._worker_url: Optional[str] = None
+
+    def set_worker_url(self, url: Optional[str]):
+        """Dynamically set the RAG worker URL (configured by Admin in Admin Settings)."""
+        self._worker_url = url.rstrip("/") if url else None
+        logger.info(f"RAG worker URL dynamically updated to: {self._worker_url}")
 
     def _get_embedding_model(self):
         if self.embedding_model is None:
@@ -36,14 +42,14 @@ class RAGService:
     async def get_embeddings(self, texts: List[str]) -> Optional[List[List[float]]]:
         """
         Retrieves vector embeddings for a list of texts.
-        1. Queries external/tunneled RAG_WORKER_URL if configured.
+        1. Queries external/tunneled RAG_WORKER_URL (Admin dynamic setting or env) if configured.
         2. Falls back to local SentenceTransformer if installed (Full runner mode).
         3. Returns None if on standby (lightweight cloud mode).
         """
         from app.core.config import settings
         
-        # 1. Check external/tunneled RAG Worker
-        worker_url = settings.RAG_WORKER_URL.rstrip("/") if getattr(settings, "RAG_WORKER_URL", None) else ""
+        # 1. Check external/tunneled RAG Worker (dynamic admin setting prioritized over env)
+        worker_url = self._worker_url or (settings.RAG_WORKER_URL.rstrip("/") if getattr(settings, "RAG_WORKER_URL", None) else "")
         if worker_url:
             try:
                 import httpx
@@ -56,6 +62,7 @@ class RAGService:
                             return embeddings
             except Exception as e:
                 logger.warning(f"RAG worker connection to {worker_url} failed: {e}")
+
 
         # 2. Check local model (Full Runner)
         local_model = self._get_embedding_model()

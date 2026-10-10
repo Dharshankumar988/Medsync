@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { supabase } from '@/lib/supabase';
-
-const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-const API_BASE_URL = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+import { getApiUrl } from '@/lib/backend-config';
 
 let _aiTokenCache: string | null = null;
 let _aiTokenExpiry = 0;
@@ -31,7 +29,7 @@ export const aiService = {
   // Standard Chat
   async chat(role: 'doctor' | 'patient' | 'pharmacy' | 'admin', message: string, sessionId?: string, patientId?: string, signal?: AbortSignal) {
     const headers = await getAuthHeaders();
-    const res = await axios.post(`${API_BASE_URL}/ai/pulse/chat`, {
+    const res = await axios.post(`${getApiUrl()}/ai/pulse/chat`, {
       message,
       session_id: sessionId || null,
       patient_id: patientId || null,
@@ -55,7 +53,7 @@ export const aiService = {
       const body: any = { message, session_id: sessionId || null };
       if (patientId) body.patient_id = patientId;
       
-      const response = await fetch(`${API_BASE_URL}/ai/pulse/chat/stream`, {
+      const response = await fetch(`${getApiUrl()}/ai/pulse/chat/stream`, {
         method: 'POST',
         headers: headers as any,
         body: JSON.stringify(body),
@@ -85,37 +83,37 @@ export const aiService = {
   // Session Management
   async getSessions() {
     const headers = await getAuthHeaders();
-    const res = await axios.get(`${API_BASE_URL}/ai/sessions`, { headers });
+    const res = await axios.get(`${getApiUrl()}/ai/sessions`, { headers });
     return res.data;
   },
 
   async getSessionMessages(sessionId: string) {
     const headers = await getAuthHeaders();
-    const res = await axios.get(`${API_BASE_URL}/ai/sessions/${sessionId}/messages`, { headers });
+    const res = await axios.get(`${getApiUrl()}/ai/sessions/${sessionId}/messages`, { headers });
     return res.data;
   },
 
   async deleteSession(sessionId: string) {
     const headers = await getAuthHeaders();
-    const res = await axios.delete(`${API_BASE_URL}/ai/sessions/${sessionId}`, { headers });
+    const res = await axios.delete(`${getApiUrl()}/ai/sessions/${sessionId}`, { headers });
     return res.data;
   },
 
   async togglePin(sessionId: string, isPinned: boolean) {
     const headers = await getAuthHeaders();
-    const res = await axios.patch(`${API_BASE_URL}/ai/sessions/${sessionId}/pin`, { is_pinned: isPinned }, { headers });
+    const res = await axios.patch(`${getApiUrl()}/ai/sessions/${sessionId}/pin`, { is_pinned: isPinned }, { headers });
     return res.data;
   },
 
   async renameSession(sessionId: string, title: string) {
     const headers = await getAuthHeaders();
-    const res = await axios.patch(`${API_BASE_URL}/ai/sessions/${sessionId}/rename`, { title }, { headers });
+    const res = await axios.patch(`${getApiUrl()}/ai/sessions/${sessionId}/rename`, { title }, { headers });
     return res.data;
   },
 
   async searchSessions(query: string) {
     const headers = await getAuthHeaders();
-    const res = await axios.get(`${API_BASE_URL}/ai/sessions/search`, {
+    const res = await axios.get(`${getApiUrl()}/ai/sessions/search`, {
       headers,
       params: { q: query }
     });
@@ -133,7 +131,7 @@ export const aiService = {
     
     const reqHeaders = { ...headers };
     delete (reqHeaders as any)['Content-Type'];
-    const res = await axios.post(`${API_BASE_URL}/ai/analyze-image`, formData, {
+    const res = await axios.post(`${getApiUrl()}/ai/analyze-image`, formData, {
       headers: reqHeaders,
       signal
     });

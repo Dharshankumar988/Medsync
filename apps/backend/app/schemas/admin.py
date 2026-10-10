@@ -75,3 +75,24 @@ class AdminUserListItem(BaseModel):
     email: str
     status: str
     created_at: str
+
+class AdminSettingsResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    maintenance_mode: bool = False
+    strict_verification: bool = True
+    active_backend_mode: str = "render"
+    portable_tunnel_url: Optional[str] = "https://entangled-dealmaker-storable.ngrok-free.dev"
+    rag_worker_url: Optional[str] = "https://entangled-dealmaker-storable.ngrok-free.dev"
+    auto_failover: bool = True
+    render_url: str = "https://medsync-backend-rktc.onrender.com"
+
+class AdminSettingsUpdatePayload(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    maintenance_mode: Optional[bool] = None
+    strict_verification: Optional[bool] = None
+    active_backend_mode: Optional[str] = None
+    portable_tunnel_url: Optional[str] = None
+    rag_worker_url: Optional[str] = None
+    auto_failover: Optional[bool] = None

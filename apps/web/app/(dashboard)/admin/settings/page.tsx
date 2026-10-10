@@ -5,6 +5,7 @@ import { Button } from "@medsync/ui";
 import { Settings, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import BackendArchitectureSwitcher from "@/components/admin/BackendArchitectureSwitcher";
 
 export default function AdminSettings() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -72,6 +73,8 @@ export default function AdminSettings() {
         </h1>
         <p className="text-muted-foreground mt-2">Configure system-wide control plane preferences.</p>
       </div>
+
+      <BackendArchitectureSwitcher />
 
       <Card>
         <CardHeader>

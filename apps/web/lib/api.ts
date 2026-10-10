@@ -1,11 +1,10 @@
 import axios, { InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { supabase } from './supabase';
-
-const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-const baseUrl = rawBaseUrl.replace(/\/api\/v1\/?$/, '');
+import { getBackendBaseUrl, BACKEND_PRESETS, setBackendOverride } from './backend-config';
+import { toast } from 'sonner';
 
 const api = axios.create({
-  baseURL: baseUrl,
+  baseURL: getBackendBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': '69420',
@@ -22,6 +21,9 @@ const responseCache = new Map<string, { data: any, timestamp: number }>();
 const CACHE_TTL = 30000; // 30 seconds cache for identical GET requests
 
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  // Always use the latest active backend URL (Render or Portable Runner)
+  config.baseURL = getBackendBaseUrl();
+
   const now = Date.now();
   if (_cachedToken && now < _tokenExpiry) {
     config.headers.Authorization = `Bearer ${_cachedToken}`;
@@ -64,6 +66,32 @@ api.interceptors.response.use(
       pendingRequests.delete(cacheKey);
     }
     
+    // Automatic Failover between Render Cloud and Portable Runner on connection failure
+    const config = error.config as any;
+    const isConnectionError = !error.response || [502, 503, 504].includes(error.response?.status);
+    const autoFailoverEnabled = typeof window !== 'undefined' ? localStorage.getItem('medsync_auto_failover') !== 'false' : true;
+
+    if (autoFailoverEnabled && config && !config._isFailoverRetry && isConnectionError && typeof window !== 'undefined') {
+      const currentUrl = getBackendBaseUrl();
+      const isCurrentlyRender = currentUrl.includes('onrender.com');
+      const failoverTarget = isCurrentlyRender 
+        ? BACKEND_PRESETS.portable.url 
+        : BACKEND_PRESETS.render.url;
+
+      config._isFailoverRetry = true;
+      config.baseURL = failoverTarget;
+
+      try {
+        console.warn(`[Failover] Primary backend (${currentUrl}) unreachable. Retrying with ${failoverTarget}...`);
+        const retryRes = await axios(config);
+        setBackendOverride(failoverTarget);
+        toast.info(`Switched active backend to ${isCurrentlyRender ? 'Portable Runner' : 'Render Cloud'}`);
+        return retryRes;
+      } catch (retryErr) {
+        // Both endpoints failed; proceed with original error
+      }
+    }
+
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       console.error("401 Unauthorized API Call:", error.config?.url);
     }

@@ -18,6 +18,7 @@ import {
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Input } from "@medsync/ui";
 import { pharmacyService, PharmacyInventoryItem, PharmacyOrder } from "@/services/pharmacy.service";
 import dynamic from "next/dynamic";
+import { getBackendBaseUrl } from "@/lib/backend-config";
 const DeliveryMap = dynamic(() => import("@/components/pharmacy/DeliveryMap").then(m => m.DeliveryMap), { ssr: false });
 import { InventoryOverviewWidget } from "@/components/pharmacy/InventoryOverviewWidget";
 import { ExpiringMedicines } from "@/components/pharmacy/ExpiringMedicines";
@@ -127,7 +128,7 @@ export default function PharmacyDashboardPage() {
 
   const handleDispatch = async (orderId: string) => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+      const baseUrl = getBackendBaseUrl();
       const res = await fetch(`${baseUrl}/orders/${orderId}/dispatch`, {
         method: "POST",
       });

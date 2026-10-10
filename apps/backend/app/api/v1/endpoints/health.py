@@ -63,3 +63,53 @@ async def ai_health():
         return {"status": "ok", "data": status}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.dependencies.db import get_db
+from app.schemas.response import APIResponse
+from app.schemas.admin import AdminSettingsResponse
+from app.models.system import SystemSetting
+
+@router.get("/system-config", response_model=APIResponse[AdminSettingsResponse])
+async def get_system_public_config(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Public system architecture configuration set by the Admin.
+    Allows all client roles (patient, doctor, pharmacy, web, mobile) to synchronize
+    with the Admin's chosen active backend without exposing administrative controls.
+    """
+    stmt = select(SystemSetting)
+    result = await db.execute(stmt)
+    settings_db = result.scalars().all()
+
+    settings_dict = {
+        "maintenance_mode": False,
+        "strict_verification": True,
+        "active_backend_mode": "render",
+        "portable_tunnel_url": "https://entangled-dealmaker-storable.ngrok-free.dev",
+        "rag_worker_url": "https://entangled-dealmaker-storable.ngrok-free.dev",
+        "auto_failover": True,
+        "render_url": "https://medsync-backend-rktc.onrender.com"
+    }
+    for s in settings_db:
+        if s.key == "maintenance_mode" and s.value_bool is not None:
+            settings_dict["maintenance_mode"] = s.value_bool
+        elif s.key == "strict_verification" and s.value_bool is not None:
+            settings_dict["strict_verification"] = s.value_bool
+        elif s.key == "active_backend_mode" and s.value_str is not None:
+            settings_dict["active_backend_mode"] = s.value_str
+        elif s.key == "portable_tunnel_url" and s.value_str is not None:
+            settings_dict["portable_tunnel_url"] = s.value_str
+        elif s.key == "rag_worker_url" and s.value_str is not None:
+            settings_dict["rag_worker_url"] = s.value_str
+        elif s.key == "auto_failover" and s.value_bool is not None:
+            settings_dict["auto_failover"] = s.value_bool
+
+    return APIResponse(
+        message="System configuration retrieved",
+        data=AdminSettingsResponse(**settings_dict)
+    )
+

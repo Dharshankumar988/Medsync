@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { PrescriptionQR } from "@medsync/ui"; 
 import { toast } from "sonner";
 import axios from "axios";
+import { getApiUrl } from "@/lib/backend-config";
 import Link from "next/link";
 
 export default function DoctorPrescriptionsPage() {
@@ -63,8 +64,7 @@ export default function DoctorPrescriptionsPage() {
 
   const handleDownload = async (id: string) => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+      const apiUrl = getApiUrl();
       
       const response = await axios.get(`${apiUrl}/prescriptions/${id}/download`, {
         responseType: 'blob'

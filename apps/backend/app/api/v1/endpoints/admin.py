@@ -935,11 +935,9 @@ async def get_relationship_graph(
         data=RelationshipGraphResponse(nodes=nodes, links=edges)
     )
 
-class AdminSettingsPayload(BaseModel):
-    maintenance_mode: bool
-    strict_verification: bool
+from app.schemas.admin import AdminSettingsResponse, AdminSettingsUpdatePayload
 
-@router.get("/settings", response_model=APIResponse[dict])
+@router.get("/settings", response_model=APIResponse[AdminSettingsResponse])
 async def get_admin_settings(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
@@ -949,50 +947,104 @@ async def get_admin_settings(
     result = await db.execute(stmt)
     settings_db = result.scalars().all()
     
-    settings = {
+    settings_dict = {
         "maintenance_mode": False,
-        "strict_verification": True
+        "strict_verification": True,
+        "active_backend_mode": "render",
+        "portable_tunnel_url": "https://entangled-dealmaker-storable.ngrok-free.dev",
+        "rag_worker_url": "https://entangled-dealmaker-storable.ngrok-free.dev",
+        "auto_failover": True,
+        "render_url": "https://medsync-backend-rktc.onrender.com"
     }
     for s in settings_db:
-        if s.key in settings and s.value_bool is not None:
-            settings[s.key] = s.value_bool
+        if s.key == "maintenance_mode" and s.value_bool is not None:
+            settings_dict["maintenance_mode"] = s.value_bool
+        elif s.key == "strict_verification" and s.value_bool is not None:
+            settings_dict["strict_verification"] = s.value_bool
+        elif s.key == "active_backend_mode" and s.value_str is not None:
+            settings_dict["active_backend_mode"] = s.value_str
+        elif s.key == "portable_tunnel_url" and s.value_str is not None:
+            settings_dict["portable_tunnel_url"] = s.value_str
+        elif s.key == "rag_worker_url" and s.value_str is not None:
+            settings_dict["rag_worker_url"] = s.value_str
+        elif s.key == "auto_failover" and s.value_bool is not None:
+            settings_dict["auto_failover"] = s.value_bool
             
-    return APIResponse(message="Settings retrieved", data=settings)
+    return APIResponse(
+        message="Settings retrieved",
+        data=AdminSettingsResponse(**settings_dict)
+    )
 
-@router.post("/settings", response_model=APIResponse[dict])
+@router.post("/settings", response_model=APIResponse[AdminSettingsResponse])
 async def update_admin_settings(
-    payload: AdminSettingsPayload,
+    payload: AdminSettingsUpdatePayload,
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
     from app.models.system import SystemSetting
-    
-    # Update Maintenance Mode
-    stmt = select(SystemSetting).where(SystemSetting.key == "maintenance_mode")
-    result = await db.execute(stmt)
-    setting1 = result.scalar_one_or_none()
-    if setting1:
-        setting1.value_bool = payload.maintenance_mode
-    else:
-        setting1 = SystemSetting(key="maintenance_mode", value_bool=payload.maintenance_mode, description="Blocks all non-admin traffic")
-        db.add(setting1)
-        
-    # Update Strict Verification
-    stmt2 = select(SystemSetting).where(SystemSetting.key == "strict_verification")
-    result2 = await db.execute(stmt2)
-    setting2 = result2.scalar_one_or_none()
-    if setting2:
-        setting2.value_bool = payload.strict_verification
-    else:
-        setting2 = SystemSetting(key="strict_verification", value_bool=payload.strict_verification, description="Requires admin approval for new accounts")
-        db.add(setting2)
-        
+
+    async def _upsert_setting(key: str, val_bool: bool | None = None, val_str: str | None = None, desc: str | None = None):
+        stmt = select(SystemSetting).where(SystemSetting.key == key)
+        res = await db.execute(stmt)
+        s = res.scalar_one_or_none()
+        if s:
+            if val_bool is not None: s.value_bool = val_bool
+            if val_str is not None: s.value_str = val_str
+        else:
+            db.add(SystemSetting(key=key, value_bool=val_bool, value_str=val_str, description=desc))
+
+    if payload.maintenance_mode is not None:
+        await _upsert_setting("maintenance_mode", val_bool=payload.maintenance_mode, desc="Blocks non-admin access")
+    if payload.strict_verification is not None:
+        await _upsert_setting("strict_verification", val_bool=payload.strict_verification, desc="Requires admin verification")
+    if payload.active_backend_mode is not None:
+        await _upsert_setting("active_backend_mode", val_str=payload.active_backend_mode, desc="Active backend mode")
+    if payload.portable_tunnel_url is not None:
+        await _upsert_setting("portable_tunnel_url", val_str=payload.portable_tunnel_url, desc="Portable runner ngrok tunnel")
+    if payload.rag_worker_url is not None:
+        await _upsert_setting("rag_worker_url", val_str=payload.rag_worker_url, desc="RAG worker URL")
+        try:
+            from app.services.rag_service import rag_service
+            rag_service.set_worker_url(payload.rag_worker_url)
+        except Exception:
+            pass
+    if payload.auto_failover is not None:
+        await _upsert_setting("auto_failover", val_bool=payload.auto_failover, desc="Automatic failover enabled")
+
     await db.commit()
-    
-    return APIResponse(message="Settings updated successfully", data={
-        "maintenance_mode": payload.maintenance_mode,
-        "strict_verification": payload.strict_verification
-    })
+
+    # Re-fetch full updated settings
+    stmt = select(SystemSetting)
+    res = await db.execute(stmt)
+    settings_db = res.scalars().all()
+
+    settings_dict = {
+        "maintenance_mode": False,
+        "strict_verification": True,
+        "active_backend_mode": "render",
+        "portable_tunnel_url": "https://entangled-dealmaker-storable.ngrok-free.dev",
+        "rag_worker_url": "https://entangled-dealmaker-storable.ngrok-free.dev",
+        "auto_failover": True,
+        "render_url": "https://medsync-backend-rktc.onrender.com"
+    }
+    for s in settings_db:
+        if s.key == "maintenance_mode" and s.value_bool is not None:
+            settings_dict["maintenance_mode"] = s.value_bool
+        elif s.key == "strict_verification" and s.value_bool is not None:
+            settings_dict["strict_verification"] = s.value_bool
+        elif s.key == "active_backend_mode" and s.value_str is not None:
+            settings_dict["active_backend_mode"] = s.value_str
+        elif s.key == "portable_tunnel_url" and s.value_str is not None:
+            settings_dict["portable_tunnel_url"] = s.value_str
+        elif s.key == "rag_worker_url" and s.value_str is not None:
+            settings_dict["rag_worker_url"] = s.value_str
+        elif s.key == "auto_failover" and s.value_bool is not None:
+            settings_dict["auto_failover"] = s.value_bool
+
+    return APIResponse(
+        message="Settings updated successfully",
+        data=AdminSettingsResponse(**settings_dict)
+    )
 
 @router.get("/system", response_model=APIResponse[dict])
 async def get_system_health(

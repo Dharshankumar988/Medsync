@@ -9,6 +9,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import axios from "axios";
 import api from "@/lib/api";
+import { getApiUrl } from "@/lib/backend-config";
 
 export default function CreatePrescriptionPage() {
   const router = useRouter();
@@ -299,8 +300,7 @@ export default function CreatePrescriptionPage() {
         
         const { data: session } = await supabase.auth.getSession();
         const token = session?.session?.access_token;
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-        const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+        const apiUrl = getApiUrl();
 
         const formData = new FormData();
         formData.append('new_pin', pin);
@@ -336,8 +336,7 @@ export default function CreatePrescriptionPage() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+      const apiUrl = getApiUrl();
 
       await axios.post(`${apiUrl}/prescriptions/`, payload, {
         headers: { Authorization: `Bearer ${token}` }

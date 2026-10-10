@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Input } from "
 import { Search, ShoppingBag, Truck, CheckCircle, PackageSearch, AlertCircle } from "lucide-react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
+import { getBackendBaseUrl } from "@/lib/backend-config";
 
 const DeliveryMap = dynamic(() => import("@/components/pharmacy/DeliveryMap").then(m => m.DeliveryMap), { ssr: false });
 
@@ -37,7 +38,7 @@ export default function PharmacyOrdersPage() {
     }
     setIsDispensing(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+      const baseUrl = getBackendBaseUrl();
       const formData = new FormData();
       formData.append("pin", pinInput);
       formData.append("auth_pin", authPinInput);
@@ -74,7 +75,7 @@ export default function PharmacyOrdersPage() {
 
   const handleDispatch = async (orderId: string) => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
+      const baseUrl = getBackendBaseUrl();
       const res = await fetch(`${baseUrl}/orders/${orderId}/dispatch`, {
         method: "POST",
       });

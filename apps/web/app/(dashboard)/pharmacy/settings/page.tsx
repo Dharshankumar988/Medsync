@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import axios from "axios";
+import { getApiUrl } from "@/lib/backend-config";
 
 export default function PharmacySettingsPage() {
   const [profile, setProfile] = useState<any>(null);
@@ -33,8 +34,7 @@ export default function PharmacySettingsPage() {
       const token = session?.session?.access_token;
       if (!token) return;
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+      const apiUrl = getApiUrl();
       
       const res = await axios.get(`${apiUrl}/security/status`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -62,8 +62,7 @@ export default function PharmacySettingsPage() {
       const token = session?.session?.access_token;
       if (!token) throw new Error("Not authenticated");
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL as string;
-      const apiUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl}/api/v1`;
+      const apiUrl = getApiUrl();
       
       const formData = new FormData();
       formData.append('new_pin', pin);
