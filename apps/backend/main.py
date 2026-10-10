@@ -74,6 +74,13 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Initialized in-memory SQLite database fallback")
     
+    # In test environment, skip background worker loops, HF pinging, and AI model downloads
+    import sys, os
+    if "pytest" in sys.modules or os.getenv("ENVIRONMENT") == "test" or os.getenv("TESTING") == "true":
+        logger.info("Test environment detected: skipping blockchain scheduler, QR cleanup, and AI warmup.")
+        yield
+        return
+    
     # 1. Start blockchain scheduler
     try:
         from app.blockchain.client import blockchain_client

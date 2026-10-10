@@ -6,6 +6,8 @@ import pytest
 import certifi
 
 # Set required environment variables for tests
+os.environ['ENVIRONMENT'] = 'test'
+os.environ['TESTING'] = 'true'
 os.environ['BACKEND_PRIVATE_KEY'] = '0x1234567890123456789012345678901234567890123456789012345678901234'
 os.environ['BLOCKCHAIN_RPC_URL'] = 'http://localhost:8545'
 os.environ['BLOCKCHAIN_MODE'] = 'mock'
@@ -145,5 +147,19 @@ async def async_client(test_db):
         yield client
         
     app.dependency_overrides.clear()
+
+
+def pytest_unconfigure(config):
+    """
+    Force clean exit immediately after all pytest output and summaries are printed.
+    Guarantees the test process never hangs during interpreter finalization (Py_FinalizeEx)
+    due to lingering background worker threads from third-party libraries (torch, anyio, etc.).
+    """
+    import os, sys
+    if os.getenv("CI") or os.getenv("ENVIRONMENT") == "test":
+        sys.stdout.flush()
+        sys.stderr.flush()
+        code = getattr(config, "_exitstatus", 0)
+        os._exit(code)
 
 

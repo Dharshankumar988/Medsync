@@ -8,7 +8,10 @@ from app.dependencies.auth import get_current_user
 from app.schemas.session import AuthenticatedPrincipal
 from app.models.patient import Patient
 
-client = TestClient(app)
+@pytest.fixture
+def client():
+    with TestClient(app) as c:
+        yield c
 
 @pytest.fixture
 def mock_user():
@@ -20,7 +23,7 @@ def mock_user():
         full_name="Test Patient"
     )
 
-def test_get_fhir_patient(mock_user):
+def test_get_fhir_patient(client, mock_user):
     mock_db = AsyncMock()
     
     # Mocking the database response for Patient
@@ -57,7 +60,7 @@ def test_get_fhir_patient(mock_user):
     # Cleanup overrides
     app.dependency_overrides.clear()
 
-def test_get_fhir_patient_unauthorized(mock_user):
+def test_get_fhir_patient_unauthorized(client, mock_user):
     mock_db = AsyncMock()
     
     other_patient_id = uuid.uuid4()
