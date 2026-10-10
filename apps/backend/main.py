@@ -68,13 +68,15 @@ async def lifespan(app: FastAPI):
     # ── Startup ──
     logger.info("═══ MedSync Backend Starting ═══")
     
-    # 0. Initialize SQLite database if fallback is used
+    # 0. Ensure all defined models exist in database
     from app.database.session import engine, db_url
-    if "sqlite" in str(db_url):
+    try:
         from app.models import Base
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("Initialized in-memory SQLite database fallback")
+        logger.info("Database schema synchronized (Base.metadata.create_all)")
+    except Exception as e:
+        logger.warning(f"Database schema sync notice: {e}")
     
     # In test environment, skip background worker loops, HF pinging, and AI model downloads
     import sys, os
