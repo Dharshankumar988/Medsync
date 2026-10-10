@@ -33,9 +33,11 @@ export default function DeliveryTracking() {
   const fetchDeliveries = async () => {
     try {
       const response = await api.get('/api/v1/delivery/tracking/active');
-      setDeliveries(response.data || []);
+      const rawDeliveries = response.data?.data ?? response.data;
+      setDeliveries(Array.isArray(rawDeliveries) ? rawDeliveries : []);
     } catch (error) {
       console.error('Failed to fetch deliveries:', error);
+      setDeliveries([]);
     } finally {
       setLoading(false);
     }
@@ -75,7 +77,7 @@ export default function DeliveryTracking() {
   };
 
   const getBangaloreLocations = (delivery: Delivery): { pharmacy: Location; patient: Location } => {
-    // Simulate predefined Bangalore locations
+    // Predefined Bangalore locations for simulation
     const pharmacies: { lat: number; lon: number }[] = [
       { lat: 12.9784, lon: 77.6408 },
       { lat: 12.9352, lon: 77.6245 },
@@ -92,12 +94,20 @@ export default function DeliveryTracking() {
       { lat: 12.9050, lon: 77.6250 },
     ];
 
-    const pharmacyIdx = parseInt(delivery.pharmacy_id.slice(-1)) % pharmacies.length;
-    const patientIdx = parseInt(delivery.prescription_id.slice(-1)) % patients.length;
+    const getSafeIndex = (str: string | undefined, len: number): number => {
+      if (!str || len <= 0) return 0;
+      const lastChar = str.slice(-1);
+      const parsed = parseInt(lastChar, 16);
+      if (!isNaN(parsed)) return parsed % len;
+      return 0;
+    };
+
+    const pharmacyIdx = getSafeIndex(delivery.pharmacy_id, pharmacies.length);
+    const patientIdx = getSafeIndex(delivery.prescription_id, patients.length);
 
     return {
-      pharmacy: pharmacies[pharmacyIdx],
-      patient: patients[patientIdx]
+      pharmacy: pharmacies[pharmacyIdx] || pharmacies[0],
+      patient: patients[patientIdx] || patients[0]
     };
   };
 

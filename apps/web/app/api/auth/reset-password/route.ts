@@ -4,7 +4,7 @@ import { verifyPatientResetToken, consumePatientResetToken } from '@/lib/resetTo
 import axios from 'axios';
 
 /**
- * GET: Verify token validity on page load
+ * GET: Verify token validity on page load (strict 5-minute timeout)
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -12,12 +12,36 @@ export async function GET(req: NextRequest) {
   const email = searchParams.get('email');
 
   if (!token) {
-    return NextResponse.json({ valid: false, error: 'No token provided' }, { status: 400 });
+    return NextResponse.json({ valid: false, error: 'No password reset token provided.' }, { status: 400 });
   }
 
+  // 1. Check with FastAPI Python backend first
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+  const apiUrl = backendUrl.endsWith('/api/v1') ? backendUrl : `${backendUrl}/api/v1`;
+
+  try {
+    const backendRes = await axios.get(`${apiUrl}/auth/verify-patient-token`, {
+      params: { token, email: email || undefined },
+    });
+    if (backendRes.data && backendRes.data.data) {
+      return NextResponse.json({
+        valid: true,
+        email: backendRes.data.data.email,
+        remaining_seconds: backendRes.data.data.remaining_seconds,
+      });
+    }
+  } catch (backendErr: any) {
+    if (backendErr.response) {
+      const status = backendErr.response.status || 404;
+      const errorDetail = backendErr.response.data?.detail || backendErr.response.data?.message;
+      return NextResponse.json({ valid: false, error: errorDetail }, { status });
+    }
+  }
+
+  // Fallback: Local cryptographic check
   const result = verifyPatientResetToken(token);
   if (!result.valid) {
-    return NextResponse.json({ valid: false, error: result.error }, { status: 400 });
+    return NextResponse.json({ valid: false, error: result.error }, { status: 404 });
   }
 
   if (email && result.email?.toLowerCase() !== email.toLowerCase()) {
@@ -28,7 +52,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST: Reset and update patient password
+ * POST: Reset and update patient password (strict 5-minute timeout)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -56,12 +80,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Verify token authenticity, expiration, and role
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+    const apiUrl = backendUrl.endsWith('/api/v1') ? backendUrl : `${backendUrl}/api/v1`;
+
+    // 1. Try FastAPI Python backend endpoint
+    try {
+      const backendRes = await axios.post(`${apiUrl}/auth/patient-reset-password`, {
+        token,
+        email,
+        password,
+        confirm_password: confirmPassword,
+      });
+
+      consumePatientResetToken(token);
+
+      return NextResponse.json({
+        success: true,
+        message: backendRes.data?.message || 'Your password has been reset successfully! You can now log in.',
+      });
+    } catch (backendErr: any) {
+      if (backendErr.response && backendErr.response.status !== 500) {
+        return NextResponse.json(
+          { error: backendErr.response.data?.detail || backendErr.response.data?.message },
+          { status: backendErr.response.status }
+        );
+      }
+    }
+
+    // 2. Fallback: Local verification and direct force-reset
     const verification = verifyPatientResetToken(token);
     if (!verification.valid || !verification.email) {
       return NextResponse.json(
-        { error: verification.error || 'Invalid or expired password reset link.' },
-        { status: 400 }
+        { error: verification.error || 'Password reset link has expired after 5 minutes.' },
+        { status: 404 }
       );
     }
 
@@ -73,7 +124,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Re-verify user in DB to ensure role is PATIENT
     const { data: dbUser } = await supabase
       .from('users')
       .select('id, email, role')
@@ -87,24 +137,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Update password in auth.users via backend service
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-    const apiUrl = backendUrl.endsWith('/api/v1') ? backendUrl : `${backendUrl}/api/v1`;
+    await axios.post(`${apiUrl}/auth/force-reset-password`, {
+      email: targetEmail,
+      new_password: password,
+    });
 
-    try {
-      await axios.post(`${apiUrl}/auth/force-reset-password`, {
-        email: targetEmail,
-        new_password: password,
-      });
-    } catch (backendErr: any) {
-      console.error('[Reset Password] Backend update failed:', backendErr.response?.data || backendErr.message);
-      return NextResponse.json(
-        { error: backendErr.response?.data?.detail || 'Failed to update account password. Please try again.' },
-        { status: 500 }
-      );
-    }
-
-    // 4. Mark token as consumed so it cannot be used again
     consumePatientResetToken(token);
 
     return NextResponse.json({

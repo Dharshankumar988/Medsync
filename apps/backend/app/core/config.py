@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     MEDSYNC_AI_URL: str = "https://dharshan8197-medsync-ai.hf.space"
     MEDSYNC_AI_TOKEN: str = ""
     AI_TIMEOUT: int = 30
+
+    # SMTP & Email Settings
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "MedSync Healthcare <no-reply@medsync.health>"
+    SMTP_TLS: bool = True
+    SMTP_SSL: bool = False
+    FRONTEND_URL: str = "http://localhost:3000"
+    RESET_TOKEN_EXPIRE_MINUTES: int = 5  # Strict 5-minute timeout for Patient password reset
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

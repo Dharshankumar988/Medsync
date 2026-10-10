@@ -24,7 +24,7 @@ export function createPatientResetToken(email: string): string {
   const payload: TokenPayload = {
     email: email.trim().toLowerCase(),
     role: 'PATIENT',
-    exp: Date.now() + 60 * 60 * 1000, // 1 hour
+    exp: Date.now() + 5 * 60 * 1000, // Strictly 5 minutes (300 seconds)
     nonce: crypto.randomBytes(16).toString('hex'),
   };
 
@@ -74,7 +74,7 @@ export function verifyPatientResetToken(token: string): {
     }
 
     if (Date.now() > payload.exp) {
-      return { valid: false, error: 'Password reset link has expired. Please request a new link.' };
+      return { valid: false, error: 'Password reset link has expired after 5 minutes. Please request a new link.' };
     }
 
     if (consumedNonces.has(payload.nonce)) {

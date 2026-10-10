@@ -50,12 +50,12 @@ export const DeliveryMap = memo(function DeliveryMap({
   useEffect(() => {
     const fetchPharmacyLocation = async () => {
       if (pharmacyId) {
-        const { data } = await supabase.from('pharmacy').select('location').eq('user_id', pharmacyId).single();
+        const { data } = await supabase.from('pharmacies').select('location').eq('user_id', pharmacyId).maybeSingle();
         if (data && data.location && data.location.lat && data.location.lng) {
           setPharmacyPos([data.location.lat, data.location.lng]);
         } else {
           // fallback to hospitals table
-          const { data: hospData } = await supabase.from('hospitals').select('latitude, longitude').eq('user_id', pharmacyId).single();
+          const { data: hospData } = await supabase.from('hospitals').select('latitude, longitude').eq('user_id', pharmacyId).maybeSingle();
           if (hospData && hospData.latitude && hospData.longitude) {
             setPharmacyPos([hospData.latitude, hospData.longitude]);
           }

@@ -126,7 +126,7 @@ export default function DeliveryMap({
       />
 
       {/* Pharmacy marker */}
-      {pharmacyLocation && (
+      {pharmacyLocation && typeof pharmacyLocation.lat === 'number' && typeof pharmacyLocation.lon === 'number' && (
         <Marker position={[pharmacyLocation.lat, pharmacyLocation.lon]} icon={pharmacyIcon}>
           <Popup>
             <div className="text-sm font-medium">Pharmacy</div>
@@ -135,7 +135,7 @@ export default function DeliveryMap({
       )}
 
       {/* Patient marker */}
-      {patientLocation && (
+      {patientLocation && typeof patientLocation.lat === 'number' && typeof patientLocation.lon === 'number' && (
         <Marker position={[patientLocation.lat, patientLocation.lon]} icon={patientIcon}>
           <Popup>
             <div className="text-sm font-medium">Delivery Location</div>

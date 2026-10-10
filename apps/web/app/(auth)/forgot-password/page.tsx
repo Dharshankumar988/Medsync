@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button, Input, Alert, AlertDescription } from "@medsync/ui";
-import { Activity, Shield, Loader2, ArrowRight, Mail, CheckCircle2, ArrowLeft, ExternalLink } from "lucide-react";
+import { Activity, Shield, Loader2, ArrowRight, Mail, CheckCircle2, ArrowLeft, ExternalLink, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -26,9 +27,11 @@ const forgotSchema = z.object({
 type ForgotFormValues = z.infer<typeof forgotSchema>;
 
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [redirectingProvider, setRedirectingProvider] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [devResetLink, setDevResetLink] = useState<string | null>(null);
@@ -47,12 +50,23 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotFormValues) => {
     setIsLoading(true);
     setError("");
+    setRedirectingProvider(null);
 
     try {
       const response = await axios.post("/api/auth/forgot-password", {
         email: data.email,
       });
 
+      // Role check: Doctor / Pharmacy redirects directly to provider reset page
+      if (response.data?.action === "REDIRECT" && response.data?.redirectUrl) {
+        setRedirectingProvider(response.data.role || "Healthcare Provider");
+        setTimeout(() => {
+          router.push(response.data.redirectUrl);
+        }, 1200);
+        return;
+      }
+
+      // Patient: Email sent
       setSubmittedEmail(data.email);
       setIsSuccess(true);
       if (response.data?.previewUrl) {
@@ -66,7 +80,7 @@ export default function ForgotPasswordPage() {
         err.response?.data?.error || 
         err.response?.data?.detail || 
         err.message || 
-        "Failed to send password reset email. Please try again."
+        "Failed to process password reset request. Please check the email entered."
       );
     } finally {
       setIsLoading(false);
@@ -90,10 +104,10 @@ export default function ForgotPasswordPage() {
           </div>
 
           <h2 className="text-2xl font-bold tracking-tight text-foreground mb-3">
-            Secure Patient Portal
+            MedSync Security Verification
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
-            We will verify your patient account and send a one-time cryptographic reset link directly to your verified email.
+            Patient accounts are protected with strict 5-minute cryptographic one-time links authorized via Python SMTP.
           </p>
         </div>
       </div>
@@ -116,41 +130,58 @@ export default function ForgotPasswordPage() {
           <motion.div variants={fadeUp} className="mb-8">
             <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">Forgot Password</h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Enter your registered Patient email address and we&apos;ll send you a link to reset your password.
+              Enter your registered email address. Patients will receive a secure 5-minute email reset link.
             </p>
           </motion.div>
 
-          {isSuccess ? (
+          {redirectingProvider ? (
+            <motion.div variants={fadeUp} className="space-y-6 py-4">
+              <div className="p-6 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-center space-y-3">
+                <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-500/20 mx-auto text-blue-600">
+                  <ArrowUpRight className="h-8 w-8 animate-pulse" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground">{redirectingProvider} Detected</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Redirecting you directly to the Provider Reset Password page...
+                </p>
+                <div className="flex justify-center pt-2">
+                  <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                </div>
+              </div>
+            </motion.div>
+          ) : isSuccess ? (
             <motion.div variants={fadeUp} className="space-y-6 py-4">
               <div className="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-3">
                 <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 mx-auto text-emerald-600">
                   <CheckCircle2 className="h-8 w-8" />
                 </div>
-                <h3 className="text-xl font-bold text-foreground">Check Your Email</h3>
+                <h3 className="text-xl font-bold text-foreground">Check Your Patient Email</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  We sent a password reset link via Nodemailer to:
+                  A cryptographic reset link has been dispatched to:
                 </p>
                 <div className="font-mono text-sm font-semibold bg-background py-1.5 px-3 rounded-lg border border-border/60 inline-block text-primary">
                   {submittedEmail}
                 </div>
-                <p className="text-xs text-muted-foreground pt-2">
-                  The link will expire in <strong>1 hour</strong>. If you don&apos;t see the email, please check your spam folder.
-                </p>
+                
+                {/* 5-minute timeout notice */}
+                <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-600 dark:text-amber-400 font-medium text-left">
+                  ⚠️ <strong>5-Minute Security Window:</strong> This link is short-lived and will expire in strictly <strong>5 minutes</strong>. If clicked after 5 minutes, it will return a 404 error.
+                </div>
               </div>
 
-              {/* Dev mode / Ethereal test account helper for local environments without custom domain */}
+              {/* Dev mode / test link helper */}
               {(previewUrl || devResetLink) && (
                 <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 space-y-2">
                   <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
                     <ExternalLink className="h-3.5 w-3.5" />
-                    Testing &amp; Development Links (No Custom Domain):
+                    Development &amp; Direct Access Link:
                   </p>
                   {devResetLink && (
                     <Link
                       href={devResetLink}
                       className="block text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline break-all"
                     >
-                      👉 Click here to directly open the reset page
+                      👉 Click here to open the Patient Reset Page (5-min window)
                     </Link>
                   )}
                   {previewUrl && (
@@ -160,7 +191,7 @@ export default function ForgotPasswordPage() {
                       rel="noopener noreferrer"
                       className="block text-xs text-muted-foreground hover:text-foreground underline pt-1"
                     >
-                      View sent email in Ethereal mailbox ↗
+                      View sent email in test mailbox ↗
                     </a>
                   )}
                 </div>
@@ -182,21 +213,21 @@ export default function ForgotPasswordPage() {
                 {error && (
                   <motion.div variants={fadeUp}>
                     <Alert variant="destructive" className="py-3 bg-destructive/10 text-destructive border-destructive/20">
-                      <AlertDescription className="text-sm">{error}</AlertDescription>
+                      <AlertDescription className="text-sm font-medium">{error}</AlertDescription>
                     </Alert>
                   </motion.div>
                 )}
 
                 <motion.div variants={fadeUp} className="space-y-2">
                   <label htmlFor="email" className="text-sm font-medium text-foreground/80">
-                    Patient Email Address
+                    Account Email Address
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
                     <Input
                       id="email"
                       type="email"
-                      placeholder="patient@example.com"
+                      placeholder="name@example.com"
                       disabled={isLoading}
                       autoComplete="email"
                       className={`h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all duration-200 ${
@@ -219,11 +250,11 @@ export default function ForgotPasswordPage() {
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending Reset Link...
+                        Verifying Account...
                       </>
                     ) : (
                       <>
-                        Send Reset Link
+                        Continue
                         <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                       </>
                     )}

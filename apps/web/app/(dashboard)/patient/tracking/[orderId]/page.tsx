@@ -26,31 +26,43 @@ export default function DeliveryTrackingPage({ params }: { params: Promise<{ ord
 
   const fetchOrder = async () => {
     try {
-      const { data } = await supabase.from('medicine_orders').select('*, pharmacies:pharmacy_id(full_name)').eq('id', orderId).single();
+      // 1. Fetch medicine order directly
+      const { data, error } = await supabase.from('medicine_orders').select('*').eq('id', orderId).single();
+      if (error) {
+        console.error("Order fetch error:", error);
+      }
       if (data) {
+        // 2. Fetch associated pharmacy business name
+        if (data.pharmacy_id) {
+          const { data: pharm } = await supabase.from('pharmacies').select('business_name').eq('user_id', data.pharmacy_id).maybeSingle();
+          data.pharmacies = { full_name: pharm?.business_name || 'Partner Pharmacy' };
+        } else {
+          data.pharmacies = { full_name: 'Partner Pharmacy' };
+        }
+        
         setOrder(data);
-        if (data.status === "SHIPPED" || data.status === "OUT_FOR_DELIVERY" || data.status === "DISPENSED") {
+        if (data.status === "SHIPPED" || data.status === "OUT_FOR_DELIVERY" || data.status === "DISPENSED" || data.status === "PROCESSING") {
           setDeliveryStatus("out_for_delivery");
-          startTrackingAnimation(data.updated_at);
+          startTrackingAnimation(data.updated_at || data.created_at);
         } else if (data.status === "DELIVERED") {
           setDeliveryStatus("delivered");
           setProgress(100);
         }
       }
     } catch (e) {
-      console.error(e);
+      console.error("Failed to load order for tracking:", e);
     }
   };
 
   const startTrackingAnimation = (updatedAtStr: string) => {
-    const updatedAt = new Date(updatedAtStr).getTime();
+    const updatedAt = new Date(updatedAtStr || Date.now()).getTime();
     // 10-minute delivery duration
     const durationMs = 10 * 60 * 1000;
     const intervalMs = 1000;
 
     const interval = setInterval(() => {
       const now = Date.now();
-      const elapsed = now - updatedAt;
+      const elapsed = Math.max(0, now - updatedAt);
       const newProgress = Math.min((elapsed / durationMs) * 100, 100);
       setProgress(newProgress);
       if (newProgress >= 100) {

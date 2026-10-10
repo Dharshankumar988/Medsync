@@ -137,7 +137,7 @@ export async function sendPatientPasswordResetEmail({
 
       <div class="callout">
         <strong>Security Notice:</strong>
-        <p style="margin: 4px 0 0;">This password reset link will expire in <strong>1 hour</strong>. If you did not request a password reset, you can safely ignore this email; your account remains secure.</p>
+        <p style="margin: 4px 0 0;">This password reset link will expire in strictly <strong>5 minutes</strong>. If you did not request a password reset, you can safely ignore this email; your account remains secure.</p>
       </div>
 
       <p style="margin-top: 24px; font-size: 13px; color: #64748b;">
@@ -157,8 +157,8 @@ export async function sendPatientPasswordResetEmail({
     const info = await transporter.sendMail({
       from: fromEmail,
       to: toEmail,
-      subject: 'Reset Your MedSync Password',
-      text: `Hello ${patientName},\n\nYou requested a password reset for your MedSync Patient account. Visit this link to reset your password:\n\n${resetLink}\n\nThis link expires in 1 hour. If you did not request this, please ignore this email.`,
+      subject: 'Reset Your MedSync Password (Valid for 5 Minutes)',
+      text: `Hello ${patientName},\n\nYou requested a password reset for your MedSync Patient account. Visit this link to reset your password:\n\n${resetLink}\n\nThis link strictly expires in 5 minutes. If you did not request this, please ignore this email.`,
       html: htmlContent,
     });
 
