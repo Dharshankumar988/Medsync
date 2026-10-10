@@ -65,4 +65,11 @@ def start_scheduler():
 
 def stop_scheduler():
     logger.info("Stopping Blockchain Synchronization Workers...")
-    scheduler.shutdown()
+    try:
+        if getattr(scheduler, "running", False):
+            scheduler.shutdown(wait=False)
+        else:
+            logger.info("Scheduler was not active; skipping shutdown.")
+    except Exception as e:
+        logger.warning(f"Error during scheduler shutdown (non-critical): {e}")
+

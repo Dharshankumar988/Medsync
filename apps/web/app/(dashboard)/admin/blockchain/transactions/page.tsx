@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
-import { ListOrdered, Search, ExternalLink, Filter, CalendarDays, Key, Server, Tag } from "lucide-react";
+import { ListOrdered, Search, ExternalLink, Filter, CalendarDays, Key, Server, Tag, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 export default function TransactionsExplorer() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
@@ -15,6 +17,19 @@ export default function TransactionsExplorer() {
   const [contract, setContract] = useState("ALL");
   const [sort, setSort] = useState("latest");
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
+
+  const handleSyncChain = async () => {
+    setSyncing(true);
+    try {
+      const res = await api.post("/api/v1/blockchain/transactions/sync");
+      toast.success(res.data?.message || "Synced on-chain wallet transactions!");
+      fetchTransactions();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Failed to sync transactions");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -56,9 +71,20 @@ export default function TransactionsExplorer() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><ListOrdered className="w-6 h-6 text-primary" /> Transactions</h1>
-          <p className="text-muted-foreground mt-1">Explore all blockchain transactions dispatched by MedSync.</p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><ListOrdered className="w-6 h-6 text-primary" /> Transactions</h1>
+            <p className="text-muted-foreground mt-1">Explore all blockchain transactions dispatched by MedSync.</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleSyncChain}
+            disabled={syncing}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all shadow-sm disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing Chain..." : "Sync Wallet Transactions"}
+          </button>
         </div>
         
         <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-3 bg-card p-4 rounded-xl border border-border shadow-sm">

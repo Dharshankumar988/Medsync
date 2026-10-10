@@ -122,7 +122,10 @@ async def lifespan(app: FastAPI):
             await qr_cleanup_task
         except asyncio.CancelledError:
             pass
-    stop_scheduler()
+    try:
+        stop_scheduler()
+    except Exception as e:
+        logger.warning(f"Failed to cleanly stop scheduler during shutdown: {e}")
     logger.info("═══ MedSync Backend Stopped ═══")
 
 app = FastAPI(

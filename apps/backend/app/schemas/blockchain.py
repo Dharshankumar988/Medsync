@@ -113,3 +113,20 @@ class BlockchainVerifyResult(BaseModel):
     details: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
 
+class SmartContractSummary(BaseModel):
+    name: str
+    address: str
+    version: str = "1.0.0"
+    health: str = "DEPLOYED"
+    explorer_url: Optional[str] = None
+
+    model_config = ConfigDict(use_enum_values=True)
+
+class TransactionSyncResponse(BaseModel):
+    synced_count: int
+    message: str
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+

@@ -222,7 +222,9 @@ class StorageService:
         signed_url = data.get("signedURL") or data.get("signedUrl")
         if not signed_url:
             return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
-        if signed_url.startswith("/"):
+        if signed_url.startswith("/object/"):
+            signed_url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1{signed_url}"
+        elif signed_url.startswith("/"):
             signed_url = f"{settings.SUPABASE_URL.rstrip('/')}{signed_url}"
         return signed_url
 

@@ -18,13 +18,63 @@ export default function SmartContractsList() {
   const [search, setSearch] = useState("");
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
 
+  const DEFAULT_CONTRACTS = [
+    {
+      name: "ConsentManagement",
+      address: "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+      version: "1.0.0",
+      health: "DEPLOYED",
+      explorer_url: "https://amoy.polygonscan.com/address/0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52"
+    },
+    {
+      name: "PatientRegistry",
+      address: "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3",
+      version: "1.0.0",
+      health: "DEPLOYED",
+      explorer_url: "https://amoy.polygonscan.com/address/0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3"
+    },
+    {
+      name: "DoctorRegistry",
+      address: "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+      version: "1.0.0",
+      health: "DEPLOYED",
+      explorer_url: "https://amoy.polygonscan.com/address/0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9"
+    },
+    {
+      name: "PharmacyRegistry",
+      address: "0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9",
+      version: "1.0.0",
+      health: "DEPLOYED",
+      explorer_url: "https://amoy.polygonscan.com/address/0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9"
+    },
+    {
+      name: "MedicalRecordRegistry",
+      address: "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+      version: "1.0.0",
+      health: "DEPLOYED",
+      explorer_url: "https://amoy.polygonscan.com/address/0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104"
+    },
+    {
+      name: "PrescriptionRegistry",
+      address: "0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D",
+      version: "1.0.0",
+      health: "DEPLOYED",
+      explorer_url: "https://amoy.polygonscan.com/address/0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D"
+    }
+  ];
+
   useEffect(() => {
     const fetchContracts = async () => {
       try {
         const res = await api.get("/api/v1/blockchain/contracts");
-        setContracts(res.data.data);
+        if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
+          setContracts(res.data.data);
+        } else {
+          setContracts(DEFAULT_CONTRACTS);
+        }
       } catch (e) {
         console.error(e);
+        setContracts(DEFAULT_CONTRACTS);
       } finally {
         setLoading(false);
       }

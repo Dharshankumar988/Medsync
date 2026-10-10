@@ -75,103 +75,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Interactive choice if not specified in TTY
-if [ -z "$MODE" ]; then
-    if [ -t 0 ]; then
-        echo -e "\033[33mChoose what you would like to run:\033[0m"
-        echo -e "  \033[36m[1] Option A: Full Backend (Runs complete API & Database locally)\033[0m"
-        echo -e "  \033[32m[2] Option B: AI & RAG Worker Only (Runs heavy AI models & embeddings locally)\033[0m"
-        read -p "Enter choice [1 or 2] (Default: 2): " choice
-        if [ "$choice" = "1" ] || [ "$choice" = "A" ] || [ "$choice" = "a" ]; then
-            MODE="full"
-        else
-            MODE="worker"
-        fi
-    else
-        MODE="full"
-    fi
-fi
+# Launch Full Backend directly
+MODE="full"
+BACKEND_REGISTRY_IMAGE="ghcr.io/dharshankumar988/medsync-backend:latest"
+BACKEND_LOCAL_IMAGE="medsync-backend:local"
+BACKEND_CONTAINER="medsync-backend"
+BACKEND_PORT="${CUSTOM_PORT:-8000}"
 
-if [ "$MODE" = "worker" ] || [ "$MODE" = "2" ]; then
-    WORKER_REGISTRY_IMAGE="ghcr.io/dharshankumar988/medsync-ai:latest"
-    WORKER_LOCAL_IMAGE="medsync-ai:local"
-    WORKER_CONTAINER="medsync-ai-worker"
-    WORKER_PORT="${CUSTOM_PORT:-7860}"
-
-    echo -e "\033[36m--- Starting AI & RAG Worker on port $WORKER_PORT ---\033[0m"
-
-    WORKER_IMAGE=""
-    if docker images -q "$WORKER_REGISTRY_IMAGE" >/dev/null 2>&1 && [ -n "$(docker images -q "$WORKER_REGISTRY_IMAGE")" ]; then
-        WORKER_IMAGE="$WORKER_REGISTRY_IMAGE"
-    elif docker images -q "$WORKER_LOCAL_IMAGE" >/dev/null 2>&1 && [ -n "$(docker images -q "$WORKER_LOCAL_IMAGE")" ]; then
-        WORKER_IMAGE="$WORKER_LOCAL_IMAGE"
-    else
-        echo -e "\033[36mPulling AI Worker image from registry: $WORKER_REGISTRY_IMAGE...\033[0m"
-        if docker pull "$WORKER_REGISTRY_IMAGE"; then
-            WORKER_IMAGE="$WORKER_REGISTRY_IMAGE"
-        else
-            echo -e "\033[33mRegistry pull failed. Building from local source...\033[0m"
-            REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-            if [ -f "$REPO_ROOT/medsync-ai/Dockerfile" ]; then
-                docker build -t "$WORKER_LOCAL_IMAGE" -f "$REPO_ROOT/medsync-ai/Dockerfile" "$REPO_ROOT/medsync-ai"
-                WORKER_IMAGE="$WORKER_LOCAL_IMAGE"
-            else
-                echo -e "\033[31mERROR: Cannot pull image and medsync-ai/Dockerfile not found.\033[0m"
-                exit 1
-            fi
-        fi
-    fi
-
-    if [ -n "$(docker ps -a -q -f "name=^/${WORKER_CONTAINER}$")" ]; then
-        docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
-    fi
-
-    docker volume create medsync-ai-model-cache >/dev/null 2>&1 || true
-
-    echo "Launching container: $WORKER_CONTAINER..."
-    docker run -d \
-        --name "$WORKER_CONTAINER" \
-        -p "${WORKER_PORT}:7860" \
-        -v medsync-ai-model-cache:/home/user/app/models/cache \
-        --env-file "$ENV_FILE" \
-        --restart unless-stopped \
-        "$WORKER_IMAGE"
-
-    echo "$WORKER_CONTAINER" >> "$CONTAINERS_FILE"
-
-    echo "Waiting for AI worker health check (http://127.0.0.1:${WORKER_PORT}/health)..."
-    healthy=false
-    for i in {1..30}; do
-        if curl -s -f "http://127.0.0.1:${WORKER_PORT}/health" >/dev/null 2>&1; then
-            healthy=true
-            break
-        fi
-        sleep 2
-    done
-
-    if [ "$healthy" = true ]; then
-        echo -e "\033[32mAI & RAG Worker is operational on http://127.0.0.1:${WORKER_PORT}\033[0m"
-        echo -e "\033[36mEndpoints:\033[0m"
-        echo -e "  • Diagnostics: http://127.0.0.1:${WORKER_PORT}/predict"
-        echo -e "  • Embeddings:  http://127.0.0.1:${WORKER_PORT}/embed"
-        echo ""
-        echo -e "\033[33mIn your online Render backend environment settings, set:\033[0m"
-        echo -e "  \033[36mRAG_WORKER_URL=https://<your-tunnel-url>\033[0m"
-    else
-        echo -e "\033[31mWARNING: Healthcheck did not pass within 60s. Inspect logs with: docker logs $WORKER_CONTAINER\033[0m"
-    fi
-
-    if [ "$FOLLOW_LOGS" = true ]; then
-        docker logs -f "$WORKER_CONTAINER"
-    fi
-
-else
-    BACKEND_REGISTRY_IMAGE="ghcr.io/dharshankumar988/medsync-backend:latest"
-    BACKEND_LOCAL_IMAGE="medsync-backend:local"
-    BACKEND_CONTAINER="medsync-backend"
-    BACKEND_PORT="${CUSTOM_PORT:-8000}"
-
-    echo -e "\033[36m--- Starting Full Backend on port $BACKEND_PORT ---\033[0m"
+echo -e "\033[36m--- Starting MedSync Full Backend on port $BACKEND_PORT ---\033[0m"
 
     BACKEND_IMAGE=""
     if docker images -q "$BACKEND_REGISTRY_IMAGE" >/dev/null 2>&1 && [ -n "$(docker images -q "$BACKEND_REGISTRY_IMAGE")" ]; then
@@ -232,5 +143,14 @@ else
 
     if [ "$FOLLOW_LOGS" = true ]; then
         docker logs -f "$BACKEND_CONTAINER"
+    elif [ "$DAEMON" = true ]; then
+        echo -e "\033[32mMedSync backend is running in background (Daemon mode).\033[0m"
+        exit 0
+    else
+        echo -e "\n\033[35m========================================================\033[0m"
+        echo -e "\033[35m          MEDSYNC FULL BACKEND READY                   \033[0m"
+        echo -e "\033[35m========================================================\033[0m"
+        echo -e "Local / Server Endpoint: http://127.0.0.1:${BACKEND_PORT}"
+        echo -e "\n\033[33mPress Ctrl+C to stop services or run ./stop-medsync.sh in another terminal.\033[0m"
+        while true; do sleep 3600; done
     fi
-fi

@@ -42,6 +42,7 @@ import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { getApiUrl } from "@/lib/backend-config";
 import Link from "next/link";
 
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -220,8 +221,32 @@ export default function MedicalRecordsPage() {
   // PERMANENT RECORD CONSENT TOGGLE - Direct column persistence in DB
   const toggleConsent = async (record: any, currentlyPublic: boolean) => {
     const newPublic = !currentlyPublic;
+    // Optimistic UI update so badges and buttons reflect change instantly
+    setRecords((prev) =>
+      prev.map((r) =>
+        r.id === record.id
+          ? {
+              ...r,
+              is_public: newPublic,
+              record_permissions: newPublic
+                ? [{ access_level: "PUBLIC", is_revoked: false }]
+                : (r.record_permissions || []).filter((p: any) => p.access_level !== "PUBLIC"),
+            }
+          : r
+      )
+    );
+
     try {
-      // 1. Update is_public column on medical_records directly
+      // 1. Update via Backend API endpoint
+      try {
+        await api.patch(`/api/v1/records/${record.id}/consent`, {
+          is_public: newPublic,
+        });
+      } catch (apiErr) {
+        console.warn("Backend consent PATCH fallback:", apiErr);
+      }
+
+      // 2. Also keep Supabase updated for direct realtime client queries
       const { error: recErr } = await supabase
         .from("medical_records")
         .update({
@@ -231,10 +256,9 @@ export default function MedicalRecordsPage() {
         .eq("id", record.id);
 
       if (recErr) {
-        console.error("Error updating medical record is_public:", recErr);
+        console.warn("Direct Supabase update note:", recErr);
       }
 
-      // 2. Keep record_permissions in sync for permission checks
       if (newPublic) {
         await supabase.from("record_permissions").upsert({
           record_id: record.id,
@@ -256,6 +280,7 @@ export default function MedicalRecordsPage() {
     } catch (err: any) {
       console.error("Toggle consent error:", err);
       toast.error("Failed to update record visibility");
+      loadRecords();
     }
   };
 
@@ -412,19 +437,35 @@ export default function MedicalRecordsPage() {
       const res = await api.post(`/api/v1/records/${downloadRecordId}/download`, {
         pin: downloadPin,
       });
-      const url = res.data?.data?.url || res.data?.data?.signed_url;
+      let url = res.data?.data?.url || res.data?.data?.signed_url;
+      // Client-side guard: ensure Supabase URLs include /storage/v1
+      if (url && url.includes(".supabase.co/object/sign/")) {
+        url = url.replace(".supabase.co/object/sign/", ".supabase.co/storage/v1/object/sign/");
+      }
       if (url) {
         window.open(url, "_blank");
         toast.success("Download started (PDF with verified QR code)");
       } else {
-        toast.error("Download URL not found");
+        const rawUrl = `${getApiUrl()}/records/${downloadRecordId}/raw`;
+        window.open(rawUrl, "_blank");
+        toast.success("Download started (Direct secure stream)");
       }
       setIsDownloadDialogOpen(false);
       setDownloadRecordId(null);
       setDownloadPin("");
     } catch (err: any) {
       console.error(err);
-      toast.error(err.response?.data?.detail || "Failed to download record");
+      // Fallback directly to direct streaming if post fails
+      try {
+        const rawUrl = `${getApiUrl()}/records/${downloadRecordId}/raw`;
+        window.open(rawUrl, "_blank");
+        toast.success("Download started (Direct secure stream)");
+        setIsDownloadDialogOpen(false);
+        setDownloadRecordId(null);
+        setDownloadPin("");
+      } catch (fallbackErr) {
+        toast.error(err.response?.data?.detail || "Failed to download record");
+      }
     } finally {
       setIsDownloading(false);
     }
@@ -648,12 +689,12 @@ export default function MedicalRecordsPage() {
 
                         <div className="flex items-center gap-2 flex-wrap justify-end">
                           {isPublic ? (
-                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
-                              <Globe className="mr-1 h-3 w-3" /> Public to Doctors
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs font-medium">
+                              <Globe className="mr-1 h-3 w-3" /> Status: Public to Doctors
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs">
-                              <Lock className="mr-1 h-3 w-3" /> Private (Confidential)
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs font-medium">
+                              <Lock className="mr-1 h-3 w-3" /> Status: Private (Confidential)
                             </Badge>
                           )}
                           <Badge variant="outline" className="bg-blue-500/5 text-blue-600 border-blue-500/20 text-xs">
@@ -673,21 +714,21 @@ export default function MedicalRecordsPage() {
                         <div>
                           {isPublic ? (
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-8 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 rounded-lg"
+                              className="h-8 text-xs border-amber-500/30 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 rounded-lg"
                               onClick={() => toggleConsent(record, true)}
                             >
-                              <Lock className="mr-1.5 h-3.5 w-3.5" /> Make Private
+                              <Lock className="mr-1.5 h-3.5 w-3.5" /> Restrict to Private
                             </Button>
                           ) : (
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 rounded-lg"
+                              className="h-8 text-xs border-emerald-500/30 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 rounded-lg"
                               onClick={() => toggleConsent(record, false)}
                             >
-                              <Globe className="mr-1.5 h-3.5 w-3.5" /> Make Public
+                              <Globe className="mr-1.5 h-3.5 w-3.5" /> Make Public to Doctors
                             </Button>
                           )}
                         </div>

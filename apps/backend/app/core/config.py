@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -41,7 +42,17 @@ class Settings(BaseSettings):
     SMTP_SSL: bool = False
     FRONTEND_URL: str = "http://localhost:3000"
     RESET_TOKEN_EXPIRE_MINUTES: int = 5  # Strict 5-minute timeout for Patient password reset
-    
+
+    @model_validator(mode="after")
+    def set_supabase_keys(self):
+        import os
+        if not self.SUPABASE_SERVICE_ROLE_KEY:
+            self.SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or ""
+        if not self.SUPABASE_ANON_KEY:
+            self.SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_KEY") or ""
+        return self
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
+

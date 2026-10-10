@@ -84,8 +84,6 @@ api.interceptors.response.use(
       try {
         console.warn(`[Failover] Primary backend (${currentUrl}) unreachable. Retrying with ${failoverTarget}...`);
         const retryRes = await axios(config);
-        setBackendOverride(failoverTarget);
-        toast.info(`Switched active backend to ${isCurrentlyRender ? 'Portable Runner' : 'Render Cloud'}`);
         return retryRes;
       } catch (retryErr) {
         // Both endpoints failed; proceed with original error

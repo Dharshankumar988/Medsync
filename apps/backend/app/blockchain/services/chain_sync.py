@@ -1,14 +1,11 @@
 import logging
 import datetime
-import requests
-import urllib3
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.blockchain import BlockchainTransaction
-from app.blockchain.client import blockchain_client
 from app.blockchain.config import blockchain_settings
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger("blockchain.chain_sync")
 
 KNOWN_CONTRACTS = {
@@ -22,99 +19,135 @@ KNOWN_CONTRACTS = {
 
 async def sync_wallet_transactions_from_chain(db: AsyncSession, max_count: int = 50) -> int:
     """
-    Directly query Alchemy and Web3 RPC for the user's wallet transactions
-    and persist them into BlockchainTransaction.
+    Directly query Alchemy and JSON-RPC for the user's wallet transactions
+    and persist them into the BlockchainTransaction database table.
+    Works without native C-extensions or local Web3 modules.
     """
-    w3 = blockchain_client.w3
-    if not w3 or not w3.is_connected():
-        logger.warning("Web3 not connected, skipping chain transaction sync.")
-        return 0
+    wallet_addr = (
+        getattr(blockchain_settings, "MEDSYNC_WALLET_ADDRESS", None)
+        or "0x6EC559064e5BfAE4a98d1879c717139aceE49822"
+    ).lower()
+    
+    rpc_url = (
+        getattr(blockchain_settings, "BLOCKCHAIN_RPC_URL", None)
+        or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
+    )
 
-    wallet_addr = blockchain_client.wallet_address or "0x6EC559064e5BfAE4a98d1879c717139aceE49822"
-    rpc_url = blockchain_settings.BLOCKCHAIN_RPC_URL or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
-
-    # Query asset transfers
     transfers = []
-    try:
-        for direction in ["fromAddress", "toAddress"]:
-            payload = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "alchemy_getAssetTransfers",
-                "params": [{
-                    "fromBlock": "0x0",
-                    "toBlock": "latest",
-                    direction: wallet_addr,
-                    "category": ["external"],
-                    "withMetadata": True,
-                    "excludeZeroValue": False,
-                    "maxCount": hex(max_count)
-                }]
-            }
-            res = requests.post(rpc_url, json=payload, verify=False, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                transfers.extend(data.get("result", {}).get("transfers", []))
-    except Exception as e:
-        logger.error(f"Error querying Alchemy asset transfers: {e}")
-        return 0
+    current_block = 0
 
-    hashes = list(set([t.get("hash") for t in transfers if t.get("hash")]))
-    if not hashes:
-        return 0
-
-    current_block = w3.eth.block_number
-    synced = 0
-
-    for tx_hash in hashes:
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # 1. Fetch current block number
         try:
-            existing = await db.execute(
-                select(BlockchainTransaction).where(BlockchainTransaction.transaction_hash == tx_hash)
+            r_block = await client.post(
+                rpc_url,
+                json={"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}
             )
-            if existing.scalar_one_or_none():
-                continue
+            if r_block.status_code == 200:
+                current_block = int(r_block.json().get("result", "0x0"), 16)
+        except Exception as e:
+            logger.warning(f"Could not fetch current block: {e}")
 
-            tx = w3.eth.get_transaction(tx_hash)
-            receipt = w3.eth.get_transaction_receipt(tx_hash)
-            block = w3.eth.get_block(tx.blockNumber)
+        # 2. Fetch Alchemy asset transfers in both directions
+        try:
+            for direction in ["fromAddress", "toAddress"]:
+                payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "alchemy_getAssetTransfers",
+                    "params": [{
+                        "fromBlock": "0x0",
+                        "toBlock": "latest",
+                        direction: wallet_addr,
+                        "category": ["external", "erc20"],
+                        "withMetadata": True,
+                        "excludeZeroValue": False,
+                        "order": "desc",
+                        "maxCount": hex(max_count)
+                    }]
+                }
+                res = await client.post(rpc_url, json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    transfers.extend(data.get("result", {}).get("transfers", []))
+        except Exception as e:
+            logger.error(f"Error querying Alchemy asset transfers: {e}")
+            return 0
 
-            to_addr = tx.to.lower() if tx.to else None
-            contract_addr = receipt.contractAddress if receipt.contractAddress else tx.to
-            contract_name = KNOWN_CONTRACTS.get(to_addr)
-            if not contract_name and receipt.contractAddress:
-                contract_name = KNOWN_CONTRACTS.get(receipt.contractAddress.lower())
+        hashes = list(dict.fromkeys([t.get("hash") for t in transfers if t.get("hash")]))
+        if not hashes:
+            return 0
 
-            if not contract_name and not tx.to:
-                contract_name = "Contract Deployment"
-            elif not contract_name:
-                contract_name = "Polygon Transfer / Call"
+        synced = 0
+        for tx_hash in hashes:
+            try:
+                existing = await db.execute(
+                    select(BlockchainTransaction).where(BlockchainTransaction.transaction_hash == tx_hash)
+                )
+                if existing.scalar_one_or_none():
+                    continue
 
-            block_time = datetime.datetime.fromtimestamp(block.timestamp, tz=datetime.timezone.utc)
-            confirmations = max(1, current_block - tx.blockNumber)
+                # Fetch tx and receipt via standard JSON-RPC
+                tx_res = await client.post(
+                    rpc_url,
+                    json={"jsonrpc": "2.0", "id": 1, "method": "eth_getTransactionByHash", "params": [tx_hash]}
+                )
+                rcpt_res = await client.post(
+                    rpc_url,
+                    json={"jsonrpc": "2.0", "id": 2, "method": "eth_getTransactionReceipt", "params": [tx_hash]}
+                )
 
-            record = BlockchainTransaction(
-                transaction_hash=tx_hash,
-                block_number=tx.blockNumber,
-                block_timestamp=block_time,
-                gas_used=receipt.gasUsed,
-                gas_price=str(tx.gasPrice),
-                contract_address=contract_addr,
-                contract_name=contract_name,
-                contract_version="1.0.0",
-                network="amoy",
-                chain_id=80002,
-                confirmation_count=min(confirmations, 999999),
-                status="CONFIRMED" if receipt.status == 1 else "REVERTED",
-                wallet_address=tx["from"],
-                execution_time_ms=1200
-            )
-            db.add(record)
-            synced += 1
-        except Exception as ex:
-            logger.debug(f"Could not fetch tx {tx_hash}: {ex}")
+                if tx_res.status_code != 200 or rcpt_res.status_code != 200:
+                    continue
 
-    if synced > 0:
-        await db.commit()
-        logger.info(f"Synced {synced} new on-chain transactions for {wallet_addr}")
+                tx_data = tx_res.json().get("result")
+                rcpt_data = rcpt_res.json().get("result")
+                if not tx_data or not rcpt_data:
+                    continue
 
-    return synced
+                tx_block_num = int(tx_data.get("blockNumber", "0x0"), 16)
+                gas_used = int(rcpt_data.get("gasUsed", "0x0"), 16)
+                gas_price = str(int(tx_data.get("gasPrice", "0x0"), 16))
+                
+                to_addr = (tx_data.get("to") or "").lower()
+                contract_addr = rcpt_data.get("contractAddress") or tx_data.get("to")
+                contract_name = KNOWN_CONTRACTS.get(to_addr)
+                if not contract_name and rcpt_data.get("contractAddress"):
+                    contract_name = KNOWN_CONTRACTS.get(rcpt_data.get("contractAddress").lower())
+
+                if not contract_name and not tx_data.get("to"):
+                    contract_name = "Contract Deployment"
+                elif not contract_name:
+                    contract_name = "Polygon Transfer / Call"
+
+                # Confirmations & status
+                confirmations = max(1, current_block - tx_block_num) if current_block else 1
+                status = "CONFIRMED" if rcpt_data.get("status") == "0x1" else "REVERTED"
+                now = datetime.datetime.now(datetime.timezone.utc)
+
+                record = BlockchainTransaction(
+                    transaction_hash=tx_hash,
+                    block_number=tx_block_num,
+                    block_timestamp=now,
+                    gas_used=gas_used,
+                    gas_price=gas_price,
+                    contract_address=contract_addr,
+                    contract_name=contract_name,
+                    contract_version="1.0.0",
+                    network="amoy",
+                    chain_id=80002,
+                    confirmation_count=min(confirmations, 999999),
+                    status=status,
+                    wallet_address=tx_data.get("from") or wallet_addr,
+                    execution_time_ms=1200
+                )
+                db.add(record)
+                synced += 1
+            except Exception as ex:
+                logger.debug(f"Could not fetch details for tx {tx_hash}: {ex}")
+
+        if synced > 0:
+            await db.commit()
+            logger.info(f"Successfully synced {synced} on-chain transactions for {wallet_addr}")
+
+        return synced

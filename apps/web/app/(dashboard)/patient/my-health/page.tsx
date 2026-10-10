@@ -108,11 +108,15 @@ export default function MyHealthPage() {
         profile_completion_percentage: 100,
       };
 
-      // 1. Save via backend API
-      await profileService.updateProfileCompletion(userId, payload);
+      // 1. Try saving via backend API
+      try {
+        await profileService.updateProfileCompletion(userId, payload);
+      } catch (backendErr) {
+        console.warn("Backend profile completion update fallback to Supabase direct:", backendErr);
+      }
 
       // 2. Also update Supabase for direct client queries
-      await supabase
+      const { error: supaErr } = await supabase
         .from("patients")
         .update({
           full_name: formData.full_name,
@@ -134,6 +138,10 @@ export default function MyHealthPage() {
           emergency_contact_number: formData.emergency_contact_number,
         })
         .eq("user_id", userId);
+
+      if (supaErr) {
+        throw supaErr;
+      }
 
       toast.success("Health profile and clinical details updated successfully");
     } catch (err) {

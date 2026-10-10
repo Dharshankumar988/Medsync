@@ -277,6 +277,57 @@ async def add_doctor_note_by_record(
     note = await DoctorNoteService.add_note(db, version.id, current_user.id, req)
     return APIResponse(message="Clinical referral note added", data=note)
 
+@router.patch("/{record_id}/consent", response_model=APIResponse[RecordConsentResponse])
+async def update_record_consent(
+    record_id: uuid.UUID,
+    payload: RecordConsentUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user)
+):
+    record = await record_repo.get(db, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Medical record not found")
+        
+    is_owner = record.patient_id == current_user.id
+    if not is_owner and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only the patient or admin can modify consent")
+
+    record.is_public = payload.is_public
+    
+    perm_stmt = select(RecordPermission).where(
+        RecordPermission.record_id == record_id,
+        RecordPermission.access_level == "PUBLIC"
+    )
+    perm_res = await db.execute(perm_stmt)
+    perm = perm_res.scalar_one_or_none()
+    
+    if payload.is_public:
+        if perm:
+            perm.is_revoked = False
+        else:
+            db.add(RecordPermission(
+                record_id=record_id,
+                granted_to=current_user.id,
+                granted_by=current_user.id,
+                access_level="PUBLIC",
+                is_revoked=False
+            ))
+    else:
+        if perm:
+            perm.is_revoked = True
+
+    await db.commit()
+    await db.refresh(record)
+
+    return APIResponse(
+        message="Record visibility consent updated successfully",
+        data=RecordConsentResponse(
+            record_id=record.id,
+            is_public=record.is_public,
+            status="PUBLIC" if record.is_public else "PRIVATE"
+        )
+    )
+
 class DownloadRecordReq(BaseModel):
     pin: Optional[str] = None
 
@@ -407,4 +458,42 @@ async def download_record(
         message="Download URL generated", 
         data=download_data
     )
+
+@router.get("/{record_id}/raw")
+async def download_record_raw(
+    record_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user)
+):
+    from fastapi.responses import Response
+    record = await record_repo.get(db, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    is_owner = record.patient_id == current_user.id
+    is_doctor = current_user.role == UserRole.DOCTOR
+    if not is_owner and is_doctor:
+        has_permission = await PermissionService.check_permission(db, record_id, current_user.id)
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="You do not have access to this record")
+    elif not is_owner and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="You do not have access to this record")
+
+    from app.services.qr_pdf_service import QRPdfService
+    token = f"QR-REC-{record.id}"
+    qr_image = QRPdfService.generate_qr_code(token)
+    created_str = record.created_at.strftime('%Y-%m-%d') if hasattr(record, 'created_at') and record.created_at else "Recent"
+    raw_doc = f"MedSync Medical Record\nTitle: {record.title}\nDescription: {record.description or 'No clinical description provided.'}\nDate: {created_str}".encode("utf-8")
+    base_pdf = QRPdfService.convert_to_pdf(raw_doc, f"{record.title}.txt")
+    stamped_pdf = QRPdfService.stamp_qr_on_pdf(base_pdf, qr_image, token, title=record.title)
+
+    clean_filename = f"{record.title.replace(' ', '_')}.pdf"
+    return Response(
+        content=stamped_pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{clean_filename}"'
+        }
+    )
+
 
