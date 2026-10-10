@@ -117,7 +117,7 @@ function Start-Backend {
         Write-Host "Found locally built image: $BACKEND_IMAGE" -ForegroundColor Green
     } else {
         Write-Host "Pulling Backend image from registry..." -ForegroundColor Cyan
-        $pullArgs = "pull $BACKEND_REGISTRY_IMAGE"
+        $pullArgs = "pull --platform linux/amd64 $BACKEND_REGISTRY_IMAGE"
         $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
         if ($pullProcess.ExitCode -eq 0) {
             $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
@@ -143,7 +143,7 @@ function Start-Backend {
 
     docker volume create medsync-model-cache > $null
 
-    $runCmd = "docker run -d --name $BACKEND_CONTAINER -p `"${BACKEND_PORT}:8000`" -v medsync-model-cache:/models --env-file `"$ENV_FILE`""
+    $runCmd = "docker run --platform linux/amd64 -d --name $BACKEND_CONTAINER -p `"${BACKEND_PORT}:8000`" -v medsync-model-cache:/models --env-file `"$ENV_FILE`""
     if ($EnvOverride) {
         $runCmd += " $EnvOverride"
     }
@@ -198,7 +198,7 @@ function Start-AIWorker {
         Write-Host "Found locally built image: $WORKER_IMAGE" -ForegroundColor Green
     } else {
         Write-Host "Pulling AI Worker image from registry..." -ForegroundColor Cyan
-        $pullArgs = "pull $WORKER_REGISTRY_IMAGE"
+        $pullArgs = "pull --platform linux/amd64 $WORKER_REGISTRY_IMAGE"
         $pullProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
         if ($pullProcess.ExitCode -eq 0) {
             $WORKER_IMAGE = $WORKER_REGISTRY_IMAGE
@@ -208,7 +208,7 @@ function Start-AIWorker {
             $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
             $aiDir = Join-Path $RepoRoot "medsync-ai"
             if (Test-Path "$aiDir\Dockerfile") {
-                docker build -t $WORKER_LOCAL_IMAGE -f "$aiDir\Dockerfile" "$aiDir"
+                docker build --platform linux/amd64 -t $WORKER_LOCAL_IMAGE -f "$aiDir\Dockerfile" "$aiDir"
                 if ($LASTEXITCODE -ne 0) {
                     Write-Host "ERROR: Failed to build AI worker image." -ForegroundColor Red
                     exit 1
@@ -229,7 +229,7 @@ function Start-AIWorker {
 
     docker volume create medsync-ai-model-cache > $null
 
-    $runCmd = "docker run -d --name $WORKER_CONTAINER -p `"${WORKER_PORT}:7860`" -v medsync-ai-model-cache:/home/user/app/models/cache --env-file `"$ENV_FILE`" $WORKER_IMAGE"
+    $runCmd = "docker run --platform linux/amd64 -d --name $WORKER_CONTAINER -p `"${WORKER_PORT}:7860`" -v medsync-ai-model-cache:/home/user/app/models/cache --env-file `"$ENV_FILE`" $WORKER_IMAGE"
     Invoke-Expression $runCmd | Out-Null
     $WORKER_CONTAINER | Out-File -FilePath $ContainersFile -Append -Encoding utf8
 
