@@ -12,6 +12,7 @@ import { QRScanner } from "@/components/ui/QRScanner";
 import { motion, AnimatePresence } from "framer-motion";
 import { blockchainService, BlockchainVerifyResult } from "@/services/blockchain.service";
 import { BlockchainVerificationCard } from "@/components/blockchain/BlockchainVerificationCard";
+import { LedgerVerificationLoader } from "@/components/blockchain/LedgerVerificationLoader";
 import { toast } from "sonner";
 
 type FlowType = "IDLE" | "PRESCRIPTION" | "BLOCKCHAIN" | "PHARMACY" | "URL" | "TEXT";
@@ -142,57 +143,66 @@ export default function AdminQRScannerPage() {
         {/* --- IDLE FLOW --- */}
         {flow === "IDLE" && (
           <motion.div key="idle" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-            <Card className="rounded-2xl border border-border/80 overflow-hidden shadow-sm bg-card">
-              <div className="p-12 flex flex-col items-center justify-center min-h-[440px]">
-                {error && (
-                  <div className="w-full max-w-md bg-destructive/10 text-destructive p-4 rounded-xl text-sm mb-6 border border-destructive/20 flex items-start shadow-sm">
-                    <AlertTriangle className="h-5 w-5 mr-2 shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-                
-                {showCamera ? (
-                  <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-xl border border-border/60 bg-black">
-                    <QRScanner 
-                      onScan={handleProcessQR} 
-                      onClose={() => setShowCamera(false)} 
-                    />
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center max-w-md w-full space-y-7">
-                    <div className="relative group cursor-pointer" onClick={() => setShowCamera(true)}>
-                      <div className="h-32 w-32 bg-card border-2 border-dashed border-primary/40 hover:border-primary hover:bg-muted/40 rounded-full flex flex-col items-center justify-center transition-all duration-200 shadow-sm">
-                        <Camera className="h-10 w-10 text-primary mb-1" />
-                        <span className="text-xs font-semibold text-foreground">Tap Camera</span>
+            {isLoading ? (
+              <LedgerVerificationLoader
+                title="Verifying Digital Signature..."
+                description="Checking authenticity and cryptographic state against Polygon Amoy ledger."
+                identifier={scanData || manualInput}
+                network="Polygon Amoy"
+              />
+            ) : (
+              <Card className="rounded-2xl border border-border/80 overflow-hidden shadow-sm bg-card">
+                <div className="p-12 flex flex-col items-center justify-center min-h-[440px]">
+                  {error && (
+                    <div className="w-full max-w-md bg-destructive/10 text-destructive p-4 rounded-xl text-sm mb-6 border border-destructive/20 flex items-start shadow-sm">
+                      <AlertTriangle className="h-5 w-5 mr-2 shrink-0 mt-0.5" />
+                      <span>{error}</span>
+                    </div>
+                  )}
+                  
+                  {showCamera ? (
+                    <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-xl border border-border/60 bg-black">
+                      <QRScanner 
+                        onScan={handleProcessQR} 
+                        onClose={() => setShowCamera(false)} 
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center max-w-md w-full space-y-7">
+                      <div className="relative group cursor-pointer" onClick={() => setShowCamera(true)}>
+                        <div className="h-32 w-32 bg-card border-2 border-dashed border-primary/40 hover:border-primary hover:bg-muted/40 rounded-full flex flex-col items-center justify-center transition-all duration-200 shadow-sm">
+                          <Camera className="h-10 w-10 text-primary mb-1" />
+                          <span className="text-xs font-semibold text-foreground">Tap Camera</span>
+                        </div>
+                      </div>
+                      
+                      <div className="text-center">
+                        <h3 className="text-xl font-bold text-foreground mb-1">Open Camera Scanner</h3>
+                        <p className="text-sm text-muted-foreground">Position the QR code within the frame.</p>
+                      </div>
+
+                      <div className="w-full flex items-center gap-3">
+                        <div className="h-px bg-border/80 flex-1"></div>
+                        <span className="text-[11px] uppercase text-muted-foreground font-semibold">Or enter manually</span>
+                        <div className="h-px bg-border/80 flex-1"></div>
+                      </div>
+
+                      <div className="w-full flex gap-2">
+                        <Input 
+                          placeholder="Paste MS- token, URL, or 0x hash..." 
+                          value={manualInput}
+                          onChange={(e) => setManualInput(e.target.value)}
+                          className="rounded-xl h-11 bg-background border-border/80 text-sm"
+                        />
+                        <Button onClick={() => handleProcessQR(manualInput)} disabled={!manualInput || isLoading} className="h-11 rounded-xl px-5 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground">
+                          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
+                        </Button>
                       </div>
                     </div>
-                    
-                    <div className="text-center">
-                      <h3 className="text-xl font-bold text-foreground mb-1">Open Camera Scanner</h3>
-                      <p className="text-sm text-muted-foreground">Position the QR code within the frame.</p>
-                    </div>
-
-                    <div className="w-full flex items-center gap-3">
-                      <div className="h-px bg-border/80 flex-1"></div>
-                      <span className="text-[11px] uppercase text-muted-foreground font-semibold">Or enter manually</span>
-                      <div className="h-px bg-border/80 flex-1"></div>
-                    </div>
-
-                    <div className="w-full flex gap-2">
-                      <Input 
-                        placeholder="Paste MS- token, URL, or 0x hash..." 
-                        value={manualInput}
-                        onChange={(e) => setManualInput(e.target.value)}
-                        className="rounded-xl h-11 bg-background border-border/80 text-sm"
-                      />
-                      <Button onClick={() => handleProcessQR(manualInput)} disabled={!manualInput || isLoading} className="h-11 rounded-xl px-5 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground">
-                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
+                  )}
+                </div>
+              </Card>
+            )}
           </motion.div>
         )}
 
@@ -200,10 +210,12 @@ export default function AdminQRScannerPage() {
         {flow === "PHARMACY" && (
           <motion.div key="pharmacy" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }}>
             {isLoading ? (
-              <Card className="rounded-2xl border border-blue-500/30 p-12 text-center max-w-md mx-auto">
-                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
-                <p className="text-sm font-semibold">Verifying Pharmacy on Polygon Amoy Ledger...</p>
-              </Card>
+              <LedgerVerificationLoader
+                title="Verifying Pharmacy on Polygon Amoy Ledger..."
+                description="Validating smart contract authority and cryptographic node registry."
+                identifier={scanData}
+                network="Polygon Amoy"
+              />
             ) : pharmacyData ? (
               <Card className="rounded-2xl border border-border/80 max-w-2xl mx-auto shadow-md overflow-hidden bg-card">
                 <CardHeader className="text-center pb-6 pt-8 border-b border-border/60">
@@ -287,7 +299,27 @@ export default function AdminQRScannerPage() {
                   </div>
                 </CardContent>
               </Card>
-            ) : null}
+            ) : (
+              <Card className="rounded-2xl border border-destructive/30 max-w-md mx-auto shadow-sm bg-card p-8 text-center space-y-5">
+                <div className="h-16 w-16 bg-destructive/10 text-destructive rounded-2xl flex items-center justify-center mx-auto">
+                  <AlertTriangle className="h-8 w-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-foreground">Verification Failed</h3>
+                  <p className="text-sm text-muted-foreground mt-1.5">
+                    {error || "Failed to verify pharmacy cryptographic signature on Polygon Amoy."}
+                  </p>
+                </div>
+                {scanData && (
+                  <div className="p-3 bg-muted/30 rounded-xl border border-border/60 font-mono text-xs text-muted-foreground truncate max-w-xs mx-auto">
+                    {scanData}
+                  </div>
+                )}
+                <Button onClick={() => { setFlow("IDLE"); setError(null); }} className="w-full rounded-xl">
+                  Scan Another Code
+                </Button>
+              </Card>
+            )}
           </motion.div>
         )}
 

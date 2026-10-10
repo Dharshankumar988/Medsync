@@ -34,7 +34,8 @@ class ConsultationCompleteRequest(BaseModel):
     follow_up_notes: Optional[str] = None
 
 
-@router.post("/", response_model=APIResponse[ConsultationResponse], status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=APIResponse[ConsultationResponse], status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=APIResponse[ConsultationResponse], status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_consultation(
     req: ConsultationCreate,
     db: AsyncSession = Depends(get_db),

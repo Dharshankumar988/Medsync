@@ -5,12 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@meds
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
 import { Badge } from "@medsync/ui";
-import { UploadCloud, CheckCircle, XCircle, Image as ImageIcon, Loader2, Save, Building2, MapPin } from "lucide-react";
+import { UploadCloud, CheckCircle, XCircle, Image as ImageIcon, Loader2, Save, Building2, MapPin, Plus, Clock, ShieldAlert, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
+import { hospitalService } from "@/services/hospital.service";
+import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@medsync/ui";
 import { Select } from "@medsync/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@medsync/ui";
 import Image from "next/image";
 
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
@@ -24,6 +27,24 @@ export default function DoctorProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Facility Registration Modal State
+  const [isAddFacilityOpen, setIsAddFacilityOpen] = useState(false);
+  const [submittingFacility, setSubmittingFacility] = useState(false);
+  const [newFacility, setNewFacility] = useState({
+    name: "",
+    type: "hospital",
+    address: "",
+    city: "",
+    state: "",
+    country: "",
+    pincode: "",
+    phone_number: "",
+    email: "",
+    google_maps_url: "",
+    latitude: 0,
+    longitude: 0,
+  });
   
   // Image Upload State
   const [dragActive, setDragActive] = useState(false);
@@ -85,6 +106,58 @@ export default function DoctorProfilePage() {
   const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setDoctorData((prev: any) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreateFacility = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFacility.name || !newFacility.address) {
+      toast.error("Please enter the facility name and address.");
+      return;
+    }
+    setSubmittingFacility(true);
+    try {
+      const res = await hospitalService.createHospital(newFacility);
+      const created = res.data?.data;
+      toast.success("Medical facility submitted! Awaiting administrator authorization.");
+      setIsAddFacilityOpen(false);
+
+      // Refresh facilities list
+      const hospRes = await hospitalService.getHospitals();
+      const updatedHospitals = hospRes.data?.data || [];
+      setHospitals(updatedHospitals);
+
+      if (created?.id) {
+        setDoctorData((prev: any) => ({ ...prev, hospital_id: created.id }));
+        if (created.type === "clinic") {
+          setDoctorData((prev: any) => ({
+            ...prev,
+            clinic_name: created.name,
+            clinic_address: created.address,
+            city: created.city || prev.city,
+            country: created.country || prev.country
+          }));
+        }
+      }
+
+      setNewFacility({
+        name: "",
+        type: "hospital",
+        address: "",
+        city: "",
+        state: "",
+        country: "",
+        pincode: "",
+        phone_number: "",
+        email: "",
+        google_maps_url: "",
+        latitude: 0,
+        longitude: 0,
+      });
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Failed to submit facility.");
+    } finally {
+      setSubmittingFacility(false);
+    }
   };
 
   const handleSave = async () => {
@@ -390,23 +463,58 @@ export default function DoctorProfilePage() {
             <div className="space-y-4">
               <Tabs value={locationMode} onValueChange={(v: any) => { setLocationMode(v); if(v === "HOSPITAL") { setDoctorData((prev: any) => ({...prev, clinic_name: "", clinic_address: ""})) } else { setDoctorData((prev: any) => ({...prev, hospital_id: ""})) } }}>
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="HOSPITAL" disabled={!isApproved}>Join Hospital</TabsTrigger>
+                  <TabsTrigger value="HOSPITAL" disabled={!isApproved}>Join Hospital / Medical Center</TabsTrigger>
                   <TabsTrigger value="CLINIC" disabled={!isApproved}>Private Clinic</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="HOSPITAL" className="space-y-4 mt-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Select Hospital</label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-muted-foreground">Select Medical Facility</label>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        disabled={!isApproved}
+                        onClick={() => {
+                          setNewFacility(prev => ({ ...prev, type: "hospital" }));
+                          setIsAddFacilityOpen(true);
+                        }}
+                        className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Facility
+                      </Button>
+                    </div>
                     <Select 
                       disabled={!isApproved} 
                       value={doctorData.hospital_id || ""} 
                       onChange={(e) => setDoctorData((prev: any) => ({...prev, hospital_id: e.target.value}))}
                     >
-                      <option value="" disabled>Select a verified hospital...</option>
+                      <option value="" disabled>Select a facility...</option>
                       {hospitals.map(h => (
-                        <option key={h.id} value={h.id}>{h.name} - {h.city}</option>
+                        <option key={h.id} value={h.id}>
+                          {h.is_verified ? "🏥 " : "⏳ [Pending Admin] "}
+                          {h.name} - {h.city || "Location not specified"} ({h.type === "clinic" ? "Clinic" : "Hospital"})
+                        </option>
                       ))}
                     </Select>
+
+                    {/* Facility Verification Status Banner */}
+                    {(() => {
+                      const selectedHospital = hospitals.find(h => h.id === doctorData.hospital_id);
+                      if (!selectedHospital) return null;
+                      return selectedHospital.is_verified ? (
+                        <div className="p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span><strong>Verified Facility:</strong> Authorized by MedSync Administration.</span>
+                        </div>
+                      ) : (
+                        <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span><strong>Pending Admin Authorization:</strong> This facility is under admin review. Once authorized, it will be fully activated.</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </TabsContent>
 
@@ -429,11 +537,186 @@ export default function DoctorProfilePage() {
                       <Input name="country" value={doctorData.country || ""} onChange={handleInputChange} disabled={!isApproved} />
                     </div>
                   </div>
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!isApproved}
+                      onClick={() => {
+                        setNewFacility({
+                          name: doctorData.clinic_name || "",
+                          type: "clinic",
+                          address: doctorData.clinic_address || "",
+                          city: doctorData.city || "",
+                          state: doctorData.state || "",
+                          country: doctorData.country || "",
+                          pincode: doctorData.pincode || "",
+                          phone_number: doctorData.clinic_phone || "",
+                          email: doctorData.clinic_email || "",
+                          google_maps_url: "",
+                          latitude: 0,
+                          longitude: 0,
+                        });
+                        setIsAddFacilityOpen(true);
+                      }}
+                      className="w-full text-xs gap-1.5 border-dashed border-primary/40 text-primary hover:bg-primary/5 py-2"
+                    >
+                      <Building2 className="w-3.5 h-3.5" /> Register Clinic with MedSync Network (Requires Admin Authorization)
+                    </Button>
+                  </div>
                 </TabsContent>
               </Tabs>
             </div>
           </CardContent>
         </Card>
+
+        {/* Modal: Add Medical Facility */}
+        <Dialog open={isAddFacilityOpen} onOpenChange={setIsAddFacilityOpen}>
+          <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <Building2 className="w-5 h-5 text-primary" />
+                Add Medical Facility
+              </DialogTitle>
+              <DialogDescription>
+                Register a hospital or clinic you work in. Once submitted, an administrator will review and authorize the facility.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 rounded-xl text-xs flex gap-2.5 items-start mt-2">
+              <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold">Admin Authorization Required</p>
+                <p className="opacity-90 mt-0.5">
+                  To ensure quality and compliance, new facilities require administrator approval before appearing in public searches.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateFacility} className="space-y-4 mt-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Facility Name *</label>
+                  <Input 
+                    required
+                    value={newFacility.name}
+                    onChange={(e) => setNewFacility({ ...newFacility, name: e.target.value })}
+                    placeholder="e.g. City General Hospital"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Facility Type *</label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={newFacility.type}
+                    onChange={(e) => setNewFacility({ ...newFacility, type: e.target.value })}
+                  >
+                    <option value="hospital">Hospital</option>
+                    <option value="clinic">Clinic</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Complete Address *</label>
+                <Input 
+                  required
+                  value={newFacility.address}
+                  onChange={(e) => setNewFacility({ ...newFacility, address: e.target.value })}
+                  placeholder="e.g. 100 Healthcare Blvd, Suite 400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">City</label>
+                  <Input 
+                    value={newFacility.city}
+                    onChange={(e) => setNewFacility({ ...newFacility, city: e.target.value })}
+                    placeholder="e.g. New York"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">State / Province</label>
+                  <Input 
+                    value={newFacility.state}
+                    onChange={(e) => setNewFacility({ ...newFacility, state: e.target.value })}
+                    placeholder="e.g. NY"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Country</label>
+                  <Input 
+                    value={newFacility.country}
+                    onChange={(e) => setNewFacility({ ...newFacility, country: e.target.value })}
+                    placeholder="e.g. USA"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Pincode / Postal Code</label>
+                  <Input 
+                    value={newFacility.pincode}
+                    onChange={(e) => setNewFacility({ ...newFacility, pincode: e.target.value })}
+                    placeholder="e.g. 10001"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Phone Number</label>
+                  <Input 
+                    value={newFacility.phone_number}
+                    onChange={(e) => setNewFacility({ ...newFacility, phone_number: e.target.value })}
+                    placeholder="e.g. +1 555-0199"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Email</label>
+                  <Input 
+                    type="email"
+                    value={newFacility.email}
+                    onChange={(e) => setNewFacility({ ...newFacility, email: e.target.value })}
+                    placeholder="e.g. facility@health.org"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Google Maps URL (Optional)</label>
+                <Input 
+                  type="url"
+                  value={newFacility.google_maps_url}
+                  onChange={(e) => setNewFacility({ ...newFacility, google_maps_url: e.target.value })}
+                  placeholder="https://maps.google.com/..."
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsAddFacilityOpen(false)}
+                  disabled={submittingFacility}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={submittingFacility || !newFacility.name || !newFacility.address}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5"
+                >
+                  {submittingFacility ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Submit for Authorization
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
 
       </div>
     </div>

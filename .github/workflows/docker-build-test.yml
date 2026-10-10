@@ -9,6 +9,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -85,7 +86,7 @@ jobs:
     - name: Run Backend Pytest Suite
       continue-on-error: true
       run: |
-        docker exec backend sh -c "pip install pytest httpx 2>/dev/null && pytest tests/ -x --timeout=60" || echo "Tests completed (some may have been skipped)"
+        docker exec backend sh -c "pip install pytest pytest-timeout httpx 2>/dev/null && pytest tests/ -x --timeout=30" || echo "Tests completed (some may have been skipped)"
 
     - name: Run Python Smoke Tests (verify_pulse.py)
       continue-on-error: true

@@ -163,6 +163,7 @@ async def root():
     return {"status": "ok", "message": "MedSync API is running. Visit /docs for documentation."}
 
 @app.get("/health", tags=["System"])
+@app.get("/health/", tags=["System"], include_in_schema=False)
 async def health_check():
     # Health checks LIVENESS: is the FastAPI server running and responding?
     return {

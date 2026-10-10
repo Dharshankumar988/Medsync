@@ -14,6 +14,7 @@ import { QRScanner } from "@/components/ui/QRScanner";
 import { toast } from "sonner";
 import { blockchainService, BlockchainVerifyResult } from "@/services/blockchain.service";
 import { BlockchainVerificationCard } from "@/components/blockchain/BlockchainVerificationCard";
+import { LedgerVerificationLoader } from "@/components/blockchain/LedgerVerificationLoader";
 import api from "@/lib/api";
 import dynamic from "next/dynamic";
 import { useSecurityStore } from "@/store/useSecurityStore";
@@ -479,30 +480,12 @@ export default function PatientQRScanPage() {
             {/* 1. Verification Animation Screen (While Verifying) */}
             {isVerifyingPharmacy && (
               <motion.div key="verifying" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-                <Card className="rounded-2xl border border-blue-500/30 shadow-xl overflow-hidden relative max-w-lg mx-auto bg-card">
-                  <CardHeader className="text-center pb-8 pt-12 relative z-10">
-                    {/* Preserved verification animation rings & pulsing shield */}
-                    <div className="mx-auto h-28 w-28 relative flex items-center justify-center mb-6">
-                      <motion.div 
-                        className="absolute inset-0 border-[3px] border-blue-500/30 rounded-[35%] border-t-blue-500"
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                      />
-                      <motion.div 
-                        className="absolute inset-2 border-[3px] border-blue-400/30 rounded-[40%] border-b-blue-400"
-                        animate={{ rotate: -360 }}
-                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                      />
-                      <ShieldCheck className="h-10 w-10 text-blue-500 animate-pulse" />
-                    </div>
-                    <CardTitle className="text-2xl font-bold text-foreground">
-                      Verifying Node on Blockchain...
-                    </CardTitle>
-                    <CardDescription className="text-sm mt-2 text-muted-foreground">
-                      Querying smart contracts on Polygon Amoy for cryptographic registry proof.
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
+                <LedgerVerificationLoader
+                  title="Verifying Pharmacy on Polygon Amoy Ledger..."
+                  description="Querying smart contracts on Polygon Amoy for cryptographic registry proof."
+                  identifier={scanData}
+                  network="Polygon Amoy"
+                />
               </motion.div>
             )}
 

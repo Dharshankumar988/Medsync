@@ -37,7 +37,7 @@ export default function AdminDashboard() {
     queryKey: ["systemHealth"],
     queryFn: async () => {
       try {
-        const res = await api.get("/health/");
+        const res = await api.get("/health");
         return res.data;
       } catch (err) {
         console.error(err);

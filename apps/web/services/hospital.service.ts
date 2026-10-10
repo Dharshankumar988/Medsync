@@ -38,6 +38,14 @@ class HospitalService {
   async deactivateHospital(id: string) {
     return api.delete<{message: string}>(`${API_PREFIX}/hospitals/${id}`);
   }
+
+  async verifyHospital(id: string) {
+    return api.post<{data: Hospital}>(`${API_PREFIX}/hospitals/${id}/verify`);
+  }
+
+  async rejectHospital(id: string) {
+    return api.post<{data: Hospital}>(`${API_PREFIX}/hospitals/${id}/reject`);
+  }
 }
 
 export const hospitalService = new HospitalService();

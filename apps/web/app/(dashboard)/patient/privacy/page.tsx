@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Skele
 import { Shield, ShieldAlert, Key, Clock, ShieldCheck, Activity } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
+import { formatDoctorName } from "@/lib/formatDoctorName";
 
 export default function PrivacyPage() {
   const [userId, setUserId] = useState<string>("");
@@ -181,7 +182,7 @@ export default function PrivacyPage() {
                           )}
                         </div>
                         <p className="text-sm text-foreground/80 font-medium">
-                          Dr. {item.doctor?.full_name || 'Unknown'} <span className="text-muted-foreground font-normal">({item.doctor?.specialization})</span>
+                          {formatDoctorName(item.doctor?.full_name)} <span className="text-muted-foreground font-normal">({item.doctor?.specialization})</span>
                         </p>
                         {item.blockchain_tx_hash && (
                           <div className="flex items-center gap-2 mt-3">

@@ -91,6 +91,13 @@ try {
 
 # 4. Verify extraction
 if (-not (Test-Path (Join-Path $portableRunnerPath "start-medsync.ps1"))) {
+    $nested = Join-Path $portableRunnerPath "portable_runner"
+    if (Test-Path (Join-Path $nested "start-medsync.ps1")) {
+        Get-ChildItem -Path $nested | Move-Item -Destination $portableRunnerPath -Force
+        Remove-Item $nested -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+if (-not (Test-Path (Join-Path $portableRunnerPath "start-medsync.ps1"))) {
     Write-Host "ERROR: start-medsync.ps1 was not found in the downloaded archive." -ForegroundColor Red
     exit 1
 }

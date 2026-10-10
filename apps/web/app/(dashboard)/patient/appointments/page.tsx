@@ -19,6 +19,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
 import { useSecurityStore } from "@/store/useSecurityStore";
+import { formatDoctorName, deduplicateDoctors } from "@/lib/formatDoctorName";
 
 const HospitalMap = dynamic(() => import("@/components/HospitalMap"), { ssr: false, loading: () => <div className="h-[300px] w-full rounded-xl bg-card/50 animate-pulse border border-border flex items-center justify-center text-sm text-muted-foreground">Loading Map...</div> });
 
@@ -143,10 +144,11 @@ export default function AppointmentsPage() {
   const loadAllDoctors = useCallback(async () => {
     try {
       const { data } = await supabase.from("doctors").select("*, users(profile_image_url)");
-      setAllDoctors((data || []).map((d: any) => ({
+      const mapped = (data || []).map((d: any) => ({
         ...d,
         profile_picture_url: d.users?.profile_image_url || d.profile_picture_url,
-      })));
+      }));
+      setAllDoctors(deduplicateDoctors(mapped));
     } catch {
       setAllDoctors([]);
     }
@@ -173,23 +175,22 @@ export default function AppointmentsPage() {
         .from("doctors")
         .select("*, users(profile_image_url)")
         .eq("hospital_id", hospital.id);
-      setHospitalDoctors(
-        (data || []).map((d: any) => ({
-          user_id: d.user_id,
-          full_name: d.full_name,
-          specialization: d.specialization,
-          consultation_fee: d.consultation_fee,
-          experience_years: d.experience_years,
-          profile_picture_url: d.users?.profile_image_url || d.profile_picture_url,
-          bio: d.bio,
-        }))
-      );
+      const mapped = (data || []).map((d: any) => ({
+        user_id: d.user_id,
+        full_name: d.full_name,
+        specialization: d.specialization,
+        consultation_fee: d.consultation_fee,
+        experience_years: d.experience_years,
+        profile_picture_url: d.users?.profile_image_url || d.profile_picture_url,
+        bio: d.bio,
+      }));
+      setHospitalDoctors(deduplicateDoctors(mapped));
     }
   };
 
   const handleSelectDoctor = (doctor: any) => {
     if (doctor.is_accepting_appointments === false) {
-      toast.error(`Dr. ${doctor.full_name} is currently not accepting new appointments.`);
+      toast.error(`${formatDoctorName(doctor.full_name)} is currently not accepting new appointments.`);
       return;
     }
     setSelectedDoctor(doctor);
@@ -342,7 +343,7 @@ export default function AppointmentsPage() {
                 <DialogTitle>
                   {bookingStep === "browse" && "Find a Hospital or Doctor"}
                   {bookingStep === "select-doctor" && `Doctors at ${selectedHospital?.name}`}
-                  {bookingStep === "book" && `Book with Dr. ${selectedDoctor?.full_name}`}
+                  {bookingStep === "book" && `Book with ${formatDoctorName(selectedDoctor?.full_name)}`}
                 </DialogTitle>
               </DialogHeader>
 
@@ -482,7 +483,7 @@ export default function AppointmentsPage() {
                             )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <p className="font-medium text-sm truncate">Dr. {d.full_name}</p>
+                                <p className="font-medium text-sm truncate">{formatDoctorName(d.full_name)}</p>
                                 {d.is_accepting_appointments === false && (
                                   <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">
                                     Unavailable
@@ -532,7 +533,7 @@ export default function AppointmentsPage() {
                           )}
                           <div className="flex-1">
                             <div className="flex items-center gap-1.5">
-                              <p className="font-semibold">Dr. {d.full_name}</p>
+                              <p className="font-semibold">{formatDoctorName(d.full_name)}</p>
                               {d.is_accepting_appointments === false && (
                                 <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-full font-medium shrink-0">
                                   Unavailable
@@ -578,7 +579,7 @@ export default function AppointmentsPage() {
                         </div>
                       )}
                       <div>
-                        <p className="font-semibold">Dr. {selectedDoctor?.full_name}</p>
+                        <p className="font-semibold">{formatDoctorName(selectedDoctor?.full_name)}</p>
                         <p className="text-xs text-muted-foreground">
                           {selectedDoctor?.specialization}
                           {selectedHospital ? ` • ${selectedHospital.name}` : ""}
@@ -704,7 +705,7 @@ export default function AppointmentsPage() {
                     </Badge>
                   </div>
                   <CardTitle className="text-base">
-                    Dr. {appt.doctor_name || appt.doctor?.full_name || "Unknown"}
+                    {formatDoctorName(appt.doctor_name || appt.doctor?.full_name)}
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
                     {appt.doctor_specialization || appt.doctor?.specialization || ""}

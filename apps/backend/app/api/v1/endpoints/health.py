@@ -30,6 +30,7 @@ def _is_placeholder_database_url(value: str) -> bool:
     return "supabase-host.supabase.co" in value or "supabase_password" in value
 
 @router.get("/")
+@router.get("", include_in_schema=False)
 async def system_health():
     blockchain_status = "unreachable"
     rpc_url = blockchain_settings.POLYGON_RPC_URL

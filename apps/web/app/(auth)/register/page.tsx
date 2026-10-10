@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { hospitalService, Hospital } from "@/services/hospital.service";
 import dynamic from "next/dynamic";
-import { Button } from "@medsync/ui";
+import { Button, Input } from "@medsync/ui";
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
-import { Input } from "@medsync/ui";
+import { formatDoctorName } from "@/lib/formatDoctorName";
 import { 
   Activity, Loader2, UserPlus, LockKeyhole, Mail, User, 
   Eye, EyeOff, Shield, Heart, Stethoscope, Pill, 
@@ -186,11 +186,12 @@ export default function RegisterPage() {
       const isFacilityMode = isHospitalMode || isClinicMode;
 
       // Perform registration using Auth service which integrates with Supabase
+      const processedFullName = role === "DOCTOR" ? formatDoctorName(fullName) : fullName.trim();
       const response = await authService.register({
         email,
         password,
         role,
-        full_name: fullName,
+        full_name: processedFullName,
         license_number: role === "DOCTOR" || role === "PHARMACY" ? licenseNumber : undefined,
         gst_number: role === "DOCTOR" || role === "PHARMACY" ? gstNumber : undefined,
         hospital_id: isFacilityMode && !isRegisteringNewHospital ? selectedHospitalId : undefined,
@@ -374,7 +375,7 @@ export default function RegisterPage() {
                 {/* Full Name */}
                 <motion.div variants={fadeUp} className="space-y-2">
                   <label htmlFor="fullName" className="text-sm font-medium text-foreground/80">
-                    {role === 'PHARMACY' ? 'Manager Name' : 'Full Name'}
+                    {role === 'DOCTOR' ? 'Doctor Name' : role === 'PHARMACY' ? 'Manager Name' : 'Full Name'}
                   </label>
                   <div className="relative">
                     <User className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground/40" />
@@ -390,6 +391,11 @@ export default function RegisterPage() {
                       className="h-12 pl-10 pr-4 bg-background border-input hover:border-muted-foreground/30 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all duration-200"
                     />
                   </div>
+                  {role === 'DOCTOR' && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Enter your name with or without &apos;Dr.&apos; (e.g. Dr. John Smith).
+                    </p>
+                  )}
                 </motion.div>
 
                 {/* Email */}

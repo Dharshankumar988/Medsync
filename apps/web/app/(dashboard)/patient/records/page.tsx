@@ -13,6 +13,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
 import { useSecurityStore } from "@/store/useSecurityStore";
+import { formatDoctorName } from "@/lib/formatDoctorName";
 
 export default function MedicalRecordsPage() {
   const { user } = useAuth();
@@ -305,7 +306,7 @@ export default function MedicalRecordsPage() {
                 >
                   <option value="">Select a doctor...</option>
                   {doctors.map(d => (
-                    <option key={d.id} value={d.id}>Dr. {d.name} ({d.specialization})</option>
+                    <option key={d.id} value={d.id}>{formatDoctorName(d.name)} ({d.specialization})</option>
                   ))}
                 </select>
                 {doctors.length === 0 && (

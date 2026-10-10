@@ -1,10 +1,11 @@
 import uuid
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 
 class DoctorLocationCreate(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
     location_type: str = "HOSPITAL"
     location_name: Optional[str] = None
     hospital_id: Optional[uuid.UUID] = None
@@ -24,6 +25,7 @@ class DoctorLocationCreate(BaseModel):
 
 
 class DoctorLocationResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True, from_attributes=True)
     id: uuid.UUID
     doctor_id: uuid.UUID
     location_type: str
@@ -46,7 +48,12 @@ class DoctorLocationResponse(BaseModel):
     verification_status: str
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+
+class DoctorLocationActionResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    id: uuid.UUID
+    is_active: bool
+    message: str
 
 
 class PharmacyLocationCreate(BaseModel):

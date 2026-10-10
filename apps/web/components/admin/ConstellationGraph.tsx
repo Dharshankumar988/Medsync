@@ -8,7 +8,8 @@ import {
   forceCenter,
   forceCollide,
   forceX,
-  forceY
+  forceY,
+  forceZ
 } from "d3-force-3d";
 import {
   Settings,
@@ -16,7 +17,6 @@ import {
   ZoomOut,
   Maximize2,
   RotateCcw,
-  Sparkles,
   MapPin,
   Phone,
   Mail,
@@ -30,7 +30,9 @@ import {
   Pill,
   Shield,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Share2,
+  Compass
 } from "lucide-react";
 
 export interface GraphNodeData {
@@ -42,6 +44,9 @@ export interface GraphNodeData {
   isCentral?: boolean;
   targetX?: number;
   targetY?: number;
+  targetZ?: number;
+  phaseOffset?: number;
+  floatSpeed?: number;
   entityData?: {
     name?: string;
     email?: string;
@@ -70,10 +75,18 @@ export interface GraphNodeData {
   // D3 force simulation internal properties
   x?: number;
   y?: number;
+  z?: number;
   vx?: number;
   vy?: number;
+  vz?: number;
   fx?: number | null;
   fy?: number | null;
+  fz?: number | null;
+  // Computed 3D projection cache for render and hit testing
+  projX?: number;
+  projY?: number;
+  projScale?: number;
+  projDepth?: number;
 }
 
 export interface GraphEdgeData {
@@ -87,7 +100,7 @@ interface ConstellationGraphProps {
   edges: GraphEdgeData[];
 }
 
-// Visual color tokens inspired by deep space obsidian constellations
+// Visual color tokens for graph entities
 const ENTITY_CONFIG: Record<
   string,
   {
@@ -100,58 +113,58 @@ const ENTITY_CONFIG: Record<
   }
 > = {
   MedSync: {
-    color: "#fbbf24", // Celestial radiant gold
-    glow: "rgba(251, 191, 36, 0.55)",
+    color: "#fbbf24", // Radiant gold
+    glow: "rgba(251, 191, 36, 0.65)",
     neighborColor: "#f59e0b",
-    radius: 16,
-    icon: Sparkles,
+    radius: 17,
+    icon: Share2,
     label: "MedSync Core"
   },
   Medicine: {
-    color: "#fbbf24", // Core fallback
-    glow: "rgba(251, 191, 36, 0.55)",
+    color: "#fbbf24",
+    glow: "rgba(251, 191, 36, 0.65)",
     neighborColor: "#f59e0b",
-    radius: 16,
-    icon: Sparkles,
+    radius: 17,
+    icon: Share2,
     label: "MedSync Core"
   },
   Hospital: {
     color: "#c084fc", // Radiant violet
-    glow: "rgba(192, 132, 252, 0.4)",
-    neighborColor: "#ec4899", // Neon magenta
-    radius: 11,
+    glow: "rgba(192, 132, 252, 0.5)",
+    neighborColor: "#ec4899", // Magenta
+    radius: 12,
     icon: Building,
     label: "Hospital"
   },
   Doctor: {
-    color: "#34d399", // Emerald nebula
-    glow: "rgba(52, 211, 153, 0.4)",
-    neighborColor: "#06b6d4", // Electric cyan
-    radius: 9,
+    color: "#34d399", // Emerald green
+    glow: "rgba(52, 211, 153, 0.5)",
+    neighborColor: "#06b6d4", // Cyan
+    radius: 10,
     icon: Stethoscope,
     label: "Doctor"
   },
   Patient: {
-    color: "#38bdf8", // Stellar sky blue
-    glow: "rgba(56, 189, 248, 0.4)",
-    neighborColor: "#f43f5e", // Neon pink / rose
-    radius: 7,
+    color: "#38bdf8", // Sky blue
+    glow: "rgba(56, 189, 248, 0.5)",
+    neighborColor: "#f43f5e", // Rose pink
+    radius: 8,
     icon: UserCheck,
     label: "Patient"
   },
   Pharmacy: {
     color: "#fb923c", // Amber orange
-    glow: "rgba(251, 146, 60, 0.4)",
-    neighborColor: "#e879f9", // Vivid purple
-    radius: 8,
+    glow: "rgba(251, 146, 60, 0.5)",
+    neighborColor: "#e879f9", // Purple
+    radius: 9,
     icon: Pill,
     label: "Pharmacy"
   },
   Admin: {
     color: "#fb7185", // Crimson rose
-    glow: "rgba(251, 113, 133, 0.4)",
+    glow: "rgba(251, 113, 133, 0.5)",
     neighborColor: "#a855f7",
-    radius: 8,
+    radius: 9,
     icon: Shield,
     label: "Admin"
   }
@@ -159,28 +172,12 @@ const ENTITY_CONFIG: Record<
 
 const DEFAULT_CONFIG = {
   color: "#94a3b8",
-  glow: "rgba(148, 163, 184, 0.3)",
+  glow: "rgba(148, 163, 184, 0.35)",
   neighborColor: "#38bdf8",
-  radius: 7,
-  icon: Sparkles,
+  radius: 8,
+  icon: Share2,
   label: "Entity"
 };
-
-// Generates background celestial dust stars for cosmic atmosphere
-function generateBackgroundStars(count: number, width: number, height: number) {
-  const stars = [];
-  for (let i = 0; i < count; i++) {
-    stars.push({
-      x: (Math.random() - 0.5) * width * 2,
-      y: (Math.random() - 0.5) * height * 2,
-      size: Math.random() * 1.5 + 0.5,
-      alpha: Math.random() * 0.45 + 0.1,
-      twinkleSpeed: Math.random() * 0.02 + 0.005,
-      phase: Math.random() * Math.PI * 2
-    });
-  }
-  return stars;
-}
 
 export default function ConstellationGraph({ nodes: initialNodes, edges: initialEdges }: ConstellationGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -191,26 +188,29 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
   // Graph state
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null);
   const [hoveredNode, setHoveredNode] = useState<GraphNodeData | null>(null);
-  const [proximityDistance, setProximityDistance] = useState<number>(0);
   const [showSettings, setShowSettings] = useState(false);
   const [filterType, setFilterType] = useState<string>("ALL");
   const [labelMode, setLabelMode] = useState<"ALL" | "CONNECTED" | "HOVER_ONLY">("ALL");
-  const [showStarfield, setShowStarfield] = useState(true);
+  const [ambientDrift, setAmbientDrift] = useState(true);
 
-  // Camera transform: x, y in pixels, k is zoom scale
-  const transformRef = useRef({ x: 0, y: 0, k: 1 });
-  const [zoomLevel, setZoomLevel] = useState(1);
+  // 3D Camera Controls State
+  const cameraRef = useRef({
+    rotX: -0.16, // slight pitch down for natural 3D depth
+    rotY: 0.35,  // slight initial yaw angle
+    zoom: 0.78,  // comfortable default zoom that fits spread nodes
+    panX: 0,
+    panY: 0,
+    velRotY: 0,
+    velRotX: 0,
+    isDragging: false,
+    dragMode: "NONE" as "ORBIT" | "PAN" | "NODE" | "NONE",
+    dragStartMouse: { x: 0, y: 0 },
+    dragStartAngles: { rotX: 0, rotY: 0 },
+    dragStartPan: { x: 0, y: 0 },
+    activeNode: null as GraphNodeData | null
+  });
 
-  // Mouse interaction state
-  const isDraggingCanvasRef = useRef(false);
-  const isDraggingNodeRef = useRef(false);
-  const dragStartMouseRef = useRef({ x: 0, y: 0 });
-  const dragStartTransformRef = useRef({ x: 0, y: 0 });
-  const activeDraggedNodeRef = useRef<GraphNodeData | null>(null);
-  const mouseScreenPosRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Background stars
-  const backgroundStarsRef = useRef<any[]>([]);
+  const [zoomLevelDisplay, setZoomLevelDisplay] = useState(0.78);
 
   // Simulation data clones
   const simNodesRef = useRef<GraphNodeData[]>([]);
@@ -230,7 +230,7 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
     return map;
   }, [initialNodes, initialEdges]);
 
-  // Initializing physics simulation with organic non-symmetric seeding
+  // Initializing 3D physics simulation with spacious multi-shell 3D distribution
   useEffect(() => {
     if (!initialNodes || initialNodes.length === 0) return;
 
@@ -248,16 +248,45 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
       return filteredNodeIds.has(srcId) && filteredNodeIds.has(tgtId);
     });
 
-    // Role cluster sector angles and distances around central MedSync core
-    const ROLE_SECTORS: Record<string, { angle: number; radius: number }> = {
-      Hospital: { angle: -Math.PI / 2, radius: 135 },       // 12 o'clock (North)
-      Doctor: { angle: -Math.PI / 6, radius: 160 },         // ~1:30 o'clock (North-East)
-      Patient: { angle: Math.PI / 4, radius: 195 },         // ~3:30 o'clock (East-Southeast)
-      Pharmacy: { angle: (3 * Math.PI) / 4, radius: 165 },  // ~7:30 o'clock (South-West)
-      Admin: { angle: (-3 * Math.PI) / 4, radius: 125 }     // ~10:30 o'clock (North-West)
+    // 3D Sectors around MedSync Core with generous radii & distinct 3D elevation
+    // Ensures categories never overlap and have plenty of breathing room
+    const ROLE_3D_SECTORS: Record<
+      string,
+      { baseAzimuth: number; baseElevation: number; innerRadius: number; outerRadius: number }
+    > = {
+      Hospital: {
+        baseAzimuth: -Math.PI / 2,     // 12 o'clock (North)
+        baseElevation: 0.35,           // +20° elevation
+        innerRadius: 280,
+        outerRadius: 360
+      },
+      Doctor: {
+        baseAzimuth: -Math.PI / 6,     // 2 o'clock (North-East)
+        baseElevation: 0.22,           // +12° elevation
+        innerRadius: 270,
+        outerRadius: 350
+      },
+      Patient: {
+        baseAzimuth: Math.PI / 4,      // 4 o'clock (East-Southeast)
+        baseElevation: -0.15,          // -8° depression
+        innerRadius: 300,
+        outerRadius: 390
+      },
+      Pharmacy: {
+        baseAzimuth: (3 * Math.PI) / 4,// 8 o'clock (South-West)
+        baseElevation: -0.25,          // -14° depression
+        innerRadius: 290,
+        outerRadius: 380
+      },
+      Admin: {
+        baseAzimuth: (-3 * Math.PI) / 4,// 10 o'clock (North-West)
+        baseElevation: 0.28,           // +16° elevation
+        innerRadius: 240,
+        outerRadius: 320
+      }
     };
 
-    const clonedNodes: GraphNodeData[] = filteredNodes.map((n) => {
+    const clonedNodes: GraphNodeData[] = filteredNodes.map((n, globalIdx) => {
       const isHub = n.isCentral || n.id === "MEDSYNC" || n.id === "MEDICINE" || n.type === "MedSync" || n.type === "Medicine";
       if (isHub) {
         return {
@@ -267,38 +296,62 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
           type: "MedSync",
           x: 0,
           y: 0,
+          z: 0,
           fx: 0,
           fy: 0,
+          fz: 0,
           targetX: 0,
           targetY: 0,
+          targetZ: 0,
           vx: 0,
-          vy: 0
+          vy: 0,
+          vz: 0,
+          phaseOffset: 0
         };
       }
 
-      // Group entities of the same role tightly together in their orbital sector
+      // Group entities of the same role and distribute across 2 tiered 3D orbital shells
       const sameRoleNodes = filteredNodes.filter((item) => item.type === n.type);
       const rIdx = sameRoleNodes.indexOf(n);
       const count = sameRoleNodes.length;
-      const sector = ROLE_SECTORS[n.type] || { angle: 0, radius: 150 };
+      const sector = ROLE_3D_SECTORS[n.type] || {
+        baseAzimuth: (globalIdx / Math.max(filteredNodes.length, 1)) * Math.PI * 2,
+        baseElevation: 0,
+        innerRadius: 280,
+        outerRadius: 360
+      };
 
-      const arcSpread = Math.min(0.65, 0.12 * Math.max(count, 1));
-      const spreadOffset = count > 1 ? ((rIdx / (count - 1)) - 0.5) * arcSpread : 0;
-      const radJitter = (rIdx % 2 === 0 ? 1 : -1) * 12;
+      // Angular spread across a wide fan (up to 1.35 radians ~78 degrees)
+      const maxFan = count > 1 ? Math.min(1.4, 0.18 * count) : 0;
+      const azOffset = count > 1 ? ((rIdx / (count - 1)) - 0.5) * maxFan : 0;
+      const az = sector.baseAzimuth + azOffset;
 
-      const targetAngle = sector.angle + spreadOffset;
-      const targetRadius = sector.radius + radJitter;
-      const initX = Math.cos(targetAngle) * targetRadius;
-      const initY = Math.sin(targetAngle) * targetRadius;
+      // Stagger radius between inner and outer shells so nodes don't sit in a tight line
+      const isOuter = rIdx % 2 === 1;
+      const radius = isOuter ? sector.outerRadius : sector.innerRadius;
+
+      // Alternate elevation and Z-depth for 3D volume
+      const elevOffset = (rIdx % 3 === 0 ? 0.12 : rIdx % 3 === 1 ? -0.12 : 0);
+      const el = sector.baseElevation + elevOffset;
+
+      // Convert spherical coordinates (azimuth, elevation, radius) to Cartesian (X, Y, Z)
+      const initX = radius * Math.cos(el) * Math.sin(az);
+      const initY = -radius * Math.sin(el); // Negative Y is UP in screen space
+      const initZ = radius * Math.cos(el) * Math.cos(az) + (rIdx % 2 === 0 ? 30 : -30);
 
       return {
         ...n,
         x: initX,
         y: initY,
+        z: initZ,
         targetX: initX,
         targetY: initY,
+        targetZ: initZ,
         vx: 0,
-        vy: 0
+        vy: 0,
+        vz: 0,
+        phaseOffset: globalIdx * 1.37,
+        floatSpeed: 0.8 + (globalIdx % 5) * 0.15
       };
     });
 
@@ -311,21 +364,25 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
     simNodesRef.current = clonedNodes;
     simEdgesRef.current = clonedEdges;
 
-    // D3 Force Simulation (Single tight cluster with role-based sector clustering)
-    const simulation = forceSimulation(clonedNodes, 2)
+    // D3 Force Simulation in full 3D space with high repulsion and collision clearance
+    const simulation = forceSimulation(clonedNodes, 3)
       .force(
         "charge",
         forceManyBody()
-          .strength((d: any) => (d.isCentral ? -260 : -85))
-          .distanceMax(360)
+          .strength((d: any) => (d.isCentral ? -700 : -280))
+          .distanceMax(650)
       )
       .force(
         "x",
-        forceX((d: any) => (d.isCentral ? 0 : d.targetX || 0)).strength((d: any) => (d.isCentral ? 1 : 0.32))
+        forceX((d: any) => (d.isCentral ? 0 : d.targetX || 0)).strength((d: any) => (d.isCentral ? 1 : 0.28))
       )
       .force(
         "y",
-        forceY((d: any) => (d.isCentral ? 0 : d.targetY || 0)).strength((d: any) => (d.isCentral ? 1 : 0.32))
+        forceY((d: any) => (d.isCentral ? 0 : d.targetY || 0)).strength((d: any) => (d.isCentral ? 1 : 0.28))
+      )
+      .force(
+        "z",
+        forceZ((d: any) => (d.isCentral ? 0 : d.targetZ || 0)).strength((d: any) => (d.isCentral ? 1 : 0.28))
       )
       .force(
         "link",
@@ -333,44 +390,35 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
           .id((d: any) => d.id)
           .distance((link: any) => {
             const type = link.type || "";
-            if (type.includes("network") || type.includes("verified") || type.includes("accredited") || type.includes("holder")) return 105;
-            if (type.includes("affiliated")) return 65;
-            if (type.includes("active") || type.includes("plan")) return 75;
-            if (type.includes("dispenses")) return 70;
-            return 80;
+            if (type.includes("network") || type.includes("verified") || type.includes("accredited") || type.includes("holder")) return 220;
+            if (type.includes("affiliated")) return 140;
+            if (type.includes("active") || type.includes("plan")) return 160;
+            if (type.includes("dispenses")) return 150;
+            return 170;
           })
-          .strength(0.75)
+          .strength(0.65)
       )
       .force(
         "collide",
         forceCollide()
           .radius((d: any) => {
             const conf = ENTITY_CONFIG[d.type] || DEFAULT_CONFIG;
-            return conf.radius + 15;
+            return conf.radius + 40; // Enforces wide spacing so labels have room
           })
           .iterations(3)
       )
-      .force("center", forceCenter(0, 0))
-      .alphaDecay(0.02)
-      .velocityDecay(0.35);
+      .force("center", forceCenter(0, 0, 0))
+      .alphaDecay(0.015)
+      .velocityDecay(0.32);
 
     simRef.current = simulation;
-
-    // Generate cosmic background stars
-    if (containerRef.current) {
-      backgroundStarsRef.current = generateBackgroundStars(
-        160,
-        containerRef.current.clientWidth || 1000,
-        containerRef.current.clientHeight || 600
-      );
-    }
 
     return () => {
       simulation.stop();
     };
   }, [initialNodes, initialEdges, filterType]);
 
-  // Main Canvas Render Loop (60 FPS, High-DPI hardware accelerated)
+  // Main 3D Hardware Accelerated Canvas Render Loop (60 FPS)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -387,42 +435,39 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
       const height = canvas.height;
       const dpr = window.devicePixelRatio || 1;
 
-      // Clear Canvas
+      // 1. Clear Canvas to Deep Obsidian Black (Clean, no sparkles)
       ctx.clearRect(0, 0, width, height);
-
-      // 1. Draw Complete Deep Black Space Background
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Draw Twinkling Background Celestial Starfield
-      if (showStarfield) {
-        ctx.save();
-        const stars = backgroundStarsRef.current;
-        const now = Date.now();
-        for (let i = 0; i < stars.length; i++) {
-          const s = stars[i];
-          const twinkle = Math.sin(now * s.twinkleSpeed + s.phase) * 0.2 + 0.8;
-          ctx.beginPath();
-          ctx.arc(
-            width / 2 + s.x * transformRef.current.k * 0.3 + transformRef.current.x * 0.1,
-            height / 2 + s.y * transformRef.current.k * 0.3 + transformRef.current.y * 0.1,
-            s.size * dpr,
-            0,
-            Math.PI * 2
-          );
-          ctx.fillStyle = `rgba(203, 213, 225, ${s.alpha * twinkle})`;
-          ctx.fill();
+      const camera = cameraRef.current;
+
+      // 2. Ambient 3D Floatation & Momentum Decay
+      if (!camera.isDragging) {
+        if (ambientDrift && !hoveredNode && !selectedNode) {
+          camera.rotY += 0.0007; // Gentle continuous 3D celestial orbit
         }
-        ctx.restore();
+        // Momentum friction
+        camera.rotY += camera.velRotY;
+        camera.rotX += camera.velRotX;
+        camera.velRotY *= 0.92;
+        camera.velRotX *= 0.92;
+        camera.rotX = Math.max(-1.3, Math.min(1.3, camera.rotX));
       }
 
-      // 3. Apply Camera Zoom & Pan Transformations
-      ctx.save();
-      ctx.translate(
-        width / 2 + transformRef.current.x * dpr,
-        height / 2 + transformRef.current.y * dpr
-      );
-      ctx.scale(transformRef.current.k * dpr, transformRef.current.k * dpr);
+      const rotX = camera.rotX;
+      const rotY = camera.rotY;
+      const zoom = camera.zoom;
+      const panX = camera.panX * dpr;
+      const panY = camera.panY * dpr;
+      const centerX = width / 2 + panX;
+      const centerY = height / 2 + panY;
+      const focalLength = 950 * dpr;
+
+      const cosY = Math.cos(rotY);
+      const sinY = Math.sin(rotY);
+      const cosX = Math.cos(rotX);
+      const sinX = Math.sin(rotX);
 
       const nodes = simNodesRef.current;
       const edges = simEdgesRef.current;
@@ -430,7 +475,7 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
       const selected = selectedNode;
       const activeNode = hovered || selected;
 
-      // Identify active constellation neighbors
+      // Active constellation neighbors
       const activeNeighborIds = new Set<string>();
       if (activeNode) {
         const neighbors = adjacencyMap.get(activeNode.id);
@@ -439,126 +484,183 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
         }
       }
 
-      // --- 4. RENDER CONSTELLATION EDGES ---
       const nowTime = Date.now();
-      for (let i = 0; i < edges.length; i++) {
-        const edge = edges[i];
-        const src = typeof edge.source === "object" ? edge.source : null;
-        const tgt = typeof edge.target === "object" ? edge.target : null;
+      const floatTime = nowTime * 0.001;
 
-        if (!src || !tgt || src.x === undefined || tgt.x === undefined) continue;
+      // 3. Project 3D Coordinates with Organic Anti-Gravity Floatation
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (n.x === undefined || n.y === undefined || n.z === undefined) continue;
+
+        // Harmonic 3D floatation wave (subtle weightless bobbing)
+        let curX = n.x;
+        let curY = n.y;
+        let curZ = n.z;
+
+        if (!n.isCentral) {
+          const phase = n.phaseOffset || 0;
+          const speed = n.floatSpeed || 1;
+          const floatDx = Math.sin(floatTime * 0.7 * speed + phase) * 8;
+          const floatDy = Math.cos(floatTime * 0.55 * speed + phase * 1.2) * 10;
+          const floatDz = Math.sin(floatTime * 0.65 * speed + phase * 0.8) * 11;
+          curX += floatDx;
+          curY += floatDy;
+          curZ += floatDz;
+        }
+
+        // Camera yaw rotation (around Y axis)
+        const x1 = curX * cosY + curZ * sinY;
+        const z1 = -curX * sinY + curZ * cosY;
+
+        // Camera pitch rotation (around X axis)
+        const y2 = curY * cosX - z1 * sinX;
+        const z2 = curY * sinX + z1 * cosX;
+
+        // Perspective scale factor based on depth Z
+        const scale = (focalLength / (focalLength + z2)) * zoom;
+
+        n.projX = centerX + x1 * scale;
+        n.projY = centerY + y2 * scale;
+        n.projScale = scale;
+        n.projDepth = z2;
+      }
+
+      // 4. RENDER 3D EDGES (Depth-aware & illuminated)
+      // Sort edges by average depth so foreground lines render properly
+      const sortedEdges = [...edges].filter((edge) => {
+        const src = typeof edge.source === "object" ? edge.source : nodes.find((n) => n.id === edge.source);
+        const tgt = typeof edge.target === "object" ? edge.target : nodes.find((n) => n.id === edge.target);
+        return src && tgt && src.projX !== undefined && tgt.projX !== undefined;
+      });
+
+      sortedEdges.sort((a, b) => {
+        const srcA = typeof a.source === "object" ? a.source : nodes.find((n) => n.id === a.source)!;
+        const tgtA = typeof a.target === "object" ? a.target : nodes.find((n) => n.id === a.target)!;
+        const srcB = typeof b.source === "object" ? b.source : nodes.find((n) => n.id === b.source)!;
+        const tgtB = typeof b.target === "object" ? b.target : nodes.find((n) => n.id === b.target)!;
+        const depthA = ((srcA.projDepth || 0) + (tgtA.projDepth || 0)) / 2;
+        const depthB = ((srcB.projDepth || 0) + (tgtB.projDepth || 0)) / 2;
+        return depthB - depthA; // Farthest first
+      });
+
+      for (let i = 0; i < sortedEdges.length; i++) {
+        const edge = sortedEdges[i];
+        const src = typeof edge.source === "object" ? edge.source : nodes.find((n) => n.id === edge.source)!;
+        const tgt = typeof edge.target === "object" ? edge.target : nodes.find((n) => n.id === edge.target)!;
 
         const isEdgeConnectedToActive =
           activeNode && (src.id === activeNode.id || tgt.id === activeNode.id);
 
+        const avgScale = ((src.projScale || 1) + (tgt.projScale || 1)) / 2;
+
         ctx.beginPath();
-        ctx.moveTo(src.x, src.y);
-        ctx.lineTo(tgt.x, tgt.y);
+        ctx.moveTo(src.projX!, src.projY!);
+        ctx.lineTo(tgt.projX!, tgt.projY!);
 
         if (isEdgeConnectedToActive) {
-          // HIGHLIGHTED EDGE (Inspired by cyan glowing lines in Image 2)
+          // Highlighted connected edge (vivid cyan neon beam)
           ctx.shadowColor = "#06b6d4";
-          ctx.shadowBlur = 12;
-          ctx.strokeStyle = "rgba(6, 182, 212, 0.95)"; // Bright cyan neon
-          ctx.lineWidth = 2.4 / transformRef.current.k;
+          ctx.shadowBlur = 14 * avgScale;
+          ctx.strokeStyle = "rgba(6, 182, 212, 0.95)";
+          ctx.lineWidth = Math.max(1.2, 2.5 * avgScale);
           ctx.stroke();
-
-          // Reset shadow
           ctx.shadowBlur = 0;
 
-          // Animated energy photon packet along the line
+          // Animated 3D energy pulse traveling along the link
           const progress = (nowTime / 1400 + i * 0.25) % 1;
-          const px = src.x + (tgt.x - src.x) * progress;
-          const py = src.y + (tgt.y - src.y) * progress;
+          const px = src.projX! + (tgt.projX! - src.projX!) * progress;
+          const py = src.projY! + (tgt.projY! - src.projY!) * progress;
 
           ctx.beginPath();
-          ctx.arc(px, py, 2.5 / transformRef.current.k, 0, Math.PI * 2);
+          ctx.arc(px, py, Math.max(1.5, 3 * avgScale), 0, Math.PI * 2);
           ctx.fillStyle = "#ffffff";
           ctx.shadowColor = "#38bdf8";
-          ctx.shadowBlur = 8;
+          ctx.shadowBlur = 8 * avgScale;
           ctx.fill();
           ctx.shadowBlur = 0;
         } else if (activeNode) {
-          // Dim non-connected edges when a node is hovered/active
-          ctx.strokeStyle = "rgba(100, 116, 139, 0.08)";
-          ctx.lineWidth = 0.8 / transformRef.current.k;
+          // Dim non-connected links
+          ctx.strokeStyle = "rgba(100, 116, 139, 0.06)";
+          ctx.lineWidth = Math.max(0.5, 0.8 * avgScale);
           ctx.stroke();
         } else {
-          // Resting constellation thread
-          ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
-          ctx.lineWidth = 1.1 / transformRef.current.k;
+          // Subtle resting network thread with depth attenuation
+          const alpha = Math.max(0.08, Math.min(0.28, 0.22 * avgScale));
+          ctx.strokeStyle = `rgba(148, 163, 184, ${alpha})`;
+          ctx.lineWidth = Math.max(0.6, 1.1 * avgScale);
           ctx.stroke();
         }
       }
 
-      // --- 5. RENDER CONSTELLATION NODES (STARS) ---
-      for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        if (node.x === undefined || node.y === undefined) continue;
+      // 5. RENDER 3D NODES (Depth-Sorted: Farthest -> Nearest)
+      const sortedNodes = [...nodes].filter((n) => n.projX !== undefined);
+      sortedNodes.sort((a, b) => (b.projDepth || 0) - (a.projDepth || 0));
 
+      for (let i = 0; i < sortedNodes.length; i++) {
+        const node = sortedNodes[i];
         const config = ENTITY_CONFIG[node.type] || DEFAULT_CONFIG;
         const isHovered = hovered?.id === node.id;
         const isSelected = selected?.id === node.id;
         const isNeighbor = activeNeighborIds.has(node.id);
         const isDimmed = activeNode && !isHovered && !isSelected && !isNeighbor;
 
-        const baseRadius = node.isCentral ? 14 : config.radius;
-        // Smoothly swell node radius when hovered or close
-        const radius = isHovered
-          ? baseRadius * 1.35
-          : isNeighbor
-          ? baseRadius * 1.15
-          : baseRadius;
+        const scale = node.projScale || 1;
+        const baseRadius = node.isCentral ? 16 : config.radius;
+        const swell = isHovered ? 1.4 : isNeighbor ? 1.2 : 1.0;
+        const radius = Math.max(3, baseRadius * scale * swell);
 
         ctx.save();
         if (isDimmed) {
-          ctx.globalAlpha = 0.18;
+          ctx.globalAlpha = 0.16;
+        } else {
+          // Depth atmospheric opacity for distant nodes
+          const depthAlpha = Math.max(0.55, Math.min(1.0, scale * 1.1));
+          ctx.globalAlpha = depthAlpha;
         }
 
-        // A. Outer Radiant Halo / Nebula Aura
-        const haloRadius = radius * (isHovered ? 3.0 : isNeighbor ? 2.4 : 1.9);
+        // A. 3D Radiant Aura Halo
+        const haloRadius = radius * (isHovered ? 3.2 : isNeighbor ? 2.5 : 2.0);
         const haloGrad = ctx.createRadialGradient(
-          node.x,
-          node.y,
-          radius * 0.5,
-          node.x,
-          node.y,
+          node.projX!,
+          node.projY!,
+          radius * 0.4,
+          node.projX!,
+          node.projY!,
           haloRadius
         );
 
         const auraColor = isNeighbor
-          ? config.neighborColor // Vivid neon magenta / pink for neighbors (Image 2 style)
+          ? config.neighborColor
           : isHovered
-          ? "#06b6d4" // Glowing teal/cyan for hovered node (Image 2 style)
+          ? "#06b6d4"
           : config.color;
 
-        haloGrad.addColorStop(0, auraColor + "88");
-        haloGrad.addColorStop(0.5, auraColor + "22");
+        haloGrad.addColorStop(0, auraColor + "99");
+        haloGrad.addColorStop(0.5, auraColor + "26");
         haloGrad.addColorStop(1, "rgba(0,0,0,0)");
 
         ctx.fillStyle = haloGrad;
         ctx.beginPath();
-        ctx.arc(node.x, node.y, haloRadius, 0, Math.PI * 2);
+        ctx.arc(node.projX!, node.projY!, haloRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        // B. Pulsing Concentric Outer Ring on Hover (Image 2 signature effect)
-        if (isHovered) {
-          const pulseWave = Math.sin(nowTime * 0.006) * 3;
+        // B. Pulsing Concentric Outer Ring on Hover / Selection
+        if (isHovered || isSelected) {
+          const pulseWave = Math.sin(nowTime * 0.007) * 3 * scale;
           ctx.beginPath();
-          ctx.arc(node.x, node.y, radius + 5 + pulseWave, 0, Math.PI * 2);
+          ctx.arc(node.projX!, node.projY!, radius + (5 * scale) + pulseWave, 0, Math.PI * 2);
           ctx.strokeStyle = "#22d3ee"; // Neon cyan
-          ctx.lineWidth = 1.8 / transformRef.current.k;
+          ctx.lineWidth = Math.max(1, 1.8 * scale);
           ctx.shadowColor = "#06b6d4";
-          ctx.shadowBlur = 10;
+          ctx.shadowBlur = 12 * scale;
           ctx.stroke();
           ctx.shadowBlur = 0;
         }
 
-        // C. Core Celestial Orb / Star Body
+        // C. Core 3D Sphere Body
         ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+        ctx.arc(node.projX!, node.projY!, radius, 0, Math.PI * 2);
 
-        // Core color: cyan if hovered, neighbor vibrant color if neighbor, else native entity color
         const coreColor = isHovered
           ? "#06b6d4"
           : isNeighbor
@@ -567,71 +669,70 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
 
         ctx.fillStyle = coreColor;
         ctx.shadowColor = coreColor;
-        ctx.shadowBlur = isHovered ? 16 : isNeighbor ? 12 : 6;
+        ctx.shadowBlur = (isHovered ? 18 : isNeighbor ? 12 : 8) * scale;
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Inner white glimmer highlight
+        // Inner specular highlight
         ctx.beginPath();
         ctx.arc(
-          node.x - radius * 0.3,
-          node.y - radius * 0.3,
+          node.projX! - radius * 0.3,
+          node.projY! - radius * 0.3,
           radius * 0.35,
           0,
           Math.PI * 2
         );
-        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
         ctx.fill();
 
-        // D. Node Text Label (Crisp, legibly rendered directly on canvas like Image 2)
+        // D. 3D Text Label (Rendered directly with high-contrast outline)
         const shouldShowLabel =
           labelMode === "ALL" ||
           (labelMode === "CONNECTED" && (isHovered || isNeighbor || isSelected)) ||
           (labelMode === "HOVER_ONLY" && (isHovered || isSelected));
 
         if (shouldShowLabel && !isDimmed) {
-          const fontSize = isHovered
+          const baseFontSize = isHovered
             ? 13
             : isNeighbor
-            ? 12
+            ? 11.5
             : node.isCentral
             ? 12
             : 10.5;
 
-          ctx.font = `${isHovered || isNeighbor ? "600" : "500"} ${
-            fontSize / transformRef.current.k
-          }px Inter, -apple-system, sans-serif`;
+          const fontSize = Math.max(8, Math.round(baseFontSize * scale));
+          ctx.font = `${isHovered || isNeighbor ? "600" : "500"} ${fontSize}px Inter, -apple-system, sans-serif`;
 
           const labelText = node.label || "Entity";
-          const labelY = node.y + radius + (13 / transformRef.current.k);
+          const labelY = node.projY! + radius + (11 * scale);
 
-          // Dark drop-shadow outline for guaranteed readability against lines
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          ctx.strokeStyle = "rgba(5, 7, 12, 0.9)";
-          ctx.lineWidth = 3 / transformRef.current.k;
-          ctx.strokeText(labelText, node.x, labelY);
+          // Dark drop-shadow outline for guaranteed readability
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.95)";
+          ctx.lineWidth = Math.max(2, 3.5 * scale);
+          ctx.strokeText(labelText, node.projX!, labelY);
 
           // Text Fill
           ctx.fillStyle = isHovered
             ? "#38bdf8"
             : isNeighbor
             ? "#f8fafc"
+            : scale < 0.75
+            ? "#94a3b8"
             : "#cbd5e1";
 
           if (isHovered) {
             ctx.shadowColor = "#0284c7";
             ctx.shadowBlur = 8;
           }
-          ctx.fillText(labelText, node.x, labelY);
+          ctx.fillText(labelText, node.projX!, labelY);
           ctx.shadowBlur = 0;
         }
 
         ctx.restore();
       }
-
-      ctx.restore();
 
       animFrameRef.current = requestAnimationFrame(render);
     };
@@ -644,9 +745,9 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [hoveredNode, selectedNode, labelMode, showStarfield, adjacencyMap]);
+  }, [hoveredNode, selectedNode, labelMode, ambientDrift, adjacencyMap]);
 
-  // Handle Resize & DPR
+  // Handle Resize & Canvas Dimensions
   useEffect(() => {
     const handleResize = () => {
       if (!canvasRef.current || !containerRef.current) return;
@@ -658,9 +759,6 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
       canvasRef.current.height = height * dpr;
       canvasRef.current.style.width = `${width}px`;
       canvasRef.current.style.height = `${height}px`;
-
-      // Regulate stars
-      backgroundStarsRef.current = generateBackgroundStars(160, width, height);
     };
 
     handleResize();
@@ -668,54 +766,34 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // PROXIMITY DETECTION & MOUSE INTERACTION ENGINE
-  // Solves: "and also i can navigate or it doesnt react when i take the mouse close to it"
+  // 3D MOUSE PROXIMITY DETECTION & INTERACTIVE CONTROLS
   const getMousePosOnCanvas = useCallback((e: React.MouseEvent) => {
     if (!canvasRef.current) return { x: 0, y: 0 };
     const rect = canvasRef.current.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: (e.clientX - rect.left) * dpr,
+      y: (e.clientY - rect.top) * dpr
     };
   }, []);
 
-  // Transform graph coordinates (node.x, node.y) to screen coordinates (px from top-left)
-  const graphToScreen = useCallback((gx: number, gy: number) => {
-    if (!canvasRef.current) return { x: 0, y: 0 };
-    const width = canvasRef.current.clientWidth;
-    const height = canvasRef.current.clientHeight;
-    return {
-      x: width / 2 + transformRef.current.x + gx * transformRef.current.k,
-      y: height / 2 + transformRef.current.y + gy * transformRef.current.k
-    };
-  }, []);
-
-  // Transform screen coordinates back to graph space
-  const screenToGraph = useCallback((sx: number, sy: number) => {
-    if (!canvasRef.current) return { x: 0, y: 0 };
-    const width = canvasRef.current.clientWidth;
-    const height = canvasRef.current.clientHeight;
-    return {
-      x: (sx - width / 2 - transformRef.current.x) / transformRef.current.k,
-      y: (sy - height / 2 - transformRef.current.y) / transformRef.current.k
-    };
-  }, []);
-
-  // Proximity Hit Tester: detects when mouse comes close to a node (radius ~42px)
+  // Proximity Hit Tester: detects which 3D node cursor is hovering over
   const findClosestNodeInProximity = useCallback(
-    (mx: number, my: number, thresholdRadius: number = 42) => {
+    (mx: number, my: number) => {
       const nodes = simNodesRef.current;
       let closestNode: GraphNodeData | null = null;
-      let minDistance = thresholdRadius;
+      let minDistance = Infinity;
 
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
-        if (node.x === undefined || node.y === undefined) continue;
+        if (node.projX === undefined || node.projY === undefined) continue;
 
-        const screenPos = graphToScreen(node.x, node.y);
-        const dist = Math.hypot(screenPos.x - mx, screenPos.y - my);
+        const scale = node.projScale || 1;
+        const config = ENTITY_CONFIG[node.type] || DEFAULT_CONFIG;
+        const hitRadius = (config.radius * scale + 24);
 
-        if (dist < minDistance) {
+        const dist = Math.hypot(node.projX - mx, node.projY - my);
+        if (dist <= hitRadius && dist < minDistance) {
           minDistance = dist;
           closestNode = node;
         }
@@ -723,101 +801,116 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
 
       return { node: closestNode, distance: minDistance };
     },
-    [graphToScreen]
+    []
   );
 
-  // Mouse Move Event Listener
+  // Mouse Move: Orbit, Pan, Node Drag or Hover Sensing
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       const { x: mx, y: my } = getMousePosOnCanvas(e);
-      mouseScreenPosRef.current = { x: mx, y: my };
+      const camera = cameraRef.current;
 
-      if (isDraggingNodeRef.current && activeDraggedNodeRef.current) {
-        // Dragging a node in 2D space
-        const graphPos = screenToGraph(mx, my);
-        activeDraggedNodeRef.current.fx = graphPos.x;
-        activeDraggedNodeRef.current.fy = graphPos.y;
-        if (simRef.current) {
-          simRef.current.alpha(0.2).restart();
+      if (camera.isDragging) {
+        const dx = mx - camera.dragStartMouse.x;
+        const dy = my - camera.dragStartMouse.y;
+
+        if (camera.dragMode === "ORBIT") {
+          // 3D Orbit Rotation around Center
+          const sensitivity = 0.0035;
+          camera.rotY = camera.dragStartAngles.rotY + dx * sensitivity;
+          camera.rotX = Math.max(
+            -1.3,
+            Math.min(1.3, camera.dragStartAngles.rotX + dy * sensitivity)
+          );
+          camera.velRotY = (dx * sensitivity) * 0.2;
+          camera.velRotX = (dy * sensitivity) * 0.2;
+        } else if (camera.dragMode === "PAN") {
+          // Canvas 2D Pan
+          camera.panX = camera.dragStartPan.x + dx;
+          camera.panY = camera.dragStartPan.y + dy;
+        } else if (camera.dragMode === "NODE" && camera.activeNode) {
+          // Reposition active node in 3D
+          const node = camera.activeNode;
+          const scale = node.projScale || 1;
+          const dpr = window.devicePixelRatio || 1;
+          node.x = (node.x || 0) + (dx / (scale * dpr)) * 0.2;
+          node.y = (node.y || 0) + (dy / (scale * dpr)) * 0.2;
+          node.fx = node.x;
+          node.fy = node.y;
+          node.fz = node.z;
+          if (simRef.current) simRef.current.alpha(0.15).restart();
         }
         return;
       }
 
-      if (isDraggingCanvasRef.current) {
-        // Panning the canvas
-        const dx = mx - dragStartMouseRef.current.x;
-        const dy = my - dragStartMouseRef.current.y;
-        transformRef.current.x = dragStartTransformRef.current.x + dx;
-        transformRef.current.y = dragStartTransformRef.current.y + dy;
-        return;
-      }
-
-      // Proximity detection: react when mouse moves close to any star!
-      const { node, distance } = findClosestNodeInProximity(mx, my, 45);
+      // Proximity detection for cursor reactions
+      const { node } = findClosestNodeInProximity(mx, my);
       if (node) {
         setHoveredNode(node);
-        setProximityDistance(distance);
         if (canvasRef.current) canvasRef.current.style.cursor = "pointer";
       } else {
         setHoveredNode(null);
-        setProximityDistance(0);
         if (canvasRef.current) canvasRef.current.style.cursor = "grab";
       }
     },
-    [getMousePosOnCanvas, screenToGraph, findClosestNodeInProximity]
+    [getMousePosOnCanvas, findClosestNodeInProximity]
   );
 
-  // Mouse Down Event Listener
+  // Mouse Down: Start Orbit or Node Drag
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       const { x: mx, y: my } = getMousePosOnCanvas(e);
-      dragStartMouseRef.current = { x: mx, y: my };
-      dragStartTransformRef.current = { ...transformRef.current };
+      const camera = cameraRef.current;
 
-      // Check if mouse is on or in proximity to a node
-      const { node } = findClosestNodeInProximity(mx, my, 35);
+      camera.isDragging = true;
+      camera.dragStartMouse = { x: mx, y: my };
+      camera.dragStartAngles = { rotX: camera.rotX, rotY: camera.rotY };
+      camera.dragStartPan = { x: camera.panX, y: camera.panY };
+
+      const { node } = findClosestNodeInProximity(mx, my);
       if (node) {
-        isDraggingNodeRef.current = true;
-        activeDraggedNodeRef.current = node;
-        const graphPos = screenToGraph(mx, my);
-        node.fx = graphPos.x;
-        node.fy = graphPos.y;
+        camera.dragMode = "NODE";
+        camera.activeNode = node;
+        node.fx = node.x;
+        node.fy = node.y;
+        node.fz = node.z;
+        if (canvasRef.current) canvasRef.current.style.cursor = "grabbing";
+      } else if (e.shiftKey || e.button === 1 || e.button === 2) {
+        camera.dragMode = "PAN";
         if (canvasRef.current) canvasRef.current.style.cursor = "grabbing";
       } else {
-        isDraggingCanvasRef.current = true;
+        camera.dragMode = "ORBIT";
         if (canvasRef.current) canvasRef.current.style.cursor = "grabbing";
       }
     },
-    [getMousePosOnCanvas, findClosestNodeInProximity, screenToGraph]
+    [getMousePosOnCanvas, findClosestNodeInProximity]
   );
 
-  // Mouse Up Event Listener
+  // Mouse Up: Settle node and register click selection
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
       const { x: mx, y: my } = getMousePosOnCanvas(e);
+      const camera = cameraRef.current;
+
       const movedDist = Math.hypot(
-        mx - dragStartMouseRef.current.x,
-        my - dragStartMouseRef.current.y
+        mx - camera.dragStartMouse.x,
+        my - camera.dragStartMouse.y
       );
 
-      if (isDraggingNodeRef.current && activeDraggedNodeRef.current) {
-        // Release node fixation (let it settle naturally into constellation)
-        activeDraggedNodeRef.current.fx = null;
-        activeDraggedNodeRef.current.fy = null;
-        isDraggingNodeRef.current = false;
-        activeDraggedNodeRef.current = null;
-        if (simRef.current) {
-          simRef.current.alpha(0.2).restart();
-        }
+      if (camera.dragMode === "NODE" && camera.activeNode) {
+        camera.activeNode.fx = null;
+        camera.activeNode.fy = null;
+        camera.activeNode.fz = null;
+        camera.activeNode = null;
+        if (simRef.current) simRef.current.alpha(0.15).restart();
       }
 
-      if (isDraggingCanvasRef.current) {
-        isDraggingCanvasRef.current = false;
-      }
+      camera.isDragging = false;
+      camera.dragMode = "NONE";
 
-      // If user performed a click without significant dragging, trigger selection
-      if (movedDist < 6) {
-        const { node } = findClosestNodeInProximity(mx, my, 35);
+      // If user clicked without dragging, select the node
+      if (movedDist < 8) {
+        const { node } = findClosestNodeInProximity(mx, my);
         if (node) {
           setSelectedNode(node);
         } else {
@@ -832,131 +925,37 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
     [getMousePosOnCanvas, findClosestNodeInProximity, hoveredNode]
   );
 
-  // Mouse Wheel (Smooth Zoom centered on cursor)
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const { x: mx, y: my } = getMousePosOnCanvas(e as any);
-      if (!canvasRef.current) return;
+  // Mouse Wheel (Smooth 3D Zoom)
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const camera = cameraRef.current;
+    const zoomDelta = e.deltaY < 0 ? 1.12 : 0.89;
+    camera.zoom = Math.max(0.35, Math.min(3.5, camera.zoom * zoomDelta));
+    setZoomLevelDisplay(camera.zoom);
+  }, []);
 
-      const width = canvasRef.current.clientWidth;
-      const height = canvasRef.current.clientHeight;
+  // Reset 3D View
+  const handleResetView = useCallback(() => {
+    const camera = cameraRef.current;
+    camera.rotX = -0.16;
+    camera.rotY = 0.35;
+    camera.zoom = 0.78;
+    camera.panX = 0;
+    camera.panY = 0;
+    camera.velRotX = 0;
+    camera.velRotY = 0;
+    setZoomLevelDisplay(0.78);
+  }, []);
 
-      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
-      const currentK = transformRef.current.k;
-      const newK = Math.max(0.25, Math.min(4.5, currentK * zoomFactor));
-
-      // Zoom towards mouse pointer
-      const graphMouseX = (mx - width / 2 - transformRef.current.x) / currentK;
-      const graphMouseY = (my - height / 2 - transformRef.current.y) / currentK;
-
-      transformRef.current.x = mx - width / 2 - graphMouseX * newK;
-      transformRef.current.y = my - height / 2 - graphMouseY * newK;
-      transformRef.current.k = newK;
-
-      setZoomLevel(newK);
-    },
-    [getMousePosOnCanvas]
-  );
-
-  // Double Click: Center camera onto clicked node or reset view
-  // Smooth Camera Animation
-  const smoothAnimateCamera = useCallback(
-    (targetX: number, targetY: number, targetK: number) => {
-      const startX = transformRef.current.x;
-      const startY = transformRef.current.y;
-      const startK = transformRef.current.k;
-      const startTime = performance.now();
-      const duration = 500;
-
-      const step = (now: number) => {
-        const elapsed = now - startTime;
-        const progress = Math.min(1, elapsed / duration);
-        // Ease-out cubic
-        const ease = 1 - Math.pow(1 - progress, 3);
-
-        transformRef.current.x = startX + (targetX - startX) * ease;
-        transformRef.current.y = startY + (targetY - startY) * ease;
-        transformRef.current.k = startK + (targetK - startK) * ease;
-        setZoomLevel(transformRef.current.k);
-
-        if (progress < 1) {
-          requestAnimationFrame(step);
-        }
-      };
-
-      requestAnimationFrame(step);
-    },
-    []
-  );
-
-  // Fit view: centers all nodes and adjusts zoom
-  const fitView = useCallback(() => {
-    const nodes = simNodesRef.current;
-    if (!nodes.length || !containerRef.current) return;
-
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-
-    for (const n of nodes) {
-      if (n.x === undefined || n.y === undefined) continue;
-      if (n.x < minX) minX = n.x;
-      if (n.x > maxX) maxX = n.x;
-      if (n.y < minY) minY = n.y;
-      if (n.y > maxY) maxY = n.y;
-    }
-
-    const boundWidth = Math.max(maxX - minX + 160, 200);
-    const boundHeight = Math.max(maxY - minY + 160, 200);
-
-    const containerWidth = containerRef.current.clientWidth || 800;
-    const containerHeight = containerRef.current.clientHeight || 500;
-
-    const scaleX = containerWidth / boundWidth;
-    const scaleY = containerHeight / boundHeight;
-    const targetK = Math.min(1.2, Math.max(0.4, Math.min(scaleX, scaleY) * 0.85));
-
-    const centerX = -(minX + maxX) / 2 * targetK;
-    const centerY = -(minY + maxY) / 2 * targetK;
-
-    smoothAnimateCamera(centerX, centerY, targetK);
-  }, [smoothAnimateCamera]);
-
-  // Double Click: Center camera onto clicked node or reset view
-  const handleDoubleClick = useCallback(
-    (e: React.MouseEvent) => {
-      const { x: mx, y: my } = getMousePosOnCanvas(e);
-      const { node } = findClosestNodeInProximity(mx, my, 40);
-
-      if (node && node.x !== undefined && node.y !== undefined) {
-        // Smoothly center onto this node
-        smoothAnimateCamera(-node.x * 1.6, -node.y * 1.6, 1.6);
-        setSelectedNode(node);
-      } else {
-        // Reset view to origin
-        fitView();
-      }
-    },
-    [getMousePosOnCanvas, findClosestNodeInProximity, smoothAnimateCamera, fitView]
-  );
-
-  // Zoom Controls
+  // Zoom In / Zoom Out Controls
   const handleZoomIn = () => {
-    smoothAnimateCamera(
-      transformRef.current.x,
-      transformRef.current.y,
-      Math.min(4.5, transformRef.current.k * 1.3)
-    );
+    cameraRef.current.zoom = Math.min(3.5, cameraRef.current.zoom * 1.25);
+    setZoomLevelDisplay(cameraRef.current.zoom);
   };
 
   const handleZoomOut = () => {
-    smoothAnimateCamera(
-      transformRef.current.x,
-      transformRef.current.y,
-      Math.max(0.25, transformRef.current.k * 0.75)
-    );
+    cameraRef.current.zoom = Math.max(0.35, cameraRef.current.zoom * 0.8);
+    setZoomLevelDisplay(cameraRef.current.zoom);
   };
 
   const handleReheatPhysics = () => {
@@ -965,7 +964,7 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
     }
   };
 
-  // Render Entity Details Modal/Drawer
+  // Render Entity Details Drawer
   const renderEntityDetails = (data: any) => {
     if (!data) return null;
     return (
@@ -1006,14 +1005,14 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
             </div>
           </div>
         )}
-        {(data.city || data.state || data.address) && (
+        {(data.city || data.state || data.address || data.clinicAddress) && (
           <div className="flex items-start gap-2.5">
             <MapPin className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
             <div>
               <p className="text-xs text-muted-foreground">Address / Region</p>
               <p className="text-foreground/90 leading-snug">
-                {data.address || ""}
-                {data.city ? `${data.address ? ", " : ""}${data.city}, ${data.state || ""}` : ""}
+                {data.clinicAddress || data.address || ""}
+                {data.city ? `${data.clinicAddress || data.address ? ", " : ""}${data.city}, ${data.state || ""}` : ""}
               </p>
             </div>
           </div>
@@ -1069,8 +1068,9 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
     <div
       ref={containerRef}
       className="relative w-full h-[540px] rounded-2xl overflow-hidden border border-neutral-900 bg-black select-none shadow-2xl"
+      onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Interactive HTML5 Hardware Accelerated Canvas */}
+      {/* 3D Hardware Accelerated Canvas */}
       <canvas
         ref={canvasRef}
         onMouseMove={handleMouseMove}
@@ -1078,13 +1078,12 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
-        onDoubleClick={handleDoubleClick}
         className="w-full h-full block cursor-grab active:cursor-grabbing"
       />
 
-      {/* TOP-LEFT OBSIDIAN STYLE GEAR & NAVIGATION TOOLBAR (Image 2 style) */}
+      {/* TOP-LEFT CONTROLS TOOLBAR */}
       <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
-        {/* Settings Gear Button */}
+        {/* Settings Button */}
         <div className="relative">
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -1093,19 +1092,19 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
                 ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300"
                 : "bg-background/80 hover:bg-background/95 border-border/70 text-foreground/80 hover:text-foreground"
             }`}
-            title="Constellation Settings & Filters"
+            title="Graph View Controls & Filters"
           >
             <Settings className={`h-4 w-4 ${showSettings ? "animate-spin-slow" : ""}`} />
           </button>
 
-          {/* Obsidian Style Settings Popover */}
+          {/* Settings Popover */}
           {showSettings && (
             <div className="absolute top-12 left-0 w-72 bg-card/95 backdrop-blur-xl border border-border/80 rounded-2xl p-4 shadow-2xl z-30 space-y-4 animate-in fade-in zoom-in-95 duration-150">
               <div className="flex items-center justify-between border-b border-border/50 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-cyan-400" />
+                  <Compass className="h-4 w-4 text-cyan-400" />
                   <span className="font-semibold text-xs tracking-wider uppercase text-foreground">
-                    Constellation Engine
+                    3D Graph Controls
                   </span>
                 </div>
                 <button
@@ -1167,18 +1166,18 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
                 </div>
               </div>
 
-              {/* Starfield Toggle */}
+              {/* Ambient 3D Float Drift Toggle */}
               <div className="flex items-center justify-between pt-1 border-t border-border/50">
-                <span className="text-xs text-muted-foreground">Cosmic Starfield</span>
+                <span className="text-xs text-muted-foreground">Ambient 3D Float</span>
                 <button
-                  onClick={() => setShowStarfield(!showStarfield)}
+                  onClick={() => setAmbientDrift(!ambientDrift)}
                   className={`text-xs px-2.5 py-1 rounded-md border font-medium transition-colors ${
-                    showStarfield
+                    ambientDrift
                       ? "bg-primary/20 border-primary/40 text-primary"
                       : "bg-muted/40 border-border text-muted-foreground"
                   }`}
                 >
-                  {showStarfield ? "Active" : "Muted"}
+                  {ambientDrift ? "Active" : "Paused"}
                 </button>
               </div>
             </div>
@@ -1202,35 +1201,35 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
             <ZoomOut className="h-4 w-4" />
           </button>
           <button
-            onClick={fitView}
+            onClick={handleResetView}
             className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-            title="Fit to Screen"
+            title="Reset 3D Perspective"
           >
             <Maximize2 className="h-4 w-4" />
           </button>
           <button
             onClick={handleReheatPhysics}
             className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-            title="Settle Constellation Forces"
+            title="Re-balance 3D Physics Layout"
           >
             <RotateCcw className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* TOP-RIGHT CONSTELLATION TELEMETRY STATS */}
+      {/* TOP-RIGHT TELEMETRY STATS */}
       <div className="absolute top-4 right-4 z-10 hidden sm:flex items-center gap-2">
         <div className="bg-background/80 backdrop-blur-md border border-border/70 rounded-xl px-3 py-1.5 shadow-lg text-[11px] font-mono text-muted-foreground flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span>
-            {simNodesRef.current.length} Stars • {simEdgesRef.current.length} Links
+            {simNodesRef.current.length} Nodes • {simEdgesRef.current.length} Links
           </span>
           <span className="text-foreground/40">|</span>
-          <span>{Math.round(zoomLevel * 100)}% Zoom</span>
+          <span>{Math.round(zoomLevelDisplay * 100)}% Zoom</span>
         </div>
       </div>
 
-      {/* HOVER / PROXIMITY HUD TOOLTIP (Image 2 style reactive badge) */}
+      {/* HOVER / PROXIMITY TOOLTIP */}
       {hoveredNode && !selectedNode && (
         <div className="absolute bottom-5 left-5 z-20 bg-card/90 backdrop-blur-md border border-border/80 rounded-xl p-3.5 shadow-2xl max-w-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center gap-2 mb-1.5">
@@ -1261,12 +1260,12 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
           </div>
 
           <p className="text-xs text-muted-foreground line-clamp-2">
-            {hoveredNode.details || "Connected in healthcare constellation graph"}
+            {hoveredNode.details || "Connected platform entity node"}
           </p>
 
           <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground font-mono">
             <span>
-              {adjacencyMap.get(hoveredNode.id)?.size || 0} Connected Constellation Link
+              {adjacencyMap.get(hoveredNode.id)?.size || 0} Connected Link
               {(adjacencyMap.get(hoveredNode.id)?.size || 0) === 1 ? "" : "s"}
             </span>
             <span className="text-cyan-400 font-sans font-medium flex items-center gap-0.5">
@@ -1276,7 +1275,7 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
         </div>
       )}
 
-      {/* SELECTED NODE INSPECTOR MODAL / DRAWER */}
+      {/* SELECTED NODE INSPECTOR MODAL */}
       {selectedNode && (
         <div className="absolute top-4 right-4 bottom-4 w-80 sm:w-96 bg-card/95 backdrop-blur-2xl border border-border/90 rounded-2xl p-5 shadow-2xl z-30 flex flex-col justify-between overflow-y-auto animate-in slide-in-from-right-4 duration-200">
           <div className="space-y-4">
@@ -1344,26 +1343,8 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
           {/* Footer Action */}
           <div className="pt-4 border-t border-border/60 mt-4 flex items-center gap-2">
             <button
-              onClick={() => {
-                if (
-                  selectedNode &&
-                  selectedNode.x !== undefined &&
-                  selectedNode.y !== undefined
-                ) {
-                  smoothAnimateCamera(
-                    -selectedNode.x * 1.8,
-                    -selectedNode.y * 1.8,
-                    1.8
-                  );
-                }
-              }}
-              className="flex-1 py-2 px-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-md"
-            >
-              <Sparkles className="h-3.5 w-3.5" /> Center Star View
-            </button>
-            <button
               onClick={() => setSelectedNode(null)}
-              className="py-2 px-3 rounded-xl border border-border hover:bg-muted text-xs font-medium text-foreground transition-colors"
+              className="w-full py-2 px-3 rounded-xl border border-border hover:bg-muted text-xs font-medium text-foreground transition-colors"
             >
               Close
             </button>
@@ -1371,9 +1352,9 @@ export default function ConstellationGraph({ nodes: initialNodes, edges: initial
         </div>
       )}
 
-      {/* BOTTOM-RIGHT CONSTELLATION NAVIGATION HINT */}
-      <div className="absolute bottom-3 right-4 z-10 pointer-events-none text-[11px] text-muted-foreground/50 font-mono hidden md:block">
-        Pan: Drag canvas • Zoom: Scroll • Drag stars to adjust • Click to inspect
+      {/* BOTTOM-RIGHT NAVIGATION HINT */}
+      <div className="absolute bottom-3 right-4 z-10 pointer-events-none text-[11px] text-muted-foreground/60 font-mono hidden md:block">
+        Orbit: Drag canvas • Zoom: Scroll • Drag node to move • Click to inspect
       </div>
     </div>
   );

@@ -11,6 +11,8 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { BlockchainVerifyResult } from "@/services/blockchain.service";
 
+import { LedgerVerificationLoader } from "./LedgerVerificationLoader";
+
 interface BlockchainVerificationCardProps {
   data: BlockchainVerifyResult | null;
   onScanAnother?: () => void;
@@ -34,30 +36,12 @@ export function BlockchainVerificationCard({
 
   if (isLoading || !data) {
     return (
-      <Card className="rounded-3xl border border-primary/30 shadow-xl overflow-hidden relative max-w-xl mx-auto bg-gradient-to-b from-primary/5 via-card to-card">
-        <div className="h-1.5 w-full bg-gradient-to-r from-primary via-blue-500 to-primary animate-[pulse_1.5s_infinite]" />
-        <CardHeader className="text-center pt-12 pb-8 px-4 sm:px-8">
-          <div className="mx-auto h-24 w-24 relative flex items-center justify-center mb-6">
-            <motion.div 
-              className="absolute inset-0 border-[3px] border-primary/30 rounded-[35%] border-t-primary"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            />
-            <motion.div 
-              className="absolute inset-2 border-[3px] border-blue-500/30 rounded-[40%] border-b-blue-500"
-              animate={{ rotate: -360 }}
-              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-            />
-            <Activity className="h-10 w-10 text-primary animate-pulse" />
-          </div>
-          <CardTitle className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-            Verifying Distributed Ledger...
-          </CardTitle>
-          <CardDescription className="text-sm sm:text-base mt-2 max-w-md mx-auto text-muted-foreground leading-relaxed">
-            Querying active Polygon Amoy nodes and validating cryptographic consensus.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <LedgerVerificationLoader
+        title="Verifying Distributed Ledger..."
+        description="Querying active Polygon Amoy nodes and validating cryptographic consensus."
+        identifier={data?.identifier}
+        network="Polygon Amoy"
+      />
     );
   }
 

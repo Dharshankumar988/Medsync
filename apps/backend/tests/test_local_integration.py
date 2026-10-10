@@ -8,7 +8,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from app.blockchain.client import blockchain_client
 from app.blockchain.gateway import blockchain_gateway
 from app.blockchain.contracts.loader import contract_loader
+import pytest
 
+@pytest.mark.skipif(os.getenv("RUN_LOCAL_HARDHAT_TESTS") != "true", reason="Requires local Hardhat node")
 async def test_integration():
     print("Testing Backend -> Local Hardhat Node Integration")
     

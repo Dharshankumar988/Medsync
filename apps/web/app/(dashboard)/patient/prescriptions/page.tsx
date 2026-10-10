@@ -14,6 +14,7 @@ import SecureOrderModal from "@/components/patient/SecureOrderModal";
 import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
 import { useSecurityStore } from "@/store/useSecurityStore";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { formatDoctorName } from "@/lib/formatDoctorName";
 
 export default function PrescriptionsPage() {
   const { user } = useAuth();
@@ -130,7 +131,7 @@ export default function PrescriptionsPage() {
                       <Pill className="h-5 w-5 text-emerald-500" />
                     </div>
                     <div>
-                      <CardTitle className="text-base">Dr. {prescription.doctor?.full_name || 'Unknown'}</CardTitle>
+                      <CardTitle className="text-base">{formatDoctorName(prescription.doctor?.full_name)}</CardTitle>
                       <p className="text-xs text-muted-foreground">{new Date(prescription.created_at).toLocaleDateString()}</p>
                     </div>
                   </div>

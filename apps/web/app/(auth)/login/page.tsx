@@ -191,7 +191,7 @@ export default function LoginPage() {
                   <label htmlFor="password" className="text-sm font-medium text-foreground/80">
                     Password
                   </label>
-                  <Link href="/reset-password" className="text-xs font-medium text-blue-500 hover:text-blue-400 transition-colors">
+                  <Link href="/forgot-password" className="text-xs font-medium text-blue-500 hover:text-blue-400 transition-colors">
                     Forgot password?
                   </Link>
                 </div>

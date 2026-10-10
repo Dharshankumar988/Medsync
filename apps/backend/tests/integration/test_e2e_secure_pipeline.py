@@ -40,6 +40,7 @@ requires_credentials = pytest.mark.skipif(
     not os.getenv("PINATA_JWT") or not os.getenv("BLOCKCHAIN_PRIVATE_KEY"),
     reason="Missing credentials for real E2E tests"
 )
+pytestmark = requires_credentials
 
 @requires_credentials
 @pytest.mark.asyncio

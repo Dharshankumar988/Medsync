@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { formatDoctorName } from "@/lib/formatDoctorName";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -191,7 +192,7 @@ export default function PatientDashboard() {
                     <div key={appt.id} className="flex items-start gap-3 border-b border-border/40 pb-3 last:border-0 last:pb-0">
                       <div className="h-2 w-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                       <div>
-                        <p className="text-sm font-medium">Appointment with Dr. {appt.doctor?.full_name || 'Assigned Doctor'}</p>
+                        <p className="text-sm font-medium">Appointment with {formatDoctorName(appt.doctor?.full_name)}</p>
                         <p className="text-xs text-muted-foreground">{new Date(appt.appointment_date).toLocaleDateString()} at {appt.start_time?.slice(0,5)}</p>
                         <span className={`text-[10px] font-semibold mt-1 px-2 py-0.5 rounded-full inline-block ${appt.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
                           {appt.status}

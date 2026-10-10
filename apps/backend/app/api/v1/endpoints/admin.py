@@ -764,16 +764,20 @@ async def get_relationship_graph(
             }
         })
 
-    # Get top 10 recent doctors (verified)
-    doctors_stmt = select(Doctor, User).join(
+    # Get top 10 recent doctors (all active, approved, verified, or registered practitioners)
+    doctors_stmt = select(Doctor, User).outerjoin(
         User, Doctor.user_id == User.id
-    ).where(Doctor.doctor_status == "VERIFIED").order_by(desc(Doctor.created_at)).limit(10)
+    ).where(
+        (Doctor.doctor_status.in_(["VERIFIED", "APPROVED", "ACTIVE", "PENDING"])) |
+        (Doctor.doctor_status.is_(None))
+    ).order_by(desc(Doctor.created_at)).limit(10)
     doctors_result = await db.execute(doctors_stmt)
     doctors = doctors_result.all()
 
     for doctor, user in doctors:
         location_str = f"{doctor.city}, {doctor.state}" if doctor.city else "Location not set"
-        google_maps_link = f"https://www.google.com/maps/search/?api=1&query={doctor.clinic_address.replace(' ', '+')}" if doctor.clinic_address else None
+        doc_address = doctor.clinic_address or getattr(doctor, "hospital_address", None) or ""
+        google_maps_link = f"https://www.google.com/maps/search/?api=1&query={doc_address.replace(' ', '+')}" if doc_address else None
 
         nodes.append({
             "id": f"DOCTOR_{doctor.id}",
@@ -783,11 +787,11 @@ async def get_relationship_graph(
             "details": f"Doctor | {doctor.specialization or 'General'} | {location_str}",
             "entityData": {
                 "name": doctor.full_name,
-                "email": user.email,
-                "specialization": doctor.specialization,
+                "email": user.email if user else None,
+                "specialization": doctor.specialization or "General Practice",
                 "licenseNumber": doctor.license_number,
-                "clinicName": doctor.clinic_name,
-                "clinicAddress": doctor.clinic_address,
+                "clinicName": doctor.clinic_name or getattr(doctor, "hospital_name", "Medical Practice"),
+                "clinicAddress": doc_address,
                 "city": doctor.city,
                 "state": doctor.state,
                 "country": doctor.country,

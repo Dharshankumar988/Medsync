@@ -7,6 +7,7 @@ import { Button } from "@medsync/ui";
 import { Badge, Skeleton } from "@medsync/ui";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { formatDoctorName } from "@/lib/formatDoctorName";
 
 export default function AdminUsers() {
   const [verifications, setVerifications] = useState<any[]>([]);
@@ -356,7 +357,7 @@ export default function AdminUsers() {
                   {doctors.map(d => (
                     <div key={d.user_id} className="flex justify-between items-center p-4 hover:bg-muted/10">
                       <div>
-                        <p className="font-medium">Dr. {d.full_name}</p>
+                        <p className="font-medium">{formatDoctorName(d.full_name)}</p>
                         <p className="text-sm text-muted-foreground">{d.email} • {d.license_number}</p>
                         <p className="text-xs text-muted-foreground mt-1">Practice: {d.hospital_name || d.clinic_name || 'Independent'}</p>
                       </div>

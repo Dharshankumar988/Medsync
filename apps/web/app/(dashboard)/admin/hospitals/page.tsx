@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { hospitalService, Hospital } from "@/services/hospital.service";
 import { Button } from "@medsync/ui";
 import { Input } from "@medsync/ui";
-import { Plus, Search, Building2, MapPin, Mail, Phone, MoreVertical, Loader2 } from "lucide-react";
+import { Plus, Search, Building2, MapPin, Mail, Phone, MoreVertical, Loader2, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 import dynamic from "next/dynamic";
 
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
@@ -83,9 +84,20 @@ export default function HospitalsManagementPage() {
     }
   };
 
+  const handleAuthorize = async (id: string, name: string) => {
+    try {
+      await hospitalService.verifyHospital(id);
+      toast.success(`${name} has been authorized and verified!`);
+      loadHospitals();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to authorize hospital");
+    }
+  };
+
   const handleDeactivate = async (id: string) => {
     try {
       await hospitalService.deactivateHospital(id);
+      toast.success("Facility deactivated");
       loadHospitals();
     } catch (error) {
       console.error("Error deactivating hospital:", error);
@@ -295,26 +307,45 @@ export default function HospitalsManagementPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="right">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                        <DropdownMenuItem>Edit Hospital</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => handleDeactivate(hospital.id)}
+                    <div className="flex items-center justify-end gap-2">
+                      {!hospital.is_verified && (
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleAuthorize(hospital.id, hospital.name)}
+                          className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1 shadow-sm"
                         >
-                          Deactivate
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          <ShieldCheck className="h-3.5 w-3.5" /> Authorize
+                        </Button>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="right">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          {!hospital.is_verified && (
+                            <DropdownMenuItem 
+                              className="text-emerald-600 focus:text-emerald-700 font-medium cursor-pointer"
+                              onClick={() => handleAuthorize(hospital.id, hospital.name)}
+                            >
+                              <ShieldCheck className="mr-2 h-4 w-4" /> Authorize Facility
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem>View Details</DropdownMenuItem>
+                          <DropdownMenuItem>Edit Hospital</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-destructive focus:text-destructive cursor-pointer"
+                            onClick={() => handleDeactivate(hospital.id)}
+                          >
+                            Deactivate
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

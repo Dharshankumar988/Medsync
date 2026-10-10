@@ -1219,10 +1219,43 @@ async def get_network_details(
             }
             return APIResponse(message="Network not configured", data=data)
         
-        latest_block = await asyncio.to_thread(lambda: w3.eth.block_number)
-        gas_price = await asyncio.to_thread(lambda: w3.eth.gas_price)
+        def _fetch_chain_details():
+            block_num = w3.eth.block_number
+            gp = w3.eth.gas_price
+            cid = w3.eth.chain_id
+            c_version = getattr(w3, 'client_version', 'Bor')
+            
+            # Fetch latest block details
+            latest_b = w3.eth.get_block(block_num, full_transactions=False)
+            base_fee = getattr(latest_b, 'baseFeePerGas', 0)
+            
+            # Fetch last 5 real mined blocks from Polygon Amoy
+            blocks_list = []
+            for i in range(5):
+                try:
+                    b_obj = w3.eth.get_block(block_num - i, full_transactions=False)
+                    gas_pct = round((b_obj.gasUsed / b_obj.gasLimit) * 100, 1) if b_obj.gasLimit else 0.0
+                    blocks_list.append({
+                        "number": b_obj.number,
+                        "hash": b_obj.hash.hex(),
+                        "tx_count": len(b_obj.transactions),
+                        "gas_used": b_obj.gasUsed,
+                        "gas_limit": b_obj.gasLimit,
+                        "gas_pct": gas_pct,
+                        "miner": b_obj.miner,
+                        "timestamp": b_obj.timestamp
+                    })
+                except Exception:
+                    pass
+            
+            return block_num, gp, cid, c_version, latest_b, base_fee, blocks_list
+
+        latest_block, gas_price, chain_id, client_version, latest_block_obj, base_fee, recent_blocks = await asyncio.to_thread(_fetch_chain_details)
+        
         gas_price_gwei = float(w3.from_wei(gas_price, "gwei"))
-        chain_id = await asyncio.to_thread(lambda: w3.eth.chain_id)
+        base_fee_gwei = float(w3.from_wei(base_fee, "gwei")) if base_fee else 0.0
+        priority_fee_gwei = max(0.0, gas_price_gwei - base_fee_gwei)
+
         # Redact API key from RPC URL — only expose hostname
         raw_uri = str(getattr(w3.provider, 'endpoint_uri', 'Unknown'))
         try:
@@ -1231,15 +1264,31 @@ async def get_network_details(
             rpc_display = f"{parsed.scheme}://{parsed.hostname}" if parsed.hostname else "Unknown"
         except Exception:
             rpc_display = "Connected"
+        
+        from app.blockchain.services.chain_sync import KNOWN_CONTRACTS
+        contracts_list = [
+            {
+                "name": name,
+                "address": addr,
+                "status": "deployed",
+                "network": "Polygon Amoy"
+            }
+            for addr, name in KNOWN_CONTRACTS.items()
+        ]
             
         data = {
             "network": "Amoy",
             "chain_id": chain_id,
             "status": "connected",
             "latest_block": latest_block,
-            "gas_price_gwei": gas_price_gwei,
+            "gas_price_gwei": round(gas_price_gwei, 2),
+            "base_fee_gwei": round(base_fee_gwei, 6),
+            "priority_fee_gwei": round(priority_fee_gwei, 2),
+            "client_version": client_version,
             "rpc_provider": rpc_display,
-            "rpc_provider_full": raw_uri
+            "rpc_provider_full": raw_uri,
+            "recent_blocks": recent_blocks,
+            "contracts": contracts_list
         }
         return APIResponse(message="Network details retrieved", data=data)
     except Exception as e:

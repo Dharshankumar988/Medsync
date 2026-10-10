@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Building, MapPin, Plus, Loader2, RefreshCw } from "lucide-react";
+import { Building, MapPin, Plus, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { Button, Input } from "@medsync/ui";
+import { toast } from "sonner";
 import api from "@/lib/api";
 import dynamic from "next/dynamic";
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
@@ -32,6 +33,17 @@ export default function MedicalFacilitiesManagement() {
       console.error("Failed to fetch facilities", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAuthorize = async (id: string, name: string) => {
+    try {
+      await api.post(`/api/v1/hospitals/${id}/verify`);
+      toast.success(`${name} authorized and verified successfully!`);
+      fetchFacilities();
+    } catch (err) {
+      console.error("Failed to authorize facility", err);
+      toast.error("Failed to authorize facility");
     }
   };
 
@@ -122,13 +134,15 @@ export default function MedicalFacilitiesManagement() {
                 <th className="px-5 py-3 font-medium text-muted-foreground">Facility Name</th>
                 <th className="px-5 py-3 font-medium text-muted-foreground">Location</th>
                 <th className="px-5 py-3 font-medium text-muted-foreground">Coordinates</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground">Verification</th>
                 <th className="px-5 py-3 font-medium text-muted-foreground">Status</th>
+                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {facilities.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-muted-foreground">No facilities registered yet.</td>
+                  <td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">No facilities registered yet.</td>
                 </tr>
               ) : (
                 facilities.map(f => (
@@ -136,14 +150,36 @@ export default function MedicalFacilitiesManagement() {
                     <td className="px-5 py-4 font-medium flex items-center gap-2">
                       <Building className="h-4 w-4 text-muted-foreground" /> {f.name}
                     </td>
-                    <td className="px-5 py-4 max-w-[300px] truncate" title={f.address}>{f.address}</td>
+                    <td className="px-5 py-4 max-w-[260px] truncate" title={f.address}>{f.address}</td>
                     <td className="px-5 py-4 font-mono text-xs text-muted-foreground">
                       {f.latitude ? `${parseFloat(f.latitude).toFixed(4)}, ${parseFloat(f.longitude).toFixed(4)}` : 'N/A'}
+                    </td>
+                    <td className="px-5 py-4">
+                      {f.is_verified ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-800/30 dark:text-emerald-400">
+                          Verified
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-800/30 dark:text-amber-400">
+                          Pending Approval
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${f.is_active ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/30' : 'bg-red-500/10 text-red-600 border border-red-500/30'}`}>
                         {f.is_active ? 'Active' : 'Inactive'}
                       </span>
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      {!f.is_verified && (
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleAuthorize(f.id, f.name)}
+                          className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1 shadow-sm"
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5" /> Authorize
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))

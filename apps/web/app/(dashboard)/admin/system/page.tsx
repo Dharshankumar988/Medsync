@@ -2,7 +2,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
-import { Server, Database, CheckCircle, Brain, XCircle, Loader2, Sparkles } from "lucide-react";
+import { Server, Database, CheckCircle, Brain, XCircle, Loader2, Sparkles, Share2 } from "lucide-react";
 import { Badge } from "@medsync/ui";
 import api from "@/lib/api";
 
@@ -12,7 +12,7 @@ const ConstellationGraph = dynamic(() => import('@/components/admin/Constellatio
     <div className="flex items-center justify-center h-full w-full border rounded-2xl border-dashed border-border/50 bg-[#070a12]">
       <div className="flex flex-col items-center gap-3 text-muted-foreground">
         <div className="animate-spin h-8 w-8 border-3 border-cyan-500 border-t-transparent rounded-full" />
-        <span className="text-xs font-mono">Initializing Celestial Constellation Engine...</span>
+        <span className="text-xs font-mono">Initializing 3D Graph Engine...</span>
       </div>
     </div>
   )
@@ -116,10 +116,10 @@ export default function AdminSystem() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <CardTitle className="flex items-center gap-2.5 text-xl">
-                  <Sparkles className="h-5 w-5 text-amber-400" /> MedSync Healthcare Constellation
+                  <Share2 className="h-5 w-5 text-cyan-400" /> Advanced Graph View
                 </CardTitle>
                 <CardDescription className="mt-1">
-                  Interactive celestial knowledge graph inspired by deep space constellations. Features mouse proximity sensing, organic clusters, and real-time physics. Hover near any star to illuminate connected pathways.
+                  Interactive 3D network topology connecting platform entities. Drag background to rotate in 3D, scroll to zoom, and select any node to trace clinical and operational relationships.
                 </CardDescription>
               </div>
             </div>
@@ -128,8 +128,8 @@ export default function AdminSystem() {
             {graphLoading ? (
               <div className="flex items-center justify-center h-[540px] w-full border rounded-2xl border-dashed border-neutral-800 bg-black">
                 <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                  <div className="animate-spin h-8 w-8 border-3 border-amber-400 border-t-transparent rounded-full" />
-                  <span className="text-xs font-mono">Charting Healthcare Stars & Clusters...</span>
+                  <div className="animate-spin h-8 w-8 border-3 border-cyan-400 border-t-transparent rounded-full" />
+                  <span className="text-xs font-mono">Loading 3D Entity Nodes & Relationships...</span>
                 </div>
               </div>
             ) : graphData && graphData.nodes && graphData.nodes.length > 0 ? (
@@ -139,22 +139,22 @@ export default function AdminSystem() {
               />
             ) : (
               <div className="flex items-center justify-center h-[540px] w-full border rounded-2xl border-dashed text-muted-foreground bg-black border-neutral-800">
-                No constellation relationship data available.
+                No relationship graph data available.
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Constellation Role & Star Legend */}
+        {/* Network Role & Entity Legend */}
         <Card className="col-span-full border-neutral-900 bg-black shadow-md">
           <CardContent className="p-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <p className="font-semibold text-sm tracking-wide text-foreground flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-cyan-400" /> Celestial Role & Entity Legend
+                  <Share2 className="h-4 w-4 text-cyan-400" /> Network Entity Legend
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Stars illuminate in vivid cyan neon and vibrant magenta when hovered or approached by cursor.
+                  Interactive node indicators. Hover or select to highlight connected clinical pathways in 3D space.
                 </p>
               </div>
               <div className="flex flex-wrap gap-4 sm:gap-6 items-center">
