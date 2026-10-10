@@ -18,6 +18,10 @@ eth-account==0.11.2
 apscheduler==3.10.4
 slowapi==0.1.9
 
+# Heavy AI & RAG dependencies (for Full local mode)
+sentence-transformers==2.7.0
+scikit-learn==1.5.0
+
 pytesseract==0.3.10
 opencv-python-headless==4.10.0.84
 Pillow==10.3.0

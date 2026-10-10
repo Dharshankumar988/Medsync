@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.gzip import GZipMiddleware
 from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
 
 from utils.config import settings
 from utils.logger import get_logger
@@ -342,6 +343,47 @@ async def diagnostics():
         "status": "ready" if model_health["all_ready"] else "degraded",
         "models": models_status
     }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# RAG EMBEDDINGS WORKER ENDPOINTS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class EmbedRequest(BaseModel):
+    texts: List[str]
+
+_rag_model = None
+
+def _get_rag_model():
+    global _rag_model
+    if _rag_model is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            logger.info("RAG Worker: Loading SentenceTransformer 'all-MiniLM-L6-v2'...")
+            _rag_model = SentenceTransformer("all-MiniLM-L6-v2")
+            logger.info("RAG Worker: SentenceTransformer ready.")
+        except Exception as e:
+            logger.error(f"RAG Worker: Failed to load SentenceTransformer: {e}")
+    return _rag_model
+
+@app.post("/embed")
+@app.post("/api/v1/embed")
+async def embed_endpoint(req: EmbedRequest):
+    """
+    RAG Worker endpoint: Generates 384-dimensional vector embeddings for text chunks.
+    """
+    if not req.texts:
+        return {"embeddings": []}
+    
+    model = _get_rag_model()
+    if model is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="RAG embedding model (all-MiniLM-L6-v2) is not available on this worker."
+        )
+    
+    embeddings = await asyncio.to_thread(model.encode, req.texts)
+    return {"embeddings": [emb.tolist() for emb in embeddings]}
 
 
 @app.post("/predict", dependencies=[Depends(verify_token)])

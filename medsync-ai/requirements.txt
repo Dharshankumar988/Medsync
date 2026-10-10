@@ -9,6 +9,7 @@ timm
 opencv-python-headless==4.9.0.80
 Pillow==10.3.0
 numpy==1.26.4
- 
 huggingface_hub==0.22.2
 python-dotenv==1.0.1
+sentence-transformers==2.7.0
+scikit-learn==1.5.0

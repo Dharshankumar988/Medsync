@@ -1,4 +1,4 @@
-# ─── Stage 1: Builder ───
+# ─── Stage 1: Builder (Full Mode with PyTorch & RAG) ───
 FROM python:3.11-slim as builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -10,13 +10,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY apps/backend/requirements.txt .
+COPY apps/backend/requirements-full.txt ./requirements.txt
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Lightweight build without PyTorch bloat (under 150MB RAM at runtime)
+ARG TARGETARCH
+
+# Use --extra-index-url so x86_64 gets CPU wheels (avoiding CUDA bloat),
+# while ARM64 gracefully falls back to standard PyPI (which has aarch64 CPU wheels).
 RUN pip install --upgrade pip && \
+    pip install --no-cache-dir torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
 
@@ -30,7 +34,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH"
 
 # Install ONLY runtime dependencies
-# OpenCV (headless) and OCR still need some basic libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -46,7 +49,6 @@ WORKDIR /app
 # Copy the virtual environment from the builder
 COPY --from=builder /opt/venv /opt/venv
 
-
 # Copy backend files
 COPY apps/backend/alembic.ini .
 COPY apps/backend/alembic/ alembic/
@@ -54,7 +56,6 @@ COPY apps/backend/app/ app/
 COPY apps/backend/main.py .
 
 # Copy blockchain artifacts if they exist
-# Using a wildcard copy so it doesn't fail if the folders don't exist yet
 COPY apps/blockchain/deployment[s] /app/app/blockchain/artifacts/deployments
 COPY apps/blockchain/abi[s] /app/app/blockchain/artifacts/abis
 

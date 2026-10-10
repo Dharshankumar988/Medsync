@@ -29,9 +29,44 @@ class RAGService:
                 logger.info(f"Loading embedding model {EMBEDDING_MODEL_NAME}...")
                 self.embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
             except ImportError:
-                logger.error("sentence_transformers is not installed.")
-                raise HTTPException(status_code=503, detail="RAG_EMBEDDING_UNAVAILABLE")
+                logger.debug("sentence_transformers is not installed locally.")
+                return None
         return self.embedding_model
+
+    async def get_embeddings(self, texts: List[str]) -> Optional[List[List[float]]]:
+        """
+        Retrieves vector embeddings for a list of texts.
+        1. Queries external/tunneled RAG_WORKER_URL if configured.
+        2. Falls back to local SentenceTransformer if installed (Full runner mode).
+        3. Returns None if on standby (lightweight cloud mode).
+        """
+        from app.core.config import settings
+        
+        # 1. Check external/tunneled RAG Worker
+        worker_url = settings.RAG_WORKER_URL.rstrip("/") if getattr(settings, "RAG_WORKER_URL", None) else ""
+        if worker_url:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.post(f"{worker_url}/embed", json={"texts": texts})
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        embeddings = data.get("embeddings")
+                        if embeddings:
+                            return embeddings
+            except Exception as e:
+                logger.warning(f"RAG worker connection to {worker_url} failed: {e}")
+
+        # 2. Check local model (Full Runner)
+        local_model = self._get_embedding_model()
+        if local_model is not None:
+            try:
+                encoded = local_model.encode(texts)
+                return [vec.tolist() for vec in encoded]
+            except Exception as e:
+                logger.error(f"Local embedding generation failed: {e}")
+
+        return None
         
     def _get_llm_client(self):
         from app.ai.services.groq_client import groq_client
@@ -72,21 +107,30 @@ class RAGService:
         
         try:
             chunks = self._chunk_text(extracted_text)
-            model = self._get_embedding_model()
-            embeddings = model.encode(chunks)
+            embeddings = await self.get_embeddings(chunks)
+            if embeddings is None:
+                doc.status = "FAILED"
+                doc.error_message = "RAG embedding service is on standby (needs local worker connection)."
+                await db.commit()
+                raise HTTPException(
+                    status_code=503, 
+                    detail="RAG embedding service is on standby. Please connect the MedSync AI & RAG worker to process documents."
+                )
             
             for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
                 chunk_record = KnowledgeChunk(
                     document_id=doc.id,
                     chunk_index=i,
                     content=chunk_text,
-                    embedding=embedding.tolist(),
+                    embedding=embedding,
                     token_count=len(chunk_text.split())
                 )
                 db.add(chunk_record)
             
             doc.status = "READY"
             await db.commit()
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error processing document: {e}")
             doc.status = "FAILED"
@@ -160,30 +204,33 @@ class RAGService:
             from app.ai.rag.policy import RAGPolicyEngine
             filters = await RAGPolicyEngine.get_retrieval_filters(db, user_id=scope_id, role=role, scope_id=scope_id)
             
-            model = self._get_embedding_model()
-            query_embedding = model.encode(query).tolist()
-            
-            stmt = (
-                select(KnowledgeChunk, KnowledgeDocument.title, KnowledgeChunk.embedding.cosine_distance(query_embedding).label("distance"))
-                .join(KnowledgeDocument)
-                .where(*filters)
-                .order_by(KnowledgeChunk.embedding.cosine_distance(query_embedding))
-                .limit(RAG_TOP_K)
-            )
-            exec_result = await db.execute(stmt)
-            results = exec_result.all()
-            
-            semantic_chunks = []
-            for idx, row in enumerate(results):
-                chunk, doc_title, distance = row
-                similarity = 1.0 - float(distance)
-                if similarity >= RAG_SIMILARITY_THRESHOLD:
-                    semantic_chunks.append(f"- [{doc_title}]: {chunk.content}")
-                    
-            if semantic_chunks:
-                context_parts.append("--- GENERAL MEDICAL KNOWLEDGE ---\n" + "\n".join(semantic_chunks))
+            query_embeddings = await self.get_embeddings([query])
+            if query_embeddings and len(query_embeddings) > 0:
+                query_embedding = query_embeddings[0]
+                
+                stmt = (
+                    select(KnowledgeChunk, KnowledgeDocument.title, KnowledgeChunk.embedding.cosine_distance(query_embedding).label("distance"))
+                    .join(KnowledgeDocument)
+                    .where(*filters)
+                    .order_by(KnowledgeChunk.embedding.cosine_distance(query_embedding))
+                    .limit(RAG_TOP_K)
+                )
+                exec_result = await db.execute(stmt)
+                results = exec_result.all()
+                
+                semantic_chunks = []
+                for idx, row in enumerate(results):
+                    chunk, doc_title, distance = row
+                    similarity = 1.0 - float(distance)
+                    if similarity >= RAG_SIMILARITY_THRESHOLD:
+                        semantic_chunks.append(f"- [{doc_title}]: {chunk.content}")
+                        
+                if semantic_chunks:
+                    context_parts.append("--- GENERAL MEDICAL KNOWLEDGE ---\n" + "\n".join(semantic_chunks))
+            else:
+                logger.info("Semantic RAG is on standby (needs local worker connection). Skipping vector search.")
         except Exception as e:
-            logger.error(f"Semantic RAG failed: {e}")
+            logger.warning(f"Semantic RAG skipped/standby: {e}")
 
         # 2. Dynamic Database Context (Role Specific)
         if role == "admin":
@@ -229,8 +276,14 @@ class RAGService:
             from app.ai.rag.policy import RAGPolicyEngine
             filters = await RAGPolicyEngine.get_retrieval_filters(db, user_id=current_user.id, role=user_role)
             
-            model = self._get_embedding_model()
-            query_embedding = model.encode(question).tolist()
+            query_embeddings = await self.get_embeddings([question])
+            if not query_embeddings or len(query_embeddings) == 0:
+                return {
+                    "answer": "RAG system is currently on standby. A local server connection to the MedSync AI & RAG worker is required for semantic retrieval.",
+                    "sources": [],
+                    "status": "standby"
+                }
+            query_embedding = query_embeddings[0]
             
             stmt = (
                 select(KnowledgeChunk, KnowledgeDocument.title, KnowledgeChunk.embedding.cosine_distance(query_embedding).label("distance"))

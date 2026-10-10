@@ -50,15 +50,21 @@ $AuthToken = ""
 $Url = ""
 $TargetPort = 8000
 
-$TokenVar = "^BACKEND_NGROK_AUTHTOKEN=(.*)"
-$UrlVar = "^BACKEND_NGROK_URL=(.*)"
-$TargetPort = 8000
+if ($Mode -eq "Worker" -or $Mode -eq "AI") {
+    $TokenVar = "^(AI_NGROK_AUTHTOKEN|BACKEND_NGROK_AUTHTOKEN|NGROK_AUTHTOKEN)=(.*)"
+    $UrlVar = "^(AI_NGROK_URL|RAG_WORKER_NGROK_URL|WORKER_NGROK_URL)=(.*)"
+    $TargetPort = 7860
+} else {
+    $TokenVar = "^(BACKEND_NGROK_AUTHTOKEN|NGROK_AUTHTOKEN)=(.*)"
+    $UrlVar = "^BACKEND_NGROK_URL=(.*)"
+    $TargetPort = 8000
+}
 
 if (Test-Path -LiteralPath $EnvPath) {
     $envContent = Get-Content $EnvPath
     foreach ($line in $envContent) {
-        if ($line -match $TokenVar) { $AuthToken = $matches[1].Trim() }
-        if ($line -match $UrlVar) { $Url = $matches[1].Trim() }
+        if ($line -match $TokenVar) { $AuthToken = $matches[2].Trim() }
+        if ($line -match $UrlVar) { $Url = $matches[2].Trim() }
     }
 }
 

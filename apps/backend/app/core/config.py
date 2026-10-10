@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     PINATA_API_KEY: str = ""
     PINATA_SECRET_API_KEY: str = ""
     
-    # External AI Microservice
+    # External AI Microservice & RAG Worker
     MEDSYNC_AI_URL: str = "https://dharshan8197-medsync-ai.hf.space"
     MEDSYNC_AI_TOKEN: str = ""
+    RAG_WORKER_URL: str = ""
     AI_TIMEOUT: int = 30
 
     # SMTP & Email Settings

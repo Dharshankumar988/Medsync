@@ -43,20 +43,22 @@ async def _init_ai_background():
             logger.warning("AI Warmup: Groq LLM → unavailable (check GROQ_API_KEY)")
             app_state.groq_ready = False
             
-        # Warm up Local Models
-        logger.info("AI Warmup: Initializing local models (may take time on first run)...")
-        
-        def _load_local_models():
-            from app.services.rag_service import rag_service
-            rag_service._get_embedding_model()
+        # Check AI / RAG Subsystem availability
+        if settings.RAG_WORKER_URL:
+            logger.info(f"AI Warmup: Configured with RAG worker at {settings.RAG_WORKER_URL}")
+            app_state.models_ready = True
+        else:
             try:
-                pass
-            except Exception as e:
-                pass
-
-        await asyncio.to_thread(_load_local_models)
-        logger.info("AI Warmup: Local models downloaded and cached successfully.")
-        app_state.models_ready = True
+                import importlib.util
+                has_st = importlib.util.find_spec("sentence_transformers") is not None
+                if has_st:
+                    logger.info("AI Warmup: Local embedding dependencies detected.")
+                    app_state.models_ready = True
+                else:
+                    logger.info("AI Warmup: RAG on standby (lightweight cloud mode; waiting for local worker connection).")
+                    app_state.models_ready = False
+            except Exception:
+                app_state.models_ready = False
         logger.info("═══ AI Subsystem Ready ═══")
     except Exception as e:
         logger.warning(f"AI warmup skipped or failed (non-critical): {e}")

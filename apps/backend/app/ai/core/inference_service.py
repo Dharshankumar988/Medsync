@@ -149,6 +149,27 @@ class InferenceService:
                 else:
                     raise
 
+        # Fallback Check: If primary HF Space failed, try local/tunneled worker if configured
+        fallback_url = getattr(settings, "RAG_WORKER_URL", "").rstrip("/")
+        if fallback_url and fallback_url != self._base_url:
+            try:
+                logger.info(f"Primary AI unreachable. Trying fallback runner at {fallback_url}...")
+                fallback_predict_url = f"{fallback_url}/api/v1/predict"
+                fb_resp = await self._client.post(
+                    fallback_predict_url,
+                    files={"file": ("image.jpg", image_bytes, "image/jpeg")},
+                    data={"scan_type": scan_type},
+                    headers=self._headers,
+                    timeout=20.0
+                )
+                if fb_resp.status_code == 200:
+                    fb_result = fb_resp.json()
+                    self._cache.put(scan_type, image_bytes, fb_result)
+                    logger.info("Fallback worker prediction succeeded.")
+                    return fb_result
+            except Exception as fb_err:
+                logger.warning(f"Fallback runner prediction also failed: {fb_err}")
+
         self._endpoint_healthy = False
         logger.error(f"Inference failed after {self._max_retries} attempts: {last_error}")
         
