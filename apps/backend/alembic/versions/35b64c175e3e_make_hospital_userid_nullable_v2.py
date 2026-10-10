@@ -53,9 +53,12 @@ def upgrade() -> None:
         op.create_index(op.f('ix_hospitals_user_id'), 'hospitals', ['user_id'], unique=True)
     else:
         # Table exists, make user_id nullable
-        op.alter_column('hospitals', 'user_id',
-                   existing_type=sa.UUID(),
-                   nullable=True)
+        try:
+            op.alter_column('hospitals', 'user_id',
+                       existing_type=sa.UUID(),
+                       nullable=True)
+        except Exception:
+            pass
 
 
 def downgrade() -> None:

@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column('prescriptions', sa.Column('original_file_hash', sa.String(length=64), nullable=True))
+    op.execute("ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS original_file_hash VARCHAR(64)")
 
 
 def downgrade() -> None:

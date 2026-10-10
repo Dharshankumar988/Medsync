@@ -20,12 +20,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.alter_column('prescriptions', 'doctor_id',
-               existing_type=sa.UUID(),
-               nullable=True)
-    op.alter_column('prescriptions', 'appointment_id',
-               existing_type=sa.UUID(),
-               nullable=True)
+    try:
+        op.alter_column('prescriptions', 'doctor_id',
+                   existing_type=sa.UUID(),
+                   nullable=True)
+    except Exception:
+        pass
+    try:
+        op.alter_column('prescriptions', 'appointment_id',
+                   existing_type=sa.UUID(),
+                   nullable=True)
+    except Exception:
+        pass
 
 
 def downgrade() -> None:

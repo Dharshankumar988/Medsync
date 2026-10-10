@@ -19,20 +19,33 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table('system_settings',
-    sa.Column('key', sa.String(length=50), nullable=False),
-    sa.Column('value_bool', sa.Boolean(), nullable=True),
-    sa.Column('value_str', sa.String(length=255), nullable=True),
-    sa.Column('value_json', sa.JSON(), nullable=True),
-    sa.Column('description', sa.String(length=255), nullable=True),
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('updated_at', sa.DateTime(), nullable=False),
-    sa.PrimaryKeyConstraint('key', 'id')
-    )
-    op.create_index(op.f('ix_system_settings_created_at'), 'system_settings', ['created_at'], unique=False)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = inspector.get_table_names()
+
+    if 'system_settings' not in tables:
+        op.create_table('system_settings',
+            sa.Column('key', sa.String(length=50), nullable=False),
+            sa.Column('value_bool', sa.Boolean(), nullable=True),
+            sa.Column('value_str', sa.String(length=255), nullable=True),
+            sa.Column('value_json', sa.JSON(), nullable=True),
+            sa.Column('description', sa.String(length=255), nullable=True),
+            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('created_at', sa.DateTime(), nullable=False),
+            sa.Column('updated_at', sa.DateTime(), nullable=False),
+            sa.PrimaryKeyConstraint('key', 'id')
+        )
+        op.create_index(op.f('ix_system_settings_created_at'), 'system_settings', ['created_at'], unique=False)
+    else:
+        existing_indexes = [idx['name'] for idx in inspector.get_indexes('system_settings')]
+        if 'ix_system_settings_created_at' not in existing_indexes:
+            op.execute("CREATE INDEX IF NOT EXISTS ix_system_settings_created_at ON system_settings(created_at)")
 
 
 def downgrade() -> None:
-    op.drop_index(op.f('ix_system_settings_created_at'), table_name='system_settings')
-    op.drop_table('system_settings')
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = inspector.get_table_names()
+    if 'system_settings' in tables:
+        op.drop_index(op.f('ix_system_settings_created_at'), table_name='system_settings')
+        op.drop_table('system_settings')
