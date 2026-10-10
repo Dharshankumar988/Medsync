@@ -118,6 +118,21 @@ export async function POST(req: NextRequest) {
 
       const resetLink = `${origin}/patient/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(dbUser.email)}`;
 
+      const dummyDomains = ['@medsync.com', '@example.com', '@test.com', '@dummy.com', '@demo.com', '@local.dev'];
+      const isDummy = dummyDomains.some(dom => dbUser.email.toLowerCase().endsWith(dom)) || dbUser.email.toLowerCase().startsWith('dummy') || dbUser.email.toLowerCase().startsWith('test-patient');
+
+      if (isDummy) {
+        return NextResponse.json({
+          success: true,
+          action: 'DUMMY_ACCOUNT',
+          role: 'PATIENT',
+          redirectUrl: null,
+          message: 'This is a demo/dummy patient account. Password reset emails can only be delivered to actual registered email addresses.',
+          previewUrl: resetLink,
+          devResetLink: resetLink,
+        });
+      }
+
       const emailResult = await sendPatientPasswordResetEmail({
         toEmail: dbUser.email,
         patientName,

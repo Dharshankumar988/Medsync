@@ -1,34 +1,72 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Input } from "@medsync/ui";
-import { FileText, Upload, CheckCircle2, AlertCircle, FilePlus, Download } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  Button,
+  Badge,
+  Skeleton,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  Input,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
+} from "@medsync/ui";
+import {
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  FilePlus,
+  Download,
+  Globe,
+  Lock,
+  Share2,
+  Loader2,
+  Stethoscope,
+  Calendar,
+  Pill,
+  Clock,
+  Sparkles,
+  ArrowRight
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import axios from "axios";
-import { Share2 } from "lucide-react";
 import api from "@/lib/api";
+import Link from "next/link";
 
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
 import { useSecurityStore } from "@/store/useSecurityStore";
-import { formatDoctorName } from "@/lib/formatDoctorName";
 
 export default function MedicalRecordsPage() {
   const { user } = useAuth();
   const [userId, setUserId] = useState<string>("");
   const [records, setRecords] = useState<any[]>([]);
+  const [consultations, setConsultations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [consultationsLoading, setConsultationsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+
+  // Upload Form State - DEFAULT PRIVATE AS REQUESTED
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isPrescription, setIsPrescription] = useState(false);
+  const [isPublicUpload, setIsPublicUpload] = useState(false); // Default to Private!
   const [pin, setPin] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
+  // Share Dialog State
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<any[]>([]);
@@ -36,13 +74,20 @@ export default function MedicalRecordsPage() {
   const [sharePin, setSharePin] = useState("");
   const [isSharing, setIsSharing] = useState(false);
 
+  // Download Dialog State
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
   const [downloadRecordId, setDownloadRecordId] = useState<string | null>(null);
   const [downloadPin, setDownloadPin] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Toggling Consultation Consent State
+  const [togglingConsultationId, setTogglingConsultationId] = useState<string | null>(null);
+
   // Security
-  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(userId, user?.role?.toLowerCase());
+  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(
+    userId,
+    user?.role?.toLowerCase()
+  );
   const { openEnrollmentModal } = useSecurityStore();
 
   useEffect(() => {
@@ -59,17 +104,18 @@ export default function MedicalRecordsPage() {
         .from("medical_records")
         .select(`
           *,
-          medical_record_versions(*)
+          medical_record_versions(*),
+          record_permissions(*)
         `)
         .eq("patient_id", userId)
         .eq("is_archived", false)
         .order("created_at", { ascending: false });
-        
+
       if (error) {
         console.error("Supabase error fetching medical records:", error);
         toast.error("Failed to load medical records");
       }
-        
+
       if (data) {
         setRecords(data);
       }
@@ -80,48 +126,187 @@ export default function MedicalRecordsPage() {
     }
   }, [userId]);
 
+  const loadConsultations = useCallback(async () => {
+    if (!userId) return;
+    setConsultationsLoading(true);
+    try {
+      // First attempt backend API
+      const res = await api.get("/api/v1/consultations/patient/history");
+      if (res.data?.data) {
+        setConsultations(res.data.data);
+        return;
+      }
+    } catch {
+      // Fallback directly to Supabase
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("consultations")
+        .select(`
+          *,
+          doctor:doctors!doctor_id(full_name, specialization, hospital_name, clinic_name)
+        `)
+        .eq("patient_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        const enriched = data.map((c: any) => ({
+          ...c,
+          doctor_name: c.doctor?.full_name ? `Dr. ${c.doctor.full_name}` : "Attending Doctor",
+          doctor_specialization: c.doctor?.specialization || "General Medicine",
+          clinic_or_hospital: c.doctor?.clinic_name || c.doctor?.hospital_name || "Medical Center",
+        }));
+        setConsultations(enriched);
+      }
+    } catch (err) {
+      console.error("Error loading consultations:", err);
+    } finally {
+      setConsultationsLoading(false);
+    }
+  }, [userId]);
+
   const loadDoctors = useCallback(async () => {
     if (!userId) return;
     try {
-      // Get unique doctors from appointments
-      const { data } = await supabase
-        .from("appointments")
-        .select("doctor_id, doctors(full_name, specialization)")
-        .eq("patient_id", userId);
-      
-      if (data) {
-        const uniqueDoctors = Array.from(new Set(data.map((a: any) => a.doctor_id)))
-          .map(id => {
-            const appt = data.find((a: any) => a.doctor_id === id);
-            return {
-              id,
-              name: (appt as any)?.doctors?.full_name || "Unknown Doctor",
-              specialization: (appt as any)?.doctors?.specialization || ""
-            };
+      // Load both doctors from appointments AND verified doctors from directory
+      const [apptRes, docsRes] = await Promise.all([
+        supabase
+          .from("appointments")
+          .select("doctor_id, doctors(full_name, specialization)")
+          .eq("patient_id", userId),
+        supabase
+          .from("doctors")
+          .select("user_id, full_name, specialization, hospital_name, clinic_name")
+          .limit(50),
+      ]);
+
+      const map = new Map<string, any>();
+      // Add appointment doctors
+      apptRes.data?.forEach((a: any) => {
+        if (a.doctor_id) {
+          map.set(a.doctor_id, {
+            id: a.doctor_id,
+            name: a.doctors?.full_name ? `Dr. ${a.doctors.full_name}` : "Doctor",
+            specialization: a.doctors?.specialization || "Physician",
           });
-        setDoctors(uniqueDoctors);
-      }
+        }
+      });
+      // Add directory doctors
+      docsRes.data?.forEach((d: any) => {
+        if (d.user_id && !map.has(d.user_id)) {
+          map.set(d.user_id, {
+            id: d.user_id,
+            name: `Dr. ${d.full_name}`,
+            specialization: d.specialization || d.clinic_name || "Physician",
+          });
+        }
+      });
+
+      setDoctors(Array.from(map.values()));
     } catch (err) {
       console.error(err);
     }
   }, [userId]);
 
   useEffect(() => {
-    loadRecords();
-    loadDoctors();
-  }, [loadRecords, loadDoctors]);
+    if (userId) {
+      loadRecords();
+      loadConsultations();
+      loadDoctors();
+    }
+  }, [userId, loadRecords, loadConsultations, loadDoctors]);
+
+  // PERMANENT RECORD CONSENT TOGGLE - Direct column persistence in DB
+  const toggleConsent = async (record: any, currentlyPublic: boolean) => {
+    const newPublic = !currentlyPublic;
+    try {
+      // 1. Update is_public column on medical_records directly
+      const { error: recErr } = await supabase
+        .from("medical_records")
+        .update({
+          is_public: newPublic,
+          description: record.description?.replace(/\[PUBLIC\]/g, "").trim(),
+        })
+        .eq("id", record.id);
+
+      if (recErr) {
+        console.error("Error updating medical record is_public:", recErr);
+      }
+
+      // 2. Keep record_permissions in sync for permission checks
+      if (newPublic) {
+        await supabase.from("record_permissions").upsert({
+          record_id: record.id,
+          granted_to: userId,
+          granted_by: userId,
+          access_level: "PUBLIC",
+          is_revoked: false,
+        });
+        toast.success("Record visibility updated: PUBLIC to attending doctors");
+      } else {
+        await supabase
+          .from("record_permissions")
+          .update({ is_revoked: true })
+          .eq("record_id", record.id)
+          .eq("access_level", "PUBLIC");
+        toast.success("Record visibility updated: PRIVATE (Only you can access)");
+      }
+      loadRecords();
+    } catch (err: any) {
+      console.error("Toggle consent error:", err);
+      toast.error("Failed to update record visibility");
+    }
+  };
+
+  // PERMANENT CONSULTATION CONSENT TOGGLE
+  const toggleConsultationConsent = async (consultation: any) => {
+    const newPublic = !consultation.is_public;
+    setTogglingConsultationId(consultation.id);
+    try {
+      // Attempt backend API first
+      await api.patch(`/api/v1/consultations/${consultation.id}/consent`, {
+        is_public: newPublic,
+      });
+      toast.success(
+        newPublic
+          ? "Consultation notes marked PUBLIC to attending doctors"
+          : "Consultation notes marked PRIVATE (Strictly confidential)"
+      );
+      loadConsultations();
+    } catch {
+      // Direct Supabase fallback
+      const { error } = await supabase
+        .from("consultations")
+        .update({ is_public: newPublic })
+        .eq("id", consultation.id);
+
+      if (error) {
+        toast.error("Failed to update consultation consent");
+      } else {
+        toast.success(
+          newPublic
+            ? "Consultation notes marked PUBLIC to attending doctors"
+            : "Consultation notes marked PRIVATE"
+        );
+        loadConsultations();
+      }
+    } finally {
+      setTogglingConsultationId(null);
+    }
+  };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
-    
+
     const file = fileInputRef.current?.files?.[0];
     if (!file) {
       toast.error("Please select a file to upload");
       return;
     }
 
-    if (!title) {
+    if (!title.trim()) {
       toast.error("Please provide a title");
       return;
     }
@@ -135,22 +320,46 @@ export default function MedicalRecordsPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("title", title);
-      formData.append("description", description || "");
+      formData.append("title", title.trim());
+      formData.append("description", description.trim());
       formData.append("patient_id", userId);
       formData.append("is_prescription", String(isPrescription));
       formData.append("pin", pin);
-      
-      await api.post(`/api/v1/records`, formData);
-      
-      toast.success("Record uploaded successfully");
+
+      const res = await api.post(`/api/v1/records`, formData);
+      const createdRecord = res.data?.data;
+
+      // Persist chosen visibility permanently in DB
+      if (createdRecord?.id) {
+        await supabase
+          .from("medical_records")
+          .update({ is_public: isPublicUpload })
+          .eq("id", createdRecord.id);
+
+        if (isPublicUpload) {
+          await supabase.from("record_permissions").upsert({
+            record_id: createdRecord.id,
+            granted_to: userId,
+            granted_by: userId,
+            access_level: "PUBLIC",
+            is_revoked: false,
+          });
+        }
+      }
+
+      toast.success(
+        isPublicUpload
+          ? "Record uploaded (Public to attending doctors)"
+          : "Record uploaded securely (Private / Confidential)"
+      );
       setIsDialogOpen(false);
       setTitle("");
       setDescription("");
       setIsPrescription(false);
+      setIsPublicUpload(false); // Reset to Private default
       setPin("");
       if (fileInputRef.current) fileInputRef.current.value = "";
-      
+
       loadRecords();
     } catch (err: any) {
       console.error("Upload error:", err);
@@ -167,21 +376,24 @@ export default function MedicalRecordsPage() {
       toast.error("Please enter your 6-digit Authorization PIN");
       return;
     }
-    
+
     setIsSharing(true);
     try {
       await api.post(`/api/v1/records/${selectedRecordId}/permissions`, {
         granted_to: selectedDoctorId,
-        pin: sharePin
+        pin: sharePin,
       });
-      toast.success("Record shared successfully with Doctor");
+      toast.success("Private record shared successfully with Doctor");
       setIsShareDialogOpen(false);
       setSelectedRecordId(null);
       setSelectedDoctorId("");
       setSharePin("");
+      loadRecords();
     } catch (err: any) {
       console.error(err);
-      toast.error(err?.response?.data?.detail || err?.response?.data?.message || "Failed to share record");
+      toast.error(
+        err?.response?.data?.detail || err?.response?.data?.message || "Failed to share record"
+      );
     } finally {
       setIsSharing(false);
     }
@@ -198,12 +410,15 @@ export default function MedicalRecordsPage() {
     setIsDownloading(true);
     try {
       const res = await api.post(`/api/v1/records/${downloadRecordId}/download`, {
-        pin: downloadPin
+        pin: downloadPin,
       });
-      const url = res.data.data.signed_url;
-      window.open(url, "_blank");
-      
-      toast.success("Download started successfully");
+      const url = res.data?.data?.url || res.data?.data?.signed_url;
+      if (url) {
+        window.open(url, "_blank");
+        toast.success("Download started (PDF with verified QR code)");
+      } else {
+        toast.error("Download URL not found");
+      }
       setIsDownloadDialogOpen(false);
       setDownloadRecordId(null);
       setDownloadPin("");
@@ -216,24 +431,29 @@ export default function MedicalRecordsPage() {
   };
 
   return (
-    <div className="relative space-y-8 pb-12">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* Header Bar */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/40"
+      >
         <div>
-          <p className="text-sm font-medium tracking-widest uppercase text-blue-500 mb-2">My Health</p>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.15]">
-            Medical Records
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Medical Records & Consultations
           </h1>
-          <p className="text-muted-foreground mt-2 max-w-md leading-relaxed">
-            View your documents, test results, and health history.
+          <p className="text-muted-foreground mt-1 text-sm">
+            Manage your personal clinical documents, verified test reports, and doctor consultation history with private/public consent.
           </p>
         </div>
-        
+
+        {/* Upload Record Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button 
-              className="shrink-0"
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm rounded-xl self-start sm:self-auto"
               onClick={(e) => {
-                const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
+                const isPinEnrolled = status === "COMPLETED" || status === "PIN_CREATED";
                 if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
                   e.preventDefault();
                   openEnrollmentModal(() => setIsDialogOpen(true));
@@ -243,226 +463,526 @@ export default function MedicalRecordsPage() {
               <FilePlus className="mr-2 h-4 w-4" /> Upload Record
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md rounded-2xl">
             <DialogHeader>
               <DialogTitle>Upload Medical Record</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleUpload} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Title *</label>
-                <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Blood Test Results" required />
+            <form onSubmit={handleUpload} className="space-y-4 pt-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Document Title *
+                </label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Blood Test Report, Chest X-Ray"
+                  className="rounded-xl"
+                  required
+                />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
-                <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional description" />
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Description
+                </label>
+                <Input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional clinical observations or summary"
+                  className="rounded-xl"
+                />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">File *</label>
-                <Input type="file" ref={fileInputRef} required />
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  File (Image or PDF) *
+                </label>
+                <Input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="application/pdf,image/png,image/jpeg,image/jpg"
+                  className="rounded-xl file:rounded-lg file:border-0 file:bg-primary/10 file:text-primary file:text-xs file:font-semibold"
+                  required
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Files are automatically processed into tamper-proof A4 PDFs with verified QR codes.
+                </p>
               </div>
-              <div className="flex items-center gap-2 pt-2">
-                <input 
-                  type="checkbox" 
-                  id="is_prescription" 
+
+              {/* Consent & Visibility Selector - DEFAULT PRIVATE */}
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Default Privacy & Consent
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPublicUpload(false)}
+                    className={`p-2.5 rounded-xl border text-xs font-medium flex items-center justify-center gap-1.5 transition ${
+                      !isPublicUpload
+                        ? "bg-amber-500/15 border-amber-500/40 text-amber-600 font-semibold"
+                        : "bg-muted/40 border-border/60 text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <Lock className="w-3.5 h-3.5" /> Private (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPublicUpload(true)}
+                    className={`p-2.5 rounded-xl border text-xs font-medium flex items-center justify-center gap-1.5 transition ${
+                      isPublicUpload
+                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 font-semibold"
+                        : "bg-muted/40 border-border/60 text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5" /> Public to Doctors
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {!isPublicUpload
+                    ? "🔒 Strictly confidential. Hidden from all doctors unless you explicitly share it."
+                    : "✓ Attending doctors can view and review this document during appointments."}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="is_prescription"
                   checked={isPrescription}
                   onChange={(e) => setIsPrescription(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  className="rounded border-gray-300 text-primary shadow-sm"
                 />
-                <label htmlFor="is_prescription" className="text-sm font-medium">This is a personal prescription (generates QR code)</label>
+                <label htmlFor="is_prescription" className="text-xs font-medium text-muted-foreground">
+                  This is an active medication prescription
+                </label>
               </div>
-              <div className="space-y-2 border-t border-border/40 pt-4 mt-2">
-                <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
-                <Input 
-                  type="password" 
-                  value={pin} 
-                  onChange={e => setPin(e.target.value)} 
-                  placeholder="• • • • • •" 
+
+              <div className="space-y-1.5 border-t border-border/40 pt-3">
+                <label className="text-xs font-semibold uppercase tracking-wider text-primary">
+                  Authorization PIN *
+                </label>
+                <Input
+                  type="password"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  placeholder="• • • • • •"
                   maxLength={6}
-                  className="text-center tracking-[0.5em]"
-                  required 
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isUploading || pin.length !== 6}>
-                {isUploading ? "Uploading..." : "Upload Document"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-        
-        {/* Share Dialog */}
-        <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Share Medical Record</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleShare} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Select Doctor *</label>
-                <select 
-                  value={selectedDoctorId} 
-                  onChange={(e) => setSelectedDoctorId(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl tracking-widest text-center font-mono"
                   required
-                >
-                  <option value="">Select a doctor...</option>
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.id}>{formatDoctorName(d.name)} ({d.specialization})</option>
-                  ))}
-                </select>
-                {doctors.length === 0 && (
-                  <p className="text-xs text-muted-foreground">You don&apos;t have any past or upcoming appointments with doctors yet.</p>
-                )}
-              </div>
-              <div className="space-y-2 border-t border-border/40 pt-4 mt-2">
-                <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
-                <Input 
-                  type="password" 
-                  value={sharePin} 
-                  onChange={e => setSharePin(e.target.value)} 
-                  placeholder="• • • • • •" 
-                  maxLength={6}
-                  className="text-center tracking-[0.5em]"
-                  required 
                 />
+                <p className="text-[11px] text-muted-foreground">Enter your 6-digit security PIN to sign and upload.</p>
               </div>
-              <Button type="submit" className="w-full" disabled={isSharing || !selectedDoctorId || sharePin.length !== 6}>
-                {isSharing ? "Sharing..." : "Grant Access"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-        
-        {/* Download Dialog */}
-        <Dialog open={isDownloadDialogOpen} onOpenChange={setIsDownloadDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Download Medical Record</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleDownload} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
-                <Input 
-                  type="password" 
-                  value={downloadPin} 
-                  onChange={e => setDownloadPin(e.target.value)} 
-                  placeholder="• • • • • •" 
-                  maxLength={6}
-                  className="text-center tracking-[0.5em]"
-                  required 
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isDownloading || downloadPin.length !== 6}>
-                {isDownloading ? "Preparing Download..." : "Download Record"}
+
+              <Button
+                type="submit"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                disabled={isUploading}
+              >
+                {isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <FilePlus className="w-4 h-4 mr-1.5" />}
+                Upload & Convert Record
               </Button>
             </form>
           </DialogContent>
         </Dialog>
       </motion.div>
 
-      {loading ? (
-        <div className="grid gap-4">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)}
-        </div>
-      ) : records.length === 0 ? (
-        <Card className="rounded-2xl border border-dashed bg-card/50">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
-            <p className="text-lg font-medium">No records found</p>
-            <p className="text-sm text-muted-foreground">Upload your first medical record to get started.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="relative space-y-6 before:absolute before:inset-0 before:ml-[11px] before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border/60 before:to-transparent">
-          {records.map(record => {
-            const currentVersion = record.medical_record_versions?.find((v: any) => v.is_current) || record.medical_record_versions?.[0];
-            const blockchainStatus = currentVersion?.blockchain_status || 'PENDING';
-            
-            let dotColor = "bg-muted border-muted-foreground/30";
-            if (blockchainStatus === 'CONFIRMED' || blockchainStatus === 'VERIFIED') {
-              dotColor = "bg-emerald-500 border-emerald-200 dark:border-emerald-900";
-            } else if (blockchainStatus === 'PENDING') {
-              dotColor = "bg-yellow-500 border-yellow-200 dark:border-yellow-900";
-            } else {
-              dotColor = "bg-rose-500 border-rose-200 dark:border-rose-900";
-            }
-            
-            return (
-              <div key={record.id} className="relative flex items-start group">
-                <div className="flex items-center justify-center w-6 h-6 rounded-full border-4 shrink-0 shadow-sm z-10 bg-background mr-6 mt-6">
-                  <div className={`w-2 h-2 rounded-full ${dotColor}`} />
-                </div>
-                
-                <Card className="flex-1 overflow-hidden rounded-2xl border border-border/60 bg-card/50 transition-all hover:-translate-y-1 hover:shadow-lg">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/10 mb-3">
-                        <FileText className="h-5 w-5 text-violet-500" />
+      {/* Main Tabs: Medical Records vs Consultation History */}
+      <Tabs defaultValue="records" className="w-full">
+        <TabsList className="bg-muted/40 p-1 rounded-xl">
+          <TabsTrigger value="records" className="rounded-lg text-sm font-medium">
+            Medical Documents & Reports ({records.length})
+          </TabsTrigger>
+          <TabsTrigger value="consultations" className="rounded-lg text-sm font-medium flex items-center gap-1.5">
+            <Stethoscope className="w-4 h-4" /> Consultation History ({consultations.length})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Tab 1: Uploaded Medical Records */}
+        <TabsContent value="records" className="pt-4 space-y-4">
+          {loading ? (
+            <div className="grid gap-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : records.length === 0 ? (
+            <Card className="rounded-2xl border border-dashed bg-card/50">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <FileText className="h-12 w-12 text-muted-foreground/40 mb-4" />
+                <p className="text-lg font-medium text-foreground">No medical records uploaded yet</p>
+                <p className="text-sm text-muted-foreground max-w-sm mt-1">
+                  Upload your lab reports, diagnostic scans, or prescriptions. All uploads are private by default.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {records.map((record) => {
+                // Permanent public check: column is_public or active PUBLIC permission
+                const isPublic =
+                  record.is_public === true ||
+                  record.record_permissions?.some(
+                    (p: any) => p.access_level === "PUBLIC" && !p.is_revoked
+                  ) ||
+                  false;
+
+                return (
+                  <Card
+                    key={record.id}
+                    className="overflow-hidden rounded-2xl border border-border/60 bg-card/50 transition-all hover:border-border hover:shadow-md"
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 shrink-0">
+                            <FileText className="h-5 w-5 text-blue-500" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base font-semibold">{record.title}</CardTitle>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Uploaded on {new Date(record.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
+                          {isPublic ? (
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
+                              <Globe className="mr-1 h-3 w-3" /> Public to Doctors
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs">
+                              <Lock className="mr-1 h-3 w-3" /> Private (Confidential)
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="bg-blue-500/5 text-blue-600 border-blue-500/20 text-xs">
+                            <CheckCircle2 className="mr-1 h-3 w-3" /> PDF with QR
+                          </Badge>
+                        </div>
                       </div>
-                      {blockchainStatus === 'CONFIRMED' || blockchainStatus === 'VERIFIED' ? (
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                          <CheckCircle2 className="mr-1 h-3 w-3" /> Verified
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
-                          <AlertCircle className="mr-1 h-3 w-3" /> Integrity Verification Unavailable
-                        </Badge>
-                      )}
-                    </div>
-                    <CardTitle className="text-base">{record.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      {record.description || "No description provided."}
-                    </p>
-                    <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/50">
-                      <span className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wide">
-                        {new Date(record.created_at).toLocaleDateString()}
-                      </span>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 text-xs hover:bg-muted" 
-                          onClick={() => {
-                            const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
-                            if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
-                              openEnrollmentModal(() => {
-                                setSelectedRecordId(record.id);
-                                setIsShareDialogOpen(true);
-                              });
-                              return;
-                            }
-                            setSelectedRecordId(record.id);
-                            setIsShareDialogOpen(true);
-                          }}
-                        >
-                          <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share
-                        </Button>
-                        {currentVersion && (
-                          <Button variant="ghost" size="sm" className="h-8 text-xs text-blue-500 hover:text-blue-600" onClick={() => {
-                            const isPinEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
-                            if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
-                              openEnrollmentModal(() => {
+                    </CardHeader>
+
+                    <CardContent className="pt-0">
+                      <p className="text-xs text-muted-foreground mb-4">
+                        {record.description?.replace(/\[PUBLIC\]/g, "").trim() || "No description provided."}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                        {/* Consent Toggle Button */}
+                        <div>
+                          {isPublic ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 rounded-lg"
+                              onClick={() => toggleConsent(record, true)}
+                            >
+                              <Lock className="mr-1.5 h-3.5 w-3.5" /> Make Private
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 rounded-lg"
+                              onClick={() => toggleConsent(record, false)}
+                            >
+                              <Globe className="mr-1.5 h-3.5 w-3.5" /> Make Public
+                            </Button>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2">
+                          {!isPublic && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-xs hover:bg-muted rounded-lg"
+                              onClick={() => {
+                                const isPinEnrolled = status === "COMPLETED" || status === "PIN_CREATED";
+                                if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
+                                  openEnrollmentModal(() => {
+                                    setSelectedRecordId(record.id);
+                                    setIsShareDialogOpen(true);
+                                  });
+                                } else {
+                                  setSelectedRecordId(record.id);
+                                  setIsShareDialogOpen(true);
+                                }
+                              }}
+                            >
+                              <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share Record
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs rounded-lg"
+                            onClick={() => {
+                              const isPinEnrolled = status === "COMPLETED" || status === "PIN_CREATED";
+                              if (user?.role === "PATIENT" && !isPinEnrolled && !isSecurityLoading) {
+                                openEnrollmentModal(() => {
+                                  setDownloadRecordId(record.id);
+                                  setIsDownloadDialogOpen(true);
+                                });
+                              } else {
                                 setDownloadRecordId(record.id);
                                 setIsDownloadDialogOpen(true);
-                              });
-                              return;
-                            }
-                            setDownloadRecordId(record.id);
-                            setIsDownloadDialogOpen(true);
-                          }}>
+                              }
+                            }}
+                          >
                             <Download className="mr-1.5 h-3.5 w-3.5" /> Download
                           </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Tab 2: Consultation History Subdivision */}
+        <TabsContent value="consultations" className="pt-4 space-y-4">
+          {consultationsLoading ? (
+            <div className="grid gap-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : consultations.length === 0 ? (
+            <Card className="rounded-2xl border border-dashed bg-card/50">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <Stethoscope className="h-12 w-12 text-muted-foreground/40 mb-4" />
+                <p className="text-lg font-medium text-foreground">No consultation history yet</p>
+                <p className="text-sm text-muted-foreground max-w-sm mt-1">
+                  When you attend appointments, your doctor&apos;s clinical observations, diagnosis, and notes will appear here automatically.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {consultations.map((c) => (
+                <Card
+                  key={c.id}
+                  className="overflow-hidden rounded-2xl border border-border/60 bg-card/50 transition-all hover:border-border hover:shadow-md"
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 shrink-0 mt-0.5">
+                          <Stethoscope className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <CardTitle className="text-base font-semibold">
+                              {c.doctor_name || "Attending Doctor"}
+                            </CardTitle>
+                            {c.doctor_specialization && (
+                              <Badge variant="outline" className="text-[11px] bg-primary/5 text-primary border-primary/20">
+                                {c.doctor_specialization}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                            {c.clinic_or_hospital && <span>{c.clinic_or_hospital}</span>}
+                            <span>•</span>
+                            <Clock className="w-3 h-3 inline" />
+                            <span>{new Date(c.created_at).toLocaleDateString()}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Consultation Consent Badge */}
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        {c.is_public ? (
+                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
+                            <Globe className="mr-1 h-3 w-3" /> Public to Attending Doctors
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs">
+                            <Lock className="mr-1 h-3 w-3" /> Private Notes
+                          </Badge>
                         )}
                       </div>
                     </div>
+                  </CardHeader>
+
+                  <CardContent className="pt-0 space-y-3">
+                    {/* Diagnosis & Symptoms */}
+                    {(c.diagnosis || c.symptoms) && (
+                      <div className="p-3 bg-muted/30 rounded-xl border border-border/40 space-y-1">
+                        {c.diagnosis && (
+                          <p className="text-xs font-semibold text-foreground">
+                            Diagnosis: <span className="font-normal text-muted-foreground">{c.diagnosis}</span>
+                          </p>
+                        )}
+                        {c.symptoms && (
+                          <p className="text-xs font-semibold text-foreground">
+                            Symptoms: <span className="font-normal text-muted-foreground">{c.symptoms}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Doctor Clinical Notes */}
+                    {c.clinical_notes && (
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Doctor&apos;s Clinical Notes:
+                        </p>
+                        <p className="text-xs text-foreground/90 leading-relaxed italic bg-card p-3 rounded-xl border border-border/50">
+                          &ldquo;{c.clinical_notes}&rdquo;
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Treatment Plan */}
+                    {c.treatment_plan && (
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Recommended Treatment Plan:
+                        </p>
+                        <p className="text-xs text-foreground/90 leading-relaxed bg-card p-3 rounded-xl border border-border/50">
+                          {c.treatment_plan}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Footer Actions & Consent Toggle */}
+                    <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                      <div>
+                        {c.is_public ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 rounded-lg"
+                            disabled={togglingConsultationId === c.id}
+                            onClick={() => toggleConsultationConsent(c)}
+                          >
+                            <Lock className="mr-1.5 h-3.5 w-3.5" /> Make Private
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 rounded-lg"
+                            disabled={togglingConsultationId === c.id}
+                            onClick={() => toggleConsultationConsent(c)}
+                          >
+                            <Globe className="mr-1.5 h-3.5 w-3.5" /> Make Public to Doctors
+                          </Button>
+                        )}
+                      </div>
+
+                      {c.prescription_id && (
+                        <Button variant="outline" size="sm" asChild className="h-8 text-xs rounded-lg">
+                          <Link href="/patient/prescriptions">
+                            <Pill className="mr-1.5 h-3.5 w-3.5 text-primary" /> View Prescription
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Share Private Record Dialog */}
+      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Share Private Record with Doctor</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleShare} className="space-y-4 pt-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Select Attending Physician *
+              </label>
+              <select
+                className="flex h-10 w-full rounded-xl border border-border/70 bg-background px-3 py-2 text-sm outline-none focus:border-primary transition"
+                value={selectedDoctorId}
+                onChange={(e) => setSelectedDoctorId(e.target.value)}
+                required
+              >
+                <option value="">-- Choose a physician --</option>
+                {doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} {d.specialization ? `(${d.specialization})` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                The selected physician will be granted secure, authorized read access to this specific record.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Authorization PIN *
+              </label>
+              <Input
+                type="password"
+                value={sharePin}
+                onChange={(e) => setSharePin(e.target.value)}
+                placeholder="• • • • • •"
+                maxLength={6}
+                className="rounded-xl tracking-widest text-center font-mono"
+                required
+              />
+              <p className="text-[11px] text-muted-foreground">Sign with your 6-digit security PIN to grant access.</p>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+              disabled={isSharing || !selectedDoctorId || sharePin.length !== 6}
+            >
+              {isSharing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Share2 className="w-4 h-4 mr-1.5" />}
+              Authorize & Share Record
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Download Record Dialog */}
+      <Dialog open={isDownloadDialogOpen} onOpenChange={setIsDownloadDialogOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Download Protected Record</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleDownload} className="space-y-4 pt-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Authorization PIN *
+              </label>
+              <Input
+                type="password"
+                value={downloadPin}
+                onChange={(e) => setDownloadPin(e.target.value)}
+                placeholder="• • • • • •"
+                maxLength={6}
+                className="rounded-xl tracking-widest text-center font-mono"
+                required
+              />
+              <p className="text-[11px] text-muted-foreground">Enter your 6-digit PIN to decrypt and download the PDF.</p>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+              disabled={isDownloading || downloadPin.length !== 6}
+            >
+              {isDownloading ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Download className="w-4 h-4 mr-1.5" />}
+              Decrypt & Download PDF
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

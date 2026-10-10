@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input, Alert, AlertDescription } from "@medsync/ui";
-import { Activity, Shield, Loader2, ArrowRight, Mail, CheckCircle2, ArrowLeft, ExternalLink, ArrowUpRight } from "lucide-react";
+import { Activity, Shield, Loader2, ArrowRight, Mail, CheckCircle2, ArrowLeft, ExternalLink, ArrowUpRight, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -32,6 +32,7 @@ export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [redirectingProvider, setRedirectingProvider] = useState<string | null>(null);
+  const [dummyAccountNotice, setDummyAccountNotice] = useState<{ email: string; resetLink: string; message: string } | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [devResetLink, setDevResetLink] = useState<string | null>(null);
@@ -51,6 +52,7 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
     setError("");
     setRedirectingProvider(null);
+    setDummyAccountNotice(null);
 
     try {
       const response = await axios.post("/api/auth/forgot-password", {
@@ -63,6 +65,16 @@ export default function ForgotPasswordPage() {
         setTimeout(() => {
           router.push(response.data.redirectUrl);
         }, 1200);
+        return;
+      }
+
+      // Demo/Dummy account check: Notify user that reset emails are only for actual emails
+      if (response.data?.action === "DUMMY_ACCOUNT") {
+        setDummyAccountNotice({
+          email: data.email,
+          resetLink: response.data?.devResetLink || response.data?.previewUrl || "",
+          message: response.data?.message || "This is a demo/dummy patient account. Password reset emails can only be delivered to actual registered email addresses.",
+        });
         return;
       }
 
@@ -149,6 +161,42 @@ export default function ForgotPasswordPage() {
                 </div>
               </div>
             </motion.div>
+          ) : dummyAccountNotice ? (
+            <motion.div variants={fadeUp} className="space-y-6 py-4">
+              <div className="p-6 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center space-y-3">
+                <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/20 mx-auto text-amber-600">
+                  <AlertTriangle className="h-8 w-8" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground">Demo / Dummy Account Detected</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  The address <strong className="text-foreground">{dummyAccountNotice.email}</strong> is a seeded demo/dummy account without a real email inbox.
+                </p>
+                <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-xs text-amber-700 dark:text-amber-300 font-medium text-left space-y-1">
+                  <p>⚠️ <strong>Reset emails via Python SMTP are only dispatched to actual patients</strong> with valid real email addresses (e.g. personal Gmail accounts).</p>
+                </div>
+                {dummyAccountNotice.resetLink && (
+                  <div className="pt-2">
+                    <Link
+                      href={dummyAccountNotice.resetLink}
+                      className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm rounded-xl transition shadow-sm"
+                    >
+                      Reset Demo Account Password (5-Min Token) <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => setDummyAccountNotice(null)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Try a different email address
+                </button>
+              </div>
+            </motion.div>
           ) : isSuccess ? (
             <motion.div variants={fadeUp} className="space-y-6 py-4">
               <div className="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-3">
@@ -171,29 +219,39 @@ export default function ForgotPasswordPage() {
 
               {/* Dev mode / test link helper */}
               {(previewUrl || devResetLink) && (
-                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 space-y-2">
-                  <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Development &amp; Direct Access Link:
-                  </p>
-                  {devResetLink && (
-                    <Link
-                      href={devResetLink}
-                      className="block text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline break-all"
-                    >
-                      👉 Click here to open the Patient Reset Page (5-min window)
-                    </Link>
-                  )}
-                  {previewUrl && (
-                    <a
-                      href={previewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-xs text-muted-foreground hover:text-foreground underline pt-1"
-                    >
-                      View sent email in test mailbox ↗
-                    </a>
-                  )}
+                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 space-y-2.5 text-left">
+                  <div className="flex items-start gap-2">
+                    <ExternalLink className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                        Sandbox Email Mode Active (No Gmail App Password set)
+                      </p>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">
+                        Because live SMTP credentials are not yet saved in your environment, the system delivered this to the <strong>Ethereal sandbox mailbox</strong> instead of Google&apos;s live Gmail servers.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 space-y-1.5 border-t border-blue-500/15">
+                    {devResetLink && (
+                      <Link
+                        href={devResetLink}
+                        className="block text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline break-all"
+                      >
+                        👉 Click here to directly open the Patient Reset Page (5-min window)
+                      </Link>
+                    )}
+                    {previewUrl && (
+                      <a
+                        href={previewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium pt-0.5"
+                      >
+                        📬 View sent email in Ethereal mailbox ↗
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
 

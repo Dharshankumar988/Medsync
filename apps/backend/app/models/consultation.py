@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, date
-from sqlalchemy import String, ForeignKey, Text, Date, DateTime
+from sqlalchemy import String, ForeignKey, Text, Date, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base_class import Base
 from app.models.mixins import UUIDMixin, TimestampMixin
@@ -19,5 +19,6 @@ class Consultation(Base, UUIDMixin, TimestampMixin):
     clinical_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     follow_up_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     prescription_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("prescriptions.id"), index=True, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

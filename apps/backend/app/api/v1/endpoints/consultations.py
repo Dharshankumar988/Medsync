@@ -1,7 +1,7 @@
 import uuid
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
@@ -14,6 +14,11 @@ from datetime import date
 
 router = APIRouter()
 require_doctor = RoleChecker([UserRole.DOCTOR])
+
+
+class ConsentUpdateReq(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    is_public: bool
 
 
 class ConsultationUpdate(BaseModel):
@@ -99,3 +104,25 @@ async def complete_consultation(
         follow_up_notes=req.follow_up_notes,
     )
     return APIResponse(message="Consultation completed", data=consultation)
+
+
+@router.get("/patient/history", response_model=APIResponse[List[ConsultationResponse]])
+async def get_patient_consultations_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user),
+):
+    results = await ConsultationService.get_patient_consultations(db, current_user.id)
+    return APIResponse(message="Consultation history retrieved", data=results)
+
+
+@router.patch("/{consultation_id}/consent", response_model=APIResponse[ConsultationResponse])
+async def update_consultation_consent(
+    consultation_id: uuid.UUID,
+    req: ConsentUpdateReq,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user),
+):
+    result = await ConsultationService.update_consultation_consent(
+        db, consultation_id, current_user.id, req.is_public
+    )
+    return APIResponse(message="Consultation consent updated", data=result)

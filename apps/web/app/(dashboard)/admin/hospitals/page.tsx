@@ -28,8 +28,14 @@ import {
 } from "@medsync/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@medsync/ui";
 
+import api from "@/lib/api";
+import { Tabs, TabsList, TabsTrigger, TabsContent, Badge } from "@medsync/ui";
+import { Briefcase, Check, Clock } from "lucide-react";
+
 export default function HospitalsManagementPage() {
+  const [activeTab, setActiveTab] = useState<"HOSPITALS" | "DOCTOR_AFFILIATIONS">("HOSPITALS");
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [doctorLocations, setDoctorLocations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -53,10 +59,14 @@ export default function HospitalsManagementPage() {
   const loadHospitals = async () => {
     try {
       setIsLoading(true);
-      const res = await hospitalService.getHospitals();
-      setHospitals(res.data.data);
+      const [hospRes, locsRes] = await Promise.all([
+        hospitalService.getHospitals(),
+        api.get('/api/v1/doctor-locations/pending').catch(() => ({ data: { data: [] } }))
+      ]);
+      setHospitals(hospRes.data.data);
+      setDoctorLocations(locsRes.data?.data || []);
     } catch (error) {
-      console.error("Error loading hospitals:", error);
+      console.error("Error loading hospitals and locations:", error);
     } finally {
       setIsLoading(false);
     }
@@ -91,6 +101,16 @@ export default function HospitalsManagementPage() {
       loadHospitals();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || "Failed to authorize hospital");
+    }
+  };
+
+  const handleAuthorizeLocation = async (id: string, locName: string) => {
+    try {
+      await api.post(`/api/v1/doctor-locations/${id}/verify`);
+      toast.success(`Practice workplace '${locName}' approved and authorized!`);
+      loadHospitals();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to authorize location");
     }
   };
 
@@ -228,17 +248,35 @@ export default function HospitalsManagementPage() {
         </div>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Hospital</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
+      <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="HOSPITALS" className="gap-2">
+            <Building2 className="w-4 h-4" />
+            Medical Facilities ({hospitals.length})
+          </TabsTrigger>
+          <TabsTrigger value="DOCTOR_AFFILIATIONS" className="gap-2">
+            <Briefcase className="w-4 h-4" />
+            Doctor Practice Affiliations
+            {doctorLocations.length > 0 && (
+              <Badge variant="secondary" className="ml-1 bg-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+                {doctorLocations.length} Pending
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="HOSPITALS">
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Hospital</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
           <TableBody>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
@@ -353,6 +391,78 @@ export default function HospitalsManagementPage() {
           </TableBody>
         </Table>
       </div>
-    </div>
+    </TabsContent>
+
+    <TabsContent value="DOCTOR_AFFILIATIONS">
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Practice Workplace / Facility</TableHead>
+              <TableHead>Address / City</TableHead>
+              <TableHead>Consultation Schedule</TableHead>
+              <TableHead>Verification Status</TableHead>
+              <TableHead className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {doctorLocations.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="h-24 text-center">
+                  <div className="flex flex-col items-center justify-center text-muted-foreground">
+                    <Briefcase className="h-8 w-8 mb-2 opacity-50" />
+                    <p>No doctor workplace affiliations pending review.</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              doctorLocations.map((loc) => (
+                <TableRow key={loc.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Briefcase className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{loc.location_name || "Practice Location"}</div>
+                        <div className="text-xs text-muted-foreground capitalize">{loc.location_type?.toLowerCase() || "Hospital"} • ID: {loc.id.substring(0,8)}...</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center text-sm">
+                      <MapPin className="mr-1 h-3 w-3 text-muted-foreground" />
+                      {[loc.address, loc.city, loc.state].filter(Boolean).join(", ") || "Location details on file"}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      {loc.working_days && <div>Days: <strong>{loc.working_days}</strong></div>}
+                      {loc.consultation_hours && <div>Hours: <strong>{loc.consultation_hours}</strong></div>}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-800/30 dark:text-amber-400">
+                      <Clock className="w-3 h-3 mr-1" /> Pending Admin Authorization
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleAuthorizeLocation(loc.id, loc.location_name || "Facility")}
+                      className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1 shadow-sm"
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" /> Authorize Workplace
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </TabsContent>
+  </Tabs>
+</div>
   );
 }

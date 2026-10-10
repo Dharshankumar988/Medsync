@@ -10,6 +10,7 @@ from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.doctor_location import DoctorLocation
 from app.models.hospital import Hospital
+from app.services.notification import NotificationService
 
 
 class AppointmentService:
@@ -48,7 +49,32 @@ class AppointmentService:
             "status": AppointmentStatus.PENDING,
             "location_id": req.location_id,
         }
-        return await appointment_repo.create(db, obj_in=appt_in)
+        appt = await appointment_repo.create(db, obj_in=appt_in)
+
+        # Notify Doctor and Patient
+        pat_res = await db.execute(select(Patient).where(Patient.user_id == patient_id))
+        pat = pat_res.scalar_one_or_none()
+        patient_name = pat.full_name if pat else "Patient"
+
+        doctor_user_id = doctor.user_id if doctor else req.doctor_id
+        doctor_name = doctor.full_name if doctor else "Doctor"
+
+        await NotificationService.send_notification(
+            db,
+            user_id=doctor_user_id,
+            title="New Appointment Received",
+            message=f"{patient_name} booked an appointment for {req.appointment_date} at {req.start_time}.",
+            type="APPOINTMENT",
+        )
+        await NotificationService.send_notification(
+            db,
+            user_id=patient_id,
+            title="Appointment Booked",
+            message=f"Your appointment with Dr. {doctor_name} on {req.appointment_date} at {req.start_time} has been requested.",
+            type="APPOINTMENT",
+        )
+
+        return appt
 
     @staticmethod
     async def list_appointments(
@@ -268,6 +294,15 @@ class AppointmentService:
 
         await db.commit()
         await db.refresh(appt)
+
+        # Notify Patient of status update
+        await NotificationService.send_notification(
+            db,
+            user_id=appt.patient_id,
+            title="Appointment Updated",
+            message=f"Your appointment status is now {target_status.value}.",
+            type="APPOINTMENT",
+        )
         return appt
 
     @staticmethod

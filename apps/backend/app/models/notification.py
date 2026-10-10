@@ -15,7 +15,7 @@ class Notification(Base, UUIDMixin, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    type: Mapped[NotificationType] = mapped_column(String(50), default=NotificationType.IN_APP)
+    type: Mapped[str] = mapped_column(String(50), default="INFO")
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class NotificationPreference(Base, UUIDMixin, TimestampMixin):

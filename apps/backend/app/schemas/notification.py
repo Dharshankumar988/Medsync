@@ -1,20 +1,27 @@
 import uuid
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from app.models.notification import NotificationType
 
 class NotificationResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True, from_attributes=True)
+
     id: uuid.UUID
     title: str
     message: str
-    type: NotificationType
-    is_read: bool
+    type: str = "INFO"
+    is_read: bool = False
     created_at: datetime
-    
-    model_config = {"from_attributes": True}
+
+class NotificationActionResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    count: int = 0
+    message: str = "Success"
 
 class NotificationPreferenceUpdate(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     email_enabled: Optional[bool] = None
     push_enabled: Optional[bool] = None
     in_app_enabled: Optional[bool] = None

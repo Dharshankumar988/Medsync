@@ -21,6 +21,9 @@ class PatientProfile(BaseModel):
     government_id_url: Optional[str] = None
     medical_alerts: Optional[str] = None
     allergies: Optional[str] = None
+    chronic_diseases: Optional[str] = None
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
     primary_physician_id: Optional[uuid.UUID] = None
     
     model_config = {"from_attributes": True}

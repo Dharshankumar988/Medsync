@@ -39,6 +39,7 @@ class MedicalRecord(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     category_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("medical_record_categories.id"), index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     
     versions = relationship("MedicalRecordVersion", back_populates="record", cascade="all, delete-orphan")
@@ -72,7 +73,7 @@ class RecordPermission(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "record_permissions"
     
     record_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_records.id"), index=True, nullable=False)
-    granted_to: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    granted_to: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     granted_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     access_level: Mapped[str] = mapped_column(String(50), default="READ")
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)

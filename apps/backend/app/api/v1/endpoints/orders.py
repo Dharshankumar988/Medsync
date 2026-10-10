@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
@@ -6,6 +6,7 @@ from app.models.user import User, UserRole
 from app.schemas.response import APIResponse
 from app.schemas.pharmacy_system import MedicineOrderCreate, MedicineOrderResponse
 from app.services.pharmacy_system import PharmacyService
+from app.services.notification import NotificationService
 from app.models.pharmacy_system import DeliveryTracking, MedicineOrder, OrderStatus
 import uuid
 from datetime import datetime, timedelta
@@ -50,6 +51,7 @@ async def place_order(
 @router.post("/{order_id}/dispatch", response_model=APIResponse)
 async def dispatch_order(
     order_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.PHARMACY]))
 ):
@@ -114,6 +116,26 @@ async def dispatch_order(
     order.status = OrderStatus.OUT_FOR_DELIVERY
 
     await db.commit()
+
+    # Trigger notifications
+    await NotificationService.send_notification(
+        db,
+        user_id=order.patient_id,
+        title="Order Out for Delivery",
+        message=f"Your medicine Order #{str(order_id)[:8]} is out for delivery with {driver[0]} ({driver[3]}).",
+        type="DELIVERY"
+    )
+    if order.pharmacy_id:
+        await NotificationService.send_notification(
+            db,
+            user_id=order.pharmacy_id,
+            title="Order Dispatched",
+            message=f"Order #{str(order_id)[:8]} dispatched with driver {driver[0]}.",
+            type="DELIVERY"
+        )
+
+    # Start delivery simulation in background
+    background_tasks.add_task(simulate_delivery, order.id)
     
     return APIResponse(
         message="Order dispatched successfully.",
@@ -168,14 +190,13 @@ async def get_tracking(
         }
     )
 
-from fastapi import BackgroundTasks
 import asyncio
 from app.database.session import AsyncSessionLocal
 
 async def simulate_delivery(order_id: uuid.UUID):
     try:
-        # Simulate delivery taking 10 minutes
-        await asyncio.sleep(600)
+        # Simulate delivery route progress
+        await asyncio.sleep(45)
         async with AsyncSessionLocal() as db:
             stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
             result = await db.execute(stmt)
@@ -192,9 +213,70 @@ async def simulate_delivery(order_id: uuid.UUID):
                     tracking.delivery_completed_at = datetime.utcnow()
                     tracking.delivery_progress = 100
                 await db.commit()
+
+                # Trigger notifications on simulation completion
+                await NotificationService.send_notification(
+                    db,
+                    user_id=order.patient_id,
+                    title="Delivery Arrived",
+                    message=f"Your medicine delivery for Order #{str(order_id)[:8]} has arrived safely!",
+                    type="DELIVERY"
+                )
+                if order.pharmacy_id:
+                    await NotificationService.send_notification(
+                        db,
+                        user_id=order.pharmacy_id,
+                        title="Order Delivered",
+                        message=f"Order #{str(order_id)[:8]} has been successfully delivered to the patient.",
+                        type="DELIVERY"
+                    )
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Failed to update delivery status for order {order_id}: {e}")
+
+@router.post("/{order_id}/complete-delivery", response_model=APIResponse)
+async def complete_delivery_now(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Instantly completes a delivery simulation and emits arrival notifications."""
+    stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
+    result = await db.execute(stmt)
+    order = result.scalar_one_or_none()
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order.status = OrderStatus.DELIVERED
+    tracking_stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
+    tracking_res = await db.execute(tracking_stmt)
+    tracking = tracking_res.scalar_one_or_none()
+    if tracking:
+        tracking.current_status = "DELIVERED"
+        tracking.delivery_completed_at = datetime.utcnow()
+        tracking.delivery_progress = 100
+
+    await db.commit()
+
+    # Trigger notifications
+    await NotificationService.send_notification(
+        db,
+        user_id=order.patient_id,
+        title="Delivery Arrived",
+        message=f"Your medicine delivery for Order #{str(order_id)[:8]} has arrived safely!",
+        type="DELIVERY"
+    )
+    if order.pharmacy_id:
+        await NotificationService.send_notification(
+            db,
+            user_id=order.pharmacy_id,
+            title="Order Delivered",
+            message=f"Order #{str(order_id)[:8]} has been successfully delivered to the patient.",
+            type="DELIVERY"
+        )
+
+    return APIResponse(message="Delivery marked as completed and notifications sent", data={"order_id": str(order_id)})
 
 @router.post("/{order_id}/pay", response_model=APIResponse)
 async def pay_order(

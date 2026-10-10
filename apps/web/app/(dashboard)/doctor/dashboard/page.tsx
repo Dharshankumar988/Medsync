@@ -71,6 +71,7 @@ export default function DoctorDashboard() {
       ),
       icon: Users,
       accent: "emerald",
+      href: "/doctor/appointments",
     },
     {
       title: "Pending Prescriptions",
@@ -78,20 +79,23 @@ export default function DoctorDashboard() {
       subtitle: "Requires your sign-off",
       icon: Activity,
       accent: "amber",
+      href: "/doctor/prescriptions",
     },
     {
-      title: "AI Analyses",
-      value: "View",
-      subtitle: "Recent model results",
-      icon: Brain,
+      title: "Patient Records",
+      value: (((dashboardData as any)?.pending_records !== undefined && (dashboardData as any).pending_records > 0) ? (dashboardData as any).pending_records : "View").toString(),
+      subtitle: "Public & shared records",
+      icon: FileText,
       accent: "blue",
+      href: "/doctor/records",
     },
     {
       title: "Today's Revenue",
-      value: "View Analytics",
-      subtitle: "Estimated earnings",
+      value: `₹${((dashboardData?.today_appointments || 0) * 500).toLocaleString()}`,
+      subtitle: `${dashboardData?.today_appointments || 0} patient(s) @ ₹500 fee`,
       icon: DollarSign,
       accent: "violet",
+      href: "/doctor/analytics",
     },
   ];
 
@@ -147,21 +151,29 @@ export default function DoctorDashboard() {
         >
           {stats.map((s, i) => {
             const a = accentMap[s.accent];
+            const CardBody = (
+              <Card className={`group relative overflow-hidden rounded-2xl border border-border/60 bg-card/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 ${a.border} cursor-pointer`}>
+                <div className={`absolute inset-0 bg-gradient-to-br ${a.glow} to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
+                <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">{s.title}</CardTitle>
+                  <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${a.bg} transition-colors duration-300 group-hover:scale-110`}>
+                    <s.icon className={`h-5 w-5 ${a.text}`} />
+                  </div>
+                </CardHeader>
+                <CardContent className="relative z-10">
+                  <div className="text-2xl font-bold tracking-tight">{s.value}</div>
+                  <p className="text-xs text-muted-foreground mt-1.5">{s.subtitle}</p>
+                </CardContent>
+              </Card>
+            );
+
             return (
               <motion.div key={i} variants={fadeUp}>
-                <Card className={`group relative overflow-hidden rounded-2xl border border-border/60 bg-card/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 ${a.border}`}>
-                  <div className={`absolute inset-0 bg-gradient-to-br ${a.glow} to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-                  <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">{s.title}</CardTitle>
-                    <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${a.bg} transition-colors duration-300 group-hover:scale-110`}>
-                      <s.icon className={`h-5 w-5 ${a.text}`} />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10">
-                    <div className="text-2xl font-bold tracking-tight">{s.value}</div>
-                    <p className="text-xs text-muted-foreground mt-1.5">{s.subtitle}</p>
-                  </CardContent>
-                </Card>
+                {s.href ? (
+                  <Link href={s.href} className="block">
+                    {CardBody}
+                  </Link>
+                ) : CardBody}
               </motion.div>
             );
           })}

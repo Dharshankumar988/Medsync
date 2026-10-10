@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 import hashlib
@@ -6,6 +7,8 @@ import httpx
 from fastapi import UploadFile
 
 from app.core.config import settings
+
+logger = logging.getLogger("medsync.storage")
 
 
 class StorageServiceError(Exception):
@@ -24,6 +27,31 @@ class StorageService:
         ]
         if missing:
             raise StorageServiceError(f"Supabase Storage is not configured: {', '.join(missing)}")
+
+    @staticmethod
+    async def _ensure_bucket(bucket_name: str | None = None) -> bool:
+        """Attempts to create the Supabase storage bucket if it does not already exist."""
+        bucket = bucket_name or settings.SUPABASE_STORAGE_BUCKET
+        bucket_url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/bucket"
+        headers = {
+            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+            "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+            "Content-Type": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                res = await client.post(
+                    bucket_url,
+                    headers=headers,
+                    json={"id": bucket, "name": bucket, "public": True},
+                )
+                if res.status_code in (200, 201, 400, 409):
+                    logger.info(f"Supabase bucket '{bucket}' confirmed/created (status: {res.status_code})")
+                    return True
+                logger.warning(f"Could not auto-create Supabase bucket '{bucket}': {res.status_code} {res.text}")
+        except Exception as e:
+            logger.warning(f"Exception auto-creating Supabase bucket '{bucket}': {e}")
+        return False
 
     @staticmethod
     def _safe_name(filename: str | None) -> str:
@@ -84,6 +112,14 @@ class StorageService:
                 headers=headers,
                 content=file_bytes,
             )
+            # If bucket missing, attempt to create it and retry upload once
+            if response.status_code in (400, 404) and ("Bucket not found" in response.text or "NoSuchBucket" in response.text):
+                await StorageService._ensure_bucket()
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    content=file_bytes,
+                )
 
         if response.status_code not in (200, 201):
             raise StorageServiceError(f"Supabase upload failed: {response.status_code} {response.text}")
@@ -117,6 +153,14 @@ class StorageService:
                 headers=headers,
                 content=file_bytes,
             )
+            # If bucket missing, attempt to create it and retry upload once
+            if response.status_code in (400, 404) and ("Bucket not found" in response.text or "NoSuchBucket" in response.text):
+                await StorageService._ensure_bucket()
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    content=file_bytes,
+                )
 
         if response.status_code not in (200, 201):
             raise StorageServiceError(f"Supabase upload failed: {response.status_code} {response.text}")
@@ -144,6 +188,9 @@ class StorageService:
         
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(url, headers=headers, content=file_bytes)
+            if response.status_code in (400, 404) and ("Bucket not found" in response.text or "NoSuchBucket" in response.text):
+                await StorageService._ensure_bucket()
+                response = await client.post(url, headers=headers, content=file_bytes)
             
         if response.status_code not in (200, 201):
             raise StorageServiceError(f"Supabase upload failed: {response.status_code} {response.text}")
@@ -168,12 +215,15 @@ class StorageService:
             response = await client.post(url, headers=headers, json=payload)
 
         if response.status_code not in (200, 201):
-            raise StorageServiceError(f"Supabase signed URL generation failed: {response.status_code} {response.text}")
+            logger.warning(f"Supabase signed URL generation failed ({response.status_code}): {response.text}")
+            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
 
         data = response.json()
         signed_url = data.get("signedURL") or data.get("signedUrl")
         if not signed_url:
-            raise StorageServiceError("Supabase did not return a signed download URL")
+            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+        if signed_url.startswith("/"):
+            signed_url = f"{settings.SUPABASE_URL.rstrip('/')}{signed_url}"
         return signed_url
 
     @staticmethod

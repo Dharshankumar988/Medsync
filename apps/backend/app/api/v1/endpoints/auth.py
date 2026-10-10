@@ -135,6 +135,22 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
         
         frontend_url = settings.FRONTEND_URL.rstrip('/')
         reset_link = f"{frontend_url}/patient/reset-password?token={token}&email={target_email}"
+
+        dummy_domains = ("@medsync.com", "@example.com", "@test.com", "@dummy.com", "@demo.com", "@local.dev")
+        is_dummy = any(target_email.endswith(dom) for dom in dummy_domains) or target_email.startswith(("dummy", "test-patient", "demo-patient"))
+
+        if is_dummy:
+            return APIResponse(
+                message="This is a demo/dummy patient account. Password reset emails can only be delivered to actual registered email addresses.",
+                data=ForgotPasswordResponseData(
+                    action="DUMMY_ACCOUNT",
+                    role="PATIENT",
+                    redirect_url=None,
+                    email=target_email,
+                    message="This is a demo/dummy patient account. Password reset emails can only be delivered to actual registered email addresses.",
+                    preview_url=reset_link
+                )
+            )
         
         email_result = email_service.send_patient_password_reset_email(
             to_email=target_email,

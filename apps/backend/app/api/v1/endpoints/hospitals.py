@@ -127,6 +127,22 @@ async def create_hospital(
     await db.commit()
     await db.refresh(new_hospital)
     _hospitals_cache.clear()
+
+    # If submitted by doctor, notify admin
+    if current_user.role.upper() != UserRole.ADMIN.value:
+        from app.services.notification import NotificationService
+        from app.models.user import User
+        admin_res = await db.execute(select(User).where(User.role == UserRole.ADMIN).limit(1))
+        admin_user = admin_res.scalar_one_or_none()
+        if admin_user:
+            await NotificationService.send_notification(
+                db,
+                user_id=admin_user.id,
+                title="New Facility Submitted",
+                message=f"Medical facility '{new_hospital.name}' was submitted for administrative approval.",
+                type="FACILITY"
+            )
+
     return APIResponse(message=msg, data=new_hospital)
 
 @router.post("/{hospital_id}/verify", response_model=APIResponse[HospitalResponse])
@@ -147,6 +163,18 @@ async def verify_hospital(
     await db.commit()
     await db.refresh(hospital)
     _hospitals_cache.clear()
+
+    # Notify facility creator/doctor
+    if hospital.user_id:
+        from app.services.notification import NotificationService
+        await NotificationService.send_notification(
+            db,
+            user_id=hospital.user_id,
+            title="Facility Authorized",
+            message=f"Medical facility '{hospital.name}' has been verified and authorized by MedSync Administration.",
+            type="FACILITY"
+        )
+
     return APIResponse(message="Medical facility authorized and verified successfully", data=hospital)
 
 @router.post("/{hospital_id}/reject", response_model=APIResponse[HospitalResponse])

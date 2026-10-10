@@ -13,6 +13,7 @@ import {
   Button
 } from "@medsync/ui";
 import { supabase } from "@/lib/supabase";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 export const Header = memo(function Header({ role }: { role: string }) {
   const pathname = usePathname();
@@ -68,10 +69,7 @@ export const Header = memo(function Header({ role }: { role: string }) {
         </div>
 
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full text-muted-foreground hover:bg-muted">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-destructive border-2 border-background" />
-        </Button>
+        <NotificationBell />
 
         {/* Profile */}
         <div className="pl-1 md:pl-2 border-l border-border/40">

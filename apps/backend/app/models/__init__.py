@@ -28,6 +28,12 @@ from app.models.security import PatientSecurityCredential, PatientBiometricProfi
 from app.models.system import SystemSetting
 from app.models.dispensing_log import PrescriptionDispensingLog
 from app.models.download_audit_log import DownloadAuditLog
+from app.models.doctor_collaboration import (
+    RecordRequest,
+    RecordRequestStatus,
+    DoctorReferral,
+    ReferralStatus,
+)
 
 __all__ = [
     "Base",
@@ -82,4 +88,8 @@ __all__ = [
     "SystemSetting",
     "PrescriptionDispensingLog",
     "DownloadAuditLog",
+    "RecordRequest",
+    "RecordRequestStatus",
+    "DoctorReferral",
+    "ReferralStatus",
 ]

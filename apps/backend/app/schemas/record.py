@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from app.models.record import FileType
 
@@ -49,3 +49,50 @@ class DoctorNoteResponse(DoctorNoteCreate):
     created_at: datetime
     
     model_config = {"from_attributes": True}
+
+class RecordDownloadResponse(BaseModel):
+    record_id: str
+    url: str
+    signed_url: str
+    sha256_hash: Optional[str] = None
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class RecordConsentUpdate(BaseModel):
+    is_public: bool
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class RecordConsentResponse(BaseModel):
+    record_id: uuid.UUID
+    is_public: bool
+    status: str
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class PermissionActionResponse(BaseModel):
+    status: str
+    message: str
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+
+class DoctorAccessibleRecordResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    description: Optional[str] = None
+    patient_id: uuid.UUID
+    patient_name: str
+    uploaded_by: uuid.UUID
+    created_at: datetime
+    is_public: bool
+    is_direct_shared: bool
+    doctor_notes: List[DoctorNoteResponse] = []
+
+    model_config = ConfigDict(use_enum_values=True, from_attributes=True)
+
+

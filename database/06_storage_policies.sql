@@ -2,9 +2,11 @@
 -- STORAGE RLS POLICIES FOR 'prescriptions' BUCKET
 -- ==============================================================================
 
--- 1. Create the bucket if it doesn't exist
+-- 1. Create buckets if they don't exist
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('prescriptions', 'prescriptions', false)
+VALUES 
+    ('prescriptions', 'prescriptions', false),
+    ('medical-records', 'medical-records', false)
 ON CONFLICT (id) DO NOTHING;
 
 -- Enable RLS on storage.objects
@@ -95,4 +97,24 @@ USING (
         WHERE p.id = prescription_items.prescription_id 
         AND p.doctor_id = auth.uid()
     )
+);
+
+-- ==============================================================================
+-- STORAGE RLS POLICIES FOR 'medical-records' BUCKET
+-- ==============================================================================
+
+DROP POLICY IF EXISTS "Authenticated users can upload medical records" ON storage.objects;
+CREATE POLICY "Authenticated users can upload medical records"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+    bucket_id = 'medical-records'
+);
+
+DROP POLICY IF EXISTS "Authenticated users can read medical records" ON storage.objects;
+CREATE POLICY "Authenticated users can read medical records"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+    bucket_id = 'medical-records'
 );

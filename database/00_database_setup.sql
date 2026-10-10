@@ -22,7 +22,7 @@ CREATE EXTENSION IF NOT EXISTS "vector";
 -- ==============================================================================
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userrole') THEN
-        CREATE TYPE userrole AS ENUM ('PATIENT', 'DOCTOR', 'PHARMACY', 'ADMIN');
+        CREATE TYPE userrole AS ENUM ('PATIENT', 'DOCTOR', 'PHARMACY', 'HOSPITAL', 'ADMIN');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userstatus') THEN
         CREATE TYPE userstatus AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED');
@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS users (
     status userstatus NOT NULL DEFAULT 'ACTIVE',
     profile_completion_percentage INTEGER NOT NULL DEFAULT 0,
     is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    profile_image_url VARCHAR(1024),
     cover_image_url VARCHAR(1024),
     bio TEXT,
     social_links JSONB,
@@ -78,6 +79,7 @@ CREATE INDEX IF NOT EXISTS ix_users_created_at ON users(created_at);
 -- Hospitals Table
 CREATE TABLE IF NOT EXISTS hospitals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     address VARCHAR(500) NOT NULL,
     city VARCHAR(100),
@@ -182,6 +184,8 @@ CREATE TABLE IF NOT EXISTS patients (
     allergies TEXT,
     primary_physician_id UUID REFERENCES doctors(id) ON DELETE SET NULL,
     chronic_diseases TEXT,
+    height_cm NUMERIC(6, 2),
+    weight_kg NUMERIC(6, 2),
     blockchain_status VARCHAR(50) DEFAULT 'PENDING',
     blockchain_tx_hash VARCHAR(66),
     pin_hash VARCHAR(255),
@@ -351,7 +355,8 @@ CREATE TABLE IF NOT EXISTS prescriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL UNIQUE,
     patient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    doctor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    doctor_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    doctor_profile_image_url VARCHAR(1024),
     diagnosis TEXT,
     notes TEXT,
     is_finalized BOOLEAN NOT NULL DEFAULT FALSE,
@@ -360,6 +365,9 @@ CREATE TABLE IF NOT EXISTS prescriptions (
     verified_at TIMESTAMP WITHOUT TIME ZONE,
     verification_method VARCHAR(50),
     pdf_url VARCHAR(1024),
+    ipfs_cid VARCHAR(255),
+    ipfs_provider VARCHAR(50),
+    ipfs_pin_status VARCHAR(50),
     qr_token TEXT,
     pin VARCHAR(10),
     expires_at TIMESTAMP WITHOUT TIME ZONE,
@@ -496,6 +504,7 @@ CREATE TABLE IF NOT EXISTS consultations (
     clinical_notes TEXT,
     follow_up_date DATE,
     follow_up_notes TEXT,
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
     prescription_id UUID REFERENCES prescriptions(id) ON DELETE SET NULL,
     completed_at TIMESTAMP WITHOUT TIME ZONE,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -530,6 +539,7 @@ CREATE TABLE IF NOT EXISTS medical_records (
     category_id UUID REFERENCES medical_record_categories(id) ON DELETE SET NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT,
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
     is_archived BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -554,6 +564,8 @@ CREATE TABLE IF NOT EXISTS medical_record_versions (
     record_id UUID NOT NULL REFERENCES medical_records(id) ON DELETE CASCADE,
     version_number INTEGER NOT NULL,
     ipfs_cid VARCHAR(255) NOT NULL UNIQUE,
+    ipfs_provider VARCHAR(50),
+    ipfs_pin_status VARCHAR(50),
     file_type VARCHAR(50) NOT NULL,
     file_size_bytes INTEGER NOT NULL,
     change_description TEXT,
@@ -585,7 +597,7 @@ CREATE TABLE IF NOT EXISTS file_metadata (
 CREATE TABLE IF NOT EXISTS record_permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     record_id UUID NOT NULL REFERENCES medical_records(id) ON DELETE CASCADE,
-    granted_to UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    granted_to UUID REFERENCES users(id) ON DELETE CASCADE,
     granted_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     access_level VARCHAR(50) NOT NULL DEFAULT 'READ',
     expires_at TIMESTAMP WITHOUT TIME ZONE,
@@ -602,6 +614,45 @@ CREATE TABLE IF NOT EXISTS doctor_notes (
     note_text TEXT NOT NULL,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- Record Requests Table (Doctor-to-Doctor / Patient record requests)
+CREATE TABLE IF NOT EXISTS record_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    requesting_doctor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_doctor_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    record_id UUID REFERENCES medical_records(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- Doctor Referrals Table
+CREATE TABLE IF NOT EXISTS doctor_referrals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    referring_doctor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    referred_to_doctor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    specialization VARCHAR(255),
+    reason TEXT NOT NULL,
+    notes TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- Doctor Pharmacy Affiliations Table (Clinic Linked Pharmacies)
+CREATE TABLE IF NOT EXISTS doctor_pharmacy_affiliations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    doctor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    pharmacy_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    clinic_name VARCHAR(255),
+    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_doctor_pharmacy UNIQUE (doctor_id, pharmacy_id)
 );
 
 -- AI Analyses Table
@@ -752,8 +803,11 @@ CREATE TABLE IF NOT EXISTS medicine_orders (
     pharmacy_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     prescription_id UUID REFERENCES prescriptions(id) ON DELETE SET NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    order_type VARCHAR(50) DEFAULT 'ONLINE_DELIVERY',
     total_amount FLOAT NOT NULL,
     delivery_address TEXT,
+    delivery_latitude NUMERIC(10, 8),
+    delivery_longitude NUMERIC(11, 8),
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
@@ -1125,7 +1179,7 @@ BEGIN
     );
 
     -- Cast or map role
-    IF UPPER(extracted_role) IN ('PATIENT', 'DOCTOR', 'PHARMACY', 'ADMIN') THEN
+    IF UPPER(extracted_role) IN ('PATIENT', 'DOCTOR', 'PHARMACY', 'HOSPITAL', 'ADMIN') THEN
         user_role := UPPER(extracted_role)::public.userrole;
     ELSE
         user_role := 'PATIENT'::public.userrole;
@@ -1222,6 +1276,17 @@ BEGIN
         INSERT INTO public.verification_requests (id, user_id, role_type, status, created_at, updated_at)
         VALUES (gen_random_uuid(), NEW.id, 'PHARMACY'::public.roletype, 'PENDING'::public.verificationstatus, NOW(), NOW())
         ON CONFLICT DO NOTHING;
+    ELSIF user_role = 'HOSPITAL' THEN
+        INSERT INTO public.hospitals (id, user_id, name, address, created_at, updated_at)
+        VALUES (
+            gen_random_uuid(),
+            NEW.id,
+            COALESCE(NEW.raw_user_meta_data->>'full_name', user_full_name, 'New Hospital'),
+            COALESCE(NEW.raw_user_meta_data->>'hospital_address', NEW.raw_user_meta_data->>'address', 'Pending Address'),
+            NOW(),
+            NOW()
+        )
+        ON CONFLICT (user_id) DO NOTHING;
     ELSIF user_role = 'ADMIN' THEN
         INSERT INTO public.admins (id, user_id, full_name, department, created_at, updated_at)
         VALUES (gen_random_uuid(), NEW.id, user_full_name, 'Administration', NOW(), NOW())
@@ -1335,6 +1400,9 @@ ALTER TABLE medicine_order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE delivery_tracking ENABLE ROW LEVEL SECURITY;
 ALTER TABLE qr_authorization_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE consultations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE record_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE doctor_referrals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE doctor_pharmacy_affiliations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE medical_history_shares ENABLE ROW LEVEL SECURITY;
 ALTER TABLE knowledge_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE knowledge_chunks ENABLE ROW LEVEL SECURITY;

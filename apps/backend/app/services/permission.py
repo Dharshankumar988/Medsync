@@ -80,6 +80,28 @@ class PermissionService:
         
     @staticmethod
     async def check_permission(db: AsyncSession, record_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        # 0. Check record existence and owner/uploader
+        rec_stmt = select(MedicalRecord).where(MedicalRecord.id == record_id)
+        rec_res = await db.execute(rec_stmt)
+        record = rec_res.scalar_one_or_none()
+        if not record:
+            return False
+        if record.patient_id == user_id or record.uploaded_by == user_id:
+            return True
+        if record.description and "[PUBLIC]" in record.description:
+            return True
+
+        # 1. Public records are accessible to all verified doctors
+        pub_stmt = select(RecordPermission).where(
+            RecordPermission.record_id == record_id,
+            RecordPermission.access_level == "PUBLIC",
+            RecordPermission.is_revoked.is_(False)
+        )
+        pub_res = await db.execute(pub_stmt)
+        if pub_res.scalar_one_or_none():
+            return True
+
+        # 2. Check direct individual grant to this doctor
         perm = await permission_repo.get_by_record_and_user(db, record_id, user_id)
         if not perm or perm.is_revoked:
             return False

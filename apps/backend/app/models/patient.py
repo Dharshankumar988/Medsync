@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import String, ForeignKey, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base_class import Base
 from app.models.mixins import UUIDMixin, TimestampMixin
@@ -25,6 +25,8 @@ class Patient(Base, UUIDMixin, TimestampMixin):
     medical_alerts: Mapped[str] = mapped_column(String, nullable=True)
     allergies: Mapped[str] = mapped_column(String, nullable=True)
     chronic_diseases: Mapped[str] = mapped_column(String, nullable=True)
+    height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     primary_physician_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("doctors.id"), index=True, nullable=True)
     pin_hash: Mapped[str] = mapped_column(String(255), nullable=True)
     # Blockchain Audit Fields

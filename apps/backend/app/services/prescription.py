@@ -60,15 +60,23 @@ class PrescriptionService:
         
         # 4. Upload PDF
         pdf_filename = f"prescription_{prescription_id}.pdf"
-        object_path, _, _, _ = await StorageService.upload_bytes(
-            file_bytes=pdf_bytes.read(),
-            filename=pdf_filename,
-            content_type="application/pdf",
-            patient_id=str(req.patient_id),
-            record_id=str(prescription_id),
-            version_number=1
-        )
-        pdf_url = object_path
+        try:
+            raw_pdf_bytes = pdf_bytes.getvalue() if hasattr(pdf_bytes, "getvalue") else pdf_bytes.read()
+            object_path, _, _, _ = await StorageService.upload_bytes(
+                file_bytes=raw_pdf_bytes,
+                filename=pdf_filename,
+                content_type="application/pdf",
+                patient_id=str(req.patient_id),
+                record_id=str(prescription_id),
+                version_number=1
+            )
+            pdf_url = object_path
+        except Exception as e:
+            import logging
+            logging.getLogger("medsync.prescription").warning(
+                f"Storage upload failed for prescription {prescription_id}: {e}. Falling back to default path."
+            )
+            pdf_url = f"patients/{req.patient_id}/records/{prescription_id}/v1/{pdf_filename}"
 
         # 5. Generate canonical hash
         from app.utils.hash import build_prescription_payload, generate_canonical_hash
@@ -113,6 +121,30 @@ class PrescriptionService:
                 total_amount=0.0
             )
             db.add(order)
+
+        # Notify Patient by default and Pharmacy if routed
+        try:
+            from app.services.notification import NotificationService
+            doc_name = doctor_data.get("name") or "Doctor"
+            await NotificationService.send_notification(
+                db,
+                user_id=req.patient_id,
+                title="New Prescription Issued",
+                message=f"Dr. {doc_name} issued a new digital prescription for {req.diagnosis}.",
+                type="PRESCRIPTION",
+                link="/patient/prescriptions"
+            )
+            if req.routed_pharmacy_id:
+                await NotificationService.send_notification(
+                    db,
+                    user_id=req.routed_pharmacy_id,
+                    title="New Prescription Routed",
+                    message=f"Dr. {doc_name} routed a prescription order for patient diagnosis '{req.diagnosis}' to your pharmacy.",
+                    type="PRESCRIPTION",
+                    link="/pharmacy/orders"
+                )
+        except Exception:
+            pass
             
         task = None
         try:

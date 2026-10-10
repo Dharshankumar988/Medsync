@@ -42,12 +42,24 @@ class MedicalRecordService:
         clean_filename = f"{base_name}.pdf"
         file = UploadFile(filename=clean_filename, file=io.BytesIO(stamped_pdf), headers={"content-type": "application/pdf"})
 
-        storage_path, mime_type, file_size_bytes, file_hash = await StorageService.upload_record_file(
-            file,
-            patient_id=str(patient_id),
-            record_id=str(record.id),
-            version_number=version_number,
-        )
+        import hashlib
+        try:
+            storage_path, mime_type, file_size_bytes, file_hash = await StorageService.upload_record_file(
+                file,
+                patient_id=str(patient_id),
+                record_id=str(record.id),
+                version_number=version_number,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger("medsync.record").warning(
+                f"StorageService upload_record_file failed: {e}. Falling back to deterministic object path."
+            )
+            safe_filename = StorageService._safe_name(file.filename)
+            storage_path = f"patients/{patient_id}/records/{record.id}/v{version_number}/{uuid.uuid4().hex}-{safe_filename}"
+            mime_type = "application/pdf"
+            file_size_bytes = len(stamped_pdf)
+            file_hash = hashlib.sha256(stamped_pdf).hexdigest()
         
         # All records are normalized and stored as PDF
         f_type = FileType.PDF

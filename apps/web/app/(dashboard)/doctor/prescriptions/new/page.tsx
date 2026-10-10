@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Badge } from "@medsync/ui";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@medsync/ui";
 import { ArrowLeft, Save, Loader2, Pill, Plus, Trash2, ShieldCheck, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -37,6 +37,11 @@ export default function CreatePrescriptionPage() {
   const [newMedName, setNewMedName] = useState("");
   const [newMedBrand, setNewMedBrand] = useState("");
   const [addingMed, setAddingMed] = useState(false);
+
+  // Link Clinic Pharmacy Modal State
+  const [isLinkPharmacyModalOpen, setIsLinkPharmacyModalOpen] = useState(false);
+  const [pharmacyToLink, setPharmacyToLink] = useState("");
+  const [linkingPharmacy, setLinkingPharmacy] = useState(false);
 
   // PIN Authorization State
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -104,19 +109,17 @@ export default function CreatePrescriptionPage() {
 
     async function fetchPharmacies() {
       try {
-        const { data: doctorProfile } = await supabase
-          .from("doctors")
-          .select("hospital_id, clinic_name")
-          .eq("user_id", userId)
-          .single();
+        const [docRes, pharmsRes, affilsRes] = await Promise.all([
+          supabase.from("doctors").select("hospital_id, clinic_name").eq("user_id", userId).single(),
+          supabase.from("pharmacies").select("*"),
+          supabase.from("doctor_pharmacy_affiliations").select("pharmacy_id").eq("doctor_id", userId).eq("status", "ACTIVE")
+        ]);
 
-        const { data: pharmacyProfiles, error } = await supabase
-          .from("pharmacies")
-          .select("*");
+        const doctorProfile = docRes.data;
+        const pharmacyProfiles = pharmsRes.data || [];
+        const affiliatedIds = new Set((affilsRes.data || []).map((a: any) => a.pharmacy_id));
           
-        if (error) throw error;
-        
-        if (pharmacyProfiles && pharmacyProfiles.length > 0) {
+        if (pharmacyProfiles.length > 0) {
           const userIds = pharmacyProfiles.map(p => p.user_id);
           const { data: usersData } = await supabase
             .from("users")
@@ -129,10 +132,10 @@ export default function CreatePrescriptionPage() {
                const user = usersData?.find(u => u.id === profile.user_id);
                if (!user) return null;
                
-               const isLinked = doctorProfile && (
+               const isLinked = affiliatedIds.has(profile.user_id) || (doctorProfile && (
                  (profile.hospital_id && doctorProfile.hospital_id && profile.hospital_id === doctorProfile.hospital_id) ||
                  (profile.clinic_name && doctorProfile.clinic_name && profile.clinic_name === doctorProfile.clinic_name)
-               );
+               ));
                
                return { ...profile, ...user, isLinked };
             })
@@ -199,6 +202,55 @@ export default function CreatePrescriptionPage() {
       toast.error("Failed to add medicine");
     } finally {
       setAddingMed(false);
+    }
+  };
+
+  const handleLinkPharmacy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pharmacyToLink) {
+      toast.error("Please select a pharmacy to link");
+      return;
+    }
+    setLinkingPharmacy(true);
+    try {
+      await supabase.from("doctor_pharmacy_affiliations").upsert({
+        doctor_id: userId,
+        pharmacy_id: pharmacyToLink,
+        status: "ACTIVE"
+      });
+      toast.success("Pharmacy linked to your clinic practice");
+      setRoutedPharmacyId(pharmacyToLink);
+      setIsLinkPharmacyModalOpen(false);
+      setPharmacyToLink("");
+
+      // Refresh pharmacies
+      const [docRes, pharmsRes, affilsRes] = await Promise.all([
+        supabase.from("doctors").select("hospital_id, clinic_name").eq("user_id", userId).single(),
+        supabase.from("pharmacies").select("*"),
+        supabase.from("doctor_pharmacy_affiliations").select("pharmacy_id").eq("doctor_id", userId).eq("status", "ACTIVE")
+      ]);
+      const doctorProfile = docRes.data;
+      const pharmacyProfiles = pharmsRes.data || [];
+      const affiliatedIds = new Set((affilsRes.data || []).map((a: any) => a.pharmacy_id));
+      if (pharmacyProfiles.length > 0) {
+        const userIds = pharmacyProfiles.map(p => p.user_id);
+        const { data: usersData } = await supabase.from("users").select("id, full_name, status").in("id", userIds).eq("status", "ACTIVE");
+        const mapped = pharmacyProfiles.map(profile => {
+          const user = usersData?.find(u => u.id === profile.user_id);
+          if (!user) return null;
+          const isLinked = affiliatedIds.has(profile.user_id) || (doctorProfile && (
+            (profile.hospital_id && doctorProfile.hospital_id && profile.hospital_id === doctorProfile.hospital_id) ||
+            (profile.clinic_name && doctorProfile.clinic_name && profile.clinic_name === doctorProfile.clinic_name)
+          ));
+          return { ...profile, ...user, isLinked };
+        }).filter(Boolean);
+        setLinkedPharmacies(mapped);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to link pharmacy");
+    } finally {
+      setLinkingPharmacy(false);
     }
   };
 
@@ -356,19 +408,27 @@ export default function CreatePrescriptionPage() {
                 <Input placeholder="e.g. Drink plenty of fluids, rest for 3 days" value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex justify-between">
-                  Route to Pharmacy
-                  <Badge variant="outline" className="text-[10px] h-4 py-0 px-1 border-emerald-500/30 text-emerald-600 bg-emerald-500/5">Optional</Badge>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Route to Pharmacy
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsLinkPharmacyModalOpen(true)}
+                    className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+                  >
+                    + Link Clinic Pharmacy
+                  </button>
+                </div>
                 <select 
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   value={routedPharmacyId}
                   onChange={(e) => setRoutedPharmacyId(e.target.value)}
                 >
-                  <option value="">Give patient physical/digital copy only</option>
-                  <optgroup label="Linked Partners">
+                  <option value="">Give patient physical/digital copy only (Default to Patient)</option>
+                  <optgroup label="Linked Clinic Partners (Your Clinic)">
                     {linkedPharmacies.filter(p => p.isLinked).map(p => (
-                      <option key={p.user_id} value={p.user_id}>{p.full_name || p.business_name} (Linked)</option>
+                      <option key={p.user_id} value={p.user_id}>{p.full_name || p.business_name} (Linked Clinic Partner)</option>
                     ))}
                   </optgroup>
                   <optgroup label="Other Network Pharmacies">
@@ -377,6 +437,9 @@ export default function CreatePrescriptionPage() {
                     ))}
                   </optgroup>
                 </select>
+                <p className="text-[11px] text-muted-foreground">
+                  The prescription is automatically sent to the patient upon creation. Selecting a clinic pharmacy also routes an order directly to their dispensing queue.
+                </p>
               </div>
             </div>
           </CardContent>
@@ -547,6 +610,49 @@ export default function CreatePrescriptionPage() {
           </div>
         </div>
       )}
+
+      {/* Link Clinic Pharmacy Dialog */}
+      <Dialog open={isLinkPharmacyModalOpen} onOpenChange={setIsLinkPharmacyModalOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Link Pharmacy to Your Clinic Practice</DialogTitle>
+            <DialogDescription>
+              Affiliate a pharmacy from the network with your clinic or hospital to quickly route prescriptions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleLinkPharmacy} className="space-y-4 pt-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Select Network Pharmacy *
+              </label>
+              <select
+                className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2"
+                value={pharmacyToLink}
+                onChange={(e) => setPharmacyToLink(e.target.value)}
+                required
+              >
+                <option value="">-- Choose a pharmacy --</option>
+                {linkedPharmacies.map((p) => (
+                  <option key={p.user_id} value={p.user_id}>
+                    {p.full_name || p.business_name} {p.address ? `• ${p.address}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsLinkPharmacyModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={linkingPharmacy || !pharmacyToLink} className="bg-primary">
+                {linkingPharmacy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+                Link Pharmacy
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

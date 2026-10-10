@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
 
 
@@ -14,8 +14,9 @@ class ConsultationCreate(BaseModel):
     follow_up_date: Optional[date] = None
     follow_up_notes: Optional[str] = None
 
-
 class ConsultationResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True, from_attributes=True)
+
     id: uuid.UUID
     appointment_id: uuid.UUID
     patient_id: uuid.UUID
@@ -27,11 +28,13 @@ class ConsultationResponse(BaseModel):
     clinical_notes: Optional[str] = None
     follow_up_date: Optional[date] = None
     follow_up_notes: Optional[str] = None
+    is_public: bool = False
     prescription_id: Optional[uuid.UUID] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
-
-    model_config = {"from_attributes": True}
+    doctor_name: Optional[str] = None
+    doctor_specialization: Optional[str] = None
+    clinic_or_hospital: Optional[str] = None
 
 
 class MedicalHistoryShareCreate(BaseModel):

@@ -60,18 +60,16 @@ const menuGroups = {
     {
       label: "CLINICAL",
       items: [
-        { name: "Medical Records", href: "/doctor/records", icon: FileText },
-        { name: "AI Analysis", href: "/doctor/ai-analysis", icon: Brain, badge: "AI" },
+        { name: "Patient Records", href: "/doctor/records", icon: FileText },
         { name: "Prescriptions", href: "/doctor/prescriptions", icon: Pill },
         { name: "Scan QR", href: "/doctor/qr-scanner", icon: ScanLine },
         { name: "Pulse AI", href: "/doctor/pulse-ai", icon: Activity, badge: "AI" },
       ]
     },
     {
-      label: "NETWORK & SECURITY",
+      label: "NETWORK",
       items: [
         { name: "Pharmacies", href: "/doctor/pharmacies", icon: Building2 },
-        { name: "Consent & Security", href: "/doctor/consent", icon: Shield },
       ]
     },
     {

@@ -39,6 +39,9 @@ class ProfileCompletionRequest(BaseModel):
     medical_alerts: Optional[str] = None
     allergies: Optional[str] = None
     chronic_diseases: Optional[str] = None
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
+    full_name: Optional[str] = None
     
     # Doctors
     qualifications: Optional[str] = None
@@ -128,7 +131,9 @@ async def get_profile(
                 "emergency_contact_number": profile.emergency_contact_number,
                 "medical_alerts": profile.medical_alerts,
                 "allergies": profile.allergies,
-                "chronic_diseases": profile.chronic_diseases
+                "chronic_diseases": profile.chronic_diseases,
+                "height_cm": profile.height_cm,
+                "weight_kg": profile.weight_kg
             })
     elif user.role == UserRole.DOCTOR:
         profile = await db.execute(select(Doctor).where(Doctor.user_id == user_id))
@@ -223,8 +228,14 @@ async def update_profile_completion(
             profile.medical_alerts = payload.medical_alerts or profile.medical_alerts
             profile.allergies = payload.allergies or profile.allergies
             
-            if hasattr(payload, 'chronic_diseases'):
-                profile.chronic_diseases = getattr(payload, 'chronic_diseases') or profile.chronic_diseases
+            if hasattr(payload, 'chronic_diseases') and payload.chronic_diseases is not None:
+                profile.chronic_diseases = payload.chronic_diseases
+            if hasattr(payload, 'height_cm') and payload.height_cm is not None:
+                profile.height_cm = payload.height_cm
+            if hasattr(payload, 'weight_kg') and payload.weight_kg is not None:
+                profile.weight_kg = payload.weight_kg
+            if hasattr(payload, 'full_name') and payload.full_name:
+                profile.full_name = payload.full_name
 
     elif user.role == UserRole.DOCTOR:
         profile = await db.execute(select(Doctor).where(Doctor.user_id == user_id))

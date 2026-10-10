@@ -121,6 +121,26 @@ class ConsultationService:
         if appointment:
             appointment.status = AppointmentStatus.COMPLETED
 
+        # Send notification to the patient with clinical notes link
+        try:
+            from app.services.notification import NotificationService
+            from app.models.doctor import Doctor
+            doc_stmt = select(Doctor).where(Doctor.user_id == doctor_id)
+            doc_res = await db.execute(doc_stmt)
+            doc = doc_res.scalar_one_or_none()
+            doc_name = f"Dr. {doc.full_name}" if doc else "Your attending doctor"
+
+            await NotificationService.send_notification(
+                db,
+                user_id=consultation.patient_id,
+                title="Consultation Completed",
+                message=f"{doc_name} completed your consultation and added clinical notes. View in Medical Records -> Consultation History.",
+                type="RECORD",
+                link="/patient/records"
+            )
+        except Exception:
+            pass
+
         await db.commit()
         await db.refresh(consultation)
         return consultation
@@ -148,3 +168,84 @@ class ConsultationService:
         await db.commit()
         await db.refresh(consultation)
         return consultation
+
+    @staticmethod
+    async def get_patient_consultations(
+        db: AsyncSession, patient_id: uuid.UUID
+    ) -> list[ConsultationResponse]:
+        from app.models.doctor import Doctor
+        stmt = (
+            select(Consultation)
+            .where(Consultation.patient_id == patient_id)
+            .order_by(Consultation.created_at.desc())
+        )
+        res = await db.execute(stmt)
+        consultations = res.scalars().all()
+
+        enriched = []
+        for c in consultations:
+            doc_stmt = select(Doctor).where(Doctor.user_id == c.doctor_id)
+            doc_res = await db.execute(doc_stmt)
+            doc = doc_res.scalar_one_or_none()
+
+            enriched.append(
+                ConsultationResponse(
+                    id=c.id,
+                    appointment_id=c.appointment_id,
+                    patient_id=c.patient_id,
+                    doctor_id=c.doctor_id,
+                    symptoms=c.symptoms,
+                    observations=c.observations,
+                    diagnosis=c.diagnosis,
+                    treatment_plan=c.treatment_plan,
+                    clinical_notes=c.clinical_notes,
+                    follow_up_date=c.follow_up_date,
+                    follow_up_notes=c.follow_up_notes,
+                    is_public=getattr(c, "is_public", False),
+                    prescription_id=c.prescription_id,
+                    completed_at=c.completed_at,
+                    created_at=c.created_at,
+                    doctor_name=f"Dr. {doc.full_name}" if doc else "Attending Doctor",
+                    doctor_specialization=doc.specialization if doc else None,
+                    clinic_or_hospital=doc.clinic_name or doc.hospital_name if doc else None,
+                )
+            )
+        return enriched
+
+    @staticmethod
+    async def update_consultation_consent(
+        db: AsyncSession, consultation_id: uuid.UUID, patient_id: uuid.UUID, is_public: bool
+    ) -> ConsultationResponse:
+        consultation = await ConsultationService.get_consultation(db, consultation_id)
+        if consultation.patient_id != patient_id:
+            raise ForbiddenException("You can only manage consent for your own consultations")
+
+        consultation.is_public = is_public
+        await db.commit()
+        await db.refresh(consultation)
+
+        from app.models.doctor import Doctor
+        doc_stmt = select(Doctor).where(Doctor.user_id == consultation.doctor_id)
+        doc_res = await db.execute(doc_stmt)
+        doc = doc_res.scalar_one_or_none()
+
+        return ConsultationResponse(
+            id=consultation.id,
+            appointment_id=consultation.appointment_id,
+            patient_id=consultation.patient_id,
+            doctor_id=consultation.doctor_id,
+            symptoms=consultation.symptoms,
+            observations=consultation.observations,
+            diagnosis=consultation.diagnosis,
+            treatment_plan=consultation.treatment_plan,
+            clinical_notes=consultation.clinical_notes,
+            follow_up_date=consultation.follow_up_date,
+            follow_up_notes=consultation.follow_up_notes,
+            is_public=consultation.is_public,
+            prescription_id=consultation.prescription_id,
+            completed_at=consultation.completed_at,
+            created_at=consultation.created_at,
+            doctor_name=f"Dr. {doc.full_name}" if doc else "Attending Doctor",
+            doctor_specialization=doc.specialization if doc else None,
+            clinic_or_hospital=doc.clinic_name or doc.hospital_name if doc else None,
+        )
