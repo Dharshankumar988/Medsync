@@ -170,9 +170,16 @@ export default function RegisterPage() {
           return;
         }
       }
-      if (pharmacyPracticeType === "CLINIC" && !clinicName && !selectedHospitalId) {
-        setError("Please select or specify the private clinic to link with.");
-        return;
+      if (pharmacyPracticeType === "CLINIC") {
+        if (isRegisteringNewHospital) {
+          if (!newHospitalName) {
+            setError("Please provide the clinic name.");
+            return;
+          }
+        } else if (!clinicName && !selectedHospitalId && !hospitalSearch) {
+          setError("Please select or specify the private clinic to link with, or choose 'Independent' if you are a standalone pharmacy.");
+          return;
+        }
       }
     }
 

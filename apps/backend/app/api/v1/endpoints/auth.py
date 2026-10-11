@@ -493,6 +493,21 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                 h_obj = h_res.scalars().first()
                 if h_obj:
                     resolved_hospital_id = h_obj.id
+                elif (payload.facility_type or "").lower() == "clinic" and payload.latitude and payload.longitude:
+                    new_clinic = Hospital(
+                        user_id=new_user.id,
+                        name=resolved_clinic_name,
+                        address=payload.clinic_address or payload.hospital_address or "Unknown",
+                        latitude=payload.latitude,
+                        longitude=payload.longitude,
+                        is_active=True,
+                        is_verified=False,
+                        type="clinic",
+                        google_maps_url=payload.google_maps_url
+                    )
+                    db.add(new_clinic)
+                    await db.flush()
+                    resolved_hospital_id = new_clinic.id
 
             profile = Pharmacy(
                 user_id=new_user.id,
