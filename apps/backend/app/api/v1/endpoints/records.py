@@ -202,7 +202,7 @@ async def list_doctor_accessible_records(
 
             notes_list = []
             if version_ids:
-                n_stmt = select(DoctorNote).where(DoctorNote.record_version_id.in_(version_ids)).order_by(DoctorNote.created_at.desc())
+                n_stmt = select(DoctorNote).where(DoctorNote.version_id.in_(version_ids)).order_by(DoctorNote.created_at.desc())
                 n_res = await db.execute(n_stmt)
                 notes_objs = n_res.scalars().all()
                 for n in notes_objs:

@@ -191,7 +191,7 @@ class RoleChecker:
             raise ForbiddenException("Insufficient permissions")
         
         if user.status.upper() == "PENDING":
-            raise ForbiddenException("Account pending admin approval")
+            raise ForbiddenException("Account pending approval")
             
         return user
 

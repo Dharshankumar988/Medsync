@@ -172,18 +172,17 @@ export default function DoctorPrescriptionsPage() {
                         <QrCode className="h-4 w-4 mr-2" /> Share QR
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-sm text-center">
-                      <DialogHeader>
-                        <DialogTitle className="text-center">Dynamic Prescription QR</DialogTitle>
+                    <DialogContent className="sm:max-w-md p-4">
+                      <DialogHeader className="sr-only">
+                        <DialogTitle>Prescription QR</DialogTitle>
                       </DialogHeader>
-                      <div className="py-6 flex justify-center">
-                        <div className="p-4 bg-white rounded-xl shadow-inner border">
-                          <PrescriptionQR prescriptionId={prescription.id} patientId={prescription.patient_id} doctorId={prescription.doctor_id} />
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground text-center">
-                        Pharmacies can scan this QR code to verify and dispense this prescription securely.
-                      </p>
+                      <PrescriptionQR 
+                        prescriptionId={prescription.id} 
+                        patientId={prescription.patient_id} 
+                        doctorId={prescription.doctor_id} 
+                        qrToken={prescription.qr_token}
+                        hash={prescription.hash}
+                      />
                     </DialogContent>
                   </Dialog>
                 </div>

@@ -1,10 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
-import { Users, Trash2, CheckCircle, XCircle, ShieldOff } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@medsync/ui";
-import { Button } from "@medsync/ui";
-import { Badge, Skeleton } from "@medsync/ui";
+
+import { useState, useEffect } from "react";
+import { 
+  Users, Trash2, CheckCircle, XCircle, ShieldOff, Building2, Building, 
+  Stethoscope, Pill, MapPin, Phone, Mail, Clock, ShieldCheck, ExternalLink, 
+  Loader2, Award, FileText, CheckCircle2 
+} from "lucide-react";
+import { 
+  Tabs, TabsContent, TabsList, TabsTrigger, Button, Badge, Skeleton, 
+  Card, CardHeader, CardTitle, CardDescription, CardContent 
+} from "@medsync/ui";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { formatDoctorName } from "@/lib/formatDoctorName";
@@ -60,21 +65,36 @@ export default function AdminUsers() {
     }
   };
 
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
   const handleApprove = async (id: string) => {
+    setActionLoading(id);
     try {
       await api.post(`/api/v1/admin/verifications/${id}/approve`);
+      toast.success("Application approved and verified successfully!");
       fetchData();
-    } catch (err) {
+      setSelectedVerification(null);
+    } catch (err: any) {
       console.error("Failed to approve", err);
+      toast.error(err.response?.data?.detail || "Failed to approve verification");
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleReject = async (id: string) => {
+    if (!confirm("Are you sure you want to reject this verification request?")) return;
+    setActionLoading(id);
     try {
       await api.post(`/api/v1/admin/verifications/${id}/reject`);
+      toast.success("Verification request rejected");
       fetchData();
-    } catch (err) {
+      setSelectedVerification(null);
+    } catch (err: any) {
       console.error("Failed to reject", err);
+      toast.error(err.response?.data?.detail || "Failed to reject verification");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -161,112 +181,439 @@ export default function AdminUsers() {
         </TabsList>
 
         <TabsContent value="verifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pending Professional Verifications</CardTitle>
-              <CardDescription>Review and approve Doctors and Pharmacies.</CardDescription>
+          <Card className="border shadow-sm">
+            <CardHeader className="border-b border-border/40 pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl">Pending Professional Verifications</CardTitle>
+                  <CardDescription>Carefully review clinical credentials, practice affiliations, and facility registrations before granting full network access.</CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 px-3 py-1 text-xs">
+                  {verifications.length} Pending Approval
+                </Badge>
+              </div>
             </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-40 w-full" /> : verifications.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground border border-dashed rounded-xl">No pending verifications.</div>
+            <CardContent className="pt-6">
+              {loading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
+                </div>
+              ) : verifications.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground border border-dashed rounded-xl p-8 bg-muted/10">
+                  <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-500/60 mb-3" />
+                  <p className="text-base font-semibold text-foreground">All Clear!</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                    There are no pending doctor licenses, clinic registrations, or pharmacy verification requests at this time.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-4">
-                  {verifications.map((req) => (
-                    <div key={req.request_id} className="flex justify-between items-center p-5 border rounded-xl hover:bg-muted/20">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Badge>{req.role}</Badge>
-                          <span className="font-semibold">{req.profile?.full_name || req.profile?.business_name || req.email}</span>
+                  {verifications.map((req: any) => {
+                    const isDoctor = req.role === "DOCTOR";
+                    const prof = req.profile || {};
+                    const isClinic = prof.practice_type === "CLINIC" || prof.clinic_name;
+                    const appliedHospName = prof.applied_hospital_info?.name || prof.hospital_name;
+                    const clinicName = prof.clinic_info?.name || prof.clinic_name;
+                    const gstNo = prof.gst_number;
+
+                    return (
+                      <div 
+                        key={req.request_id} 
+                        className="p-5 border border-border/70 rounded-xl hover:border-primary/50 transition-all bg-card shadow-sm space-y-3.5"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className={isDoctor ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-amber-600 hover:bg-amber-700 text-white"}>
+                                {req.role}
+                              </Badge>
+                              <span className="font-bold text-base text-foreground">
+                                {isDoctor ? formatDoctorName(prof.full_name || req.email) : (prof.business_name || req.email)}
+                              </span>
+                              {prof.specialization && (
+                                <Badge variant="outline" className="text-xs border-primary/30 text-primary">
+                                  {prof.specialization}
+                                </Badge>
+                              )}
+                              {req.email?.toLowerCase().includes('@gmail.com') && (
+                                <span className="flex items-center text-emerald-600 text-xs font-medium bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                  <CheckCircle className="h-3 w-3 mr-1" /> Auth Verified
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-muted-foreground flex items-center gap-2">
+                              <span><Mail className="w-3 h-3 inline mr-1" />{req.email}</span>
+                              <span>•</span>
+                              <span>License: <strong>{prof.license_number || "Pending"}</strong></span>
+                              {prof.medical_council_reg_number && (
+                                <>
+                                  <span>•</span>
+                                  <span>Council Reg: <strong>{prof.medical_council_reg_number}</strong></span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => setSelectedVerification(req)}
+                              className="text-xs h-9 gap-1 shadow-sm"
+                            >
+                              Review Application
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              disabled={actionLoading === req.request_id}
+                              onClick={() => handleApprove(req.request_id)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 gap-1 shadow-sm"
+                            >
+                              {actionLoading === req.request_id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle className="w-3.5 h-3.5" />
+                              )}
+                              Approve
+                            </Button>
+                          </div>
                         </div>
-                        <div className="text-sm text-muted-foreground mt-2">
-                          <p className="flex items-center gap-1">
-                            Email: {req.email} 
-                            {req.email?.toLowerCase().includes('@gmail.com') && (
-                              <span className="flex items-center text-emerald-500 text-xs font-medium ml-2 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                                <CheckCircle className="h-3 w-3 mr-1" /> Verified
+
+                        {/* Workplace & Facility Highlight Banner */}
+                        <div className="p-3 rounded-lg bg-muted/40 border border-border/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {isDoctor ? (
+                              isClinic ? (
+                                <span className="flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-400">
+                                  <Stethoscope className="w-4 h-4 text-emerald-600" />
+                                  <span><strong>Private Clinic:</strong> {clinicName || "Clinic details submitted"}</span>
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1.5 font-medium text-blue-700 dark:text-blue-400">
+                                  <Building2 className="w-4 h-4 text-blue-600" />
+                                  <span><strong>Applied to Hospital:</strong> {appliedHospName || "Hospital facility"}</span>
+                                </span>
+                              )
+                            ) : (
+                              <span className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400">
+                                <Pill className="w-4 h-4 text-amber-600" />
+                                <span><strong>Pharmacy Store:</strong> {prof.business_name} {prof.clinic_name ? `(Linked to Clinic: ${prof.clinic_name})` : (prof.affiliated_info ? `(At ${prof.affiliated_info.name})` : "")}</span>
                               </span>
                             )}
-                          </p>
-                          <p>License / GST No: {req.profile?.license_number}</p>
+
+                            {(prof.city || prof.clinic_info?.city || prof.applied_hospital_info?.city) && (
+                              <span className="text-muted-foreground flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                {prof.city || prof.clinic_info?.city || prof.applied_hospital_info?.city}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {gstNo && (
+                              <Badge variant="outline" className="text-[11px] bg-background border-border">
+                                GST: {gstNo}
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className="text-[11px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20">
+                              <Clock className="w-3 h-3 mr-1" /> Pending Approval
+                            </Badge>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => setSelectedVerification(req)}>View Details</Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {selectedVerification && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-background rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b">
-                <h2 className="text-xl font-semibold">Verification Request</h2>
-                <p className="text-sm text-muted-foreground">Review details before approving.</p>
-              </div>
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+        {/* ─── MODAL: Comprehensive Professional Verification Details ─── */}
+        {selectedVerification && (() => {
+          const req = selectedVerification;
+          const isDoctor = req.role === "DOCTOR";
+          const prof = req.profile || {};
+          const isClinic = prof.practice_type === "CLINIC" || prof.clinic_name;
+          const appliedHosp = prof.applied_hospital_info;
+          const clinicInfo = prof.clinic_info;
+          const gstNo = prof.gst_number;
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-200">
+              <div className="bg-background border border-border/80 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
+                <div className="p-6 border-b border-border/60 flex items-start justify-between bg-muted/20">
                   <div>
-                    <span className="text-xs text-muted-foreground font-medium uppercase">Role</span>
-                    <p className="font-medium">{selectedVerification.role}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground font-medium uppercase">Email</span>
-                    <p className="font-medium flex items-center gap-2">
-                      {selectedVerification.email}
-                      {selectedVerification.email?.toLowerCase().includes('@gmail.com') && (
-                        <span className="flex items-center text-emerald-500 text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                          <CheckCircle className="h-3.5 w-3.5 mr-1" /> Supabase Verified
-                        </span>
-                      )}
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge className={isDoctor ? "bg-emerald-600 text-white" : "bg-amber-600 text-white"}>
+                        {req.role}
+                      </Badge>
+                      <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 text-xs">
+                        <Clock className="w-3 h-3 mr-1" /> Pending Approval
+                      </Badge>
+                    </div>
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                      {isDoctor ? formatDoctorName(prof.full_name || req.email) : (prof.business_name || req.email)}
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Submitted application for MedSync credentialing and network authorization.
                     </p>
                   </div>
-                  <div className="col-span-2">
-                    <span className="text-xs text-muted-foreground font-medium uppercase">Name / Business Name</span>
-                    <p className="font-medium">{selectedVerification.profile?.full_name || selectedVerification.profile?.business_name || "N/A"}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-xs text-muted-foreground font-medium uppercase">License / GST No.</span>
-                    <p className="font-medium">{selectedVerification.profile?.license_number || "N/A"}</p>
-                  </div>
-                  {selectedVerification.role === 'DOCTOR' && (
-                    <>
-                      <div className="col-span-2">
-                        <span className="text-xs text-muted-foreground font-medium uppercase">Hospital / Clinic</span>
-                        <p className="font-medium">{selectedVerification.profile?.hospital_name || selectedVerification.profile?.clinic_name || "N/A"}</p>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedVerification(null)} className="h-8 w-8 p-0 rounded-full">
+                    ✕
+                  </Button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Card 1: Identity & Credentials */}
+                  <div className="p-4 rounded-xl border border-border/60 bg-card space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-primary" />
+                      Professional Identity & Credentials
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-xs text-muted-foreground">Email Address</span>
+                        <p className="font-medium flex items-center gap-1.5 text-foreground">
+                          {req.email}
+                          {req.email?.toLowerCase().includes('@gmail.com') && (
+                            <span className="text-emerald-600 text-[11px] bg-emerald-500/10 px-1.5 py-0.2 rounded font-normal">
+                              Verified
+                            </span>
+                          )}
+                        </p>
                       </div>
-                      <div className="col-span-2">
-                        <span className="text-xs text-muted-foreground font-medium uppercase">Specialization</span>
-                        <p className="font-medium">{selectedVerification.profile?.specialization || "N/A"}</p>
+                      <div>
+                        <span className="text-xs text-muted-foreground">Medical License No.</span>
+                        <p className="font-semibold text-foreground">{prof.license_number || "N/A"}</p>
                       </div>
-                    </>
-                  )}
-                  <div className="col-span-2">
-                    <span className="text-xs text-muted-foreground font-medium uppercase">Address</span>
-                    <p className="font-medium whitespace-pre-wrap">{selectedVerification.profile?.address || selectedVerification.profile?.hospital_address || selectedVerification.profile?.clinic_address || "N/A"}</p>
+                      {prof.medical_council_reg_number && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Medical Council Reg. No.</span>
+                          <p className="font-semibold text-foreground">{prof.medical_council_reg_number}</p>
+                        </div>
+                      )}
+                      {gstNo && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">GST Registration No.</span>
+                          <p className="font-semibold text-foreground">{gstNo}</p>
+                        </div>
+                      )}
+                      {prof.specialization && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Specialization</span>
+                          <p className="font-medium text-foreground">{prof.specialization}</p>
+                        </div>
+                      )}
+                      {prof.qualifications && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Qualifications</span>
+                          <p className="font-medium text-foreground">{prof.qualifications}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {(selectedVerification.profile?.google_maps_url) && (
-                    <div className="col-span-2">
-                      <span className="text-xs text-muted-foreground font-medium uppercase">Google Maps Link</span>
-                      <p className="font-medium text-blue-500 hover:underline">
-                        <a href={selectedVerification.profile.google_maps_url} target="_blank" rel="noreferrer">Open in Maps</a>
-                      </p>
+
+                  {/* Card 2: Workplace & Facility Affiliation (Exact requirement) */}
+                  <div className="p-4 rounded-xl border border-border/60 bg-card space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4 text-primary" />
+                      Practice Workplace & Facility Affiliation
+                    </h3>
+
+                    {isDoctor ? (
+                      isClinic ? (
+                        /* Doctor registering a Private Clinic */
+                        <div className="space-y-3 bg-emerald-500/[0.04] p-3.5 rounded-lg border border-emerald-500/20">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                              <Stethoscope className="w-4 h-4" /> New Private Clinic Registration
+                            </span>
+                            <Badge variant="outline" className="text-[11px] bg-emerald-500/10 text-emerald-700 border-emerald-500/30">
+                              Private Practice
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm pt-1">
+                            <div>
+                              <span className="text-xs text-muted-foreground">Clinic Name</span>
+                              <p className="font-semibold text-foreground">{clinicInfo?.name || prof.clinic_name || "Apex Care Clinic"}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs text-muted-foreground">Clinic Phone / Contact</span>
+                              <p className="font-medium text-foreground">{clinicInfo?.phone || prof.clinic_phone || "On file"}</p>
+                            </div>
+                            <div className="sm:col-span-2">
+                              <span className="text-xs text-muted-foreground">Clinic Complete Address</span>
+                              <p className="font-medium text-foreground flex items-start gap-1">
+                                <MapPin className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                {[clinicInfo?.address || prof.clinic_address, clinicInfo?.city || prof.city, clinicInfo?.state || prof.state, clinicInfo?.pincode || prof.pincode].filter(Boolean).join(", ") || "Location details submitted"}
+                              </p>
+                            </div>
+                            {(clinicInfo?.google_maps_url || prof.google_maps_url) && (
+                              <div className="sm:col-span-2">
+                                <span className="text-xs text-muted-foreground">Map Coordinates & Link</span>
+                                <p className="text-sm">
+                                  <a 
+                                    href={clinicInfo?.google_maps_url || prof.google_maps_url} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                                  >
+                                    View on Google Maps <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        /* Doctor applying to work at an Existing Hospital */
+                        <div className="space-y-3 bg-blue-500/[0.04] p-3.5 rounded-lg border border-blue-500/20">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                              <Building2 className="w-4 h-4" /> Hospital Affiliation Application
+                            </span>
+                            <Badge variant="outline" className="text-[11px] bg-blue-500/10 text-blue-700 border-blue-500/30">
+                              Network Hospital
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm pt-1">
+                            <div className="sm:col-span-2">
+                              <span className="text-xs text-muted-foreground">Hospital Facility Applied For</span>
+                              <p className="font-semibold text-foreground text-base">
+                                {appliedHosp?.name || prof.hospital_name || "Existing Hospital Facility"}
+                              </p>
+                            </div>
+                            <div className="sm:col-span-2">
+                              <span className="text-xs text-muted-foreground">Hospital Address</span>
+                              <p className="font-medium text-foreground flex items-start gap-1">
+                                <MapPin className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                                {[appliedHosp?.address || prof.hospital_address, appliedHosp?.city, appliedHosp?.state].filter(Boolean).join(", ") || "Facility address on record"}
+                              </p>
+                            </div>
+                            {appliedHosp?.phone && (
+                              <div>
+                                <span className="text-xs text-muted-foreground">Hospital Contact Phone</span>
+                                <p className="font-medium text-foreground">{appliedHosp.phone}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    ) : (
+                      /* Pharmacy Facility Details */
+                      <div className="space-y-3 bg-amber-500/[0.04] p-3.5 rounded-lg border border-amber-500/20">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                            <Pill className="w-4 h-4" /> Pharmacy Store & Affiliation
+                          </span>
+                          <Badge variant="outline" className="text-[11px] bg-amber-500/10 text-amber-700 border-amber-500/30">
+                            Fulfillment Center
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm pt-1">
+                          <div>
+                            <span className="text-xs text-muted-foreground">Store Business Name</span>
+                            <p className="font-semibold text-foreground">{prof.business_name}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground">Contact Phone</span>
+                            <p className="font-medium text-foreground">{prof.contact_number || "On file"}</p>
+                          </div>
+                          {prof.clinic_name && (
+                            <div className="sm:col-span-2">
+                              <span className="text-xs text-muted-foreground">Affiliated Private Clinic</span>
+                              <p className="font-semibold text-emerald-600 flex items-center gap-1">
+                                <Building className="w-4 h-4" /> Linked to {prof.clinic_name}
+                              </p>
+                            </div>
+                          )}
+                          {prof.affiliated_info && !prof.clinic_name && (
+                            <div className="sm:col-span-2">
+                              <span className="text-xs text-muted-foreground">Affiliated Facility</span>
+                              <p className="font-semibold text-blue-600 flex items-center gap-1">
+                                <Building2 className="w-4 h-4" /> Located at {prof.affiliated_info.name}
+                              </p>
+                            </div>
+                          )}
+                          <div className="sm:col-span-2">
+                            <span className="text-xs text-muted-foreground">Physical Store Address</span>
+                            <p className="font-medium text-foreground flex items-start gap-1">
+                              <MapPin className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                              {[prof.address, prof.city, prof.state, prof.pincode].filter(Boolean).join(", ") || "Store address on file"}
+                            </p>
+                          </div>
+                          {prof.operating_hours && (
+                            <div>
+                              <span className="text-xs text-muted-foreground">Operating Hours</span>
+                              <p className="font-medium text-foreground">{prof.operating_hours}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card 3: Additional Practice Locations if any */}
+                  {prof.locations && prof.locations.length > 0 && (
+                    <div className="p-4 rounded-xl border border-border/60 bg-card space-y-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-primary" />
+                        Registered Practice Facilities ({prof.locations.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {prof.locations.map((loc: any, idx: number) => (
+                          <div key={idx} className="p-2.5 rounded-lg border border-border/40 bg-muted/20 text-xs flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold text-foreground">{loc.location_name || "Facility"} ({loc.location_type})</p>
+                              <p className="text-muted-foreground">{[loc.address, loc.city].filter(Boolean).join(", ")}</p>
+                            </div>
+                            <span className="text-muted-foreground">{loc.working_days || "Full Week"}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-              <div className="p-6 border-t flex justify-end gap-3 bg-muted/20">
-                <Button variant="outline" onClick={() => setSelectedVerification(null)}>Close</Button>
-                <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => { handleReject(selectedVerification.request_id); setSelectedVerification(null); }}>Reject</Button>
-                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { handleApprove(selectedVerification.request_id); setSelectedVerification(null); }}>Verify & Approve</Button>
+
+                <div className="p-6 border-t border-border/60 flex flex-col sm:flex-row justify-end items-center gap-3 bg-muted/20">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setSelectedVerification(null)}
+                    disabled={actionLoading === req.request_id}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    disabled={actionLoading === req.request_id}
+                    className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950/20"
+                    onClick={() => handleReject(req.request_id)}
+                  >
+                    {actionLoading === req.request_id ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                    Reject Application
+                  </Button>
+                  <Button 
+                    disabled={actionLoading === req.request_id}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-md"
+                    onClick={() => handleApprove(req.request_id)}
+                  >
+                    {actionLoading === req.request_id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="w-4 h-4" />
+                    )}
+                    Verify & Authorize {isDoctor ? "Doctor & Clinics" : "Pharmacy"}
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         <TabsContent value="patients">
           <Card>
@@ -274,7 +621,7 @@ export default function AdminUsers() {
             <CardContent>
               {loading ? <Skeleton className="h-40 w-full" /> : (
                 <div className="divide-y border rounded-xl">
-                  {patients.map(p => (
+                  {patients.map((p: any) => (
                     <div key={p.user_id} className="flex justify-between p-4 hover:bg-muted/10">
                       <div>
                         <p className="font-medium">{p.full_name}</p>
@@ -354,7 +701,7 @@ export default function AdminUsers() {
 
               {loading ? <Skeleton className="h-40 w-full" /> : (
                 <div className="divide-y border rounded-xl">
-                  {doctors.map(d => (
+                  {doctors.map((d: any) => (
                     <div key={d.user_id} className="flex justify-between items-center p-4 hover:bg-muted/10">
                       <div>
                         <p className="font-medium">{formatDoctorName(d.full_name)}</p>
@@ -385,7 +732,7 @@ export default function AdminUsers() {
             <CardContent>
               {loading ? <Skeleton className="h-40 w-full" /> : (
                 <div className="divide-y border rounded-xl">
-                  {pharmacies.map(p => (
+                  {pharmacies.map((p: any) => (
                     <div key={p.user_id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-muted/10 gap-4">
                       <div>
                         <p className="font-medium">{p.business_name}</p>
@@ -454,7 +801,7 @@ export default function AdminUsers() {
 
               {loading ? <Skeleton className="h-40 w-full" /> : (
                 <div className="divide-y border rounded-xl">
-                  {admins.map(a => (
+                  {admins.map((a: any) => (
                     <div key={a.user_id} className="flex justify-between p-4 hover:bg-muted/10">
                       <div>
                         <p className="font-medium">{a.email}</p>

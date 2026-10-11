@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean
+from datetime import datetime
+from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base_class import Base
 from app.models.mixins import UUIDMixin, TimestampMixin
@@ -15,7 +16,7 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dispensed: Mapped[bool] = mapped_column(Boolean, default=False)
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False)
-    expires_at: Mapped[str | None] = mapped_column(String, nullable=True) # ISO format timestamp or Date
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     pdf_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     qr_token: Mapped[str | None] = mapped_column(Text, nullable=True)    
     pin: Mapped[str | None] = mapped_column(String(10), nullable=True)

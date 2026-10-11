@@ -7,6 +7,7 @@ import { Input } from '@medsync/ui';
 import { Store, Lock, KeyRound, Loader2, UserSquare2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import dynamic from 'next/dynamic';
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
@@ -56,13 +57,43 @@ export default function SecureOrderModal({
   }, [open, initialPharmacyId]);
 
   useEffect(() => {
-    api
-      .get('/api/v1/pharmacies/all')
-      .then((res) => {
-        if (res.data?.data) setPharmacies(res.data.data);
-      })
-      .catch(console.error);
-  }, []);
+    async function loadPharmacies() {
+      try {
+        const res = await api.get('/api/v1/pharmacy/network');
+        if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
+          setPharmacies(res.data.data);
+          return;
+        }
+      } catch {
+        // Continue to fallback
+      }
+
+      try {
+        const resAll = await api.get('/api/v1/pharmacies/all');
+        if (resAll.data?.data && Array.isArray(resAll.data.data) && resAll.data.data.length > 0) {
+          setPharmacies(resAll.data.data);
+          return;
+        }
+      } catch {
+        // Continue to Supabase direct query
+      }
+
+      try {
+        const { data: dbPharmacies } = await supabase
+          .from('pharmacies')
+          .select('id, user_id, business_name, city, address, contact_number');
+        if (dbPharmacies && dbPharmacies.length > 0) {
+          setPharmacies(dbPharmacies);
+        }
+      } catch (err) {
+        console.error('Failed to load network pharmacies:', err);
+      }
+    }
+
+    if (open) {
+      loadPharmacies();
+    }
+  }, [open]);
 
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,11 +258,15 @@ export default function SecureOrderModal({
                 <option value="" disabled>
                   -- Select a network pharmacy --
                 </option>
-                {pharmacies.map((p) => (
-                  <option key={p.id} value={p.user_id}>
-                    {p.business_name} ({p.city})
-                  </option>
-                ))}
+                {pharmacies.map((p) => {
+                  const val = p.user_id || p.pharmacy_id || p.id;
+                  const cityName = p.city ? ` (${p.city})` : (p.address ? ` • ${p.address.slice(0, 25)}` : "");
+                  return (
+                    <option key={p.id || val} value={val}>
+                      {p.business_name || p.full_name || "Pharmacy"}{cityName}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 

@@ -9,16 +9,19 @@ from app.models.doctor_collaboration import (
     DoctorReferral,
     ReferralStatus,
 )
-from app.models.record import RecordPermission, MedicalRecord
+from app.models.record import RecordPermission, MedicalRecord, ConsentHistory
 from app.models.user import User
 from app.models.patient import Patient
 from app.models.doctor import Doctor
+from app.models.appointment import Appointment
+from app.models.prescription import Prescription
 from app.schemas.collaboration import (
     RecordRequestCreate,
     RecordRequestResponse,
     DoctorReferralCreate,
     DoctorReferralResponse,
     DoctorDirectoryItem,
+    ConsultedPatientItem,
 )
 from app.services.notification import NotificationService
 
@@ -85,8 +88,8 @@ class DoctorCollaborationService:
             db,
             user_id=data.patient_id,
             title="Record Access Requested",
-            message=f"Dr. {req_doc_name} requested access to your medical records for clinical review.",
-            type="RECORD",
+            message=f"Dr. {req_doc_name} requested access to your private medical records for clinical review. Manage access in Privacy & Consent.",
+            type="CONSENT",
         )
 
         return RecordRequestResponse(
@@ -558,7 +561,272 @@ class DoctorCollaborationService:
                 full_name=d.full_name,
                 specialization=d.specialization,
                 hospital_name=d.hospital_name,
+                hospital_id=d.hospital_id,
                 clinic_name=d.clinic_name,
+                profile_picture_url=d.profile_picture_url,
             )
             for d in docs
         ]
+
+    @staticmethod
+    async def list_consulted_patients(
+        db: AsyncSession, doctor_user_id: uuid.UUID
+    ) -> List[ConsultedPatientItem]:
+        """Fetch only patients who have consulted with this doctor (via appointments, prescriptions, referrals, or permissions)."""
+        appt_pats = select(Appointment.patient_id).where(Appointment.doctor_id == doctor_user_id)
+        pres_pats = select(Prescription.patient_id).where(Prescription.doctor_id == doctor_user_id)
+        ref_pats = select(DoctorReferral.patient_id).where(
+            or_(
+                DoctorReferral.referring_doctor_id == doctor_user_id,
+                DoctorReferral.referred_to_doctor_id == doctor_user_id,
+            )
+        )
+        perm_pats = (
+            select(MedicalRecord.patient_id)
+            .join(RecordPermission, RecordPermission.record_id == MedicalRecord.id)
+            .where(
+                RecordPermission.granted_to == doctor_user_id,
+                RecordPermission.is_revoked.is_(False),
+            )
+        )
+
+        all_patient_ids_query = appt_pats.union(pres_pats).union(ref_pats).union(perm_pats)
+        stmt = select(Patient).where(Patient.user_id.in_(all_patient_ids_query)).order_by(Patient.full_name.asc())
+        res = await db.execute(stmt)
+        patients = res.scalars().all()
+
+        return [
+            ConsultedPatientItem(
+                id=p.id,
+                user_id=p.user_id,
+                full_name=p.full_name,
+                phone_number=p.phone_number,
+                gender=p.gender,
+                date_of_birth=p.date_of_birth,
+                blood_group=p.blood_group,
+                medical_alerts=p.medical_alerts,
+            )
+            for p in patients
+        ]
+
+    @staticmethod
+    async def list_patient_record_requests(
+        db: AsyncSession, patient_id: uuid.UUID
+    ) -> List[RecordRequestResponse]:
+        """Fetch all record access requests targeting this patient."""
+        stmt = (
+            select(RecordRequest)
+            .where(RecordRequest.patient_id == patient_id)
+            .order_by(RecordRequest.created_at.desc())
+        )
+        res = await db.execute(stmt)
+        requests = res.scalars().all()
+
+        enriched = []
+        for r in requests:
+            pat_name, req_doc, target_doc = await DoctorCollaborationService._get_names(
+                db, r.patient_id, r.requesting_doctor_id, r.target_doctor_id
+            )
+            rec_title = None
+            if r.record_id:
+                rec_res = await db.execute(select(MedicalRecord).where(MedicalRecord.id == r.record_id))
+                rec = rec_res.scalar_one_or_none()
+                if rec:
+                    rec_title = rec.title
+
+            enriched.append(
+                RecordRequestResponse(
+                    id=r.id,
+                    patient_id=r.patient_id,
+                    requesting_doctor_id=r.requesting_doctor_id,
+                    target_doctor_id=r.target_doctor_id,
+                    record_id=r.record_id,
+                    reason=r.reason,
+                    status=r.status,
+                    created_at=r.created_at,
+                    patient_name=pat_name,
+                    requesting_doctor_name=req_doc,
+                    target_doctor_name=target_doc,
+                    record_title=rec_title,
+                )
+            )
+        return enriched
+
+    @staticmethod
+    async def patient_approve_record_request(
+        db: AsyncSession, request_id: uuid.UUID, patient_id: uuid.UUID
+    ) -> RecordRequestResponse:
+        """Patient approves a physician's request to access their private records."""
+        stmt = select(RecordRequest).where(RecordRequest.id == request_id)
+        res = await db.execute(stmt)
+        req = res.scalar_one_or_none()
+        if not req:
+            raise HTTPException(status_code=404, detail="Record request not found")
+
+        if req.patient_id != patient_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to approve this request")
+
+        req.status = RecordRequestStatus.APPROVED
+
+        # If specific record was requested, grant permission
+        if req.record_id:
+            perm = RecordPermission(
+                id=uuid.uuid4(),
+                record_id=req.record_id,
+                granted_to=req.requesting_doctor_id,
+                granted_by=patient_id,
+                access_level="READ",
+                is_revoked=False,
+            )
+            db.add(perm)
+        else:
+            # Grant access to all patient's records
+            records_stmt = select(MedicalRecord).where(MedicalRecord.patient_id == patient_id)
+            rec_res = await db.execute(records_stmt)
+            for rec in rec_res.scalars().all():
+                perm = RecordPermission(
+                    id=uuid.uuid4(),
+                    record_id=rec.id,
+                    granted_to=req.requesting_doctor_id,
+                    granted_by=patient_id,
+                    access_level="READ",
+                    is_revoked=False,
+                )
+                db.add(perm)
+
+        # Log to ConsentHistory
+        consent_log = ConsentHistory(
+            id=uuid.uuid4(),
+            patient_id=patient_id,
+            doctor_id=req.requesting_doctor_id,
+            action="GRANTED",
+        )
+        db.add(consent_log)
+
+        await db.commit()
+        await db.refresh(req)
+
+        pat_name, req_doc, _ = await DoctorCollaborationService._get_names(
+            db, req.patient_id, req.requesting_doctor_id
+        )
+
+        # Notify Requesting Doctor
+        await NotificationService.send_notification(
+            db,
+            user_id=req.requesting_doctor_id,
+            title="Record Request Approved",
+            message=f"{pat_name} has granted you access to their medical records. You can now review them in Patient Records.",
+            type="RECORD",
+        )
+
+        # Notify Patient
+        await NotificationService.send_notification(
+            db,
+            user_id=patient_id,
+            title="Record Consent Granted",
+            message=f"You granted medical record access to Dr. {req_doc}.",
+            type="CONSENT",
+        )
+
+        return RecordRequestResponse(
+            id=req.id,
+            patient_id=req.patient_id,
+            requesting_doctor_id=req.requesting_doctor_id,
+            target_doctor_id=req.target_doctor_id,
+            record_id=req.record_id,
+            reason=req.reason,
+            status=req.status,
+            created_at=req.created_at,
+            patient_name=pat_name,
+            requesting_doctor_name=req_doc,
+        )
+
+    @staticmethod
+    async def patient_reject_record_request(
+        db: AsyncSession, request_id: uuid.UUID, patient_id: uuid.UUID
+    ) -> RecordRequestResponse:
+        """Patient declines a physician's request to access their private records."""
+        stmt = select(RecordRequest).where(RecordRequest.id == request_id)
+        res = await db.execute(stmt)
+        req = res.scalar_one_or_none()
+        if not req:
+            raise HTTPException(status_code=404, detail="Record request not found")
+
+        if req.patient_id != patient_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to decline this request")
+
+        req.status = RecordRequestStatus.REJECTED
+
+        consent_log = ConsentHistory(
+            id=uuid.uuid4(),
+            patient_id=patient_id,
+            doctor_id=req.requesting_doctor_id,
+            action="REJECTED",
+        )
+        db.add(consent_log)
+
+        await db.commit()
+        await db.refresh(req)
+
+        pat_name, req_doc, _ = await DoctorCollaborationService._get_names(
+            db, req.patient_id, req.requesting_doctor_id
+        )
+
+        # Notify Requesting Doctor
+        await NotificationService.send_notification(
+            db,
+            user_id=req.requesting_doctor_id,
+            title="Record Request Declined",
+            message=f"{pat_name} declined the request to share their private medical records.",
+            type="RECORD",
+        )
+
+        return RecordRequestResponse(
+            id=req.id,
+            patient_id=req.patient_id,
+            requesting_doctor_id=req.requesting_doctor_id,
+            target_doctor_id=req.target_doctor_id,
+            record_id=req.record_id,
+            reason=req.reason,
+            status=req.status,
+            created_at=req.created_at,
+            patient_name=pat_name,
+            requesting_doctor_name=req_doc,
+        )
+
+    @staticmethod
+    async def list_patient_referrals(
+        db: AsyncSession, patient_id: uuid.UUID
+    ) -> List[DoctorReferralResponse]:
+        """Fetch all doctor referrals issued for this patient."""
+        stmt = (
+            select(DoctorReferral)
+            .where(DoctorReferral.patient_id == patient_id)
+            .order_by(DoctorReferral.created_at.desc())
+        )
+        res = await db.execute(stmt)
+        referrals = res.scalars().all()
+
+        enriched = []
+        for ref in referrals:
+            pat_name, ref_doc, target_doc = await DoctorCollaborationService._get_names(
+                db, ref.patient_id, ref.referring_doctor_id, ref.referred_to_doctor_id
+            )
+            enriched.append(
+                DoctorReferralResponse(
+                    id=ref.id,
+                    patient_id=ref.patient_id,
+                    referring_doctor_id=ref.referring_doctor_id,
+                    referred_to_doctor_id=ref.referred_to_doctor_id,
+                    specialization=ref.specialization,
+                    reason=ref.reason,
+                    notes=ref.notes,
+                    status=ref.status,
+                    created_at=ref.created_at,
+                    patient_name=pat_name,
+                    referring_doctor_name=ref_doc,
+                    referred_to_doctor_name=target_doc,
+                )
+            )
+        return enriched
+

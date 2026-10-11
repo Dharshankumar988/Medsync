@@ -195,17 +195,43 @@ export default function DeliveryTracking() {
               </div>
 
               {/* Map */}
-              {isExpanded && delivery.route && (
-                <div className="h-80 rounded-lg overflow-hidden border">
-                  <DeliveryMap
-                    route={delivery.route}
-                    currentLocation={delivery.current_location}
-                    status={delivery.delivery_status}
-                    pharmacyLocation={locations.pharmacy}
-                    patientLocation={locations.patient}
-                  />
-                </div>
-              )}
+              {isExpanded && (() => {
+                const pharmacyCoord: [number, number] = [locations.pharmacy.lon, locations.pharmacy.lat];
+                const patientCoord: [number, number] = [locations.patient.lon, locations.patient.lat];
+                const midLon = (pharmacyCoord[0] + patientCoord[0]) / 2 + 0.004;
+                const midLat = (pharmacyCoord[1] + patientCoord[1]) / 2 + 0.002;
+
+                const safeRoute = (delivery.route && delivery.route.geometry?.coordinates?.length)
+                  ? delivery.route
+                  : {
+                      geometry: {
+                        coordinates: [
+                          pharmacyCoord,
+                          [midLon, midLat],
+                          patientCoord
+                        ]
+                      }
+                    };
+
+                const currentProgress = Math.max(0.05, Math.min(0.95, (delivery.progress || 50) / 100));
+                const curLat = locations.pharmacy.lat + (locations.patient.lat - locations.pharmacy.lat) * currentProgress;
+                const curLon = locations.pharmacy.lon + (locations.patient.lon - locations.pharmacy.lon) * currentProgress;
+                const safeCurrentLocation = (delivery.current_location && delivery.current_location.lat)
+                  ? delivery.current_location
+                  : { lat: curLat, lon: curLon };
+
+                return (
+                  <div className="h-80 rounded-xl overflow-hidden border border-border/80 shadow-inner mt-4">
+                    <DeliveryMap
+                      route={safeRoute}
+                      currentLocation={safeCurrentLocation}
+                      status={delivery.delivery_status}
+                      pharmacyLocation={locations.pharmacy}
+                      patientLocation={locations.patient}
+                    />
+                  </div>
+                );
+              })()}
 
               {delivery.delivery_status === 'DELIVERED' && (
                 <div className="flex items-center gap-2 text-green-600 bg-green-50 p-3 rounded-lg">

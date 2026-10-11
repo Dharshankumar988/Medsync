@@ -417,13 +417,13 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                 )
                 db.add(location)
             elif payload.hospital_name and payload.latitude and payload.longitude and not payload.hospital_id:
-                # Register New Hospital flow
-                # Check for duplicate
+                # If facility_type is clinic, allow registering as clinic
+                is_clinic = (payload.facility_type or "").lower() == "clinic"
                 existing_hosp = await db.execute(select(Hospital).where(Hospital.name.ilike(payload.hospital_name)))
                 hosp = existing_hosp.scalars().first()
                 if hosp:
                     profile.hospital_id = hosp.id
-                else:
+                elif is_clinic:
                     new_hospital = Hospital(
                         user_id=new_user.id,
                         name=payload.hospital_name,
@@ -432,21 +432,25 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                         longitude=payload.longitude,
                         is_active=True,
                         is_verified=False,
-                        type=payload.facility_type or "hospital",
+                        type="clinic",
                         google_maps_url=payload.google_maps_url
                     )
                     db.add(new_hospital)
                     await db.flush()
                     profile.hospital_id = new_hospital.id
+                    profile.clinic_name = payload.hospital_name
+                    profile.clinic_address = payload.hospital_address
 
-                location = DoctorLocation(
-                    doctor_id=profile.id,
-                    location_type="HOSPITAL",
-                    hospital_id=profile.hospital_id,
-                    is_primary=True,
-                    is_active=True
-                )
-                db.add(location)
+                if profile.hospital_id:
+                    location = DoctorLocation(
+                        doctor_id=profile.id,
+                        location_type="CLINIC" if is_clinic else "HOSPITAL",
+                        hospital_id=profile.hospital_id,
+                        location_name=payload.hospital_name,
+                        is_primary=True,
+                        is_active=True
+                    )
+                    db.add(location)
             elif payload.hospital_id:
                 # Add hospital location link
                 location = DoctorLocation(
@@ -473,15 +477,32 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                     "google_maps_url": payload.google_maps_url
                 }
                 
+            resolved_clinic_name = payload.clinic_name
+            resolved_hospital_id = payload.hospital_id
+
+            if resolved_hospital_id and not resolved_clinic_name:
+                h_res = await db.execute(select(Hospital).where(Hospital.id == resolved_hospital_id))
+                h_obj = h_res.scalar_one_or_none()
+                if h_obj and (h_obj.type or "").lower() == "clinic":
+                    resolved_clinic_name = h_obj.name
+
+            if resolved_clinic_name and not resolved_hospital_id:
+                h_res = await db.execute(select(Hospital).where(
+                    (Hospital.name.ilike(resolved_clinic_name.strip())) & (Hospital.type == "clinic")
+                ))
+                h_obj = h_res.scalars().first()
+                if h_obj:
+                    resolved_hospital_id = h_obj.id
+
             profile = Pharmacy(
                 user_id=new_user.id,
                 business_name=payload.business_name or payload.full_name,
                 license_number=payload.license_number or f"LIC-PHM-{str(new_user.id)[:8]}",
                 gst_number=payload.gst_number,
                 contact_number=payload.contact_number,
-                address=payload.clinic_address or payload.hospital_address, # Fallback to clinic_address/hospital_address if payload uses those
-                hospital_id=payload.hospital_id,
-                clinic_name=payload.clinic_name,
+                address=payload.clinic_address or payload.hospital_address,
+                hospital_id=resolved_hospital_id,
+                clinic_name=resolved_clinic_name,
                 location=location_data
             )
             db.add(profile)

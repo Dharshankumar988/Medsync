@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.models.verification import VerificationRequest, VerificationStatus
 from app.models.user import User, UserStatus
 from app.core.exceptions import NotFoundException, BadRequestException
@@ -35,6 +35,10 @@ class VerificationService:
             
             if user.role.value == "DOCTOR":
                 from app.models.doctor import Doctor
+                from app.models.hospital import Hospital
+                from app.models.doctor_location import DoctorLocation, LocationVerificationStatus
+                from app.api.v1.endpoints.hospitals import _hospitals_cache
+                
                 doc_stmt = select(Doctor).where(Doctor.user_id == user.id)
                 doc_result = await db.execute(doc_stmt)
                 doctor = doc_result.scalar_one_or_none()
@@ -42,6 +46,44 @@ class VerificationService:
                     doctor.doctor_status = "ACTIVE"
                     doctor.approval_date = datetime.now(timezone.utc)
                     doctor.approved_by = admin_id
+
+                    # Automatically verify all private clinics registered by this doctor
+                    clinic_stmt = select(Hospital).where(
+                        (Hospital.user_id == user.id) & (Hospital.type == "clinic")
+                    )
+                    clinic_res = await db.execute(clinic_stmt)
+                    for clinic in clinic_res.scalars().all():
+                        clinic.is_verified = True
+                        clinic.is_active = True
+
+                    if doctor.hospital_id:
+                        linked_hosp_stmt = select(Hospital).where(
+                            (Hospital.id == doctor.hospital_id) & (Hospital.type == "clinic")
+                        )
+                        linked_hosp_res = await db.execute(linked_hosp_stmt)
+                        linked_clinic = linked_hosp_res.scalar_one_or_none()
+                        if linked_clinic:
+                            linked_clinic.is_verified = True
+                            linked_clinic.is_active = True
+
+                    if doctor.clinic_name:
+                        c_name_stmt = select(Hospital).where(
+                            (func.lower(Hospital.name) == doctor.clinic_name.strip().lower()) & (Hospital.type == "clinic")
+                        )
+                        c_name_res = await db.execute(c_name_stmt)
+                        for c in c_name_res.scalars().all():
+                            c.is_verified = True
+                            c.is_active = True
+
+                    # Automatically verify all doctor practice locations
+                    locs_stmt = select(DoctorLocation).where(DoctorLocation.doctor_id == doctor.id)
+                    locs_res = await db.execute(locs_stmt)
+                    for loc in locs_res.scalars().all():
+                        loc.verification_status = LocationVerificationStatus.APPROVED
+                        loc.verified_by = admin_id
+                        loc.verified_at = datetime.now(timezone.utc)
+
+                    _hospitals_cache.clear()
             elif user.role.value == "PHARMACY":
                 from app.models.pharmacy import Pharmacy
                 from app.api.v1.endpoints.pharmacy import _generate_qr_identifier

@@ -13,11 +13,13 @@ from app.schemas.collaboration import (
     DoctorReferralCreate,
     DoctorReferralResponse,
     DoctorDirectoryItem,
+    ConsultedPatientItem,
 )
 from app.services.doctor_collaboration_service import DoctorCollaborationService
 
 router = APIRouter()
 require_doctor = RoleChecker([UserRole.DOCTOR])
+require_patient = RoleChecker([UserRole.PATIENT])
 
 
 # ─── Record Requests ──────────────────────────────────────────────
@@ -164,3 +166,70 @@ async def list_doctor_directory(
 ):
     results = await DoctorCollaborationService.list_doctors_directory(db, exclude_user_id=current_user.id)
     return APIResponse(message="Doctor directory retrieved", data=results)
+
+
+# ─── Consulted Patients ───────────────────────────────────────────
+
+@router.get(
+    "/consulted-patients",
+    response_model=APIResponse[List[ConsultedPatientItem]],
+)
+async def list_consulted_patients(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_doctor),
+):
+    results = await DoctorCollaborationService.list_consulted_patients(db, current_user.id)
+    return APIResponse(message="Consulted patients fetched successfully", data=results)
+
+
+# ─── Patient-Facing Collaboration Endpoints ────────────────────────
+
+@router.get(
+    "/patient/record-requests",
+    response_model=APIResponse[List[RecordRequestResponse]],
+)
+async def list_patient_record_requests(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_patient),
+):
+    results = await DoctorCollaborationService.list_patient_record_requests(db, current_user.id)
+    return APIResponse(message="Patient record requests fetched", data=results)
+
+
+@router.post(
+    "/patient/record-requests/{request_id}/approve",
+    response_model=APIResponse[RecordRequestResponse],
+)
+async def patient_approve_record_request(
+    request_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_patient),
+):
+    result = await DoctorCollaborationService.patient_approve_record_request(db, request_id, current_user.id)
+    return APIResponse(message="Consent granted and medical records shared with doctor", data=result)
+
+
+@router.post(
+    "/patient/record-requests/{request_id}/reject",
+    response_model=APIResponse[RecordRequestResponse],
+)
+async def patient_reject_record_request(
+    request_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_patient),
+):
+    result = await DoctorCollaborationService.patient_reject_record_request(db, request_id, current_user.id)
+    return APIResponse(message="Record access request declined", data=result)
+
+
+@router.get(
+    "/patient/referrals",
+    response_model=APIResponse[List[DoctorReferralResponse]],
+)
+async def list_patient_referrals(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_patient),
+):
+    results = await DoctorCollaborationService.list_patient_referrals(db, current_user.id)
+    return APIResponse(message="Patient referrals fetched", data=results)
+

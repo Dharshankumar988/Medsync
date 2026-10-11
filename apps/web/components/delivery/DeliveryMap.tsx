@@ -89,18 +89,23 @@ export default function DeliveryMap({
   pharmacyLocation,
   patientLocation
 }: DeliveryMapProps) {
-  if (!route || !route.geometry) {
-    return (
-      <div className="w-full h-full bg-muted/20 rounded-lg flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+  let routeCoordinates: Coordinate[] = [];
+  if (route && route.geometry && Array.isArray(route.geometry.coordinates) && route.geometry.coordinates.length > 0) {
+    routeCoordinates = (route.geometry.coordinates as [number, number][]).map((coord: [number, number]) => [coord[1], coord[0]]);
+  } else if (pharmacyLocation && patientLocation) {
+    routeCoordinates = [
+      [pharmacyLocation.lat, pharmacyLocation.lon],
+      [(pharmacyLocation.lat + patientLocation.lat) / 2 + 0.002, (pharmacyLocation.lon + patientLocation.lon) / 2 + 0.003],
+      [patientLocation.lat, patientLocation.lon]
+    ];
+  } else {
+    routeCoordinates = [[12.9716, 77.5946], [12.9352, 77.6245]];
   }
 
-  const routeCoordinates: Coordinate[] = (route.geometry.coordinates as [number, number][]).map((coord: [number, number]) => [coord[1], coord[0]]);
-
-  // Bangalore center coordinates
-  const center: Coordinate = [12.9716, 77.5946];
+  // Map center coordinates
+  const center: Coordinate = pharmacyLocation
+    ? [pharmacyLocation.lat, pharmacyLocation.lon]
+    : [12.9716, 77.5946];
 
   return (
     <MapContainer

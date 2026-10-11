@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState } from "react";
-import { LogOut, User, Settings, ShoppingBag, Search, Bell, Menu } from "lucide-react";
+import { LogOut, User, Settings, ShoppingBag } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   DropdownMenu,
@@ -53,21 +53,6 @@ export const Header = memo(function Header({ role }: { role: string }) {
       </div>
 
       <div className="flex items-center gap-3 md:gap-4">
-        {/* Search Bar - Hidden on small screens */}
-        <div className="relative hidden md:block w-64 lg:w-80">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input 
-            type="text"
-            placeholder={`Search ${role} dashboard...`}
-            className="w-full rounded-full border border-border/60 bg-muted/30 py-1.5 pl-9 pr-4 text-sm outline-none transition-colors focus:border-primary/50 focus:bg-background"
-          />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <kbd className="hidden rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100 lg:flex">
-              <span className="text-xs">⌘</span>K
-            </kbd>
-          </div>
-        </div>
-
         {/* Notifications */}
         <NotificationBell />
 

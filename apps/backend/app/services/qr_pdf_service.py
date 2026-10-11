@@ -170,33 +170,35 @@ class QRPdfService:
                 img = img.convert("RGB")
             
             img_buffer = io.BytesIO()
-            img.save(img_buffer, format="JPEG", quality=95)
+            img.save(img_buffer, format="PNG")
             img_buffer.seek(0)
             
             packet = io.BytesIO()
             c = canvas.Canvas(packet, pagesize=A4)
             width, height = A4
             
-            # Page layout with margins
-            margin = 35
+            # Generous layout margins for maximum readability
+            margin = 20
+            top_offset = 24
             avail_w = width - (2 * margin)
-            avail_h = height - (2 * margin) - 60 # Leave bottom room for verification badge
+            avail_h = height - margin - top_offset - 20
             
             img_w, img_h = img.size
-            ratio = min(avail_w / max(img_w, 1), avail_h / max(img_h, 1), 1.0)
+            # Scale proportionally to fill available page area without 1.0 cap
+            ratio = min(avail_w / max(img_w, 1), avail_h / max(img_h, 1))
             draw_w = img_w * ratio
             draw_h = img_h * ratio
             
             draw_x = margin + (avail_w - draw_w) / 2
-            draw_y = height - margin - draw_h
+            draw_y = height - margin - top_offset - draw_h
             
             c.drawImage(ImageReader(img_buffer), draw_x, draw_y, width=draw_w, height=draw_h)
             
-            # Header
-            c.setFont("Helvetica-Bold", 10)
+            # Header title
+            c.setFont("Helvetica-Bold", 9)
             c.setFillColorRGB(0.25, 0.3, 0.38)
             display_title = filename or "Medical Record Attachment"
-            c.drawString(margin, height - 22, display_title)
+            c.drawString(margin, height - 16, display_title)
             
             c.save()
             packet.seek(0)

@@ -4,6 +4,9 @@ from app.models.hospital import Hospital
 from app.models.doctor import Doctor
 from app.models.pharmacy import Pharmacy
 from app.models.patient import Patient
+from app.models.prescription import Prescription
+from app.models.record import DoctorNote
+from app.models.notification import Notification
 from app.models.user import UserRole, UserStatus
 from app.models.verification import RoleType, VerificationStatus
 from app.models.blockchain import SyncEntityType, SyncActionType, SyncStatus
@@ -13,6 +16,7 @@ from app.schemas.admin import (
     GraphEdge,
     GraphNodeEntityData
 )
+from app.schemas.notification import NotificationResponse
 from app.schemas.response import APIResponse
 
 
@@ -241,4 +245,74 @@ def test_blockchain_analytics_schema_and_serialization():
     assert dumped["data"]["contracts"][0]["contract_name"] == "DoctorRegistry"
     assert dumped["data"]["network"]["chain_id"] == 80002
     assert dumped["data"]["sync_tasks"]["by_status"]["CONFIRMED"] == 1
+
+
+def test_notification_model_and_schema_aliases():
+    """Verify Notification model and NotificationResponse support both is_read and read."""
+    import uuid
+    from datetime import datetime
+
+    notif_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    now = datetime.utcnow()
+
+    n = Notification(
+        id=notif_id,
+        user_id=user_id,
+        title="Appointment Confirmed",
+        message="Your appointment is confirmed.",
+        type="APPOINTMENT",
+        is_read=False,
+        created_at=now,
+        updated_at=now
+    )
+
+    # Initial state
+    assert n.is_read is False
+    assert n.read is False
+
+    # Setting via alias
+    n.read = True
+    assert n.is_read is True
+    assert n.read is True
+
+    # Pydantic schema validation & serialization
+    resp = NotificationResponse.model_validate(n)
+    assert resp.is_read is True
+    assert resp.read is True
+
+    dumped = resp.model_dump(mode="json")
+    assert dumped["is_read"] is True
+    assert dumped["read"] is True
+
+
+def test_prescription_and_doctor_note_contracts():
+    """Verify Prescription expires_at column type and DoctorNote version_id / record_version_id alias."""
+    import uuid
+    from datetime import datetime
+    from sqlalchemy import DateTime
+
+    # Check Prescription.expires_at type
+    assert isinstance(Prescription.expires_at.type, DateTime)
+
+    # Check DoctorNote attributes and aliases
+    note_id = uuid.uuid4()
+    doc_id = uuid.uuid4()
+    v_id = uuid.uuid4()
+
+    dn = DoctorNote(
+        id=note_id,
+        version_id=v_id,
+        doctor_id=doc_id,
+        note_text="Patient responded well"
+    )
+
+    assert dn.version_id == v_id
+    assert dn.record_version_id == v_id
+
+    new_v_id = uuid.uuid4()
+    dn.record_version_id = new_v_id
+    assert dn.version_id == new_v_id
+
+
 

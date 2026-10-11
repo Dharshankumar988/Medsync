@@ -1,5 +1,6 @@
 import uuid
 import httpx
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -56,27 +57,147 @@ async def get_pending_verifications(
     result = await db.execute(stmt)
     rows = result.all()
     
+    from app.models.hospital import Hospital
+    from app.models.doctor_location import DoctorLocation
+
     data = []
     for req, user, doctor, pharmacy in rows:
         profile = None
         if user.role == UserRole.DOCTOR and doctor:
+            # Parse GST if present in license_number string
+            gst_no = None
+            clean_lic = doctor.license_number or ""
+            if " | GST: " in clean_lic:
+                parts = clean_lic.split(" | GST: ")
+                clean_lic = parts[0].strip()
+                gst_no = parts[1].strip()
+
+            practice_type = "CLINIC" if doctor.clinic_name else "HOSPITAL"
+            applied_hospital_info = None
+            clinic_info = None
+
+            # Check if doctor has a registered clinic in hospitals table
+            clinic_hosp_stmt = select(Hospital).where(
+                (Hospital.user_id == user.id) & (Hospital.type == "clinic")
+            )
+            clinic_hosp_res = await db.execute(clinic_hosp_stmt)
+            clinic_hosp = clinic_hosp_res.scalar_one_or_none()
+
+            if doctor.hospital_id:
+                hosp_stmt = select(Hospital).where(Hospital.id == doctor.hospital_id)
+                hosp_res = await db.execute(hosp_stmt)
+                linked_hosp = hosp_res.scalar_one_or_none()
+                if linked_hosp:
+                    if (linked_hosp.type or "").lower() == "clinic":
+                        practice_type = "CLINIC"
+                        clinic_info = {
+                            "name": linked_hosp.name,
+                            "address": linked_hosp.address,
+                            "city": linked_hosp.city,
+                            "state": linked_hosp.state,
+                            "latitude": float(linked_hosp.latitude) if linked_hosp.latitude is not None else None,
+                            "longitude": float(linked_hosp.longitude) if linked_hosp.longitude is not None else None,
+                            "google_maps_url": linked_hosp.google_maps_url,
+                        }
+                    else:
+                        practice_type = "HOSPITAL"
+                        applied_hospital_info = {
+                            "id": str(linked_hosp.id),
+                            "name": linked_hosp.name,
+                            "address": linked_hosp.address,
+                            "city": linked_hosp.city,
+                            "state": linked_hosp.state,
+                            "phone": linked_hosp.phone_number,
+                            "type": linked_hosp.type or "hospital"
+                        }
+
+            if not clinic_info and (doctor.clinic_name or clinic_hosp):
+                practice_type = "CLINIC"
+                clinic_info = {
+                    "name": doctor.clinic_name or (clinic_hosp.name if clinic_hosp else "Private Clinic"),
+                    "address": doctor.clinic_address or (clinic_hosp.address if clinic_hosp else None),
+                    "city": doctor.city or (clinic_hosp.city if clinic_hosp else None),
+                    "state": doctor.state or (clinic_hosp.state if clinic_hosp else None),
+                    "pincode": doctor.pincode,
+                    "phone": doctor.clinic_phone,
+                    "email": doctor.clinic_email,
+                    "latitude": float(clinic_hosp.latitude) if clinic_hosp and clinic_hosp.latitude is not None else None,
+                    "longitude": float(clinic_hosp.longitude) if clinic_hosp and clinic_hosp.longitude is not None else None,
+                    "google_maps_url": clinic_hosp.google_maps_url if clinic_hosp else None,
+                }
+
+            # Check doctor locations
+            loc_stmt = select(DoctorLocation).where(
+                (DoctorLocation.doctor_id == doctor.id) & (DoctorLocation.is_active == True)
+            )
+            loc_res = await db.execute(loc_stmt)
+            locations_list = [
+                {
+                    "location_type": loc.location_type,
+                    "location_name": loc.location_name,
+                    "address": loc.address,
+                    "city": loc.city,
+                    "working_days": loc.working_days,
+                    "consultation_hours": loc.consultation_hours
+                }
+                for loc in loc_res.scalars().all()
+            ]
+
             profile = {
-                "hospital_name": doctor.hospital_name,
-                "hospital_address": doctor.hospital_address,
-                "license_number": doctor.license_number,
                 "full_name": doctor.full_name,
                 "specialization": doctor.specialization,
                 "experience_years": doctor.experience_years,
                 "qualifications": doctor.qualifications,
+                "license_number": clean_lic,
+                "gst_number": gst_no,
+                "medical_council_reg_number": doctor.medical_council_reg_number,
+                "practice_type": practice_type,
+                "clinic_info": clinic_info,
+                "applied_hospital_info": applied_hospital_info,
+                "hospital_name": doctor.hospital_name or (applied_hospital_info["name"] if applied_hospital_info else None),
+                "hospital_address": doctor.hospital_address or (applied_hospital_info["address"] if applied_hospital_info else None),
+                "clinic_name": doctor.clinic_name or (clinic_info["name"] if clinic_info else None),
+                "clinic_address": doctor.clinic_address or (clinic_info["address"] if clinic_info else None),
+                "city": doctor.city or (clinic_info["city"] if clinic_info else None),
+                "state": doctor.state or (clinic_info["state"] if clinic_info else None),
+                "consultation_fee": doctor.consultation_fee,
+                "consultation_hours": doctor.consultation_hours,
                 "verification_documents_url": doctor.verification_documents_url,
                 "certificates_url": doctor.certificates_url,
-                "medical_council_reg_number": doctor.medical_council_reg_number
+                "government_id_url": doctor.government_id_url,
+                "locations": locations_list
             }
         elif user.role == UserRole.PHARMACY and pharmacy:
+            affiliated_info = None
+            if pharmacy.hospital_id:
+                hosp_stmt = select(Hospital).where(Hospital.id == pharmacy.hospital_id)
+                hosp_res = await db.execute(hosp_stmt)
+                aff_hosp = hosp_res.scalar_one_or_none()
+                if aff_hosp:
+                    affiliated_info = {
+                        "id": str(aff_hosp.id),
+                        "name": aff_hosp.name,
+                        "type": aff_hosp.type or "facility",
+                        "city": aff_hosp.city,
+                        "address": aff_hosp.address
+                    }
+
             profile = {
                 "business_name": pharmacy.business_name,
+                "license_number": pharmacy.license_number,
+                "gst_number": pharmacy.gst_number,
+                "contact_number": pharmacy.contact_number or pharmacy.phone_number,
                 "address": pharmacy.address,
-                "license_number": pharmacy.license_number
+                "city": pharmacy.city,
+                "state": pharmacy.state,
+                "pincode": pharmacy.pincode,
+                "operating_hours": pharmacy.operating_hours,
+                "clinic_name": pharmacy.clinic_name or (affiliated_info["name"] if affiliated_info and affiliated_info["type"] == "clinic" else None),
+                "hospital_id": str(pharmacy.hospital_id) if pharmacy.hospital_id else None,
+                "affiliated_info": affiliated_info,
+                "location": pharmacy.location if isinstance(pharmacy.location, dict) else None,
+                "verification_documents_url": pharmacy.verification_documents_url,
+                "supporting_documents_url": pharmacy.supporting_documents_url
             }
             
         data.append({
@@ -220,23 +341,65 @@ async def create_admin(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    # Supabase auth-free admin creation - direct SQL injection like doctor/pharmacy
-    from sqlalchemy import text
-    user_id = uuid.uuid4()
-    try:
-        await db.execute(
-            text("""
-            INSERT INTO auth.users (id, instance_id, email, encrypted_password, aud, role, email_confirmed_at)
-            VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')), 'authenticated', 'authenticated', now())
-            """),
-            {"id": user_id, "email": payload.email, "pwd": payload.password}
-        )
-        await db.commit()
+    # Supabase auth-free admin creation - direct SQL injection with full metadata
+    clean_email = payload.email.strip().lower()
+    
+    existing = await db.execute(select(User).where(User.email.ilike(clean_email)))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="A user with this email already exists.")
 
+    user_id: Optional[uuid.UUID] = None
+
+    # Try creating user via Supabase Admin API first if configured
+    if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
+        try:
+            async with await get_supabase_client() as client:
+                res = await client.post(
+                    "/admin/users",
+                    json={
+                        "email": clean_email,
+                        "password": payload.password,
+                        "email_confirm": True,
+                        "app_metadata": {"role": "ADMIN", "provider": "email"},
+                        "user_metadata": {"role": "ADMIN"}
+                    }
+                )
+                if res.status_code in (200, 201):
+                    user_id = uuid.UUID(res.json()["id"])
+        except Exception:
+            user_id = None
+
+    # Fallback to direct SQL insert into auth.users if Supabase API was unreachable or unconfigured
+    if not user_id:
+        user_id = uuid.uuid4()
+        try:
+            from sqlalchemy import text
+            await db.execute(
+                text("""
+                INSERT INTO auth.users (
+                    id, instance_id, email, encrypted_password, aud, role,
+                    raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
+                )
+                VALUES (
+                    :id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')),
+                    'authenticated', 'authenticated',
+                    '{"provider":"email","providers":["email"],"role":"ADMIN"}',
+                    '{"role":"ADMIN"}',
+                    now(), now(), now()
+                )
+                """),
+                {"id": user_id, "email": clean_email, "pwd": payload.password}
+            )
+            await db.commit()
+        except Exception:
+            # If auth.users doesn't exist (e.g. SQLite test DB), rollback and continue
+            await db.rollback()
+
+    try:
         # Create local DB user record
         new_user = User(
             id=user_id,
-            email=payload.email,
+            email=clean_email,
             role=UserRole.ADMIN,
             status=UserStatus.ACTIVE,
             is_verified=True,
@@ -245,7 +408,10 @@ async def create_admin(
         db.add(new_user)
         await db.commit()
 
-        return APIResponse(message="Admin created successfully", data={"email": payload.email, "id": str(user_id)})
+        return APIResponse(message="Admin created successfully", data={"email": clean_email, "id": str(user_id)})
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))

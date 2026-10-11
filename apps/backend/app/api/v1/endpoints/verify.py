@@ -162,36 +162,55 @@ async def verify_qr(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(get_current_user),
 ):
-    """Verify a QR token — supports both legacy JWT and new permanent MS- tokens."""
-    if not token.startswith("MS-"):
-        # Legacy JWT Flow
-        verification = await QRAuthorizationService.verify_token(
-            db=db,
-            jwt_token=token,
-            verifier_id=current_user.id,
-            verifier_role=current_user.role,
-        )
-        if not verification.get("valid"):
-            raise HTTPException(status_code=403, detail=verification.get("error", "Invalid or expired QR token"))
-        purpose = verification.get("purpose", "PRESCRIPTION_ACCESS")
-        if purpose in ["PRESCRIPTION_ACCESS", "IN_STORE_ORDER"] and current_user.role.upper() not in ["PHARMACY"]:
-            raise HTTPException(status_code=403, detail="Unauthorized role for this QR purpose")
-        elif purpose == "DELIVERY_CONFIRMATION" and current_user.role.upper() not in ["PHARMACY"]:
-            raise HTTPException(status_code=403, detail="Unauthorized role for delivery confirmation")
-        return APIResponse(
-            message="Verification Successful",
-            data=VerifyResponse(
-                is_valid=True, purpose=purpose, resource_id=str(verification.get("resource_id", "")),
-                message="Verified", data=verification.get("data", {})
-            )
-        )
-        
-    # --- Permanent MS- Token Flow ---
-    stmt = select(Prescription).where(Prescription.qr_token == token)
+    # Clean token if passed as URL or path
+    clean_token = token.strip()
+    if "/verify/prescription/" in clean_token:
+        clean_token = clean_token.split("/verify/prescription/")[-1].split("?")[0].split("/")[0]
+    elif clean_token.startswith("http://") or clean_token.startswith("https://"):
+        clean_token = clean_token.rstrip("/").split("/")[-1]
+
+    # Look up prescription by raw token, clean token, or UUID
+    from sqlalchemy import or_
+    prescription_conditions = [
+        Prescription.qr_token == token,
+        Prescription.qr_token == clean_token,
+    ]
+    if clean_token.startswith("MS-RX-"):
+        uuid_str = clean_token[6:]
+        try:
+            prescription_conditions.append(Prescription.id == uuid.UUID(uuid_str))
+        except (ValueError, AttributeError):
+            pass
+
+    try:
+        raw_uuid = uuid.UUID(clean_token)
+        prescription_conditions.append(Prescription.id == raw_uuid)
+    except (ValueError, AttributeError):
+        pass
+
+    stmt = select(Prescription).where(or_(*prescription_conditions))
     result = await db.execute(stmt)
     rx = result.scalar_one_or_none()
-    
+
     if not rx:
+        # Fall back to legacy JWT validation if not matched as permanent token
+        if not clean_token.startswith("MS-"):
+            verification = await QRAuthorizationService.verify_token(
+                db=db,
+                jwt_token=token,
+                verifier_id=current_user.id,
+                verifier_role=current_user.role,
+            )
+            if verification.get("valid"):
+                purpose = verification.get("purpose", "PRESCRIPTION_ACCESS")
+                return APIResponse(
+                    message="Verification Successful",
+                    data=VerifyResponse(
+                        is_valid=True, purpose=purpose, resource_id=str(verification.get("resource_id", "")),
+                        message="Verified", data=verification.get("data", {})
+                    )
+                )
+
         return APIResponse(message="Verification Failed", data=VerifyResponse(
             is_valid=False, purpose="PRESCRIPTION_ACCESS", resource_id="", message="INVALID", data={}
         ))
@@ -221,9 +240,12 @@ async def verify_qr(
     else:
         status_msg = "PENDING"
         
-    # Authorization Rules
+    # Authorization Rules: Attending Doctors, Pharmacies, Admins, and Patient owner can view clinical details
     authorized_for_details = False
-    if current_user.role.upper() == "DOCTOR":
+    cur_role = str(current_user.role).upper()
+    if cur_role in ["PHARMACY", "ADMIN"]:
+        authorized_for_details = True
+    elif cur_role == "DOCTOR":
         if str(rx.doctor_id) == str(current_user.id):
             authorized_for_details = True
         else:
@@ -231,6 +253,8 @@ async def verify_qr(
             has_permission = await PermissionService.can_access_patient(db, current_user.id, rx.patient_id)
             if has_permission:
                 authorized_for_details = True
+    elif str(rx.patient_id) == str(current_user.id):
+        authorized_for_details = True
 
     # Build Response Data
     doc_stmt = select(Doctor).where(Doctor.user_id == rx.doctor_id)

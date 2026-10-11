@@ -47,6 +47,7 @@ export default function CreatePrescriptionPage() {
   // PIN Authorization State
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [pinMode, setPinMode] = useState<"create" | "verify">("verify");
   const [hasPin, setHasPin] = useState<boolean | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -279,6 +280,7 @@ export default function CreatePrescriptionPage() {
     // Set PIN mode based on whether doctor has enrolled a PIN
     setPinMode(hasPin ? "verify" : "create");
     setPin("");
+    setConfirmPin("");
     setIsPinModalOpen(true);
   };
 
@@ -288,15 +290,25 @@ export default function CreatePrescriptionPage() {
       return;
     }
 
+    if (pinMode === "create") {
+      if (!currentPassword) {
+        toast.error("Please enter your account password");
+        return;
+      }
+      if (confirmPin.length !== 6) {
+        toast.error("Please confirm your 6-digit PIN");
+        return;
+      }
+      if (pin !== confirmPin) {
+        toast.error("New PIN and Confirm PIN do not match");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       // If creating PIN for first time, enroll it first
       if (pinMode === "create") {
-        if (!currentPassword) {
-          toast.error("Please enter your account password");
-          setSaving(false);
-          return;
-        }
         
         const { data: session } = await supabase.auth.getSession();
         const token = session?.session?.access_token;
@@ -581,27 +593,66 @@ export default function CreatePrescriptionPage() {
                 : "Enter your 6-digit Doctor Authorization PIN to cryptographically sign and finalize this prescription."}
             </p>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {pinMode === "create" && (
+                <div className="space-y-1 text-left">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Account Password</label>
+                  <Input
+                    type="password"
+                    placeholder="Enter current password"
+                    className="h-11 rounded-xl"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </div>
+              )}
+              <div className="space-y-1 text-left">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {pinMode === "create" ? "Enter 6-Digit PIN" : "Enter Doctor PIN"}
+                </label>
                 <Input
                   type="password"
-                  placeholder="Current Account Password"
-                  className="h-12 rounded-xl"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="••••••"
+                  className="tracking-widest font-mono text-center text-2xl h-14 rounded-xl"
+                  maxLength={6}
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                  autoFocus
                 />
-              )}
-              <Input
-                type="password"
-                placeholder="••••••"
-                className="tracking-widest font-mono text-center text-3xl h-16 rounded-xl"
-                maxLength={6}
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                autoFocus
-              />
+              </div>
 
-              <Button className="w-full h-12 text-md bg-emerald-600 hover:bg-emerald-700" disabled={saving || pin.length !== 6} onClick={handleConfirmSave}>
+              {pinMode === "create" && (
+                <div className="space-y-1 text-left">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Confirm 6-Digit PIN</label>
+                  <Input
+                    type="password"
+                    placeholder="••••••"
+                    className="tracking-widest font-mono text-center text-2xl h-14 rounded-xl"
+                    maxLength={6}
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                  />
+                  {confirmPin.length > 0 && (
+                    <div className="pt-1 text-xs font-medium">
+                      {pin === confirmPin ? (
+                        <span className="text-emerald-500 flex items-center gap-1">✓ PINs match</span>
+                      ) : (
+                        <span className="text-rose-500 flex items-center gap-1">✕ PINs do not match</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <Button
+                className="w-full h-12 text-md bg-emerald-600 hover:bg-emerald-700 mt-2"
+                disabled={
+                  saving ||
+                  pin.length !== 6 ||
+                  (pinMode === "create" && (!currentPassword || confirmPin.length !== 6 || pin !== confirmPin))
+                }
+                onClick={handleConfirmSave}
+              >
                 {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />}
                 {pinMode === "create" ? "Create & Sign" : "Sign & Finalize"}
               </Button>

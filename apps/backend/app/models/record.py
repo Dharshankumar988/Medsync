@@ -97,6 +97,14 @@ class DoctorNote(Base, UUIDMixin, TimestampMixin):
     note_text: Mapped[str] = mapped_column(Text, nullable=False)
     
     version = relationship("MedicalRecordVersion", back_populates="doctor_notes")
+    
+    @property
+    def record_version_id(self) -> uuid.UUID:
+        return self.version_id
+
+    @record_version_id.setter
+    def record_version_id(self, val: uuid.UUID) -> None:
+        self.version_id = val
 
 class OCRResult(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "ocr_results"

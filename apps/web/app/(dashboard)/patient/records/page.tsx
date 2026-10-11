@@ -586,19 +586,6 @@ export default function MedicalRecordsPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="is_prescription"
-                  checked={isPrescription}
-                  onChange={(e) => setIsPrescription(e.target.checked)}
-                  className="rounded border-gray-300 text-primary shadow-sm"
-                />
-                <label htmlFor="is_prescription" className="text-xs font-medium text-muted-foreground">
-                  This is an active medication prescription
-                </label>
-              </div>
-
               <div className="space-y-1.5 border-t border-border/40 pt-3">
                 <label className="text-xs font-semibold uppercase tracking-wider text-primary">
                   Authorization PIN *

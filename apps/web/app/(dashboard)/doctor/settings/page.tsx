@@ -11,6 +11,7 @@ import { getApiUrl } from "@/lib/backend-config";
 
 export default function DoctorSettingsPage() {
   const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [isEnrollingPin, setIsEnrollingPin] = useState(false);
   const [pinStatus, setPinStatus] = useState<string>("NOT_STARTED");
@@ -79,13 +80,20 @@ export default function DoctorSettingsPage() {
   };
 
   const handleEnrollPin = async () => {
+    if (!currentPassword) {
+      toast.error("Please enter your current account password to update your PIN.");
+      return;
+    }
     if (pin.length !== 6) {
       toast.error("PIN must be exactly 6 digits.");
       return;
     }
-    
-    if (!currentPassword) {
-      toast.error("Please enter your current account password to update your PIN.");
+    if (confirmPin.length !== 6) {
+      toast.error("Please confirm your 6-digit PIN.");
+      return;
+    }
+    if (pin !== confirmPin) {
+      toast.error("New PIN and Confirm PIN do not match.");
       return;
     }
     
@@ -107,6 +115,7 @@ export default function DoctorSettingsPage() {
 
       toast.success(pinStatus === "NOT_STARTED" ? "PIN enrolled successfully!" : "PIN updated successfully!");
       setPin("");
+      setConfirmPin("");
       setCurrentPassword("");
       fetchPinStatus();
     } catch (err: any) {
@@ -203,9 +212,46 @@ export default function DoctorSettingsPage() {
                 className="tracking-widest font-mono text-center text-lg" 
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••••"
               />
             </div>
-            <Button onClick={handleEnrollPin} disabled={isEnrollingPin || pin.length !== 6} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">Confirm 6-Digit PIN</label>
+                {confirmPin.length > 0 && (
+                  <span className={`text-[11px] font-semibold flex items-center gap-1 ${
+                    pin === confirmPin && pin.length === 6 ? "text-emerald-500" : "text-rose-500"
+                  }`}>
+                    {pin === confirmPin && pin.length === 6 ? "PINs match" : "PINs do not match"}
+                  </span>
+                )}
+              </div>
+              <Input 
+                type="password" 
+                maxLength={6} 
+                className={`tracking-widest font-mono text-center text-lg transition-colors ${
+                  confirmPin.length === 6
+                    ? pin === confirmPin
+                      ? "border-emerald-500/60 focus-visible:ring-emerald-500/30 text-emerald-500"
+                      : "border-rose-500/60 focus-visible:ring-rose-500/30 text-rose-500"
+                    : ""
+                }`}
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••••"
+              />
+            </div>
+            <Button
+              onClick={handleEnrollPin}
+              disabled={
+                isEnrollingPin ||
+                !currentPassword ||
+                pin.length !== 6 ||
+                confirmPin.length !== 6 ||
+                pin !== confirmPin
+              }
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
               {isEnrollingPin && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {pinStatus !== "NOT_STARTED" ? "Update PIN" : "Enroll PIN"}
             </Button>

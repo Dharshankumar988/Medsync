@@ -18,6 +18,14 @@ class Notification(Base, UUIDMixin, TimestampMixin):
     type: Mapped[str] = mapped_column(String(50), default="INFO")
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    @property
+    def read(self) -> bool:
+        return self.is_read
+
+    @read.setter
+    def read(self, value: bool) -> None:
+        self.is_read = value
+
 class NotificationPreference(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "notification_preferences"
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True, unique=True, nullable=False)

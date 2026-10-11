@@ -212,31 +212,17 @@ export default function PrescriptionsPage() {
                         <QrCode className="h-4 w-4" />
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-sm text-center">
-                      <DialogHeader>
-                        <DialogTitle className="text-center">Prescription QR</DialogTitle>
+                    <DialogContent className="sm:max-w-md p-4">
+                      <DialogHeader className="sr-only">
+                        <DialogTitle>Prescription QR</DialogTitle>
                       </DialogHeader>
-                      <div className="py-6 flex justify-center">
-                        <div className="p-4 bg-white rounded-xl shadow-inner border">
-                          <PrescriptionQR 
-                            prescriptionId={prescription.id} 
-                            patientId={prescription.patient_id} 
-                            doctorId={prescription.doctor_id} 
-                            qrToken={prescription.qr_token}
-                            hash={prescription.hash}
-                          />
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground text-center">
-                        Show this QR code at any MedSync network pharmacy.
-                      </p>
-                      
-                      <div className="mt-4 pt-4 border-t border-dashed">
-                          <p className="text-xs font-semibold text-muted-foreground mb-2 text-left">SECURE TOKEN</p>
-                          <div className="bg-muted p-2 rounded-md font-mono text-xs break-all text-left select-all">
-                              {prescription.hash || "Token generation pending..."}
-                          </div>
-                      </div>
+                      <PrescriptionQR 
+                        prescriptionId={prescription.id} 
+                        patientId={prescription.patient_id} 
+                        doctorId={prescription.doctor_id} 
+                        qrToken={prescription.qr_token}
+                        hash={prescription.hash}
+                      />
                     </DialogContent>
                   </Dialog>
                 </div>

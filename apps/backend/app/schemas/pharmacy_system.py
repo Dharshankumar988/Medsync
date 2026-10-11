@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
 from app.models.pharmacy_system import OrderStatus
 
@@ -115,3 +115,24 @@ class PharmacyVerificationResponse(BaseModel):
     contract_explorer_url: Optional[str] = None
     timestamp: Optional[str] = None
     qr_identifier: Optional[str] = None
+
+class PharmacyNetworkItem(BaseModel):
+    id: uuid.UUID
+    pharmacy_id: uuid.UUID
+    user_id: uuid.UUID
+    business_name: str
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    contact_number: Optional[str] = None
+    phone: Optional[str] = None
+    license_number: Optional[str] = None
+    is_24x7: bool = False
+    operating_hours: Optional[str] = None
+    logo_url: Optional[str] = None
+    location: Optional[dict] = None
+    clinic_name: Optional[str] = None
+    hospital_id: Optional[uuid.UUID] = None
+
+    model_config = ConfigDict(use_enum_values=True)
+

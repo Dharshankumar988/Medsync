@@ -115,13 +115,20 @@ async def create_hospital(
     new_hospital = Hospital(**payload.model_dump())
     new_hospital.user_id = current_user.id
     
-    # Admins create verified hospitals directly; doctors require admin authorization
+    # Admins create verified hospitals or clinics directly; doctors can only register private clinics
     if current_user.role.upper() == UserRole.ADMIN.value:
         new_hospital.is_verified = True
-        msg = "Hospital created successfully"
+        msg = f"{'Hospital' if (payload.type or 'hospital').lower() == 'hospital' else 'Clinic'} created successfully"
     else:
+        req_type = (payload.type or "hospital").lower()
+        if req_type == "hospital":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Doctors can only register private clinics. Hospital facilities must be registered by an administrator."
+            )
+        new_hospital.type = "clinic"
         new_hospital.is_verified = False
-        msg = "Medical facility submitted successfully. It is pending authorization by the administrator."
+        msg = "Private clinic submitted successfully. It is pending approval by the administrator."
 
     db.add(new_hospital)
     await db.commit()

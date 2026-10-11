@@ -82,6 +82,11 @@ class StorageService:
         return f"patients/{patient_id}/records/{record_id}/v{version_number}/{uuid.uuid4().hex}-{safe_filename}"
 
     @staticmethod
+    def _prescription_object_path(patient_id: str, prescription_id: str, filename: str | None) -> str:
+        safe_filename = StorageService._safe_name(filename)
+        return f"patients/{patient_id}/prescriptions/{prescription_id}/{safe_filename}"
+
+    @staticmethod
     async def upload_record_file(
         file: UploadFile,
         *,
@@ -168,15 +173,51 @@ class StorageService:
         return object_path, content_type, len(file_bytes), file_hash
 
     @staticmethod
+    async def upload_prescription_bytes(
+        file_bytes: bytes,
+        filename: str,
+        content_type: str,
+        patient_id: str,
+        prescription_id: str,
+    ) -> tuple[str, str, int, str]:
+        StorageService._ensure_configured()
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+        object_path = StorageService._prescription_object_path(patient_id, prescription_id, filename)
+        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+
+        headers = {
+            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+            "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+            "x-upsert": "true",
+            "Content-Type": content_type,
+        }
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                url,
+                headers=headers,
+                content=file_bytes,
+            )
+            if response.status_code in (400, 404) and ("Bucket not found" in response.text or "NoSuchBucket" in response.text):
+                await StorageService._ensure_bucket()
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    content=file_bytes,
+                )
+
+        if response.status_code not in (200, 201):
+            raise StorageServiceError(f"Supabase prescription upload failed: {response.status_code} {response.text}")
+
+        return object_path, content_type, len(file_bytes), file_hash
+
+    @staticmethod
     async def upload_profile_image(user_id: str, file_bytes: bytes, filename: str, content_type: str) -> str:
         StorageService._ensure_configured()
         
         safe_filename = StorageService._safe_name(filename)
-        # Store as new object/version to preserve old links
         object_path = f"profiles/{user_id}/{uuid.uuid4().hex}-{safe_filename}"
-        
-        # Use public endpoint for profiles if bucket is public, else just store path.
-        # Actually, Supabase Storage uploads use the same API for public/private.
         url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
         
         headers = {
@@ -195,15 +236,30 @@ class StorageService:
         if response.status_code not in (200, 201):
             raise StorageServiceError(f"Supabase upload failed: {response.status_code} {response.text}")
             
-        # Return the public URL
         public_url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
         return public_url
 
     @staticmethod
-    async def create_signed_download_url(object_path: str, expires_in: int = 300) -> str:
-        StorageService._ensure_configured()
+    def _clean_object_path(object_path: str) -> str:
+        cleaned = object_path.strip()
+        if cleaned.startswith("supabase://"):
+            cleaned = cleaned.replace("supabase://", "").split("#")[0]
+        # Remove bucket prefix if prepended
+        bucket_prefix = f"{settings.SUPABASE_STORAGE_BUCKET}/"
+        if cleaned.startswith(bucket_prefix):
+            cleaned = cleaned[len(bucket_prefix):]
+        return cleaned
 
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/sign/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+    @staticmethod
+    async def create_signed_download_url(object_path: str, expires_in: int = 300) -> str:
+        # If it is already an absolute HTTP/HTTPS URL, return it directly
+        if object_path.startswith("http://") or object_path.startswith("https://"):
+            return object_path
+
+        StorageService._ensure_configured()
+        clean_path = StorageService._clean_object_path(object_path)
+
+        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/sign/{settings.SUPABASE_STORAGE_BUCKET}/{clean_path}"
         headers = {
             "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
             "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
@@ -216,12 +272,12 @@ class StorageService:
 
         if response.status_code not in (200, 201):
             logger.warning(f"Supabase signed URL generation failed ({response.status_code}): {response.text}")
-            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{clean_path}"
 
         data = response.json()
         signed_url = data.get("signedURL") or data.get("signedUrl")
         if not signed_url:
-            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{clean_path}"
         if signed_url.startswith("/object/"):
             signed_url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1{signed_url}"
         elif signed_url.startswith("/"):
@@ -230,9 +286,17 @@ class StorageService:
 
     @staticmethod
     async def download_record_file(object_path: str) -> bytes:
-        StorageService._ensure_configured()
+        if object_path.startswith("http://") or object_path.startswith("https://"):
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.get(object_path)
+            if response.status_code != 200:
+                raise StorageServiceError(f"HTTP download failed: {response.status_code} {response.text}")
+            return response.content
 
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+        StorageService._ensure_configured()
+        clean_path = StorageService._clean_object_path(object_path)
+
+        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{settings.SUPABASE_STORAGE_BUCKET}/{clean_path}"
         headers = {
             "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
             "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,

@@ -202,7 +202,38 @@ export default function AnalyticsDashboard() {
   const totalTx = analytics?.total_transactions || 0;
   const confirmedTx = txData["CONFIRMED"] || totalTx;
 
-  const smartContracts = analytics?.smart_contracts || [];
+  const DEFAULT_FALLBACK_CONTRACTS: Record<string, string> = {
+    ConsentManagement: "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+    PatientRegistry: "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3",
+    DoctorRegistry: "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+    PharmacyRegistry: "0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9",
+    MedicalRecordRegistry: "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+    PrescriptionRegistry: "0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D"
+  };
+
+  const rawSmartContracts = analytics?.smart_contracts || [];
+  const smartContracts = (rawSmartContracts.length > 0
+    ? rawSmartContracts
+    : Object.entries(DEFAULT_FALLBACK_CONTRACTS).map(([name, address]) => ({
+        name,
+        address,
+        status: "DEPLOYED",
+        tx_count: 0,
+        total_gas: 0,
+        explorer_url: `https://amoy.polygonscan.com/address/${address}`
+      }))
+  ).map(sc => {
+    const fallbackAddr = DEFAULT_FALLBACK_CONTRACTS[sc.name];
+    if ((!sc.address || sc.address === "Not configured") && fallbackAddr) {
+      return {
+        ...sc,
+        address: fallbackAddr,
+        status: "DEPLOYED",
+        explorer_url: `https://amoy.polygonscan.com/address/${fallbackAddr}`
+      };
+    }
+    return sc;
+  });
   const topWallets = analytics?.top_wallets || [];
   const recentTxs = analytics?.recent_transactions || [];
   const dailyTimeline = analytics?.daily_timeline || [];

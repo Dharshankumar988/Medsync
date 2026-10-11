@@ -28,6 +28,7 @@ const menuGroups = {
         { name: "Medical Records", href: "/patient/records", icon: FileText },
         { name: "Appointments & Doctors", href: "/patient/appointments", icon: Calendar },
         { name: "Prescriptions & Medicines", href: "/patient/prescriptions", icon: Pill },
+        { name: "Specialist Referrals", href: "/patient/referrals", icon: UserPlus },
       ]
     },
     {

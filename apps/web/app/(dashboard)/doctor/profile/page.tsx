@@ -415,29 +415,18 @@ export default function DoctorProfilePage() {
                 <TabsContent value="HOSPITAL" className="space-y-4 mt-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-muted-foreground">Primary Medical Facility</label>
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => {
-                          setNewFacility(prev => ({ ...prev, type: "hospital" }));
-                          setIsAddFacilityOpen(true);
-                        }}
-                        className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Register New Facility
-                      </Button>
+                      <label className="text-xs font-medium text-muted-foreground">Select Hospital Facility (Existing Network)</label>
+                      <span className="text-[11px] text-muted-foreground">Hospitals are verified by MedSync Administration</span>
                     </div>
                     <Select 
                       value={doctorData.hospital_id || ""} 
                       onChange={(e) => setDoctorData((prev: any) => ({...prev, hospital_id: e.target.value}))}
                     >
-                      <option value="" disabled>Select a facility...</option>
-                      {hospitals.map(h => (
+                      <option value="" disabled>Select a hospital where you practice...</option>
+                      {hospitals.filter(h => (h.type || "").toLowerCase() !== "clinic").map(h => (
                         <option key={h.id} value={h.id}>
-                          {h.is_verified ? "🏥 " : "⏳ [Pending Admin] "}
-                          {h.name} - {h.city || "Bengaluru"} ({h.type === "clinic" ? "Clinic" : "Hospital"})
+                          {h.is_verified ? "🏥 " : "⏳ [Pending Approval] "}
+                          {h.name} - {h.city || "Bengaluru"} (Hospital)
                         </option>
                       ))}
                     </Select>
@@ -448,12 +437,12 @@ export default function DoctorProfilePage() {
                       return selectedHospital.is_verified ? (
                         <div className="p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs flex items-center gap-2">
                           <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                          <span><strong>Verified Facility:</strong> Authorized by MedSync Administration.</span>
+                          <span><strong>Verified Facility:</strong> Hospital affiliation authorized by MedSync Administration.</span>
                         </div>
                       ) : (
                         <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
                           <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                          <span><strong>Pending Admin Authorization:</strong> This facility is under review by administrator.</span>
+                          <span><strong>Pending Approval:</strong> This hospital affiliation is under review by administrator.</span>
                         </div>
                       );
                     })()}
@@ -461,6 +450,21 @@ export default function DoctorProfilePage() {
                 </TabsContent>
 
                 <TabsContent value="CLINIC" className="space-y-4 mt-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-muted-foreground">Private Clinic Information</label>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setNewFacility(prev => ({ ...prev, type: "clinic" }));
+                        setIsAddFacilityOpen(true);
+                      }}
+                      className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Register New Clinic
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">Clinic Name</label>
@@ -471,6 +475,25 @@ export default function DoctorProfilePage() {
                       <Input name="clinic_address" value={doctorData.clinic_address || ""} onChange={handleInputChange} placeholder="e.g. 45 Indiranagar 100ft Rd" />
                     </div>
                   </div>
+
+                  {doctorData.clinic_name && (() => {
+                    const matchedClinic = hospitals.find(h => 
+                      (h.name.toLowerCase() === (doctorData.clinic_name || "").toLowerCase()) ||
+                      (doctorData.hospital_id && h.id === doctorData.hospital_id)
+                    );
+                    const isClinicVerified = (profile?.status === "ACTIVE") || matchedClinic?.is_verified;
+                    return isClinicVerified ? (
+                      <div className="p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span><strong>Verified Clinic:</strong> Your private clinic is verified and authorized by MedSync Administration.</span>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span><strong>Pending Approval:</strong> Private clinic registration is under review by administrator.</span>
+                      </div>
+                    );
+                  })()}
                 </TabsContent>
               </Tabs>
             </div>
@@ -532,7 +555,7 @@ export default function DoctorProfilePage() {
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[11px] shrink-0">
-                            <Clock className="w-3 h-3 mr-1" /> Pending Admin
+                            <Clock className="w-3 h-3 mr-1" /> Pending Approval
                           </Badge>
                         )}
                       </div>
@@ -693,41 +716,28 @@ export default function DoctorProfilePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal: Register Entire New Facility to MedSync */}
+      {/* Modal: Register New Private Clinic to MedSync */}
       <Dialog open={isAddFacilityOpen} onOpenChange={setIsAddFacilityOpen}>
         <DialogContent className="sm:max-w-[540px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Building2 className="w-5 h-5 text-primary" />
-              Register Medical Facility
+              Register Private Clinic
             </DialogTitle>
             <DialogDescription>
-              Register a hospital or healthcare center into the MedSync network for administrative authorization.
+              Register your private medical clinic into the MedSync network for administrator approval.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreateFacility} className="space-y-4 mt-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Facility Name *</label>
-                <Input 
-                  required
-                  value={newFacility.name}
-                  onChange={(e) => setNewFacility({ ...newFacility, name: e.target.value })}
-                  placeholder="e.g. City General Hospital"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Facility Type *</label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={newFacility.type}
-                  onChange={(e) => setNewFacility({ ...newFacility, type: e.target.value })}
-                >
-                  <option value="hospital">Hospital</option>
-                  <option value="clinic">Clinic</option>
-                </select>
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Clinic Name *</label>
+              <Input 
+                required
+                value={newFacility.name}
+                onChange={(e) => setNewFacility({ ...newFacility, name: e.target.value, type: "clinic" })}
+                placeholder="e.g. Apex Specialist Clinic"
+              />
             </div>
 
             <div className="space-y-1.5">

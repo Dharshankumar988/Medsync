@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Skeleton } from "@medsync/ui";
-import { Settings, Download, Mail, Bell, Smartphone, Shield, LogOut, Loader2, X } from "lucide-react";
+import { Settings, Download, Mail, Bell, Smartphone, Shield, LogOut, Loader2, X, CheckCircle2, AlertCircle } from "lucide-react";
 import { SecurityService } from "@/services/security.service";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
@@ -23,6 +23,7 @@ export default function SettingsPage() {
 
   // Security Reset State
   const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -112,12 +113,20 @@ export default function SettingsPage() {
   };
 
   const handleResetPin = async () => {
-    if (pin.length !== 6 || !/^\d+$/.test(pin)) {
-      setErrorMsg('PIN must be 6 digits.');
+    if (!currentPassword) {
+      setErrorMsg('Please enter your current account password.');
       return;
     }
-    if (!currentPassword) {
-      setErrorMsg('Please enter your current password.');
+    if (pin.length !== 6 || !/^\d+$/.test(pin)) {
+      setErrorMsg('New PIN must be exactly 6 digits.');
+      return;
+    }
+    if (confirmPin.length !== 6) {
+      setErrorMsg('Please confirm your 6-digit PIN.');
+      return;
+    }
+    if (pin !== confirmPin) {
+      setErrorMsg('New PIN and Confirm PIN do not match.');
       return;
     }
 
@@ -138,6 +147,7 @@ export default function SettingsPage() {
         toast.success('PIN reset successfully');
         setResetModal(null);
         setPin('');
+        setConfirmPin('');
         setCurrentPassword('');
       }
     } catch (err: any) {
@@ -261,8 +271,19 @@ export default function SettingsPage() {
 
       {resetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-md p-6 rounded-2xl shadow-xl relative border">
-            <Button variant="ghost" size="icon" className="absolute right-4 top-4" onClick={() => setResetModal(null)}>
+          <div className="bg-card w-full max-w-md p-6 rounded-2xl shadow-xl relative border border-border">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-4 top-4"
+              onClick={() => {
+                setResetModal(null);
+                setPin("");
+                setConfirmPin("");
+                setCurrentPassword("");
+                setErrorMsg("");
+              }}
+            >
               <X className="h-4 w-4" />
             </Button>
             <h2 className="text-xl font-bold mb-4">Reset Authorization PIN</h2>
@@ -275,8 +296,11 @@ export default function SettingsPage() {
                 <input
                   type="password"
                   value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full bg-muted/30 border border-border p-3 rounded-xl"
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    if (errorMsg) setErrorMsg("");
+                  }}
+                  className="w-full bg-muted/30 border border-border p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
                   placeholder="Enter your account password"
                 />
               </div>
@@ -288,13 +312,75 @@ export default function SettingsPage() {
                   inputMode="numeric"
                   maxLength={6}
                   value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                  className="w-full bg-muted/30 border border-border p-3 rounded-xl text-center tracking-widest text-xl"
+                  onChange={(e) => {
+                    setPin(e.target.value.replace(/\D/g, ''));
+                    if (errorMsg) setErrorMsg("");
+                  }}
+                  placeholder="••••••"
+                  className="w-full bg-muted/30 border border-border p-3 rounded-xl text-center tracking-widest text-xl font-mono focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
                 />
               </div>
+
+              <div className="space-y-2 mt-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Confirm 6-Digit PIN</label>
+                  {confirmPin.length > 0 && (
+                    <span
+                      className={`text-xs font-semibold flex items-center gap-1 transition-colors ${
+                        pin === confirmPin && pin.length === 6
+                          ? "text-emerald-500"
+                          : confirmPin.length >= pin.length
+                          ? "text-rose-500"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {pin === confirmPin && pin.length === 6 ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5" /> PINs match
+                        </>
+                      ) : confirmPin.length >= pin.length ? (
+                        <>
+                          <AlertCircle className="w-3.5 h-3.5" /> PINs do not match
+                        </>
+                      ) : null}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={confirmPin}
+                  onChange={(e) => {
+                    setConfirmPin(e.target.value.replace(/\D/g, ''));
+                    if (errorMsg) setErrorMsg("");
+                  }}
+                  placeholder="••••••"
+                  className={`w-full bg-muted/30 border p-3 rounded-xl text-center tracking-widest text-xl font-mono focus:outline-none focus:ring-2 transition-all ${
+                    confirmPin.length === 6
+                      ? pin === confirmPin
+                        ? "border-emerald-500/60 focus:ring-emerald-500/30 text-emerald-500"
+                        : "border-rose-500/60 focus:ring-rose-500/30 text-rose-500"
+                      : "border-border focus:ring-primary/40"
+                  }`}
+                />
+              </div>
+
               {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-              <Button className="w-full" disabled={isSubmitting} onClick={handleResetPin}>
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin"/> : "Reset PIN"}
+
+              <Button
+                className="w-full mt-2"
+                disabled={
+                  isSubmitting ||
+                  !currentPassword ||
+                  pin.length !== 6 ||
+                  confirmPin.length !== 6 ||
+                  pin !== confirmPin
+                }
+                onClick={handleResetPin}
+              >
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Reset PIN
               </Button>
             </div>
           </div>

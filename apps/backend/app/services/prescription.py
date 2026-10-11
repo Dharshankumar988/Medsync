@@ -45,9 +45,8 @@ class PrescriptionService:
         chars = string.ascii_uppercase + string.digits
         pin = ''.join(random.choices(chars, k=4))
         
-        # QR token now a URL to verify page
-        base_url = "https://medsync.vercel.app" # Standardize base URL
-        qr_token = f"{base_url}/verify/prescription/{prescription_id}"
+        # Standardize QR token format to permanent verifiable MS-RX-{id}
+        qr_token = f"MS-RX-{prescription_id}"
         
         # 3. Generate QR Image and PDF
         qr_image_bytes = QRPdfService.generate_qr_code(qr_token)
@@ -62,13 +61,12 @@ class PrescriptionService:
         pdf_filename = f"prescription_{prescription_id}.pdf"
         try:
             raw_pdf_bytes = pdf_bytes.getvalue() if hasattr(pdf_bytes, "getvalue") else pdf_bytes.read()
-            object_path, _, _, _ = await StorageService.upload_bytes(
+            object_path, _, _, _ = await StorageService.upload_prescription_bytes(
                 file_bytes=raw_pdf_bytes,
                 filename=pdf_filename,
                 content_type="application/pdf",
                 patient_id=str(req.patient_id),
-                record_id=str(prescription_id),
-                version_number=1
+                prescription_id=str(prescription_id),
             )
             pdf_url = object_path
         except Exception as e:
@@ -76,7 +74,7 @@ class PrescriptionService:
             logging.getLogger("medsync.prescription").warning(
                 f"Storage upload failed for prescription {prescription_id}: {e}. Falling back to default path."
             )
-            pdf_url = f"patients/{req.patient_id}/records/{prescription_id}/v1/{pdf_filename}"
+            pdf_url = f"patients/{req.patient_id}/prescriptions/{prescription_id}/{pdf_filename}"
 
         # 5. Generate canonical hash
         from app.utils.hash import build_prescription_payload, generate_canonical_hash

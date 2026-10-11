@@ -443,7 +443,7 @@ export default function HospitalsManagementPage() {
                   </TableCell>
                   <TableCell>
                     <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-800/30 dark:text-amber-400">
-                      <Clock className="w-3 h-3 mr-1" /> Pending Admin Authorization
+                      <Clock className="w-3 h-3 mr-1" /> Pending Approval
                     </span>
                   </TableCell>
                   <TableCell className="text-right">

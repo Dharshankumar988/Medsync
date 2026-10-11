@@ -66,6 +66,12 @@ export default function AdminSettings() {
         setStrictVerification(Boolean(res.data.data.strict_verification));
         setLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       }
+      if (typeof window !== "undefined") {
+        const savedTimeout = localStorage.getItem("medsync_session_timeout");
+        if (savedTimeout) setSessionTimeout(parseInt(savedTimeout, 10));
+        const savedBlockchain = localStorage.getItem("medsync_blockchain_enforced");
+        if (savedBlockchain) setBlockchainEnforced(savedBlockchain === "true");
+      }
     } catch (err) {
       console.error("Failed to load settings", err);
       toast.error("Failed to load platform settings");
@@ -310,8 +316,12 @@ export default function AdminSettings() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setBlockchainEnforced(!blockchainEnforced);
-                  toast.success(`Blockchain anchoring policy ${!blockchainEnforced ? "enabled" : "relaxed"}`);
+                  const nextVal = !blockchainEnforced;
+                  setBlockchainEnforced(nextVal);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("medsync_blockchain_enforced", nextVal ? "true" : "false");
+                  }
+                  toast.success(`Polygon Amoy anchoring policy ${nextVal ? "enforced platform-wide" : "relaxed"}`);
                 }}
                 className={`h-9 px-4 text-xs font-semibold rounded-xl border-white/10 ${
                   blockchainEnforced ? "text-cyan-400 border-cyan-500/40 bg-cyan-500/5" : ""
@@ -342,6 +352,9 @@ export default function AdminSettings() {
                     type="button"
                     onClick={() => {
                       setSessionTimeout(mins);
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("medsync_session_timeout", mins.toString());
+                      }
                       toast.info(`Session timeout set to ${mins} minutes`);
                     }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium border transition-all ${

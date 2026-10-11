@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Card,
@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogDescription,
   Input,
-  Badge
+  Badge,
 } from "@medsync/ui";
 import { Avatar } from "@medsync/ui/components/avatar";
 import {
@@ -37,21 +37,21 @@ import {
   Building2,
   Stethoscope,
   CheckCircle2,
-  Lock
+  Lock,
+  Download,
+  Clock,
+  AlertCircle,
+  ExternalLink,
+  ChevronRight,
+  ShieldCheck,
+  XCircle,
+  UserCheck,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
-
-interface DoctorDirectoryItem {
-  id: string;
-  user_id: string;
-  full_name: string;
-  specialization?: string | null;
-  hospital_name?: string | null;
-  clinic_name?: string | null;
-}
+import DoctorHospitalPicker from "@/components/doctor/DoctorHospitalPicker";
 
 export default function PatientDetailPage() {
   const { id } = useParams();
@@ -62,9 +62,15 @@ export default function PatientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
 
+  // Patient Sub-Entities
+  const [records, setRecords] = useState<any[]>([]);
+  const [prescriptions, setPrescriptions] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [downloadingRecordId, setDownloadingRecordId] = useState<string | null>(null);
+
   // Referral Modal State
   const [isReferralOpen, setIsReferralOpen] = useState(false);
-  const [doctorDirectory, setDoctorDirectory] = useState<DoctorDirectoryItem[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
   const [referralSpecialization, setReferralSpecialization] = useState<string>("");
   const [referralReason, setReferralReason] = useState<string>("");
@@ -82,89 +88,127 @@ export default function PatientDetailPage() {
     });
   }, []);
 
-  useEffect(() => {
+  const fetchPatientData = useCallback(async () => {
     if (!userId || !patientId) return;
 
-    async function verifyAndFetch() {
-      try {
-        setLoading(true);
-        // Verify authorization (has appointment, prescription, or granted record permission)
-        const { data: appts } = await supabase
-          .from("appointments")
-          .select("id")
-          .eq("doctor_id", userId)
+    try {
+      setLoading(true);
+      // Verify authorization (has appointment, prescription, or granted record permission)
+      const { data: appts } = await supabase
+        .from("appointments")
+        .select("id")
+        .eq("doctor_id", userId)
+        .eq("patient_id", patientId)
+        .limit(1);
+      const { data: pres } = await supabase
+        .from("prescriptions")
+        .select("id")
+        .eq("doctor_id", userId)
+        .eq("patient_id", patientId)
+        .limit(1);
+
+      const { data: perms } = await supabase
+        .from("record_permissions")
+        .select("id")
+        .eq("granted_to", userId)
+        .eq("is_revoked", false)
+        .limit(1);
+
+      if ((appts && appts.length > 0) || (pres && pres.length > 0) || (perms && perms.length > 0)) {
+        setAuthorized(true);
+
+        // 1. Fetch Patient Profile
+        const { data: pData } = await supabase
+          .from("patients")
+          .select("*")
+          .eq("user_id", patientId)
+          .single();
+        setPatient(pData);
+
+        // 2. Fetch Medical Records for this patient
+        const { data: recData } = await supabase
+          .from("medical_records")
+          .select("*, record_versions(*, doctor_notes(*))")
           .eq("patient_id", patientId)
-          .limit(1);
-        const { data: pres } = await supabase
+          .order("created_at", { ascending: false });
+        setRecords(recData || []);
+
+        // 3. Fetch Prescriptions for this patient
+        const { data: presData } = await supabase
           .from("prescriptions")
-          .select("id")
-          .eq("doctor_id", userId)
+          .select("*, prescription_items(*)")
           .eq("patient_id", patientId)
-          .limit(1);
+          .order("created_at", { ascending: false });
+        setPrescriptions(presData || []);
 
-        const { data: perms } = await supabase
-          .from("record_permissions")
-          .select("id")
-          .eq("granted_to", userId)
-          .eq("is_revoked", false)
-          .limit(1);
+        // 4. Fetch Appointments for this patient
+        const { data: apptData } = await supabase
+          .from("appointments")
+          .select("*")
+          .eq("patient_id", patientId)
+          .order("appointment_date", { ascending: false });
+        setAppointments(apptData || []);
 
-        if ((appts && appts.length > 0) || (pres && pres.length > 0) || (perms && perms.length > 0)) {
-          setAuthorized(true);
-          const { data: pData } = await supabase
-            .from("patients")
-            .select("*")
-            .eq("user_id", patientId)
-            .single();
-          setPatient(pData);
+        // 5. Fetch Referrals involving this patient
+        const { data: refData } = await supabase
+          .from("doctor_referrals")
+          .select("*")
+          .eq("patient_id", patientId)
+          .order("created_at", { ascending: false });
+
+        if (refData && refData.length > 0) {
+          const docUserIds = [
+            ...new Set([
+              ...refData.map((r) => r.referring_doctor_id),
+              ...refData.map((r) => r.referred_to_doctor_id),
+            ]),
+          ];
+          const { data: docProfiles } = await supabase
+            .from("doctors")
+            .select("user_id, full_name, specialization, hospital_name")
+            .in("user_id", docUserIds);
+
+          const docMap = (docProfiles || []).reduce((acc: any, d: any) => {
+            acc[d.user_id] = d;
+            return acc;
+          }, {});
+
+          const enriched = refData.map((r) => ({
+            ...r,
+            referring_doctor: docMap[r.referring_doctor_id],
+            referred_to_doctor: docMap[r.referred_to_doctor_id],
+          }));
+          setReferrals(enriched);
         } else {
-          setAuthorized(false);
+          setReferrals([]);
         }
-      } catch (err) {
-        console.error(err);
+      } else {
         setAuthorized(false);
-      } finally {
-        setLoading(false);
       }
+    } catch (err) {
+      console.error(err);
+      setAuthorized(false);
+    } finally {
+      setLoading(false);
     }
-
-    verifyAndFetch();
   }, [userId, patientId]);
 
-  // Load doctor directory for referrals
-  const loadDoctorDirectory = async () => {
-    try {
-      const res = await api.get("/api/v1/doctor-collaboration/directory");
-      if (res.data?.data) {
-        setDoctorDirectory(res.data.data);
-      }
-    } catch {
-      // Fallback to Supabase if endpoint unavailable
-      const { data } = await supabase
-        .from("doctors")
-        .select("id, user_id, full_name, specialization, hospital_name, clinic_name")
-        .neq("user_id", userId);
-      if (data) setDoctorDirectory(data);
-    }
-  };
+  useEffect(() => {
+    fetchPatientData();
+  }, [fetchPatientData]);
 
   const handleOpenReferral = () => {
-    loadDoctorDirectory();
+    setSelectedDoctorId("");
+    setReferralSpecialization("");
+    setReferralReason("");
+    setReferralNotes("");
     setIsReferralOpen(true);
-  };
-
-  const handleDoctorSelect = (docUserId: string) => {
-    setSelectedDoctorId(docUserId);
-    const doc = doctorDirectory.find((d) => d.user_id === docUserId);
-    if (doc?.specialization) {
-      setReferralSpecialization(doc.specialization);
-    }
   };
 
   const handleSubmitReferral = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDoctorId || !referralReason.trim()) {
-      toast.error("Please select a target doctor and provide a referral reason");
+      toast.error("Please select a target specialist doctor and provide a referral reason");
       return;
     }
 
@@ -178,18 +222,47 @@ export default function PatientDetailPage() {
         notes: referralNotes.trim() || undefined,
       });
 
-      const doc = doctorDirectory.find((d) => d.user_id === selectedDoctorId);
-      toast.success(`Referral sent successfully to Dr. ${doc?.full_name || "Doctor"}`);
+      toast.success("Referral sent successfully to specialist physician");
       setIsReferralOpen(false);
       setSelectedDoctorId("");
       setReferralReason("");
       setReferralNotes("");
       setReferralSpecialization("");
+      fetchPatientData();
     } catch (err: any) {
       console.error(err);
       toast.error(err.response?.data?.detail || "Failed to submit doctor referral");
     } finally {
       setIsSubmittingReferral(false);
+    }
+  };
+
+  const handleDownloadRecord = async (recordId: string) => {
+    setDownloadingRecordId(recordId);
+    try {
+      const res = await api.post(`/api/v1/records/${recordId}/download`, {});
+      const url = res.data?.data?.url || res.data?.data?.signed_url;
+      if (url) {
+        let downloadUrl = url;
+        if (downloadUrl.startsWith("/")) {
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+          downloadUrl = `${supabaseUrl.replace(/\/$/, "")}${downloadUrl}`;
+        }
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.download = `medical_record_${recordId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        toast.info("Document verified on blockchain ledger.");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Failed to download record");
+    } finally {
+      setDownloadingRecordId(null);
     }
   };
 
@@ -206,7 +279,7 @@ export default function PatientDetailPage() {
         patient_id: patientId,
         reason: accessReason.trim(),
       });
-      toast.success("Record access request submitted. The patient and attending doctor have been notified.");
+      toast.success("Record access request submitted. The patient has been notified in Privacy & Consent.");
       setIsAccessRequestOpen(false);
       setAccessReason("");
     } catch (err: any) {
@@ -233,7 +306,7 @@ export default function PatientDetailPage() {
         </div>
         <h1 className="text-2xl font-bold">Access Denied</h1>
         <p className="text-muted-foreground text-sm">
-          You are not currently authorized to view this patient&apos;s medical information. Access requires an appointment, direct referral, or authorized record consent.
+          You are not currently authorized to view this patient&apos;s medical information. Access requires an appointment, direct referral, or patient consent.
         </p>
         <div className="flex gap-3 pt-2">
           <Button variant="outline" onClick={() => router.push("/doctor/patients")}>
@@ -243,17 +316,17 @@ export default function PatientDetailPage() {
             className="bg-emerald-600 hover:bg-emerald-500 text-white"
             onClick={() => setIsAccessRequestOpen(true)}
           >
-            <Lock className="w-4 h-4 mr-1.5" /> Request Access
+            <Lock className="w-4 h-4 mr-1.5" /> Request Access from Patient
           </Button>
         </div>
 
         {/* Access Request Dialog */}
         <Dialog open={isAccessRequestOpen} onOpenChange={setIsAccessRequestOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md rounded-2xl">
             <DialogHeader>
               <DialogTitle>Request Patient Record Access</DialogTitle>
               <DialogDescription>
-                Submit an official request to access this patient&apos;s medical history and clinical records.
+                Submit an official clinical request to access this patient&apos;s medical history and records.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmitAccessRequest} className="space-y-4 pt-2">
@@ -264,7 +337,7 @@ export default function PatientDetailPage() {
                 <textarea
                   value={accessReason}
                   onChange={(e) => setAccessReason(e.target.value)}
-                  placeholder="e.g. Referred for consultation, need prior diagnostic history..."
+                  placeholder="e.g. Consulted for medical opinion, need prior diagnostic history..."
                   rows={3}
                   className="w-full text-sm bg-muted/40 border border-border/60 rounded-xl p-3 outline-none focus:border-primary transition resize-none"
                   required
@@ -272,7 +345,7 @@ export default function PatientDetailPage() {
               </div>
               <Button
                 type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl"
                 disabled={isSubmittingAccess || !accessReason.trim()}
               >
                 {isSubmittingAccess ? (
@@ -280,7 +353,7 @@ export default function PatientDetailPage() {
                 ) : (
                   <Send className="w-4 h-4 mr-1.5" />
                 )}
-                Submit Access Request
+                Submit Request to Patient
               </Button>
             </form>
           </DialogContent>
@@ -320,7 +393,7 @@ export default function PatientDetailPage() {
         {/* Doctor Referral Button */}
         <Button
           onClick={handleOpenReferral}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm flex items-center gap-2 rounded-xl self-start sm:self-auto"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-2 rounded-xl self-start sm:self-auto font-medium"
         >
           <UserPlus className="w-4 h-4" />
           Refer to Specialist Doctor
@@ -427,7 +500,7 @@ export default function PatientDetailPage() {
         {/* Right Main Content */}
         <div className="flex-1">
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="w-full justify-start bg-transparent border-b rounded-none h-12 p-0 space-x-6">
+            <TabsList className="w-full justify-start bg-transparent border-b rounded-none h-12 p-0 space-x-6 overflow-x-auto">
               <TabsTrigger
                 value="overview"
                 className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-0 font-medium"
@@ -438,22 +511,29 @@ export default function PatientDetailPage() {
                 value="records"
                 className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-0 font-medium"
               >
-                Medical Records
+                Medical Records ({records.length})
               </TabsTrigger>
               <TabsTrigger
                 value="prescriptions"
                 className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-0 font-medium"
               >
-                Prescriptions
+                Prescriptions ({prescriptions.length})
               </TabsTrigger>
               <TabsTrigger
                 value="appointments"
                 className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-0 font-medium"
               >
-                Appointments
+                Appointments ({appointments.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="referrals"
+                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-0 font-medium"
+              >
+                Referrals ({referrals.length})
               </TabsTrigger>
             </TabsList>
 
+            {/* TAB 1: OVERVIEW */}
             <TabsContent value="overview" className="pt-6 space-y-6">
               <Card className="rounded-2xl border border-border/60 bg-card/60">
                 <CardHeader>
@@ -491,78 +571,324 @@ export default function PatientDetailPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="records" className="pt-6">
-              <div className="flex flex-col items-center justify-center py-16 text-center border rounded-2xl bg-card/40 border-dashed">
-                <FileText className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                <h3 className="text-lg font-medium text-foreground">View Medical Records</h3>
-                <p className="text-muted-foreground max-w-sm mt-1 mb-4 text-sm">
-                  Access and review diagnostic documents, lab reports, and clinical notes with verified QR codes.
-                </p>
-                <Button variant="outline" asChild className="rounded-xl">
-                  <Link href={`/doctor/records?patient_id=${patientId}`}>Open Records Directory</Link>
+            {/* TAB 2: MEDICAL RECORDS INLINE */}
+            <TabsContent value="records" className="pt-6 space-y-4">
+              <div className="flex items-center justify-between pb-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Patient Medical Records ({records.length})
+                </h3>
+                <Button size="sm" variant="outline" asChild className="rounded-xl text-xs h-8">
+                  <Link href={`/doctor/records?patient_id=${patientId}`}>
+                    Open in Records Workspace <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Link>
                 </Button>
               </div>
+
+              {records.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center border rounded-2xl bg-card/40 border-dashed">
+                  <FileText className="w-12 h-12 text-muted-foreground/40 mb-3" />
+                  <p className="font-medium text-foreground">No medical records documented</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    No clinical reports or lab diagnostics are on file for this patient.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {records.map((rec) => (
+                    <Card key={rec.id} className="rounded-xl border border-border/60 bg-card/60 hover:border-border transition-all">
+                      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-semibold text-sm text-foreground truncate">{rec.title}</h4>
+                            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                              {rec.category || "General"}
+                            </Badge>
+                            {rec.blockchain_status === "VERIFIED" && (
+                              <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px]">
+                                <ShieldCheck className="w-3 h-3 mr-1" /> Verified
+                              </Badge>
+                            )}
+                          </div>
+                          {rec.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-1">{rec.description}</p>
+                          )}
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-2">
+                            <span>Uploaded {new Date(rec.created_at).toLocaleDateString()}</span>
+                            {rec.record_versions?.[0]?.doctor_notes?.length > 0 && (
+                              <span className="text-primary">• {rec.record_versions[0].doctor_notes.length} Clinical Notes</span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 rounded-lg text-xs"
+                            onClick={() => handleDownloadRecord(rec.id)}
+                            disabled={downloadingRecordId === rec.id}
+                          >
+                            {downloadingRecordId === rec.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5 mr-1.5" />
+                            )}
+                            View / Download
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
-            <TabsContent value="prescriptions" className="pt-6">
-              <div className="flex flex-col items-center justify-center py-16 text-center border rounded-2xl bg-card/40 border-dashed">
-                <Pill className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                <h3 className="text-lg font-medium text-foreground">Prescriptions</h3>
-                <p className="text-muted-foreground max-w-sm mt-1 mb-4 text-sm">
-                  Generate digital prescriptions or check current medications for this patient.
-                </p>
-                <Button variant="outline" asChild className="rounded-xl">
-                  <Link href={`/doctor/prescriptions?patient_id=${patientId}`}>Manage Prescriptions</Link>
+            {/* TAB 3: PRESCRIPTIONS INLINE */}
+            <TabsContent value="prescriptions" className="pt-6 space-y-4">
+              <div className="flex items-center justify-between pb-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Prescriptions Issued ({prescriptions.length})
+                </h3>
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs h-8" asChild>
+                  <Link href={`/doctor/prescriptions/new?patient_id=${patientId}`}>
+                    <Pill className="w-3.5 h-3.5 mr-1.5" /> Issue New Prescription
+                  </Link>
                 </Button>
               </div>
+
+              {prescriptions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center border rounded-2xl bg-card/40 border-dashed">
+                  <Pill className="w-12 h-12 text-muted-foreground/40 mb-3" />
+                  <p className="font-medium text-foreground">No prescriptions issued</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    No active medications or digital prescriptions have been issued to this patient yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {prescriptions.map((p) => (
+                    <Card key={p.id} className="rounded-xl border border-border/60 bg-card/60">
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-sm text-foreground">
+                                Diagnosis: {p.diagnosis || "Clinical Prescription"}
+                              </h4>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] ${
+                                  p.is_dispensed
+                                    ? "bg-muted text-muted-foreground"
+                                    : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                }`}
+                              >
+                                {p.is_dispensed ? "Dispensed" : "Active"}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Issued: {new Date(p.created_at).toLocaleDateString()}
+                              {p.expires_at && ` • Expires: ${new Date(p.expires_at).toLocaleDateString()}`}
+                            </p>
+                          </div>
+                          {p.qr_token && (
+                            <Badge variant="outline" className="text-[10px] font-mono">
+                              QR: {p.qr_token.slice(0, 8)}...
+                            </Badge>
+                          )}
+                        </div>
+
+                        {p.prescription_items && p.prescription_items.length > 0 && (
+                          <div className="p-2.5 rounded-lg bg-muted/30 border border-border/40 space-y-1.5 text-xs">
+                            <p className="font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
+                              Medications ({p.prescription_items.length}):
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {p.prescription_items.map((item: any) => (
+                                <div key={item.id} className="p-2 rounded bg-background/50 border border-border/30">
+                                  <p className="font-medium text-foreground">{item.medicine_name}</p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {item.dosage} • {item.frequency} for {item.duration}
+                                  </p>
+                                  {item.instructions && (
+                                    <p className="text-[10px] text-primary italic mt-0.5">{item.instructions}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
-            <TabsContent value="appointments" className="pt-6">
-              <div className="flex flex-col items-center justify-center py-16 text-center border rounded-2xl bg-card/40 border-dashed">
-                <Calendar className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                <h3 className="text-lg font-medium text-foreground">Appointments</h3>
-                <p className="text-muted-foreground max-w-sm mt-1 mb-4 text-sm">
-                  Review upcoming consultations and past medical visits with this patient.
-                </p>
-                <Button variant="outline" asChild className="rounded-xl">
-                  <Link href={`/doctor/appointments?patient_id=${patientId}`}>View Appointments</Link>
+            {/* TAB 4: APPOINTMENTS INLINE */}
+            <TabsContent value="appointments" className="pt-6 space-y-4">
+              <div className="flex items-center justify-between pb-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Consultation Appointments ({appointments.length})
+                </h3>
+              </div>
+
+              {appointments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center border rounded-2xl bg-card/40 border-dashed">
+                  <Calendar className="w-12 h-12 text-muted-foreground/40 mb-3" />
+                  <p className="font-medium text-foreground">No appointments recorded</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    No prior consultations or scheduled visits exist with this patient.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {appointments.map((a) => (
+                    <Card key={a.id} className="rounded-xl border border-border/60 bg-card/60">
+                      <CardContent className="p-4 flex items-center justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-sm text-foreground">
+                              {a.appointment_date} at {a.start_time}
+                            </h4>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                a.status === "CONFIRMED"
+                                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                  : a.status === "PENDING"
+                                  ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {a.status}
+                            </Badge>
+                          </div>
+                          {a.notes && <p className="text-xs text-muted-foreground">{a.notes}</p>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* TAB 5: REFERRALS INLINE (NEW!) */}
+            <TabsContent value="referrals" className="pt-6 space-y-4">
+              <div className="flex items-center justify-between pb-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Specialist Doctor Referrals ({referrals.length})
+                </h3>
+                <Button
+                  size="sm"
+                  onClick={handleOpenReferral}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs h-8"
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1.5" /> Refer to Another Specialist
                 </Button>
               </div>
+
+              {referrals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center border rounded-2xl bg-card/40 border-dashed">
+                  <UserPlus className="w-12 h-12 text-muted-foreground/40 mb-3" />
+                  <p className="font-medium text-foreground">No referrals recorded</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    This patient has not been referred to any specialist physicians yet.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={handleOpenReferral}
+                    className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs"
+                  >
+                    Create First Referral
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {referrals.map((ref) => (
+                    <Card key={ref.id} className="rounded-xl border border-border/60 bg-card/60">
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-sm text-foreground">
+                                Referred to: Dr. {ref.referred_to_doctor?.full_name || "Specialist Physician"}
+                              </h4>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] ${
+                                  ref.status === "ACCEPTED"
+                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                    : ref.status === "PENDING"
+                                    ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                    : "bg-rose-500/10 text-rose-600 border-rose-500/20"
+                                }`}
+                              >
+                                {ref.status}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {ref.specialization || ref.referred_to_doctor?.specialization || "Clinical Specialist"} •{" "}
+                              {ref.referred_to_doctor?.hospital_name || "Network Clinic"} •{" "}
+                              {new Date(ref.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-muted/30 border border-border/40 text-xs space-y-1.5">
+                          <div>
+                            <span className="font-semibold text-muted-foreground uppercase text-[10px]">
+                              Clinical Reason:
+                            </span>{" "}
+                            <span className="text-foreground">{ref.reason}</span>
+                          </div>
+                          {ref.notes && (
+                            <div>
+                              <span className="font-semibold text-muted-foreground uppercase text-[10px]">
+                                Physician Notes:
+                              </span>{" "}
+                              <span className="text-muted-foreground italic">{ref.notes}</span>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>
       </div>
 
-      {/* Refer Patient to Specialist Dialog */}
+      {/* Refer Patient to Specialist Dialog with Interactive Map */}
       <Dialog open={isReferralOpen} onOpenChange={setIsReferralOpen}>
-        <DialogContent className="max-w-lg rounded-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-primary" /> Refer Patient to Specialist Doctor
+              <UserPlus className="w-5 h-5 text-emerald-500" /> Refer Patient to Specialist Doctor
             </DialogTitle>
             <DialogDescription>
-              Collaborate by referring <strong>{patient?.full_name}</strong> to another physician. The doctor will receive a real-time notification and access to medical history.
+              Collaborate by referring <strong>{patient?.full_name}</strong> to a specialist physician or clinic.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmitReferral} className="space-y-4 pt-3">
+          <form onSubmit={handleSubmitReferral} className="space-y-4 pt-2">
+            {/* Interactive Hospital Map & Specialist Picker */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Select Specialist / Doctor *
+                Select Specialist Doctor (Browse Map / Clinics) *
               </label>
-              <select
-                value={selectedDoctorId}
-                onChange={(e) => handleDoctorSelect(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-border/70 bg-background text-sm outline-none focus:border-primary transition"
-                required
-              >
-                <option value="">-- Choose a doctor --</option>
-                {doctorDirectory.map((doc) => (
-                  <option key={doc.user_id} value={doc.user_id}>
-                    Dr. {doc.full_name} {doc.specialization ? `(${doc.specialization})` : ""} {doc.hospital_name ? `• ${doc.hospital_name}` : ""}
-                  </option>
-                ))}
-              </select>
+              <DoctorHospitalPicker
+                selectedDoctorId={selectedDoctorId}
+                onSelectDoctor={(doc) => {
+                  setSelectedDoctorId(doc?.user_id || "");
+                  if (doc?.specialization) {
+                    setReferralSpecialization(doc.specialization);
+                  }
+                }}
+                currentDoctorUserId={userId}
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -616,7 +942,7 @@ export default function PatientDetailPage() {
               <Button
                 type="submit"
                 disabled={isSubmittingReferral || !selectedDoctorId || !referralReason.trim()}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
               >
                 {isSubmittingReferral ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-1.5" />

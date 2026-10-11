@@ -143,18 +143,20 @@ export default function RegisterPage() {
         return;
       }
       if (doctorPracticeType === "HOSPITAL") {
-        if (!isRegisteringNewHospital && !selectedHospitalId) {
-          setError("Please select a hospital.");
-          return;
-        }
-        if (isRegisteringNewHospital && (!newHospitalName || !newHospitalLatitude)) {
-          setError("Please provide the new hospital name and location.");
+        if (!selectedHospitalId) {
+          setError("Please select an approved hospital facility.");
           return;
         }
       }
-      if (doctorPracticeType === "CLINIC" && (!clinicName || !latitude)) {
-        setError("Please provide clinic name and map location.");
-        return;
+      if (doctorPracticeType === "CLINIC") {
+        if (!isRegisteringNewHospital && !selectedHospitalId && !hospitalSearch) {
+          setError("Please select an existing private clinic or register a new one.");
+          return;
+        }
+        if (isRegisteringNewHospital && (!newHospitalName || !newHospitalLatitude)) {
+          setError("Please provide the new private clinic name and pick its location on the map.");
+          return;
+        }
       }
     }
     if (role === "PHARMACY") {
@@ -163,17 +165,13 @@ export default function RegisterPage() {
         return;
       }
       if (pharmacyPracticeType === "HOSPITAL") {
-        if (!isRegisteringNewHospital && !selectedHospitalId) {
-          setError("Please select a hospital.");
-          return;
-        }
-        if (isRegisteringNewHospital && (!newHospitalName || !newHospitalLatitude)) {
-          setError("Please provide the new hospital name and location.");
+        if (!selectedHospitalId) {
+          setError("Please select a hospital facility.");
           return;
         }
       }
-      if (pharmacyPracticeType === "CLINIC" && !clinicName) {
-        setError("Please provide the clinic name.");
+      if (pharmacyPracticeType === "CLINIC" && !clinicName && !selectedHospitalId) {
+        setError("Please select or specify the private clinic to link with.");
         return;
       }
     }
@@ -197,7 +195,7 @@ export default function RegisterPage() {
         hospital_id: isFacilityMode && !isRegisteringNewHospital ? selectedHospitalId : undefined,
         hospital_name: isHospitalMode && isRegisteringNewHospital ? newHospitalName : undefined,
         hospital_address: isHospitalMode && isRegisteringNewHospital ? newHospitalAddress : undefined,
-        clinic_name: isClinicMode && isRegisteringNewHospital ? newHospitalName : undefined,
+        clinic_name: isClinicMode ? (isRegisteringNewHospital ? newHospitalName : (clinicName || hospitalSearch)) : undefined,
         clinic_address: isClinicMode && isRegisteringNewHospital ? newHospitalAddress : undefined,
         facility_type: isRegisteringNewHospital ? (isClinicMode ? "clinic" : "hospital") : undefined,
         google_maps_url: isRegisteringNewHospital ? newHospitalGmapsUrl : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? pharmacyGmapsUrl : undefined),
@@ -546,6 +544,9 @@ export default function RegisterPage() {
                                 onClick={() => {
                                   setSelectedHospitalId(h.id);
                                   setHospitalSearch(h.name);
+                                  if (doctorPracticeType === "CLINIC") {
+                                    setClinicName(h.name);
+                                  }
                                   setShowHospitalDropdown(false);
                                   setIsRegisteringNewHospital(false);
                                 }}
@@ -554,17 +555,23 @@ export default function RegisterPage() {
                                 <div className="text-xs text-muted-foreground">{h.city || 'Unknown Location'}</div>
                               </div>
                             ))}
-                            <div 
-                              className="p-3 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 cursor-pointer text-sm font-medium"
-                              onClick={() => {
-                                setIsRegisteringNewHospital(true);
-                                setShowHospitalDropdown(false);
-                                setSelectedHospitalId("");
-                                setHospitalSearch("");
-                              }}
-                            >
-                              + Register New {doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}
-                            </div>
+                            {doctorPracticeType === "CLINIC" ? (
+                              <div 
+                                className="p-3 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 cursor-pointer text-sm font-medium"
+                                onClick={() => {
+                                  setIsRegisteringNewHospital(true);
+                                  setShowHospitalDropdown(false);
+                                  setSelectedHospitalId("");
+                                  setHospitalSearch("");
+                                }}
+                              >
+                                + Register New Private Clinic
+                              </div>
+                            ) : (
+                              <div className="p-3 text-xs text-muted-foreground bg-muted/40 text-center">
+                                Hospital not listed? Contact MedSync Administration to onboard new hospital facilities.
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -750,26 +757,35 @@ export default function RegisterPage() {
                                     className="p-3 hover:bg-muted cursor-pointer text-sm border-b border-border/50"
                                     onClick={() => {
                                       setSelectedHospitalId(h.id);
+                                      if (pharmacyPracticeType === "CLINIC") {
+                                        setClinicName(h.name);
+                                      }
                                       setHospitalSearch(h.name);
                                       setShowHospitalDropdown(false);
                                       setIsRegisteringNewHospital(false);
                                     }}
                                   >
                                     <div className="font-medium">{h.name}</div>
-                                    <div className="text-xs text-muted-foreground">{h.city || 'Unknown Location'}</div>
+                                    <div className="text-xs text-muted-foreground">{h.city || 'Unknown Location'} ({h.type === 'clinic' ? 'Clinic' : 'Hospital'})</div>
                                   </div>
                                 ))}
-                                <div 
-                                  className="p-3 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 cursor-pointer text-sm font-medium"
-                                  onClick={() => {
-                                    setIsRegisteringNewHospital(true);
-                                    setShowHospitalDropdown(false);
-                                    setSelectedHospitalId("");
-                                    setHospitalSearch("");
-                                  }}
-                                >
-                                  + Register New {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}
-                                </div>
+                                {pharmacyPracticeType === "CLINIC" ? (
+                                  <div 
+                                    className="p-3 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 cursor-pointer text-sm font-medium"
+                                    onClick={() => {
+                                      setIsRegisteringNewHospital(true);
+                                      setShowHospitalDropdown(false);
+                                      setSelectedHospitalId("");
+                                      setHospitalSearch("");
+                                    }}
+                                  >
+                                    + Register New Clinic
+                                  </div>
+                                ) : (
+                                  <div className="p-3 text-xs text-muted-foreground bg-muted/40 text-center">
+                                    Hospital not listed? Contact MedSync Administration to onboard new hospital facilities.
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

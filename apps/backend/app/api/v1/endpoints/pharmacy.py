@@ -11,7 +11,7 @@ from app.models.pharmacy import Pharmacy
 from app.models.patient import Patient
 from app.models.user import UserStatus
 from app.schemas.response import APIResponse
-from app.schemas.pharmacy_system import PharmacyVerificationResponse
+from app.schemas.pharmacy_system import PharmacyVerificationResponse, PharmacyNetworkItem
 from app.schemas.session import AuthenticatedPrincipal
 from pydantic import BaseModel
 from typing import List
@@ -574,4 +574,46 @@ async def create_temporary_patient_order(
             "payment_method": order.payment_method
         }
     )
+
+
+@router.get("/network", response_model=APIResponse[List[PharmacyNetworkItem]])
+@router.get("/all", response_model=APIResponse[List[PharmacyNetworkItem]])
+async def get_network_pharmacies(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal | None = Depends(get_current_user_optional)
+):
+    """Retrieve all active network pharmacies for patient ordering and doctor affiliation."""
+    stmt = (
+        select(Pharmacy, User)
+        .join(User, Pharmacy.user_id == User.id)
+        .where(User.status == UserStatus.ACTIVE)
+        .order_by(Pharmacy.business_name.asc())
+    )
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    items: List[PharmacyNetworkItem] = []
+    for pharmacy, user in rows:
+        phone_val = pharmacy.contact_number or pharmacy.phone_number
+        items.append(PharmacyNetworkItem(
+            id=pharmacy.id,
+            pharmacy_id=pharmacy.user_id,
+            user_id=pharmacy.user_id,
+            business_name=pharmacy.business_name or user.full_name or "Pharmacy",
+            address=pharmacy.address,
+            city=pharmacy.city or "Local",
+            state=pharmacy.state,
+            contact_number=phone_val,
+            phone=phone_val,
+            license_number=pharmacy.license_number,
+            is_24x7=bool(pharmacy.is_24x7),
+            operating_hours=pharmacy.operating_hours,
+            logo_url=pharmacy.logo_url,
+            location=pharmacy.location if isinstance(pharmacy.location, dict) else None,
+            clinic_name=pharmacy.clinic_name,
+            hospital_id=pharmacy.hospital_id
+        ))
+
+    return APIResponse(message="Network pharmacies retrieved successfully", data=items)
+
 

@@ -1554,13 +1554,29 @@ async def get_analytics(
             ))
 
         # 9. Configured Smart Contracts info
+        default_amoy_contracts = {
+            "ConsentManagement": "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+            "PatientRegistry": "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3",
+            "DoctorRegistry": "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+            "PharmacyRegistry": "0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9",
+            "MedicalRecordRegistry": "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+            "PrescriptionRegistry": "0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D"
+        }
+        loaded_addresses = {}
+        try:
+            from app.blockchain.contracts.loader import contract_loader
+            if contract_loader and hasattr(contract_loader, "addresses"):
+                loaded_addresses = contract_loader.addresses or {}
+        except Exception:
+            pass
+
         contract_configs = [
-            ("PatientRegistry", os.getenv("PATIENT_REGISTRY_ADDRESS") or os.getenv("PATIENTREGISTRY_ADDRESS", "")),
-            ("DoctorRegistry", os.getenv("DOCTOR_REGISTRY_ADDRESS") or os.getenv("DOCTORREGISTRY_ADDRESS", "")),
-            ("PharmacyRegistry", os.getenv("PHARMACY_REGISTRY_ADDRESS") or os.getenv("PHARMACYREGISTRY_ADDRESS", "")),
-            ("MedicalRecordRegistry", os.getenv("RECORD_REGISTRY_ADDRESS") or os.getenv("MEDICALRECORDREGISTRY_ADDRESS", "")),
-            ("PrescriptionRegistry", os.getenv("PRESCRIPTION_REGISTRY_ADDRESS") or os.getenv("PRESCRIPTIONREGISTRY_ADDRESS", "")),
-            ("ConsentManagement", os.getenv("CONSENT_MANAGER_ADDRESS") or os.getenv("CONSENTMANAGEMENT_ADDRESS", "")),
+            ("PatientRegistry", os.getenv("PATIENT_REGISTRY_ADDRESS") or os.getenv("PATIENTREGISTRY_ADDRESS") or loaded_addresses.get("PatientRegistry") or default_amoy_contracts.get("PatientRegistry", "")),
+            ("DoctorRegistry", os.getenv("DOCTOR_REGISTRY_ADDRESS") or os.getenv("DOCTORREGISTRY_ADDRESS") or loaded_addresses.get("DoctorRegistry") or default_amoy_contracts.get("DoctorRegistry", "")),
+            ("PharmacyRegistry", os.getenv("PHARMACY_REGISTRY_ADDRESS") or os.getenv("PHARMACYREGISTRY_ADDRESS") or loaded_addresses.get("PharmacyRegistry") or default_amoy_contracts.get("PharmacyRegistry", "")),
+            ("MedicalRecordRegistry", os.getenv("RECORD_REGISTRY_ADDRESS") or os.getenv("MEDICALRECORDREGISTRY_ADDRESS") or loaded_addresses.get("MedicalRecordRegistry") or default_amoy_contracts.get("MedicalRecordRegistry", "")),
+            ("PrescriptionRegistry", os.getenv("PRESCRIPTION_REGISTRY_ADDRESS") or os.getenv("PRESCRIPTIONREGISTRY_ADDRESS") or loaded_addresses.get("PrescriptionRegistry") or default_amoy_contracts.get("PrescriptionRegistry", "")),
+            ("ConsentManagement", os.getenv("CONSENT_MANAGER_ADDRESS") or os.getenv("CONSENTMANAGEMENT_ADDRESS") or loaded_addresses.get("ConsentManagement") or default_amoy_contracts.get("ConsentManagement", "")),
         ]
         smart_contracts_list: list[BlockchainSmartContractInfo] = []
         for c_name, c_addr in contract_configs:

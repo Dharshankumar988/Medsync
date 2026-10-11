@@ -100,16 +100,16 @@ export default function HospitalMap({ hospitals, onSelectHospital }: HospitalMap
             position={[hospital.latitude, hospital.longitude]}
             icon={customIcon}
           >
-            <Popup className="rounded-xl min-w-[200px]">
-              <div className="p-1">
-                <h3 className="font-semibold text-sm mb-1">{hospital.name}</h3>
-                <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+            <Popup className="rounded-2xl min-w-[220px]">
+              <div className="p-1 text-zinc-100">
+                <h3 className="font-bold text-sm mb-1 text-white">{hospital.name}</h3>
+                <p className="text-xs text-zinc-400 mb-3 leading-relaxed">
                   {hospital.address}
                 </p>
                 <div className="flex flex-col gap-2">
                   <Button 
                     size="sm" 
-                    className="w-full h-8 rounded-lg text-xs"
+                    className="w-full h-8 rounded-lg text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium"
                     onClick={() => onSelectHospital(hospital)}
                   >
                     View Doctors <ChevronRight className="h-3 w-3 ml-1" />
@@ -117,7 +117,7 @@ export default function HospitalMap({ hospitals, onSelectHospital }: HospitalMap
                   <Button 
                     size="sm" 
                     variant="outline"
-                    className="w-full h-8 rounded-lg text-xs"
+                    className="w-full h-8 rounded-lg text-xs border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
                     onClick={() => {
                       window.open(getDirectionsUrl(hospital.latitude, hospital.longitude), '_blank', 'noopener,noreferrer');
                     }}

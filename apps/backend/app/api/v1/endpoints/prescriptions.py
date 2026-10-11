@@ -108,6 +108,10 @@ async def authorize_prescription_download(
                     raise HTTPException(status_code=401, detail="Face verification failed")
                 
                 # Face auth resets PIN lockout
+                from app.models.security import PatientSecurityCredential
+                cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
+                cred_res = await db.execute(cred_stmt)
+                cred = cred_res.scalar_one_or_none()
                 if cred:
                     cred.failed_attempts = 0
                     cred.locked_until = None
@@ -122,10 +126,77 @@ async def authorize_prescription_download(
             DOWNLOAD_PIN_CACHE[auth_ref] = pin
         return APIResponse(message="Authorization successful", data={"authorization_reference": auth_ref})
     
-    # For doctors/admins, just return a direct short-lived auth reference bypassing MFA for now (or a different flow)
+    # For doctors/admins, just return a direct short-lived auth reference bypassing MFA
     from app.services.security_service import create_download_authorization
     auth_ref = await create_download_authorization(db, current_user.id, rx.id, password_verified=False, pin_verified=False, face_verified=False)
     return APIResponse(message="Authorization successful", data={"authorization_reference": auth_ref})
+
+@router.get("/{id}/download")
+async def download_prescription_file(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user)
+):
+    from fastapi.responses import Response
+    from app.models.prescription import Prescription, PrescriptionItem
+    from app.models.doctor import Doctor
+    from app.models.patient import Patient
+    from app.services.storage import StorageService
+    from app.services.qr_pdf_service import QRPdfService
+
+    stmt = select(Prescription).where(Prescription.id == id)
+    result = await db.execute(stmt)
+    rx = result.scalar_one_or_none()
+
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    if rx.patient_id != current_user.id and rx.doctor_id != current_user.id and current_user.role not in [UserRole.ADMIN]:
+        raise HTTPException(status_code=403, detail="Unauthorized to download this prescription")
+
+    pdf_content = None
+    if rx.pdf_url:
+        try:
+            pdf_content = await StorageService.download_record_file(rx.pdf_url)
+        except Exception as e:
+            import logging
+            logging.getLogger("medsync.prescriptions").warning(f"Could not download PDF from storage for {rx.id}: {e}")
+
+    if not pdf_content:
+        # Re-generate on demand using QRPdfService
+        doc_stmt = select(Doctor).where(Doctor.user_id == rx.doctor_id)
+        doc_res = await db.execute(doc_stmt)
+        doc_prof = doc_res.scalar_one_or_none()
+
+        pat_stmt = select(Patient).where(Patient.user_id == rx.patient_id)
+        pat_res = await db.execute(pat_stmt)
+        pat_prof = pat_res.scalar_one_or_none()
+
+        doctor_data = {"name": doc_prof.full_name if doc_prof else "Doctor", "profile_image_url": rx.doctor_profile_image_url}
+        patient_data = {"name": pat_prof.full_name if pat_prof else "Patient", "id": str(rx.patient_id)}
+
+        items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == rx.id)
+        items_res = await db.execute(items_stmt)
+        items_list = [
+            {"medicine_name": i.medicine_name, "dosage": i.dosage, "frequency": i.frequency, "duration_days": i.duration_days, "special_instructions": i.special_instructions}
+            for i in items_res.scalars().all()
+        ]
+
+        qr_tok = rx.qr_token or f"MS-RX-{rx.id}"
+        qr_img = QRPdfService.generate_qr_code(qr_tok)
+        rx_dict = {"diagnosis": rx.diagnosis or "Clinical Prescription", "notes": rx.notes}
+        pdf_stream = QRPdfService.generate_prescription_pdf(
+            rx_dict, patient_data, doctor_data, items_list, qr_img, qr_token=qr_tok, pin=rx.pin
+        )
+        pdf_content = pdf_stream.getvalue() if hasattr(pdf_stream, "getvalue") else pdf_stream.read()
+
+    return Response(
+        content=pdf_content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="prescription_{rx.id}.pdf"'
+        }
+    )
 
 @router.get("/download/{authorization_reference}")
 async def download_prescription_by_ref(
@@ -170,13 +241,12 @@ async def download_prescription_by_ref(
         try:
             raw_pdf_bytes = await StorageService.download_record_file(rx.pdf_url)
             encrypted_pdf_bytes = QRPdfService.encrypt_pdf(raw_pdf_bytes, pin)
-            enc_object_path, _, _, _ = await StorageService.upload_bytes(
+            enc_object_path, _, _, _ = await StorageService.upload_prescription_bytes(
                 file_bytes=encrypted_pdf_bytes,
                 filename=f"prescription_{rx.id}_encrypted.pdf",
                 content_type="application/pdf",
                 patient_id=str(rx.patient_id),
-                record_id=str(rx.id),
-                version_number=2
+                prescription_id=str(rx.id),
             )
             signed_url = await StorageService.create_signed_download_url(enc_object_path, expires_in=300)
             return APIResponse(message="Download URL generated (PIN encrypted)", data={"url": signed_url})
@@ -409,6 +479,10 @@ async def verify_prescription_auth(
             if not fv or not fv.get("verified"):
                 raise HTTPException(status_code=401, detail="Face verification failed")
                 
+            from app.models.security import PatientSecurityCredential
+            cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == rx.patient_id)
+            cred_res = await db.execute(cred_stmt)
+            cred = cred_res.scalar_one_or_none()
             if cred:
                 cred.failed_attempts = 0
                 cred.locked_until = None
@@ -520,6 +594,10 @@ async def order_prescription_online(
             if not fv or not fv.get("verified"):
                 raise HTTPException(status_code=401, detail="Face verification failed")
                 
+            from app.models.security import PatientSecurityCredential
+            cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
+            cred_res = await db.execute(cred_stmt)
+            cred = cred_res.scalar_one_or_none()
             if cred:
                 cred.failed_attempts = 0
                 cred.locked_until = None
@@ -614,6 +692,10 @@ async def physical_pickup_prescription(
             if not fv or not fv.get("verified"):
                 raise HTTPException(status_code=401, detail="Face verification failed")
                 
+            from app.models.security import PatientSecurityCredential
+            cred_stmt = select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == current_user.id)
+            cred_res = await db.execute(cred_stmt)
+            cred = cred_res.scalar_one_or_none()
             if cred:
                 cred.failed_attempts = 0
                 cred.locked_until = None
@@ -657,13 +739,12 @@ async def upload_offline_prescription(
     file_bytes = await file.read()
     filename = f"offline_prescription_{prescription_id}_{file.filename}"
     
-    object_path, _, _, file_hash = await StorageService.upload_bytes(
+    object_path, _, _, file_hash = await StorageService.upload_prescription_bytes(
         file_bytes=file_bytes,
         filename=filename,
         content_type=file.content_type,
         patient_id=str(current_user.id),
-        record_id=str(prescription_id),
-        version_number=1
+        prescription_id=str(prescription_id),
     )
     
     rx = Prescription(
@@ -725,15 +806,14 @@ async def verify_offline_prescription(
         qr_image_bytes = QRPdfService.generate_qr_code(qr_token)
         stamped_pdf_bytes = QRPdfService.stamp_qr_on_pdf(original_pdf_bytes, qr_image_bytes, qr_token)
         
-        # Upload stamped PDF as version 2
+        # Upload stamped PDF to dedicated prescriptions path
         new_filename = f"stamped_prescription_{rx.id}.pdf"
-        new_object_path, _, _, _ = await StorageService.upload_bytes(
+        new_object_path, _, _, _ = await StorageService.upload_prescription_bytes(
             file_bytes=stamped_pdf_bytes,
             filename=new_filename,
             content_type="application/pdf",
             patient_id=str(rx.patient_id),
-            record_id=str(rx.id),
-            version_number=2
+            prescription_id=str(rx.id),
         )
         rx.pdf_url = new_object_path
     except Exception as e:

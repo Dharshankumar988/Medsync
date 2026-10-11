@@ -82,4 +82,20 @@ class DoctorDirectoryItem(BaseModel):
     full_name: str
     specialization: Optional[str] = None
     hospital_name: Optional[str] = None
+    hospital_id: Optional[uuid.UUID] = None
     clinic_name: Optional[str] = None
+    profile_picture_url: Optional[str] = None
+
+
+class ConsultedPatientItem(BaseModel):
+    model_config = ConfigDict(use_enum_values=True, from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    full_name: str
+    phone_number: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    blood_group: Optional[str] = None
+    medical_alerts: Optional[str] = None
+

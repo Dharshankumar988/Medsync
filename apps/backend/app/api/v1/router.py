@@ -19,6 +19,7 @@ api_router.include_router(records.router, prefix="/records", tags=["Medical Reco
 api_router.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])
 api_router.include_router(prescriptions.router, prefix="/prescriptions", tags=["Prescriptions"])
 api_router.include_router(pharmacy.router, prefix="/pharmacy", tags=["Pharmacy Inventory"])
+api_router.include_router(pharmacy.router, prefix="/pharmacies", tags=["Pharmacy Inventory"])
 api_router.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api_router.include_router(medicines.router, prefix="/medicines", tags=["Medicines"])
 api_router.include_router(orders.router, prefix="/orders", tags=["Medicine Orders"])

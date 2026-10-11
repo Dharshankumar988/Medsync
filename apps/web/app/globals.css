@@ -196,3 +196,39 @@ html {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
+
+/* ===== Leaflet Map Popup Styling (Dark Mode & Light Mode) ===== */
+.dark .leaflet-popup-content-wrapper,
+.leaflet-popup-content-wrapper {
+  background: #09090b !important;
+  color: #f4f4f5 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6) !important;
+  padding: 0.25rem !important;
+}
+
+.dark .leaflet-popup-tip,
+.leaflet-popup-tip {
+  background: #09090b !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.dark .leaflet-popup-content,
+.leaflet-popup-content {
+  margin: 0.75rem !important;
+  line-height: 1.4 !important;
+  color: #f4f4f5 !important;
+}
+
+.dark .leaflet-popup-close-button,
+.leaflet-popup-close-button {
+  color: #a1a1aa !important;
+  padding: 8px !important;
+}
+
+.dark .leaflet-popup-close-button:hover,
+.leaflet-popup-close-button:hover {
+  color: #ffffff !important;
+}
+

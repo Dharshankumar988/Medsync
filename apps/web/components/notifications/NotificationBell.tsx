@@ -28,15 +28,17 @@ import {
   Badge
 } from "@medsync/ui";
 import api from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 export interface NotificationItem {
   id: string;
-  user_id: string;
+  user_id?: string;
   title: string;
   message: string;
   type: string;
   link?: string | null;
-  read: boolean;
+  read?: boolean;
+  is_read?: boolean;
   metadata?: Record<string, any> | null;
   created_at: string;
 }
@@ -98,9 +100,17 @@ export function NotificationBell() {
         setNotifications((prev) => {
           // Deduplicate strictly by ID
           const existingMap = new Map<string, NotificationItem>();
-          // Insert new ones first
-          res.data.data.forEach((item: NotificationItem) => {
-            if (item && item.id) existingMap.set(item.id, item);
+          // Insert new ones first with normalized read/is_read properties
+          res.data.data.forEach((rawItem: any) => {
+            if (rawItem && rawItem.id) {
+              const isRead = Boolean(rawItem.is_read ?? rawItem.read);
+              const item: NotificationItem = {
+                ...rawItem,
+                read: isRead,
+                is_read: isRead,
+              };
+              existingMap.set(item.id, item);
+            }
           });
           // Preserve any not returned but existing
           prev.forEach((item) => {
@@ -114,9 +124,38 @@ export function NotificationBell() {
           );
           return merged;
         });
+        return;
       }
     } catch (err) {
       // Silently handle error if unauthenticated or network failure
+    }
+
+    // Direct Supabase fallback if backend fails or returns empty
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user?.id) {
+        const { data: supaNotifs } = await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", userData.user.id)
+          .order("created_at", { ascending: false })
+          .limit(30);
+
+        if (Array.isArray(supaNotifs) && supaNotifs.length > 0) {
+          setNotifications(
+            supaNotifs.map((rawItem: any) => {
+              const isRead = Boolean(rawItem.is_read ?? rawItem.read);
+              return {
+                ...rawItem,
+                read: isRead,
+                is_read: isRead,
+              };
+            })
+          );
+        }
+      }
+    } catch {
+      // fallback silently
     }
   }, []);
 
@@ -127,16 +166,19 @@ export function NotificationBell() {
   }, [fetchNotifications]);
 
   const unreadCount = useMemo(() => {
-    return notifications.filter((n) => !n.read).length;
+    return notifications.filter((n) => !Boolean(n.is_read ?? n.read)).length;
   }, [notifications]);
 
   const handleMarkAsRead = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     try {
       setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+        prev.map((n) => (n.id === id ? { ...n, read: true, is_read: true } : n))
       );
       await api.post(`/api/v1/notifications/${id}/read`);
+      try {
+        await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+      } catch {}
     } catch (err) {
       console.error("Failed to mark notification as read", err);
     }
@@ -144,8 +186,21 @@ export function NotificationBell() {
 
   const handleMarkAllAsRead = async () => {
     try {
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      const unreadIds = notifications
+        .filter((n) => !Boolean(n.is_read ?? n.read))
+        .map((n) => n.id);
+
+      setNotifications((prev) =>
+        prev.map((n) => ({ ...n, read: true, is_read: true }))
+      );
+
       await api.post(`/api/v1/notifications/read-all`);
+
+      if (unreadIds.length > 0) {
+        try {
+          await supabase.from("notifications").update({ is_read: true }).in("id", unreadIds);
+        } catch {}
+      }
     } catch (err) {
       console.error("Failed to mark all as read", err);
     }
@@ -156,13 +211,17 @@ export function NotificationBell() {
     try {
       setNotifications((prev) => prev.filter((n) => n.id !== id));
       await api.delete(`/api/v1/notifications/${id}`);
+      try {
+        await supabase.from("notifications").delete().eq("id", id);
+      } catch {}
     } catch (err) {
       console.error("Failed to delete notification", err);
     }
   };
 
   const handleNotificationClick = async (notif: NotificationItem) => {
-    if (!notif.read) {
+    const isUnread = !Boolean(notif.is_read ?? notif.read);
+    if (isUnread) {
       handleMarkAsRead(notif.id);
     }
     setIsOpen(false);
@@ -229,16 +288,17 @@ export function NotificationBell() {
           ) : (
             notifications.map((notif) => {
               const { icon: IconComp, color, bg } = getTypeIcon(notif.type);
+              const isUnread = !Boolean(notif.is_read ?? notif.read);
               return (
                 <div
                   key={notif.id}
                   onClick={() => handleNotificationClick(notif)}
                   className={`group relative flex items-start gap-3 p-3.5 cursor-pointer transition-colors hover:bg-muted/40 ${
-                    !notif.read ? "bg-primary/[0.03]" : ""
+                    isUnread ? "bg-primary/[0.03]" : ""
                   }`}
                 >
                   {/* Status Indicator */}
-                  {!notif.read && (
+                  {isUnread && (
                     <span className="absolute left-1.5 top-5 h-2 w-2 rounded-full bg-primary" />
                   )}
 
@@ -254,7 +314,7 @@ export function NotificationBell() {
                     <div className="flex items-center justify-between gap-1">
                       <p
                         className={`text-xs font-semibold truncate ${
-                          !notif.read ? "text-foreground" : "text-muted-foreground"
+                          isUnread ? "text-foreground" : "text-muted-foreground"
                         }`}
                       >
                         {notif.title}
@@ -276,7 +336,7 @@ export function NotificationBell() {
 
                   {/* Actions on hover */}
                   <div className="absolute right-2 top-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {!notif.read && (
+                    {isUnread && (
                       <button
                         title="Mark as read"
                         onClick={(e) => handleMarkAsRead(notif.id, e)}

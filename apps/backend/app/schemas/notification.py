@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 from datetime import datetime
 
 class NotificationResponse(BaseModel):
@@ -12,6 +12,11 @@ class NotificationResponse(BaseModel):
     type: str = "INFO"
     is_read: bool = False
     created_at: datetime
+
+    @computed_field
+    @property
+    def read(self) -> bool:
+        return self.is_read
 
 class NotificationActionResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)

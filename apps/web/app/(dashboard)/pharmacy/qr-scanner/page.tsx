@@ -42,22 +42,27 @@ export default function PharmacyQRScannerPage() {
     setShowCamera(false);
     setError(null);
 
-    if (data.startsWith("0x") || data.startsWith("QR-REC-")) {
+    let cleanToken = data.trim();
+    if (cleanToken.includes("/verify/prescription/")) {
+      cleanToken = cleanToken.split("/verify/prescription/")[1]?.split("?")[0]?.split("/")[0] || cleanToken;
+    }
+
+    if (cleanToken.startsWith("0x") || cleanToken.startsWith("QR-REC-")) {
       setFlow("BLOCKCHAIN");
       setIsLoading(true);
       try {
-        const result = await blockchainService.verifyHash(data);
+        const result = await blockchainService.verifyHash(cleanToken);
         setBlockchainData(result);
       } catch (err: any) {
         console.error("Blockchain verification error:", err);
         setBlockchainData({
           verified: false,
           status: "NOT_FOUND",
-          item_type: data.startsWith("0x") && data.length === 66 ? "TRANSACTION" : "UNKNOWN",
-          identifier: data,
+          item_type: cleanToken.startsWith("0x") && cleanToken.length === 66 ? "TRANSACTION" : "UNKNOWN",
+          identifier: cleanToken,
           network: "Polygon Amoy Testnet",
           chain_id: 80002,
-          explorer_url: data.startsWith("0x") ? `https://amoy.polygonscan.com/tx/${data}` : null,
+          explorer_url: cleanToken.startsWith("0x") ? `https://amoy.polygonscan.com/tx/${cleanToken}` : null,
           error_message: err?.message || "Ledger query failed"
         });
       } finally {
@@ -66,21 +71,21 @@ export default function PharmacyQRScannerPage() {
       return;
     }
     
-    // If it looks like a URL
-    if (data.startsWith("http://") || data.startsWith("https://")) {
-      const isMedsync = data.includes("medsync-web.vercel.app") || data.includes("localhost:3000");
+    // If it looks like an unrelated external URL
+    if ((cleanToken.startsWith("http://") || cleanToken.startsWith("https://")) && !cleanToken.includes("/prescription")) {
+      const isMedsync = cleanToken.includes("medsync-web.vercel.app") || cleanToken.includes("localhost:3000");
       if (isMedsync) {
-        window.location.href = data;
+        window.location.href = cleanToken;
         return;
       }
       setFlow("URL");
       return;
     }
 
-    // Otherwise, assume it's a Prescription Token (MS-...) or raw text
+    // Prescription Token (MS-RX-..., MS-..., UUID, or raw token)
     setIsLoading(true);
     try {
-      const res = await pharmacyService.verifyQR(data);
+      const res = await pharmacyService.verifyQR(cleanToken);
       if (res.data?.is_valid) {
         setBasicData(res.data.data);
         if (res.data.data.status === "TAMPERED") {
@@ -89,14 +94,14 @@ export default function PharmacyQRScannerPage() {
         setFlow("PRESCRIPTION");
         setStep("PAYMENT");
       } else {
-        if (!data.startsWith("MS-")) {
+        if (!cleanToken.startsWith("MS-")) {
           setFlow("TEXT");
         } else {
           setError(res.message || "Invalid or tampered QR token.");
         }
       }
     } catch (err: any) {
-      if (!data.startsWith("MS-")) {
+      if (!cleanToken.startsWith("MS-")) {
         setFlow("TEXT");
       } else {
         setError(err.message || "Failed to decode prescription token.");

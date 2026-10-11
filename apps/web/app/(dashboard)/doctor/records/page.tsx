@@ -36,6 +36,7 @@ import {
   FileQuestion,
   UserCheck,
   XCircle,
+  UserPlus,
   Clock,
   ArrowRight
 } from "lucide-react";
@@ -43,6 +44,7 @@ import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import DoctorHospitalPicker, { DoctorItem } from "@/components/doctor/DoctorHospitalPicker";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 10 },
@@ -74,9 +76,10 @@ export default function DoctorMedicalRecordsPage() {
   const [isSubmittingNote, setIsSubmittingNote] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Referral Modal State
+  // Specialist Referral Modal State
   const [isReferralModalOpen, setIsReferralModalOpen] = useState(false);
   const [selectedRecordForReferral, setSelectedRecordForReferral] = useState<any | null>(null);
+  const [referralPatientId, setReferralPatientId] = useState("");
   const [referralTargetDoctorId, setReferralTargetDoctorId] = useState("");
   const [referralReason, setReferralReason] = useState("");
   const [referralNotes, setReferralNotes] = useState("");
@@ -245,18 +248,35 @@ export default function DoctorMedicalRecordsPage() {
     }
   }, [userId, loadRecords, loadRequests]);
 
+  const fetchConsultedPatients = async () => {
+    try {
+      const res = await api.get("/api/v1/doctor-collaboration/consulted-patients");
+      if (res.data?.data && res.data.data.length > 0) {
+        setPatientList(res.data.data);
+        return res.data.data;
+      }
+    } catch {}
+
+    // Fallback: distinct patient ids from appointments and prescriptions
+    try {
+      const [{ data: appts }, { data: pres }] = await Promise.all([
+        supabase.from("appointments").select("patient_id").eq("doctor_id", userId),
+        supabase.from("prescriptions").select("patient_id").eq("doctor_id", userId),
+      ]);
+      const ids = Array.from(new Set([...(appts || []).map((a) => a.patient_id), ...(pres || []).map((p) => p.patient_id)]));
+      if (ids.length > 0) {
+        const { data: pats } = await supabase.from("patients").select("user_id, full_name").in("user_id", ids);
+        setPatientList(pats || []);
+        return pats || [];
+      }
+    } catch {}
+    setPatientList([]);
+    return [];
+  };
+
   const handleOpenRequestModal = async () => {
     setIsRequestModalOpen(true);
-    try {
-      const [docRes, patRes] = await Promise.all([
-        api.get("/api/v1/doctor-collaboration/directory"),
-        supabase.from("patients").select("user_id, full_name").limit(100),
-      ]);
-      setDoctorDirectory(docRes.data?.data || []);
-      setPatientList(patRes.data || []);
-    } catch (err) {
-      console.error(err);
-    }
+    await fetchConsultedPatients();
   };
 
   const handleApproveRequest = async (requestId: string) => {
@@ -288,7 +308,7 @@ export default function DoctorMedicalRecordsPage() {
   const handleSubmitRecordRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!requestPatientId || !requestReason.trim()) {
-      toast.error("Please select a patient and provide a reason");
+      toast.error("Please select a consulted patient and provide a clinical reason");
       return;
     }
 
@@ -296,13 +316,11 @@ export default function DoctorMedicalRecordsPage() {
     try {
       await api.post("/api/v1/doctor-collaboration/record-requests", {
         patient_id: requestPatientId,
-        target_doctor_id: targetDoctorId || undefined,
         reason: requestReason.trim(),
       });
-      toast.success("Record request submitted successfully. Attending doctor has been notified.");
+      toast.success("Record request submitted to patient. The patient will review and can share access in Privacy & Consent.");
       setIsRequestModalOpen(false);
       setRequestReason("");
-      setTargetDoctorId("");
       loadRequests();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Failed to submit record request");
@@ -342,13 +360,32 @@ export default function DoctorMedicalRecordsPage() {
     }
   };
 
-  const handleOpenReferralModal = async (record: any) => {
-    setSelectedRecordForReferral(record);
+  const handleOpenHeaderReferralModal = async () => {
+    setSelectedRecordForReferral(null);
+    setReferralPatientId(filterPatientId || "");
     setReferralReason("");
     setReferralNotes("");
     setReferralTargetDoctorId("");
     setReferralSpecialization("");
     setIsReferralModalOpen(true);
+    await fetchConsultedPatients();
+    try {
+      const docRes = await api.get("/api/v1/doctor-collaboration/directory");
+      setDoctorDirectory(docRes.data?.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOpenReferralModal = async (record: any) => {
+    setSelectedRecordForReferral(record);
+    setReferralPatientId(record.patient_id);
+    setReferralReason("");
+    setReferralNotes("");
+    setReferralTargetDoctorId("");
+    setReferralSpecialization("");
+    setIsReferralModalOpen(true);
+    await fetchConsultedPatients();
     try {
       const docRes = await api.get("/api/v1/doctor-collaboration/directory");
       setDoctorDirectory(docRes.data?.data || []);
@@ -359,8 +396,13 @@ export default function DoctorMedicalRecordsPage() {
 
   const handleSubmitReferral = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRecordForReferral || !referralTargetDoctorId || !referralReason.trim()) {
-      toast.error("Please select a target doctor and specify a referral reason");
+    const targetPatientId = selectedRecordForReferral ? selectedRecordForReferral.patient_id : referralPatientId;
+    if (!targetPatientId) {
+      toast.error("Please select a patient to refer");
+      return;
+    }
+    if (!referralTargetDoctorId || !referralReason.trim()) {
+      toast.error("Please select a specialist doctor and specify a referral reason");
       return;
     }
 
@@ -370,15 +412,15 @@ export default function DoctorMedicalRecordsPage() {
       
       // 1. Submit referral with physician clinical notes
       await api.post("/api/v1/doctor-collaboration/referrals", {
-        patient_id: selectedRecordForReferral.patient_id,
+        patient_id: targetPatientId,
         referred_to_doctor_id: referralTargetDoctorId,
         specialization: referralSpecialization || targetDoc?.specialization || undefined,
         reason: referralReason.trim(),
         notes: referralNotes.trim() || undefined,
       });
 
-      // 2. Also log referral note directly on this medical record if notes provided
-      if (referralNotes.trim()) {
+      // 2. Also log referral note directly on this medical record if notes provided and opened from record
+      if (selectedRecordForReferral && referralNotes.trim()) {
         await api.post(`/api/v1/records/${selectedRecordForReferral.id}/notes`, {
           note_text: `[Specialist Referral to Dr. ${targetDoc?.full_name || 'Physician'}]: ${referralNotes.trim()}`,
         }).catch(() => null);
@@ -387,6 +429,7 @@ export default function DoctorMedicalRecordsPage() {
       toast.success(`Referral and clinical notes submitted to Dr. ${targetDoc?.full_name || "Specialist"}`);
       setIsReferralModalOpen(false);
       setSelectedRecordForReferral(null);
+      setReferralPatientId("");
       setReferralTargetDoctorId("");
       setReferralReason("");
       setReferralNotes("");
@@ -448,10 +491,18 @@ export default function DoctorMedicalRecordsPage() {
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <Button
-            onClick={handleOpenRequestModal}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm rounded-xl flex items-center gap-2"
+            onClick={handleOpenHeaderReferralModal}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm rounded-xl flex items-center gap-2 font-medium"
           >
-            <FileQuestion className="w-4 h-4" /> Request Records from Doctor
+            <Send className="w-4 h-4" /> Refer Patient to Specialist
+          </Button>
+
+          <Button
+            onClick={handleOpenRequestModal}
+            variant="outline"
+            className="border-border/70 hover:bg-muted/40 shadow-sm rounded-xl flex items-center gap-2"
+          >
+            <FileQuestion className="w-4 h-4 text-primary" /> Request Records from Patient
           </Button>
 
           <div className="relative w-full sm:w-64">
@@ -844,17 +895,17 @@ export default function DoctorMedicalRecordsPage() {
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileQuestion className="w-5 h-5 text-primary" /> Request Records from Another Doctor
+              <FileQuestion className="w-5 h-5 text-primary" /> Request Records from Patient
             </DialogTitle>
             <DialogDescription>
-              Submit an official request to access medical history or diagnostic files held by another physician.
+              Submit an official clinical request to access private medical history and diagnostic files directly from the patient.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmitRecordRequest} className="space-y-4 pt-3">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Select Patient *
+                Select Patient (Treated / Consulted) *
               </label>
               <select
                 value={requestPatientId}
@@ -862,28 +913,10 @@ export default function DoctorMedicalRecordsPage() {
                 className="w-full h-10 px-3 rounded-xl border border-border/70 bg-background text-sm outline-none focus:border-primary transition"
                 required
               >
-                <option value="">-- Choose a patient --</option>
+                <option value="">-- Choose a consulted patient --</option>
                 {patientList.map((p) => (
                   <option key={p.user_id} value={p.user_id}>
                     {p.full_name} (ID: {p.user_id?.slice(0, 8)}...)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Target Doctor Holding Records (Optional)
-              </label>
-              <select
-                value={targetDoctorId}
-                onChange={(e) => setTargetDoctorId(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-border/70 bg-background text-sm outline-none focus:border-primary transition"
-              >
-                <option value="">-- Any attending doctor / Direct Request --</option>
-                {doctorDirectory.map((doc) => (
-                  <option key={doc.user_id} value={doc.user_id}>
-                    Dr. {doc.full_name} {doc.specialization ? `(${doc.specialization})` : ""} {doc.hospital_name ? `• ${doc.hospital_name}` : ""}
                   </option>
                 ))}
               </select>
@@ -896,7 +929,7 @@ export default function DoctorMedicalRecordsPage() {
               <textarea
                 value={requestReason}
                 onChange={(e) => setRequestReason(e.target.value)}
-                placeholder="State why these records are needed (e.g. Second opinion, pre-surgical assessment, comprehensive treatment planning)..."
+                placeholder="State why these records are needed (e.g. Diagnostic review, pre-treatment baseline, specialized consultation)..."
                 rows={3}
                 className="w-full text-sm bg-muted/40 border border-border/60 rounded-xl p-3 outline-none focus:border-primary transition resize-none"
                 required
@@ -922,7 +955,7 @@ export default function DoctorMedicalRecordsPage() {
                 ) : (
                   <Send className="w-4 h-4 mr-1.5" />
                 )}
-                Submit Request
+                Submit Request to Patient
               </Button>
             </div>
           </form>
@@ -931,17 +964,17 @@ export default function DoctorMedicalRecordsPage() {
 
       {/* Refer Patient to Specialist Dialog */}
       <Dialog open={isReferralModalOpen} onOpenChange={setIsReferralModalOpen}>
-        <DialogContent className="max-w-lg rounded-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Send className="w-5 h-5 text-primary" /> Refer Patient to Specialist Doctor
+              <Send className="w-5 h-5 text-emerald-500" /> Refer Patient to Specialist Doctor
             </DialogTitle>
             <DialogDescription>
-              Collaborate and refer this patient with diagnostic documentation and clinical physician notes.
+              Select a hospital or clinic on the map, choose a specialist physician, and submit clinical documentation.
             </DialogDescription>
           </DialogHeader>
 
-          {selectedRecordForReferral && (
+          {selectedRecordForReferral ? (
             <div className="p-3 bg-muted/40 rounded-xl border border-border/50 text-xs space-y-1">
               <p>
                 <strong>Patient:</strong> {selectedRecordForReferral.patient?.full_name}
@@ -950,33 +983,43 @@ export default function DoctorMedicalRecordsPage() {
                 <strong>Record:</strong> {selectedRecordForReferral.title}
               </p>
             </div>
-          )}
-
-          <form onSubmit={handleSubmitReferral} className="space-y-4 pt-1">
-            <div className="space-y-1.5">
+          ) : (
+            <div className="space-y-1.5 pt-1">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Select Consulting Specialist Doctor *
+                Select Patient (Treated / Consulted) *
               </label>
               <select
-                value={referralTargetDoctorId}
-                onChange={(e) => {
-                  const docId = e.target.value;
-                  setReferralTargetDoctorId(docId);
-                  const doc = doctorDirectory.find((d) => d.user_id === docId);
-                  if (doc?.specialization) setReferralSpecialization(doc.specialization);
-                }}
+                value={referralPatientId}
+                onChange={(e) => setReferralPatientId(e.target.value)}
                 className="w-full h-10 px-3 rounded-xl border border-border/70 bg-background text-sm outline-none focus:border-primary transition"
                 required
               >
-                <option value="">-- Choose a doctor --</option>
-                {doctorDirectory
-                  .filter((d) => d.user_id !== userId)
-                  .map((doc) => (
-                    <option key={doc.user_id} value={doc.user_id}>
-                      Dr. {doc.full_name} {doc.specialization ? `(${doc.specialization})` : ""} {doc.hospital_name ? `• ${doc.hospital_name}` : ""}
-                    </option>
-                  ))}
+                <option value="">-- Choose a consulted patient --</option>
+                {patientList.map((p) => (
+                  <option key={p.user_id} value={p.user_id}>
+                    {p.full_name} (ID: {p.user_id?.slice(0, 8)}...)
+                  </option>
+                ))}
               </select>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmitReferral} className="space-y-4 pt-2">
+            {/* Interactive Hospital Map & Doctor Selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Select Specialist Doctor (Browse Map / Clinics) *
+              </label>
+              <DoctorHospitalPicker
+                selectedDoctorId={referralTargetDoctorId}
+                onSelectDoctor={(doc) => {
+                  setReferralTargetDoctorId(doc?.user_id || "");
+                  if (doc?.specialization) {
+                    setReferralSpecialization(doc.specialization);
+                  }
+                }}
+                currentDoctorUserId={userId}
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -993,7 +1036,7 @@ export default function DoctorMedicalRecordsPage() {
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Reason for Referral *
+                Clinical Reason for Referral *
               </label>
               <Input
                 value={referralReason}
@@ -1013,7 +1056,7 @@ export default function DoctorMedicalRecordsPage() {
                 value={referralNotes}
                 onChange={(e) => setReferralNotes(e.target.value)}
                 placeholder="Enter your detailed clinical observations, medication concerns, test findings, and specific instructions for the specialist..."
-                rows={4}
+                rows={3}
                 className="w-full text-sm bg-muted/40 border border-border/60 rounded-xl p-3 outline-none focus:border-primary transition resize-none"
                 required
               />
@@ -1030,15 +1073,20 @@ export default function DoctorMedicalRecordsPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmittingReferral || !referralTargetDoctorId || !referralReason.trim() || !referralNotes.trim()}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                disabled={
+                  isSubmittingReferral ||
+                  (!selectedRecordForReferral && !referralPatientId) ||
+                  !referralTargetDoctorId ||
+                  !referralReason.trim()
+                }
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
               >
                 {isSubmittingReferral ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
                 ) : (
                   <Send className="w-4 h-4 mr-1.5" />
                 )}
-                Send Referral with Notes
+                Send Referral to Specialist
               </Button>
             </div>
           </form>
