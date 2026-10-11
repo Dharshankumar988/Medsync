@@ -792,6 +792,7 @@ async def _auto_seed_transactions_if_empty(db: AsyncSession):
                 db.add(BlockchainTransaction(**tx_data))
         await db.commit()
     except Exception as e:
+        await db.rollback()
         logger.warning(f"Could not auto-seed blockchain transactions: {e}")
 
 @router.post("/transactions/sync", response_model=APIResponse[TransactionSyncResponse])
@@ -803,7 +804,13 @@ async def trigger_chain_transactions_sync(
 ):
     """Explicitly trigger live wallet transactions synchronization from Polygon Amoy."""
     from app.blockchain.services.chain_sync import sync_wallet_transactions_from_chain
-    synced = await sync_wallet_transactions_from_chain(db, max_count=50)
+    try:
+        synced = await sync_wallet_transactions_from_chain(db, max_count=50)
+    except Exception as e:
+        await db.rollback()
+        synced = 0
+        logger.warning(f"Manual chain sync error: {e}")
+
     return APIResponse(
         message=f"Synced {synced} blockchain transactions from Polygon Amoy",
         data=TransactionSyncResponse(
@@ -827,16 +834,24 @@ async def get_transactions(
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN", "DOCTOR", "PHARMACY"]))
 ):
     # Auto-sync live wallet transactions from Polygon Amoy if table only has seed data
-    total_db_tx = await db.scalar(select(func.count(BlockchainTransaction.transaction_hash)))
-    if total_db_tx <= 1:
-        from app.blockchain.services.chain_sync import sync_wallet_transactions_from_chain
-        try:
-            await sync_wallet_transactions_from_chain(db, max_count=50)
-        except Exception as e:
-            import logging
-            logging.getLogger("blockchain.endpoints").warning(f"Live chain auto-sync note: {e}")
-        if total_db_tx == 0:
-            await _auto_seed_transactions_if_empty(db)
+    try:
+        total_db_tx = await db.scalar(select(func.count(BlockchainTransaction.transaction_hash)))
+        if (total_db_tx or 0) <= 1:
+            from app.blockchain.services.chain_sync import sync_wallet_transactions_from_chain
+            try:
+                await sync_wallet_transactions_from_chain(db, max_count=50)
+            except Exception as e:
+                await db.rollback()
+                import logging
+                logging.getLogger("blockchain.endpoints").warning(f"Live chain auto-sync note: {e}")
+
+            curr_count = await db.scalar(select(func.count(BlockchainTransaction.transaction_hash)))
+            if (curr_count or 0) == 0:
+                await _auto_seed_transactions_if_empty(db)
+    except Exception as e:
+        await db.rollback()
+        import logging
+        logging.getLogger("blockchain.endpoints").warning(f"Live auto-sync check error: {e}")
 
     query = select(BlockchainTransaction)
     

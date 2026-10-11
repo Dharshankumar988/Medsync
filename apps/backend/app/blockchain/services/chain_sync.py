@@ -78,15 +78,20 @@ async def sync_wallet_transactions_from_chain(db: AsyncSession, max_count: int =
         if not hashes:
             return 0
 
+        # Pre-fetch existing hashes in lowercase to avoid redundant RPC lookups
+        try:
+            existing_rows = await db.scalars(select(BlockchainTransaction.transaction_hash))
+            existing_hashes = {h.lower() for h in existing_rows.all() if h}
+        except Exception:
+            existing_hashes = set()
+
         synced = 0
         for tx_hash in hashes:
-            try:
-                existing = await db.execute(
-                    select(BlockchainTransaction).where(BlockchainTransaction.transaction_hash == tx_hash)
-                )
-                if existing.scalar_one_or_none():
-                    continue
+            tx_hash_lower = tx_hash.lower()
+            if tx_hash_lower in existing_hashes:
+                continue
 
+            try:
                 # Fetch tx and receipt via standard JSON-RPC
                 tx_res = await client.post(
                     rpc_url,
@@ -125,29 +130,47 @@ async def sync_wallet_transactions_from_chain(db: AsyncSession, max_count: int =
                 status = "CONFIRMED" if rcpt_data.get("status") == "0x1" else "REVERTED"
                 now = datetime.datetime.now(datetime.timezone.utc)
 
-                record = BlockchainTransaction(
-                    transaction_hash=tx_hash,
-                    block_number=tx_block_num,
-                    block_timestamp=now,
-                    gas_used=gas_used,
-                    gas_price=gas_price,
-                    contract_address=contract_addr,
-                    contract_name=contract_name,
-                    contract_version="1.0.0",
-                    network="amoy",
-                    chain_id=80002,
-                    confirmation_count=min(confirmations, 999999),
-                    status=status,
-                    wallet_address=tx_data.get("from") or wallet_addr,
-                    execution_time_ms=1200
-                )
-                db.add(record)
-                synced += 1
+                val_dict = {
+                    "transaction_hash": tx_hash,
+                    "block_number": tx_block_num,
+                    "block_timestamp": now,
+                    "gas_used": gas_used,
+                    "gas_price": gas_price,
+                    "contract_address": contract_addr,
+                    "contract_name": contract_name,
+                    "contract_version": "1.0.0",
+                    "network": "amoy",
+                    "chain_id": 80002,
+                    "confirmation_count": min(confirmations, 999999),
+                    "status": status,
+                    "wallet_address": tx_data.get("from") or wallet_addr,
+                    "execution_time_ms": 1200
+                }
+
+                try:
+                    # Atomic upsert via PostgreSQL dialect to eliminate concurrent duplicate key exceptions
+                    from sqlalchemy.dialects.postgresql import insert as pg_insert
+                    stmt = pg_insert(BlockchainTransaction).values(**val_dict).on_conflict_do_nothing(index_elements=['transaction_hash'])
+                    await db.execute(stmt)
+                    await db.commit()
+                    synced += 1
+                    existing_hashes.add(tx_hash_lower)
+                except Exception:
+                    await db.rollback()
+                    try:
+                        # Fallback for SQLite / generic DB in tests
+                        await db.merge(BlockchainTransaction(**val_dict))
+                        await db.commit()
+                        synced += 1
+                        existing_hashes.add(tx_hash_lower)
+                    except Exception as inner_ex:
+                        await db.rollback()
+                        logger.debug(f"Could not persist tx {tx_hash}: {inner_ex}")
+
             except Exception as ex:
                 logger.debug(f"Could not fetch details for tx {tx_hash}: {ex}")
 
         if synced > 0:
-            await db.commit()
             logger.info(f"Successfully synced {synced} on-chain transactions for {wallet_addr}")
 
         return synced

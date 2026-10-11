@@ -226,6 +226,7 @@ CREATE TABLE IF NOT EXISTS pharmacies (
     blockchain_tx_hash VARCHAR(66),
     qr_identifier VARCHAR(255) UNIQUE,
     qr_status VARCHAR(50) DEFAULT 'ACTIVE',
+    security_pin_hash VARCHAR(255),
     verification_id VARCHAR(100),
     registered_at TIMESTAMP WITHOUT TIME ZONE,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -450,6 +451,7 @@ CREATE TABLE IF NOT EXISTS prescription_transfers (
     transfer_request_id VARCHAR(255) NOT NULL UNIQUE,
     status VARCHAR(50) NOT NULL DEFAULT 'CREATED',
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
     authorized_at TIMESTAMP WITHOUT TIME ZONE,
     delivered_at TIMESTAMP WITHOUT TIME ZONE,
     expires_at TIMESTAMP WITHOUT TIME ZONE

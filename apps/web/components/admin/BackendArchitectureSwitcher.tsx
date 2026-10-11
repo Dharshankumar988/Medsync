@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Card,
   CardContent,
@@ -14,14 +15,19 @@ import {
   Server,
   Cloud,
   Laptop,
-  Radio,
+  Terminal,
   CheckCircle2,
-  XCircle,
   RefreshCw,
-  Cpu,
   ShieldCheck,
   ExternalLink,
-  Zap
+  Zap,
+  Activity,
+  ArrowRightLeft,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Check,
+  Network
 } from "lucide-react";
 import {
   BACKEND_PRESETS,
@@ -45,6 +51,7 @@ export default function BackendArchitectureSwitcher() {
   const [customUrl, setCustomUrl] = useState<string>("");
   const [isEditingCustom, setIsEditingCustom] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+  const [copied, setCopied] = useState<boolean>(false);
 
   // Ping States
   const [renderHealth, setRenderHealth] = useState<HealthState>({
@@ -68,10 +75,7 @@ export default function BackendArchitectureSwitcher() {
 
   useEffect(() => {
     setActiveUrl(getBackendBaseUrl());
-
-    // Fetch master settings from database (Admin control plane)
     fetchSystemSettings();
-
     pingAllBackends();
 
     const handleBackendChange = (e: any) => {
@@ -95,7 +99,6 @@ export default function BackendArchitectureSwitcher() {
         if (portable_tunnel_url) {
           BACKEND_PRESETS.portable.url = portable_tunnel_url;
         }
-        // Match active mode to preset URL
         let targetUrl = BACKEND_PRESETS.render.url;
         if (active_backend_mode === "portable" && portable_tunnel_url) {
           targetUrl = portable_tunnel_url;
@@ -106,7 +109,6 @@ export default function BackendArchitectureSwitcher() {
         setBackendOverride(targetUrl);
       }
     } catch {
-      // If auth token not ready or backend offline, fall back to local state
       if (typeof window !== "undefined") {
         const savedFailover = localStorage.getItem("medsync_auto_failover");
         setAutoFailover(savedFailover !== "false");
@@ -138,20 +140,17 @@ export default function BackendArchitectureSwitcher() {
   const handleSelectBackend = async (modeKey: 'render' | 'portable' | 'local', url: string, name: string) => {
     try {
       setSaving(true);
-      // Persist Admin's choice to PostgreSQL database for the whole project
       await api.post('/api/v1/admin/settings', {
         active_backend_mode: modeKey,
-        portable_tunnel_url: modeKey === 'portable' ? url : undefined,
-        rag_worker_url: modeKey === 'portable' ? url : undefined,
+        portable_tunnel_url: modeKey === 'portable' ? url : undefined
       });
       setBackendOverride(url);
       setActiveUrl(url);
-      toast.success(`Project-wide backend set to: ${name}`);
+      toast.success(`Platform-wide route switched to: ${name}`);
     } catch {
-      // Even if network blips, update client view
       setBackendOverride(url);
       setActiveUrl(url);
-      toast.info(`Active backend switched to: ${name}`);
+      toast.info(`Active backend routed locally to: ${name}`);
     } finally {
       setSaving(false);
     }
@@ -164,14 +163,13 @@ export default function BackendArchitectureSwitcher() {
       setSaving(true);
       await api.post('/api/v1/admin/settings', {
         active_backend_mode: 'portable',
-        portable_tunnel_url: cleanUrl,
-        rag_worker_url: cleanUrl
+        portable_tunnel_url: cleanUrl
       });
       BACKEND_PRESETS.portable.url = cleanUrl;
       setBackendOverride(cleanUrl);
       setActiveUrl(cleanUrl);
       setIsEditingCustom(false);
-      toast.success("Applied custom backend URL system-wide");
+      toast.success("Applied custom backend endpoint system-wide");
       pingAllBackends();
     } catch {
       setBackendOverride(cleanUrl);
@@ -191,34 +189,48 @@ export default function BackendArchitectureSwitcher() {
     }
     try {
       await api.post('/api/v1/admin/settings', { auto_failover: nextVal });
-      toast.info(`Project-wide auto-failover ${nextVal ? "enabled" : "disabled"}`);
+      toast.success(`Automated failover ${nextVal ? "enabled" : "disabled"}`);
     } catch {
-      toast.info(`Auto-failover ${nextVal ? "enabled" : "disabled"} locally`);
+      toast.info(`Automated failover ${nextVal ? "enabled" : "disabled"} locally`);
     }
   };
 
   const isCurrentActive = (targetUrl: string) => {
-    const cleanActive = activeUrl.replace(/\/$/, "");
-    const cleanTarget = targetUrl.replace(/\/$/, "");
+    const cleanActive = (activeUrl || "").replace(/\/$/, "");
+    const cleanTarget = (targetUrl || "").replace(/\/$/, "");
     return cleanActive === cleanTarget;
   };
 
+  const handleCopyUrl = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    toast.success("Copied endpoint to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
-    <Card className="border-border/60 bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-md shadow-lg overflow-hidden">
-      <CardHeader className="border-b border-border/40 pb-5">
+    <Card className="relative overflow-hidden border border-white/10 bg-gradient-to-b from-card/90 via-card/60 to-card/90 backdrop-blur-2xl shadow-2xl transition-all duration-300">
+      {/* Decorative ambient top line */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500" />
+
+      <CardHeader className="border-b border-white/5 pb-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
-                <Server className="h-4 w-4" />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-indigo-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shadow-inner">
+                <Server className="h-4.5 w-4.5" />
               </div>
-              <CardTitle className="text-xl font-bold tracking-tight">
-                Hybrid Backend & Runner Switcher
-              </CardTitle>
+              <div>
+                <CardTitle className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                  Backend Architecture & Topology
+                  <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider border-cyan-500/30 bg-cyan-500/10 text-cyan-400 py-0.5">
+                    Live Cluster
+                  </Badge>
+                </CardTitle>
+              </div>
             </div>
-            <CardDescription className="text-sm">
-              Control whether the web app connects to the 24/7 Render cloud backend or your portable runner on any laptop.
+            <CardDescription className="text-xs sm:text-sm text-muted-foreground max-w-2xl">
+              Control where MedSync routes live API queries. Seamlessly hot-swap between our 24/7 cloud cluster and local on-premises portable runners with zero downtime.
             </CardDescription>
           </div>
 
@@ -227,251 +239,339 @@ export default function BackendArchitectureSwitcher() {
               variant="outline"
               size="sm"
               onClick={pingAllBackends}
-              className="gap-2 h-9 text-xs"
+              disabled={renderHealth.loading || portableHealth.loading || localHealth.loading}
+              className="gap-2 h-9 text-xs border-white/10 hover:border-cyan-500/40 hover:bg-cyan-500/5 transition-all duration-200"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${renderHealth.loading ? "animate-spin" : ""}`} />
-              Ping Backends
+              <RefreshCw className={`h-3.5 w-3.5 text-cyan-400 ${renderHealth.loading ? "animate-spin" : ""}`} />
+              <span>Ping All Nodes</span>
             </Button>
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="pt-6 space-y-6">
-        {/* ACTIVE STATUS BANNER */}
-        <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
-            <div>
-              <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
-                Currently Active Endpoint
-              </p>
-              <p className="font-mono text-sm font-bold text-foreground truncate max-w-md">
-                {activeUrl || "https://medsync-backend-rktc.onrender.com"}
-              </p>
+        {/* ACTIVE ENDPOINT HERO PANEL */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-cyan-950/20 via-background/40 to-indigo-950/20 p-5 backdrop-blur-md shadow-lg"
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="relative flex h-3.5 w-3.5 items-center justify-center shrink-0 mt-1 sm:mt-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                    Active Gateway Route
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={
+                      activeUrl.includes("onrender.com")
+                        ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/30 text-[10px]"
+                        : activeUrl.includes("ngrok")
+                        ? "bg-purple-500/10 text-purple-300 border-purple-500/30 text-[10px]"
+                        : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30 text-[10px]"
+                    }
+                  >
+                    {activeUrl.includes("onrender.com")
+                      ? "Cloud (Render Primary)"
+                      : activeUrl.includes("ngrok")
+                      ? "Portable Runner (Ngrok)"
+                      : "Local Sandbox (Port 8000)"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="font-mono text-sm sm:text-base font-semibold text-foreground truncate max-w-lg">
+                    {activeUrl || BACKEND_PRESETS.render.url}
+                  </p>
+                  <button
+                    onClick={() => handleCopyUrl(activeUrl || BACKEND_PRESETS.render.url)}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                    title="Copy URL"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start md:self-auto">
+              <a
+                href={`${activeUrl || BACKEND_PRESETS.render.url}/health`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-medium bg-white/5 hover:bg-white/10 text-foreground border border-white/10 transition-colors"
+              >
+                <span>/health</span>
+                <ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </a>
             </div>
           </div>
+        </motion.div>
 
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={
-                activeUrl.includes("onrender.com")
-                  ? "bg-sky-500/10 text-sky-400 border-sky-500/30"
-                  : activeUrl.includes("ngrok")
-                  ? "bg-purple-500/10 text-purple-400 border-purple-500/30"
-                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-              }
-            >
-              {activeUrl.includes("onrender.com")
-                ? "Cloud (Render)"
-                : activeUrl.includes("ngrok")
-                ? "Portable Runner (Ngrok)"
-                : "Localhost"}
-            </Badge>
-
-            <a
-              href={`${activeUrl}/health`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              /health <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
-        </div>
-
-        {/* BACKEND OPTIONS GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* TOPOLOGY NODES GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* 1. RENDER CLOUD (PRIMARY) */}
-          <div
+          <motion.div
+            whileHover={{ y: -3, transition: { duration: 0.15 } }}
             onClick={() => handleSelectBackend('render', BACKEND_PRESETS.render.url, BACKEND_PRESETS.render.name)}
-            className={`cursor-pointer rounded-xl border p-4 transition-all duration-200 relative ${
+            className={`cursor-pointer rounded-2xl border p-5 transition-all duration-300 relative flex flex-col justify-between ${
               isCurrentActive(BACKEND_PRESETS.render.url)
-                ? "border-primary bg-primary/10 shadow-sm"
-                : "border-border/60 hover:border-primary/40 hover:bg-muted/10"
+                ? "border-cyan-500/80 bg-gradient-to-b from-cyan-950/30 to-card shadow-[0_0_20px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500/30"
+                : "border-white/10 bg-card/40 hover:border-cyan-500/30 hover:bg-card/70"
             }`}
           >
             {isCurrentActive(BACKEND_PRESETS.render.url) && (
-              <span className="absolute top-3 right-3 text-primary">
+              <span className="absolute top-4 right-4 text-cyan-400">
                 <CheckCircle2 className="h-5 w-5" />
               </span>
             )}
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-9 w-9 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center">
-                <Cloud className="h-5 w-5" />
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-10 w-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center">
+                  <Cloud className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                    Render Cloud
+                    <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-mono font-medium">
+                      24/7 Primary
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]">
+                    {BACKEND_PRESETS.render.url}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-semibold text-sm flex items-center gap-2">
-                  Render Cloud Backend
-                  <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-mono">
-                    24/7 Primary
-                  </span>
-                </h4>
-                <p className="text-xs text-muted-foreground font-mono truncate max-w-xs">
-                  {BACKEND_PRESETS.render.url}
-                </p>
-              </div>
+
+              <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+                High-availability cloud container deployed continuously. Always reachable globally even when on-site workstations are powered off.
+              </p>
             </div>
 
-            <p className="text-xs text-muted-foreground mt-2 mb-3">
-              Runs in the cloud 24/7 on Render. Always available even when all laptops are turned off.
-            </p>
-
-            <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
-              <span className="text-muted-foreground">Status:</span>
+            <div className="flex items-center justify-between pt-3 border-t border-white/5 text-xs">
+              <span className="text-muted-foreground font-medium">Telemetry:</span>
               <div className="flex items-center gap-1.5">
                 {renderHealth.loading ? (
-                  <span className="text-muted-foreground animate-pulse">Pinging...</span>
+                  <span className="text-muted-foreground animate-pulse flex items-center gap-1">
+                    <Activity className="h-3 w-3 animate-spin" /> Pinging...
+                  </span>
                 ) : renderHealth.ok ? (
-                  <>
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    <span className="text-emerald-400 font-medium">
-                      Online ({renderHealth.latencyMs}ms)
-                    </span>
-                  </>
+                  <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
+                    Online ({renderHealth.latencyMs}ms)
+                  </span>
                 ) : (
-                  <>
+                  <span className="inline-flex items-center gap-1.5 text-rose-400 font-medium">
                     <span className="h-2 w-2 rounded-full bg-rose-500" />
-                    <span className="text-rose-400 font-medium">{renderHealth.statusText}</span>
-                  </>
+                    Offline
+                  </span>
                 )}
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* 2. PORTABLE RUNNER (NGROK TUNNEL) */}
-          <div
+          <motion.div
+            whileHover={{ y: -3, transition: { duration: 0.15 } }}
             onClick={() => handleSelectBackend('portable', BACKEND_PRESETS.portable.url, BACKEND_PRESETS.portable.name)}
-            className={`cursor-pointer rounded-xl border p-4 transition-all duration-200 relative ${
+            className={`cursor-pointer rounded-2xl border p-5 transition-all duration-300 relative flex flex-col justify-between ${
               isCurrentActive(BACKEND_PRESETS.portable.url)
-                ? "border-purple-500 bg-purple-500/10 shadow-sm"
-                : "border-border/60 hover:border-purple-500/40 hover:bg-muted/10"
+                ? "border-purple-500/80 bg-gradient-to-b from-purple-950/30 to-card shadow-[0_0_20px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/30"
+                : "border-white/10 bg-card/40 hover:border-purple-500/30 hover:bg-card/70"
             }`}
           >
             {isCurrentActive(BACKEND_PRESETS.portable.url) && (
-              <span className="absolute top-3 right-3 text-purple-400">
+              <span className="absolute top-4 right-4 text-purple-400">
                 <CheckCircle2 className="h-5 w-5" />
               </span>
             )}
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-9 w-9 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
-                <Laptop className="h-5 w-5" />
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center">
+                  <Laptop className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                    Portable Runner
+                    <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-mono font-medium">
+                      On-Premises
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]">
+                    {BACKEND_PRESETS.portable.url}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-semibold text-sm flex items-center gap-2">
-                  Portable Runner
-                  <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-mono">
-                    Any Laptop
-                  </span>
-                </h4>
-                <p className="text-xs text-muted-foreground font-mono truncate max-w-xs">
-                  {BACKEND_PRESETS.portable.url}
-                </p>
-              </div>
+
+              <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+                Routes traffic to whichever laptop is running <code className="text-purple-300 font-mono">start-medsync.bat</code> via encrypted Ngrok tunneling.
+              </p>
             </div>
 
-            <p className="text-xs text-muted-foreground mt-2 mb-3">
-              Routes traffic to whichever laptop is running <code className="text-primary">start-medsync.ps1</code>.
-            </p>
-
-            <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
-              <span className="text-muted-foreground">Status:</span>
+            <div className="flex items-center justify-between pt-3 border-t border-white/5 text-xs">
+              <span className="text-muted-foreground font-medium">Telemetry:</span>
               <div className="flex items-center gap-1.5">
                 {portableHealth.loading ? (
-                  <span className="text-muted-foreground animate-pulse">Pinging...</span>
+                  <span className="text-muted-foreground animate-pulse flex items-center gap-1">
+                    <Activity className="h-3 w-3 animate-spin" /> Pinging...
+                  </span>
                 ) : portableHealth.ok ? (
-                  <>
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    <span className="text-emerald-400 font-medium">
-                      Runner Active ({portableHealth.latencyMs}ms)
-                    </span>
-                  </>
+                  <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
+                    Runner Active ({portableHealth.latencyMs}ms)
+                  </span>
                 ) : (
-                  <>
+                  <span className="inline-flex items-center gap-1.5 text-amber-400 font-medium">
                     <span className="h-2 w-2 rounded-full bg-amber-500" />
-                    <span className="text-amber-400 font-medium">
-                      Offline (Start runner on laptop)
-                    </span>
-                  </>
+                    Standby (Offline)
+                  </span>
                 )}
               </div>
             </div>
-          </div>
+          </motion.div>
+
+          {/* 3. LOCALHOST DEV INSTANCE */}
+          <motion.div
+            whileHover={{ y: -3, transition: { duration: 0.15 } }}
+            onClick={() => handleSelectBackend('local', BACKEND_PRESETS.local.url, BACKEND_PRESETS.local.name)}
+            className={`cursor-pointer rounded-2xl border p-5 transition-all duration-300 relative flex flex-col justify-between ${
+              isCurrentActive(BACKEND_PRESETS.local.url)
+                ? "border-amber-500/80 bg-gradient-to-b from-amber-950/30 to-card shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30"
+                : "border-white/10 bg-card/40 hover:border-amber-500/30 hover:bg-card/70"
+            }`}
+          >
+            {isCurrentActive(BACKEND_PRESETS.local.url) && (
+              <span className="absolute top-4 right-4 text-amber-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </span>
+            )}
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
+                  <Terminal className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                    Local Dev Sandbox
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono font-medium">
+                      Port 8000
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]">
+                    {BACKEND_PRESETS.local.url}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+                Direct loopback socket for local development, rapid schema debugging, and unit testing without cloud dependencies.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-white/5 text-xs">
+              <span className="text-muted-foreground font-medium">Telemetry:</span>
+              <div className="flex items-center gap-1.5">
+                {localHealth.loading ? (
+                  <span className="text-muted-foreground animate-pulse flex items-center gap-1">
+                    <Activity className="h-3 w-3 animate-spin" /> Pinging...
+                  </span>
+                ) : localHealth.ok ? (
+                  <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
+                    Online ({localHealth.latencyMs}ms)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <span className="h-2 w-2 rounded-full bg-muted" />
+                    Not Running
+                  </span>
+                )}
+              </div>
+            </div>
+          </motion.div>
         </div>
 
-        {/* FAILOVER & RAG WORKER SECTION */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          {/* AUTO-FAILOVER SWITCH */}
-          <div className="p-4 rounded-xl border border-border/60 bg-muted/5 flex items-start justify-between gap-3">
+        {/* INTELLIGENT AUTO-FAILOVER SWITCH */}
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-r from-emerald-950/20 via-card to-cyan-950/20 p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                <h5 className="text-sm font-semibold">Automatic Intelligent Failover</h5>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                If the active backend is unreachable (or laptop goes to sleep), automatically route to the alternative backend so users experience zero downtime.
-              </p>
-            </div>
-            <Button
-              variant={autoFailover ? "default" : "outline"}
-              size="sm"
-              onClick={toggleAutoFailover}
-              className={`h-8 text-xs ${autoFailover ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
-            >
-              {autoFailover ? "Enabled" : "Disabled"}
-            </Button>
-          </div>
-
-          {/* RAG WORKER COMPUTATION ARCHITECTURE */}
-          <div className="p-4 rounded-xl border border-border/60 bg-muted/5 flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
-              <Cpu className="h-4 w-4" />
-            </div>
-            <div className="space-y-1 text-xs">
-              <div className="flex items-center gap-2">
-                <h5 className="text-sm font-semibold">Local AI & RAG Worker Microservice</h5>
-                <Badge variant="outline" className="text-[10px] h-4">
-                  Option B
+                <h5 className="text-sm font-semibold text-foreground">Intelligent High-Availability Failover</h5>
+                <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 bg-emerald-500/10 text-[10px]">
+                  Zero Downtime
                 </Badge>
               </div>
-              <p className="text-muted-foreground">
-                To run heavy vector embeddings locally, launch <strong>Option B</strong> in your portable runner. Render delegates vector computations to your laptop while maintaining its 24/7 cloud core.
+              <p className="text-xs text-muted-foreground max-w-xl">
+                When enabled, if the active portable runner disconnects or the laptop sleeps, queries instantaneously re-route to the 24/7 Render Cloud cluster without disturbing active user sessions.
               </p>
             </div>
           </div>
+
+          <Button
+            variant={autoFailover ? "default" : "outline"}
+            size="sm"
+            onClick={toggleAutoFailover}
+            className={`h-9 px-4 text-xs font-medium rounded-xl transition-all duration-200 ${
+              autoFailover
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                : "border-white/10 hover:border-emerald-500/30"
+            }`}
+          >
+            {autoFailover ? "Auto-Failover Active" : "Auto-Failover Disabled"}
+          </Button>
         </div>
 
-        {/* CUSTOM ENDPOINT OPTION */}
-        <div className="pt-2">
+        {/* CUSTOM ENDPOINT EXPANDER */}
+        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs">
           {isEditingCustom ? (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="https://your-custom-tunnel.ngrok-free.dev"
-                value={customUrl}
-                onChange={e => setCustomUrl(e.target.value)}
-                className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-xs font-mono"
-              />
-              <Button size="sm" onClick={handleSaveCustomUrl} className="h-8 text-xs">
-                Apply Custom URL
-              </Button>
+            <div className="space-y-3 p-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Network className="h-3.5 w-3.5 text-cyan-400" /> Custom Ngrok or Private Gateway URL
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditingCustom(false)}
+                  className="h-6 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </Button>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  placeholder="https://your-custom-tunnel.ngrok-free.dev"
+                  value={customUrl}
+                  onChange={e => setCustomUrl(e.target.value)}
+                  className="flex-1 bg-background/80 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSaveCustomUrl}
+                  disabled={saving || !customUrl.trim()}
+                  className="h-8 text-xs bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl px-4"
+                >
+                  Apply Custom Route
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between px-2">
+              <span className="text-muted-foreground">Need to bind a custom reverse-proxy, LAN IP, or bespoke tunnel?</span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setIsEditingCustom(false)}
-                className="h-8 text-xs"
-              >
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Need a custom tunneling address or local IP?</span>
-              <Button
-                variant="link"
-                size="sm"
                 onClick={() => setIsEditingCustom(true)}
-                className="text-xs h-auto p-0"
+                className="text-xs text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 h-7 px-2.5 rounded-lg"
               >
                 Configure Custom Endpoint
               </Button>
