@@ -158,3 +158,87 @@ def test_graph_schema_validation_and_serialization():
     assert dumped["status"] == "success"
     assert len(dumped["data"]["nodes"]) == 3
     assert dumped["data"]["nodes"][2]["entityData"]["role"] == "ADMIN"
+
+
+def test_blockchain_analytics_schema_and_serialization():
+    """Verify BlockchainAnalyticsData schema correctly serializes and preserves authentic metric contracts."""
+    from app.schemas.blockchain import (
+        BlockchainAnalyticsData, BlockchainNetworkStats, BlockchainGasStats,
+        BlockchainContractMetric, BlockchainDailyMetric, BlockchainWalletMetric,
+        BlockchainRecentTx, BlockchainSyncTaskStats, BlockchainSmartContractInfo
+    )
+
+    data = BlockchainAnalyticsData(
+        transactions={"CONFIRMED": 57},
+        events={"ConsentRevoked": 0},
+        total_transactions=57,
+        total_events=0,
+        network=BlockchainNetworkStats(
+            name="Polygon Amoy Testnet",
+            chain_id=80002,
+            connected=True,
+            latest_block=49873182,
+            gas_price_gwei=449.28,
+            wallet_balance_pol=0.4994
+        ),
+        gas=BlockchainGasStats(
+            total_gas_used=13601910,
+            avg_gas_per_tx=238630.0,
+            min_gas_used=21000,
+            max_gas_used=1093398,
+            current_gas_price_gwei=449.28
+        ),
+        contracts=[
+            BlockchainContractMetric(
+                contract_name="DoctorRegistry",
+                tx_count=1,
+                percentage=1.75,
+                total_gas_used=1088016,
+                avg_gas_used=1088016.0,
+                min_gas=1088016,
+                max_gas=1088016
+            )
+        ],
+        daily_timeline=[
+            BlockchainDailyMetric(date="2026-10-11", tx_count=56, gas_used=13580910)
+        ],
+        top_wallets=[
+            BlockchainWalletMetric(address="0x6ec559064e5bfae4a98d1879c717139acee49822", tx_count=39, gas_used=13223910)
+        ],
+        sync_tasks=BlockchainSyncTaskStats(
+            total_tasks=1,
+            by_status={"CONFIRMED": 1},
+            by_entity_type={"MEDICAL_RECORD": 1}
+        ),
+        smart_contracts=[
+            BlockchainSmartContractInfo(
+                name="DoctorRegistry",
+                address="0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+                status="DEPLOYED",
+                tx_count=1,
+                total_gas=1088016,
+                explorer_url="https://amoy.polygonscan.com/address/0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9"
+            )
+        ],
+        recent_transactions=[
+            BlockchainRecentTx(
+                hash="0x65dad0a55fd5f1",
+                short_hash="0x65da...5fd5f1",
+                contract_name="Polygon Transfer / Call",
+                gas_used=21000,
+                status="CONFIRMED",
+                explorer_url="https://amoy.polygonscan.com/tx/0x65dad0a55fd5f1"
+            )
+        ]
+    )
+
+    api_resp = APIResponse(message="Analytics retrieved", data=data)
+    dumped = api_resp.model_dump(mode="json")
+
+    assert dumped["status"] == "success"
+    assert dumped["data"]["total_transactions"] == 57
+    assert dumped["data"]["gas"]["total_gas_used"] == 13601910
+    assert dumped["data"]["contracts"][0]["contract_name"] == "DoctorRegistry"
+    assert dumped["data"]["network"]["chain_id"] == 80002
+    assert dumped["data"]["sync_tasks"]["by_status"]["CONFIRMED"] == 1
+

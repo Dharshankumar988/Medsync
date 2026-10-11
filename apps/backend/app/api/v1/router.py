@@ -49,9 +49,4 @@ api_router.include_router(transfers.router, prefix="/transfers", tags=["Transfer
 api_router.include_router(delivery.router, prefix="/delivery", tags=["Delivery Tracking"])
 api_router.include_router(doctor_collaboration.router, prefix="/doctor-collaboration", tags=["Doctor Collaboration"])
 
-try:
-    from app.api.v1.endpoints import blockchain_analytics
-    api_router.include_router(blockchain_analytics.router, prefix="/blockchain", tags=["Blockchain Analytics"])
-except ImportError:
-    import logging
-    logging.warning("Skipped blockchain_analytics router because web3 is not installed.")
+

@@ -21,7 +21,7 @@ if (-not (Test-Path $ContainersFile)) { New-Item $ContainersFile -ItemType File 
 if (-not (Test-Path $PidsFile)) { New-Item $PidsFile -ItemType File -Force | Out-Null }
 
 # Get version
-$VERSION = "1.0.0"
+$VERSION = "1.0.1"
 if (Test-Path "VERSION") {
     $VERSION = (Get-Content "VERSION" -Raw).Trim()
 }

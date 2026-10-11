@@ -129,4 +129,107 @@ class TransactionSyncResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
 
+class BlockchainContractMetric(BaseModel):
+    contract_name: str
+    tx_count: int
+    percentage: float
+    total_gas_used: int
+    avg_gas_used: float
+    min_gas: int
+    max_gas: int
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class BlockchainDailyMetric(BaseModel):
+    date: str
+    tx_count: int
+    gas_used: int
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class BlockchainWalletMetric(BaseModel):
+    address: str
+    tx_count: int
+    gas_used: int
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class BlockchainRecentTx(BaseModel):
+    hash: str
+    short_hash: str
+    contract_name: str
+    gas_used: int
+    block_number: Optional[int] = None
+    status: str
+    created_at: Optional[str] = None
+    explorer_url: str
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class BlockchainNetworkStats(BaseModel):
+    name: str = "Polygon Amoy Testnet"
+    chain_id: int = 80002
+    connected: bool = False
+    rpc_url: Optional[str] = None
+    latest_block: int = 0
+    gas_price_gwei: float = 0.0
+    wallet_address: Optional[str] = None
+    wallet_balance_pol: float = 0.0
+    wallet_balance_wei: int = 0
+    explorer_base_url: str = "https://amoy.polygonscan.com"
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class BlockchainGasStats(BaseModel):
+    total_gas_used: int = 0
+    avg_gas_per_tx: float = 0.0
+    min_gas_used: int = 0
+    max_gas_used: int = 0
+    current_gas_price_gwei: float = 0.0
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class BlockchainSyncTaskStats(BaseModel):
+    total_tasks: int = 0
+    by_status: dict[str, int] = {}
+    by_entity_type: dict[str, int] = {}
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class BlockchainSmartContractInfo(BaseModel):
+    name: str
+    address: str
+    status: str
+    tx_count: int = 0
+    total_gas: int = 0
+    explorer_url: str = ""
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class BlockchainAnalyticsData(BaseModel):
+    transactions: dict[str, int] = {}
+    events: dict[str, int] = {}
+    total_transactions: int = 0
+    total_events: int = 0
+    network: BlockchainNetworkStats
+    gas: BlockchainGasStats
+    contracts: list[BlockchainContractMetric] = []
+    daily_timeline: list[BlockchainDailyMetric] = []
+    top_wallets: list[BlockchainWalletMetric] = []
+    sync_tasks: BlockchainSyncTaskStats
+    smart_contracts: list[BlockchainSmartContractInfo] = []
+    recent_transactions: list[BlockchainRecentTx] = []
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+
 

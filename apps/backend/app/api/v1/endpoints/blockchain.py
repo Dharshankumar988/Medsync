@@ -8,7 +8,10 @@ from app.schemas.blockchain import (
     BlockchainTransactionResponse, BlockchainSyncTaskResponse, 
     BlockchainAuditLogResponse, PaginatedResponse, TransactionSearchQuery,
     StatusResponse, VerificationResponse, BlockchainVerifyResult, SmartContractSummary,
-    TransactionSyncResponse
+    TransactionSyncResponse, BlockchainAnalyticsData, BlockchainContractMetric,
+    BlockchainDailyMetric, BlockchainWalletMetric, BlockchainRecentTx,
+    BlockchainNetworkStats, BlockchainGasStats, BlockchainSyncTaskStats,
+    BlockchainSmartContractInfo
 )
 from app.models.blockchain import (
     BlockchainSyncTask, SyncEntityType, SyncActionType, SyncStatus,
@@ -1390,40 +1393,247 @@ async def get_wallet_details(
         }
         return APIResponse(message=f"Wallet details degraded: {str(e)}", data=data)
 
-@router.get("/analytics", response_model=APIResponse)
-@limiter.limit("10/minute")
+@router.get("/analytics", response_model=APIResponse[BlockchainAnalyticsData])
+@limiter.limit("30/minute")
 async def get_analytics(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
-    """Get aggregated blockchain analytics."""
+    """Get comprehensive, authentic aggregated blockchain analytics."""
     try:
-        # Transactions by status
+        import os
+        # 1. Transactions by status
         tx_status_res = await db.execute(
             select(BlockchainTransaction.status, func.count(BlockchainTransaction.transaction_hash))
             .group_by(BlockchainTransaction.status)
         )
-        tx_stats = dict(tx_status_res.all())
-        
-        # Events by type
+        tx_stats = {str(row[0]): int(row[1]) for row in tx_status_res.all()}
+        total_tx = sum(tx_stats.values())
+
+        # 2. Events by type
         event_res = await db.execute(
             select(BlockchainEventQueue.event_name, func.count(BlockchainEventQueue.id))
             .group_by(BlockchainEventQueue.event_name)
         )
-        event_stats = dict(event_res.all())
-        
-        # Simple Tx Volume (Total)
-        total_tx = sum(tx_stats.values())
+        event_stats = {str(row[0]): int(row[1]) for row in event_res.all()}
         total_events = sum(event_stats.values())
-        
-        data = {
-            "transactions": tx_stats,
-            "events": event_stats,
-            "total_transactions": total_tx,
-            "total_events": total_events
+
+        # 3. Contract breakdown
+        contract_res = await db.execute(
+            select(
+                BlockchainTransaction.contract_name,
+                func.count(BlockchainTransaction.transaction_hash),
+                func.coalesce(func.sum(BlockchainTransaction.gas_used), 0),
+                func.coalesce(func.avg(BlockchainTransaction.gas_used), 0),
+                func.coalesce(func.min(BlockchainTransaction.gas_used), 0),
+                func.coalesce(func.max(BlockchainTransaction.gas_used), 0)
+            )
+            .group_by(BlockchainTransaction.contract_name)
+            .order_by(desc(func.count(BlockchainTransaction.transaction_hash)))
+        )
+        contract_metrics: list[BlockchainContractMetric] = []
+        for row in contract_res.all():
+            c_name = row[0] or "Direct Polygon Call"
+            c_count = int(row[1])
+            c_gas_used = int(row[2])
+            c_avg_gas = round(float(row[3]), 2)
+            c_min_gas = int(row[4])
+            c_max_gas = int(row[5])
+            c_pct = round((c_count / total_tx * 100), 2) if total_tx > 0 else 0.0
+            contract_metrics.append(BlockchainContractMetric(
+                contract_name=c_name,
+                tx_count=c_count,
+                percentage=c_pct,
+                total_gas_used=c_gas_used,
+                avg_gas_used=c_avg_gas,
+                min_gas=c_min_gas,
+                max_gas=c_max_gas
+            ))
+
+        # 4. Overall gas metrics
+        gas_res = await db.execute(
+            select(
+                func.coalesce(func.sum(BlockchainTransaction.gas_used), 0),
+                func.coalesce(func.avg(BlockchainTransaction.gas_used), 0),
+                func.coalesce(func.min(BlockchainTransaction.gas_used), 0),
+                func.coalesce(func.max(BlockchainTransaction.gas_used), 0)
+            )
+        )
+        gas_row = gas_res.one()
+        total_gas_used = int(gas_row[0])
+        avg_gas_used = round(float(gas_row[1]), 2)
+        min_gas_used = int(gas_row[2])
+        max_gas_used = int(gas_row[3])
+
+        # 5. Daily timeline
+        daily_res = await db.execute(
+            select(
+                func.date(BlockchainTransaction.created_at).label("day"),
+                func.count(BlockchainTransaction.transaction_hash),
+                func.coalesce(func.sum(BlockchainTransaction.gas_used), 0)
+            )
+            .where(BlockchainTransaction.created_at.isnot(None))
+            .group_by("day")
+            .order_by("day")
+        )
+        daily_timeline: list[BlockchainDailyMetric] = [
+            BlockchainDailyMetric(
+                date=str(row[0]),
+                tx_count=int(row[1]),
+                gas_used=int(row[2])
+            )
+            for row in daily_res.all()
+        ]
+
+        # 6. Top interacting wallets
+        wallets_res = await db.execute(
+            select(
+                BlockchainTransaction.wallet_address,
+                func.count(BlockchainTransaction.transaction_hash),
+                func.coalesce(func.sum(BlockchainTransaction.gas_used), 0)
+            )
+            .where(BlockchainTransaction.wallet_address.isnot(None))
+            .group_by(BlockchainTransaction.wallet_address)
+            .order_by(desc(func.count(BlockchainTransaction.transaction_hash)))
+            .limit(6)
+        )
+        top_wallets: list[BlockchainWalletMetric] = [
+            BlockchainWalletMetric(
+                address=row[0],
+                tx_count=int(row[1]),
+                gas_used=int(row[2])
+            )
+            for row in wallets_res.all()
+        ]
+
+        # 7. Sync tasks analytics
+        task_status_res = await db.execute(
+            select(BlockchainSyncTask.status, func.count(BlockchainSyncTask.id))
+            .group_by(BlockchainSyncTask.status)
+        )
+        task_status_dict = {
+            str(row[0].value if hasattr(row[0], "value") else row[0]): int(row[1])
+            for row in task_status_res.all()
         }
-        return APIResponse(message="Analytics retrieved", data=data)
+
+        task_entity_res = await db.execute(
+            select(BlockchainSyncTask.entity_type, func.count(BlockchainSyncTask.id))
+            .group_by(BlockchainSyncTask.entity_type)
+        )
+        task_entity_dict = {
+            str(row[0].value if hasattr(row[0], "value") else row[0]): int(row[1])
+            for row in task_entity_res.all()
+        }
+
+        sync_tasks_stats = BlockchainSyncTaskStats(
+            total_tasks=sum(task_status_dict.values()),
+            by_status=task_status_dict,
+            by_entity_type=task_entity_dict
+        )
+
+        # 8. Recent transactions
+        recent_res = await db.execute(
+            select(BlockchainTransaction)
+            .order_by(desc(BlockchainTransaction.created_at))
+            .limit(15)
+        )
+        recent_txs: list[BlockchainRecentTx] = []
+        for tx in recent_res.scalars().all():
+            h = tx.transaction_hash
+            short_h = f"{h[:8]}...{h[-6:]}" if len(h) > 16 else h
+            recent_txs.append(BlockchainRecentTx(
+                hash=h,
+                short_hash=short_h,
+                contract_name=tx.contract_name or "Direct Call",
+                gas_used=tx.gas_used or 0,
+                block_number=tx.block_number,
+                status=tx.status,
+                created_at=tx.created_at.isoformat() if tx.created_at else None,
+                explorer_url=f"https://amoy.polygonscan.com/tx/{h}"
+            ))
+
+        # 9. Configured Smart Contracts info
+        contract_configs = [
+            ("PatientRegistry", os.getenv("PATIENT_REGISTRY_ADDRESS") or os.getenv("PATIENTREGISTRY_ADDRESS", "")),
+            ("DoctorRegistry", os.getenv("DOCTOR_REGISTRY_ADDRESS") or os.getenv("DOCTORREGISTRY_ADDRESS", "")),
+            ("PharmacyRegistry", os.getenv("PHARMACY_REGISTRY_ADDRESS") or os.getenv("PHARMACYREGISTRY_ADDRESS", "")),
+            ("MedicalRecordRegistry", os.getenv("RECORD_REGISTRY_ADDRESS") or os.getenv("MEDICALRECORDREGISTRY_ADDRESS", "")),
+            ("PrescriptionRegistry", os.getenv("PRESCRIPTION_REGISTRY_ADDRESS") or os.getenv("PRESCRIPTIONREGISTRY_ADDRESS", "")),
+            ("ConsentManagement", os.getenv("CONSENT_MANAGER_ADDRESS") or os.getenv("CONSENTMANAGEMENT_ADDRESS", "")),
+        ]
+        smart_contracts_list: list[BlockchainSmartContractInfo] = []
+        for c_name, c_addr in contract_configs:
+            match_metric = next((m for m in contract_metrics if c_name.lower() in m.contract_name.lower()), None)
+            c_txs = match_metric.tx_count if match_metric else 0
+            c_gas = match_metric.total_gas_used if match_metric else 0
+            is_cfg = bool(c_addr and len(c_addr) >= 40 and c_addr != "0x0000000000000000000000000000000000000000")
+            smart_contracts_list.append(BlockchainSmartContractInfo(
+                name=c_name,
+                address=c_addr if is_cfg else "Not configured",
+                status="DEPLOYED" if is_cfg else "UNCONFIGURED",
+                tx_count=c_txs,
+                total_gas=c_gas,
+                explorer_url=f"https://amoy.polygonscan.com/address/{c_addr}" if is_cfg else ""
+            ))
+
+        # 10. Live on-chain network data
+        network_stats = BlockchainNetworkStats(
+            name="Polygon Amoy Testnet",
+            chain_id=80002,
+            connected=False,
+            rpc_url=os.getenv("POLYGON_RPC_URL", "https://rpc.ankr.com/polygon_amoy"),
+            latest_block=0,
+            gas_price_gwei=0.0,
+            wallet_address=None,
+            wallet_balance_pol=0.0,
+            wallet_balance_wei=0,
+            explorer_base_url="https://amoy.polygonscan.com"
+        )
+
+        try:
+            from app.blockchain.client import blockchain_client
+            if blockchain_client and blockchain_client.w3:
+                w3 = blockchain_client.w3
+                is_conn = w3.is_connected()
+                network_stats.connected = is_conn
+                if is_conn:
+                    network_stats.chain_id = int(w3.eth.chain_id)
+                    network_stats.latest_block = int(w3.eth.block_number)
+                    gas_wei = int(w3.eth.gas_price)
+                    network_stats.gas_price_gwei = round(gas_wei / 1e9, 2)
+                w_addr = getattr(blockchain_client, "wallet_address", None)
+                if w_addr:
+                    network_stats.wallet_address = w_addr
+                    if is_conn:
+                        b_wei = int(w3.eth.get_balance(w_addr))
+                        network_stats.wallet_balance_wei = b_wei
+                        network_stats.wallet_balance_pol = round(float(w3.from_wei(b_wei, "ether")), 4)
+        except Exception:
+            pass
+
+        analytics_data = BlockchainAnalyticsData(
+            transactions=tx_stats,
+            events=event_stats,
+            total_transactions=total_tx,
+            total_events=total_events,
+            network=network_stats,
+            gas=BlockchainGasStats(
+                total_gas_used=total_gas_used,
+                avg_gas_per_tx=avg_gas_used,
+                min_gas_used=min_gas_used,
+                max_gas_used=max_gas_used,
+                current_gas_price_gwei=network_stats.gas_price_gwei
+            ),
+            contracts=contract_metrics,
+            daily_timeline=daily_timeline,
+            top_wallets=top_wallets,
+            sync_tasks=sync_tasks_stats,
+            smart_contracts=smart_contracts_list,
+            recent_transactions=recent_txs
+        )
+
+        return APIResponse(message="Analytics retrieved", data=analytics_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

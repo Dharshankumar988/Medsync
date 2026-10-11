@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import String, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship, deferred
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base_class import Base
 from app.models.mixins import UUIDMixin, TimestampMixin
 from sqlalchemy.dialects.postgresql import JSONB
@@ -38,8 +38,8 @@ class Pharmacy(Base, UUIDMixin, TimestampMixin):
     blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)
     blockchain_tx_hash: Mapped[str | None] = mapped_column(String(66), nullable=True)
     
-    # Security (deferred to avoid querying missing column when unselected)
-    security_pin_hash: Mapped[str | None] = deferred(mapped_column(String(255), nullable=True))
+    # Security
+    security_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     user = relationship("User", back_populates="pharmacy_profile")
 
