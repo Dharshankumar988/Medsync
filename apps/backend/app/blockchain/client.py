@@ -102,7 +102,7 @@ class BlockchainClient:
         session.mount('https://', adapter)
 
         # Test connectivity with current ssl_verify setting
-        rpc_url = blockchain_settings.BLOCKCHAIN_RPC_URL or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
+        rpc_url = blockchain_settings.BLOCKCHAIN_RPC_URL or "https://polygon-amoy-bor-rpc.publicnode.com"
         try:
             res = session.post(rpc_url, json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
                          verify=ssl_verify, timeout=5)

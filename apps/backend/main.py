@@ -90,10 +90,8 @@ async def lifespan(app: FastAPI):
         from app.database.session import AsyncSessionLocal
         from sqlalchemy import text
         async with AsyncSessionLocal() as session:
-            await session.execute(text("""
-                ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS security_pin_hash VARCHAR(255);
-                ALTER TABLE doctors ADD COLUMN IF NOT EXISTS security_pin_hash VARCHAR(255);
-            """))
+            await session.execute(text("ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS security_pin_hash VARCHAR(255);"))
+            await session.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS security_pin_hash VARCHAR(255);"))
             await session.commit()
             logger.info("Database schema verified: security_pin_hash ensured.")
     except Exception as e:

@@ -23,7 +23,7 @@ def _resolve_rpc_url() -> str:
             url = os.getenv("POLYGON_AMOY_RPC_URL") or os.getenv("NEXT_PUBLIC_POLYGON_RPC_URL") or os.getenv("POLYGON_RPC_URL")
         else:
             url = os.getenv("POLYGON_RPC_URL")
-    return (url or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c").strip()
+    return (url or "https://polygon-amoy-bor-rpc.publicnode.com").strip()
 
 class BlockchainSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -66,10 +66,10 @@ class BlockchainSettings(BaseSettings):
                     self.POLYGON_AMOY_RPC_URL 
                     or os.getenv("NEXT_PUBLIC_POLYGON_RPC_URL") 
                     or self.POLYGON_RPC_URL 
-                    or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
+                    or "https://polygon-amoy-bor-rpc.publicnode.com"
                 )
             else:
-                self.BLOCKCHAIN_RPC_URL = self.POLYGON_RPC_URL or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
+                self.BLOCKCHAIN_RPC_URL = self.POLYGON_RPC_URL or "https://polygon-amoy-bor-rpc.publicnode.com"
 
         import logging
         logger = logging.getLogger("blockchain.config")
