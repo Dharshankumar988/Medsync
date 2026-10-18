@@ -782,9 +782,18 @@ async def verify_hash_or_identifier(
     )
 
 async def _auto_seed_transactions_if_empty(db: AsyncSession):
-    """Seed deployment and operational transactions if the database has no transactions."""
+    """Seed deployment and operational transactions and purge any local mock dummy records."""
     try:
         from app.blockchain.constants import DEPLOYMENT_TRANSACTIONS
+        from sqlalchemy import delete
+
+        # Purge any dummy mock transactions that were recorded during local mock testing
+        await db.execute(
+            delete(BlockchainTransaction).where(
+                (BlockchainTransaction.block_number == 99999) |
+                (BlockchainTransaction.contract_address == "0x0000000000000000000000000000000000000001")
+            )
+        )
         for tx_data in DEPLOYMENT_TRANSACTIONS:
             existing = await db.execute(
                 select(BlockchainTransaction).where(
@@ -808,6 +817,8 @@ async def trigger_chain_transactions_sync(
     """Explicitly trigger live wallet transactions synchronization from Polygon Amoy."""
     from app.blockchain.services.chain_sync import sync_wallet_transactions_from_chain
     try:
+        # Also ensure baseline deployment transactions exist
+        await _auto_seed_transactions_if_empty(db)
         synced = await sync_wallet_transactions_from_chain(db, max_count=50)
     except Exception as e:
         await db.rollback()
@@ -836,27 +847,30 @@ async def get_transactions(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN", "DOCTOR", "PHARMACY"]))
 ):
-    # Auto-sync live wallet transactions from Polygon Amoy if table only has seed data
+    # Ensure legitimate deployment transactions exist and purge dummy mock transactions
     try:
-        total_db_tx = await db.scalar(select(func.count(BlockchainTransaction.transaction_hash)))
-        if (total_db_tx or 0) <= 1:
+        legit_count = await db.scalar(
+            select(func.count(BlockchainTransaction.transaction_hash)).where(
+                (BlockchainTransaction.block_number != 99999) | (BlockchainTransaction.block_number.is_(None)),
+                (BlockchainTransaction.contract_address != "0x0000000000000000000000000000000000000001") | (BlockchainTransaction.contract_address.is_(None))
+            )
+        )
+        if (legit_count or 0) < 5:
+            await _auto_seed_transactions_if_empty(db)
             from app.blockchain.services.chain_sync import sync_wallet_transactions_from_chain
             try:
                 await sync_wallet_transactions_from_chain(db, max_count=50)
-            except Exception as e:
+            except Exception:
                 await db.rollback()
-                import logging
-                logging.getLogger("blockchain.endpoints").warning(f"Live chain auto-sync note: {e}")
-
-            curr_count = await db.scalar(select(func.count(BlockchainTransaction.transaction_hash)))
-            if (curr_count or 0) == 0:
-                await _auto_seed_transactions_if_empty(db)
     except Exception as e:
         await db.rollback()
-        import logging
-        logging.getLogger("blockchain.endpoints").warning(f"Live auto-sync check error: {e}")
+        logger.warning(f"Live auto-sync check error: {e}")
 
-    query = select(BlockchainTransaction)
+    # Query only legitimate transactions (exclude dummy 99999 / 0x000...01 records)
+    query = select(BlockchainTransaction).where(
+        (BlockchainTransaction.block_number != 99999) | (BlockchainTransaction.block_number.is_(None)),
+        (BlockchainTransaction.contract_address != "0x0000000000000000000000000000000000000001") | (BlockchainTransaction.contract_address.is_(None))
+    )
     
     if status and status.upper() != "ALL":
         stat_upper = status.upper()

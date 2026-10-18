@@ -18,8 +18,11 @@ load_dotenv()
 logger = logging.getLogger("blockchain.provider")
 
 _raw = os.getenv("BLOCKCHAIN_MODE", "").strip().lower()
-# Empty / missing / unrecognised → mock.  Only explicit "production"/"real" activates web3.
-RESOLVED_BLOCKCHAIN_MODE = _raw if _raw in ("production", "real", "mock") else "mock"
+# If unset or empty, default to "production" (especially on Render or when Polygon RPC is configured)
+if not _raw:
+    _raw = "production"
+
+RESOLVED_BLOCKCHAIN_MODE = _raw if _raw in ("production", "real", "mock") else "production"
 
 
 def _can_import_web3() -> bool:

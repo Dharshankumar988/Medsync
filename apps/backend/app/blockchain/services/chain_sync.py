@@ -30,8 +30,9 @@ async def sync_wallet_transactions_from_chain(db: AsyncSession, max_count: int =
     
     rpc_url = (
         getattr(blockchain_settings, "BLOCKCHAIN_RPC_URL", None)
-        or "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
+        or "https://polygon-amoy-bor-rpc.publicnode.com"
     )
+    alchemy_url = "https://polygon-amoy.g.alchemy.com/v2/alch__Nw1xD-aIASoR5r0zqb1c"
 
     transfers = []
     current_block = 0
@@ -50,6 +51,7 @@ async def sync_wallet_transactions_from_chain(db: AsyncSession, max_count: int =
 
         # 2. Fetch Alchemy asset transfers in both directions
         try:
+            target_url = alchemy_url if "alchemy.com" in alchemy_url else rpc_url
             for direction in ["fromAddress", "toAddress"]:
                 payload = {
                     "jsonrpc": "2.0",
@@ -66,13 +68,12 @@ async def sync_wallet_transactions_from_chain(db: AsyncSession, max_count: int =
                         "maxCount": hex(max_count)
                     }]
                 }
-                res = await client.post(rpc_url, json=payload)
+                res = await client.post(target_url, json=payload)
                 if res.status_code == 200:
                     data = res.json()
                     transfers.extend(data.get("result", {}).get("transfers", []))
         except Exception as e:
-            logger.error(f"Error querying Alchemy asset transfers: {e}")
-            return 0
+            logger.warning(f"Error querying Alchemy asset transfers: {e}")
 
         hashes = list(dict.fromkeys([t.get("hash") for t in transfers if t.get("hash")]))
         if not hashes:

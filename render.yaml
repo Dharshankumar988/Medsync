@@ -1,0 +1,52 @@
+services:
+  - type: web
+    name: medsync-backend
+    runtime: python
+    rootDir: apps/backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    plan: starter
+    region: oregon
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: BLOCKCHAIN_MODE
+        value: production
+      - key: BLOCKCHAIN_NETWORK
+        value: amoy
+      - key: POLYGON_RPC_URL
+        value: https://polygon-amoy-bor-rpc.publicnode.com
+      - key: BLOCKCHAIN_RPC_URL
+        value: https://polygon-amoy-bor-rpc.publicnode.com
+      - key: NEXT_PUBLIC_POLYGON_RPC_URL
+        value: https://polygon-amoy-bor-rpc.publicnode.com
+      - key: PATIENT_REGISTRY_ADDRESS
+        value: "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3"
+      - key: DOCTOR_REGISTRY_ADDRESS
+        value: "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9"
+      - key: PHARMACY_REGISTRY_ADDRESS
+        value: "0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9"
+      - key: RECORD_REGISTRY_ADDRESS
+        value: "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104"
+      - key: PRESCRIPTION_REGISTRY_ADDRESS
+        value: "0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D"
+      - key: CONSENT_MANAGER_ADDRESS
+        value: "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52"
+      - key: IPFS_GATEWAY
+        value: https://gateway.pinata.cloud/ipfs/
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: BACKEND_PRIVATE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: PINATA_JWT
+        sync: false
