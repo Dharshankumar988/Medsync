@@ -4,5 +4,5 @@ services:
       context: .
       dockerfile: apps/backend/Dockerfile
     environment:
-      - BLOCKCHAIN_MODE=mock
+      - BLOCKCHAIN_MODE=${BLOCKCHAIN_MODE:-production}
       # Face verification now uses local InsightFace (buffalo_l) - no external service needed

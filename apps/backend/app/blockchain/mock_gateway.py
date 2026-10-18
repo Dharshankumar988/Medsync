@@ -43,17 +43,32 @@ class MockBlockchainGateway:
         self, contract_name: str, function_name: str, *args
     ) -> TransactionReceiptResult:
         from app.blockchain.client import blockchain_client
+        from app.blockchain.contracts.loader import contract_loader
         tx_hash = _mock_tx_hash()
         logger.info(
             f"[MOCK] write_contract {contract_name}.{function_name} -> {tx_hash}"
         )
+        # Look up the actual contract address configured for this contract
+        to_address = contract_loader.addresses.get(contract_name)
+        if not to_address:
+            from app.blockchain.config import blockchain_config
+            to_address = blockchain_config.contracts.get(contract_name) or "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3"
+
+        current_block = 50500000
+        if blockchain_client.w3:
+            try:
+                if blockchain_client.w3.is_connected():
+                    current_block = blockchain_client.w3.eth.block_number
+            except Exception:
+                pass
+
         return {
             "transactionHash": tx_hash,
-            "blockNumber": 99999,
+            "blockNumber": current_block,
             "gasUsed": 21000,
             "status": 1,
             "fromAddress": blockchain_client.wallet_address,
-            "toAddress": "0x0000000000000000000000000000000000000001",
+            "toAddress": to_address,
             "logs": [],
         }
 
