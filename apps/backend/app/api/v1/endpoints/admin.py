@@ -20,6 +20,7 @@ from app.models.blockchain import BlockchainTransaction, BlockchainSyncTask, Syn
 import asyncio
 from app.schemas.response import APIResponse
 from app.schemas.session import AuthenticatedPrincipal
+from app.schemas.admin import AdminBlockchainOverview
 from app.services.verification import VerificationService
 from app.core.config import settings
 
@@ -671,7 +672,7 @@ async def get_admin_ai(
     
     return APIResponse(message="AI management data retrieved", data={"analyses": analyses, "models": models})
 
-@router.get("/blockchain", response_model=APIResponse[dict])
+@router.get("/blockchain", response_model=APIResponse[AdminBlockchainOverview])
 async def get_admin_blockchain(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
@@ -776,22 +777,23 @@ async def get_admin_blockchain(
     mismatches_res = await db.execute(mismatches_stmt)
     mismatches = mismatches_res.scalar_one()
 
-    data = {
-        "status": status_text,
-        "nodes": nodes,
-        "latest_block": latest_block,
-        "chain_id": chain_id,
-        "wallet_address": wallet_address,
-        "wallet_balance_eth": wallet_balance_eth,
-        "gas_price_gwei": gas_price_gwei,
-        "network_name": network_name,
-        "rpc_url": rpc_url,
-        "contracts": contracts_detail,
-        "transactions": transactions,
-        "mismatches": mismatches,
-        "explorer_base": "https://amoy.polygonscan.com"
-    }
+    data = AdminBlockchainOverview(
+        status=status_text,
+        nodes=nodes,
+        latest_block=latest_block,
+        chain_id=chain_id,
+        wallet_address=wallet_address,
+        wallet_balance_eth=wallet_balance_eth,
+        gas_price_gwei=gas_price_gwei,
+        network_name=network_name,
+        rpc_url=rpc_url,
+        contracts=contracts_detail,
+        transactions=transactions,
+        mismatches=mismatches,
+        explorer_base="https://amoy.polygonscan.com"
+    )
     return APIResponse(message="Blockchain overview retrieved", data=data)
+
 
 from pydantic import BaseModel
 class AdminDoctorCreate(BaseModel):

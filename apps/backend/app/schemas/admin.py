@@ -96,3 +96,38 @@ class AdminSettingsUpdatePayload(BaseModel):
     portable_tunnel_url: Optional[str] = None
     rag_worker_url: Optional[str] = None
     auto_failover: Optional[bool] = None
+
+class AdminContractDetail(BaseModel):
+    name: str
+    address: str
+    health: str
+    explorer_url: str
+
+    model_config = ConfigDict(use_enum_values=True)
+
+class AdminTxInfo(BaseModel):
+    hash: str
+    from_address: str = Field(alias="from")
+    status: str
+    network: str
+    explorer_url: Optional[str] = None
+
+    model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
+
+class AdminBlockchainOverview(BaseModel):
+    status: str
+    nodes: int
+    latest_block: int
+    chain_id: int
+    wallet_address: str
+    wallet_balance_eth: Optional[float] = None
+    gas_price_gwei: Optional[float] = None
+    network_name: str
+    rpc_url: Optional[str] = None
+    contracts: list[AdminContractDetail] = Field(default_factory=list)
+    transactions: list[AdminTxInfo] = Field(default_factory=list)
+    mismatches: int = 0
+    explorer_base: str = "https://amoy.polygonscan.com"
+
+    model_config = ConfigDict(use_enum_values=True)
+

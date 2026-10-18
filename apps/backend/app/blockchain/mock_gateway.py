@@ -48,11 +48,21 @@ class MockBlockchainGateway:
         logger.info(
             f"[MOCK] write_contract {contract_name}.{function_name} -> {tx_hash}"
         )
-        # Look up the actual contract address configured for this contract
-        to_address = contract_loader.addresses.get(contract_name)
-        if not to_address:
-            from app.blockchain.config import blockchain_config
-            to_address = blockchain_config.contracts.get(contract_name) or "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3"
+        KNOWN_CONTRACT_ADDRESSES = {
+            "ConsentManagement": "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+            "ConsentManager": "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+            "PatientRegistry": "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3",
+            "DoctorRegistry": "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+            "PharmacyRegistry": "0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9",
+            "MedicalRecordRegistry": "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+            "RecordRegistry": "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+            "PrescriptionRegistry": "0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D",
+        }
+        to_address = (
+            contract_loader.addresses.get(contract_name)
+            or KNOWN_CONTRACT_ADDRESSES.get(contract_name)
+            or "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3"
+        )
 
         current_block = 50500000
         if blockchain_client.w3:

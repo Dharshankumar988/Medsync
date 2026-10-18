@@ -8,7 +8,7 @@ from app.schemas.blockchain import (
     BlockchainTransactionResponse, BlockchainSyncTaskResponse, 
     BlockchainAuditLogResponse, PaginatedResponse, TransactionSearchQuery,
     StatusResponse, VerificationResponse, BlockchainVerifyResult, SmartContractSummary,
-    TransactionSyncResponse, BlockchainAnalyticsData, BlockchainContractMetric,
+    SmartContractDetail, TransactionSyncResponse, BlockchainAnalyticsData, BlockchainContractMetric,
     BlockchainDailyMetric, BlockchainWalletMetric, BlockchainRecentTx,
     BlockchainNetworkStats, BlockchainGasStats, BlockchainSyncTaskStats,
     BlockchainSmartContractInfo
@@ -782,16 +782,22 @@ async def verify_hash_or_identifier(
     )
 
 async def _auto_seed_transactions_if_empty(db: AsyncSession):
-    """Seed deployment and operational transactions and purge any local mock dummy records."""
+    """Seed deployment and operational transactions for all 6 contracts and purge any local mock dummy records."""
     try:
         from app.blockchain.constants import DEPLOYMENT_TRANSACTIONS
         from sqlalchemy import delete
 
-        # Purge any dummy mock transactions that were recorded during local mock testing
+        # Purge dummy mock transactions or unrecognized test addresses
         await db.execute(
             delete(BlockchainTransaction).where(
                 (BlockchainTransaction.block_number == 99999) |
-                (BlockchainTransaction.contract_address == "0x0000000000000000000000000000000000000001")
+                (BlockchainTransaction.contract_address == "0x0000000000000000000000000000000000000001") |
+                (BlockchainTransaction.contract_address.in_([
+                    "0x83bf7a9e1e14bb1f876a5994c65179705b90faa5",
+                    "0x8aced4e33d6570735a326aa17de49ce8b6b8e84f",
+                    "0x582a8781c310dbdf03bd4c3dff5f4cbdc48de1f3",
+                    "0xba3a98a1be6e395908f1a84b5a473941be55fa17"
+                ]))
             )
         )
         for tx_data in DEPLOYMENT_TRANSACTIONS:
@@ -800,8 +806,12 @@ async def _auto_seed_transactions_if_empty(db: AsyncSession):
                     BlockchainTransaction.transaction_hash == tx_data["transaction_hash"]
                 )
             )
-            if not existing.scalar_one_or_none():
+            existing_tx = existing.scalar_one_or_none()
+            if not existing_tx:
                 db.add(BlockchainTransaction(**tx_data))
+            else:
+                for k, v in tx_data.items():
+                    setattr(existing_tx, k, v)
         await db.commit()
     except Exception as e:
         await db.rollback()
@@ -855,7 +865,7 @@ async def get_transactions(
                 (BlockchainTransaction.contract_address != "0x0000000000000000000000000000000000000001") | (BlockchainTransaction.contract_address.is_(None))
             )
         )
-        if (legit_count or 0) < 5:
+        if (legit_count or 0) < 6:
             await _auto_seed_transactions_if_empty(db)
             from app.blockchain.services.chain_sync import sync_wallet_transactions_from_chain
             try:
@@ -881,7 +891,12 @@ async def get_transactions(
     if network and network != "ALL":
         query = query.where(BlockchainTransaction.network == network)
     if contract and contract != "ALL":
-        query = query.where(BlockchainTransaction.contract_name == contract)
+        alias_group = [contract]
+        if contract in ("ConsentManagement", "ConsentManager"):
+            alias_group = ["ConsentManagement", "ConsentManager"]
+        elif contract in ("MedicalRecordRegistry", "RecordRegistry"):
+            alias_group = ["MedicalRecordRegistry", "RecordRegistry"]
+        query = query.where(BlockchainTransaction.contract_name.in_(alias_group))
     if search:
         clean_search = search.strip()
         if clean_search:
@@ -1127,7 +1142,96 @@ async def get_all_contracts(
             
     return APIResponse(message="Contracts retrieved", data=contracts)
 
-@router.get("/contracts/{name}", response_model=APIResponse)
+KNOWN_CONTRACT_ABIS = {
+    "ConsentManagement": {
+        "events": [
+            "ConsentGranted(address indexed patient, address indexed authorizedParty, bytes32 indexed recordHash, uint256 expiresAt)",
+            "ConsentRevoked(bytes32 indexed consentId, address indexed patient, address indexed authorizedParty)"
+        ],
+        "functions": [
+            "grantConsent(address authorizedParty, bytes32 recordHash, uint256 expiresAt)",
+            "revokeConsent(bytes32 consentId)",
+            "hasConsent(address patient, address authorizedParty, bytes32 recordHash) view returns (bool)",
+            "getConsent(bytes32 consentId) view returns (address, address, bytes32, uint256, bool)"
+        ]
+    },
+    "PatientRegistry": {
+        "events": [
+            "PatientRegistered(bytes32 indexed patientHash, address indexed wallet, uint256 registeredAt)",
+            "PatientVerified(bytes32 indexed patientHash, uint256 verifiedAt)",
+            "PatientDeactivated(bytes32 indexed patientHash, uint256 deactivatedAt)",
+            "WalletUpdated(bytes32 indexed patientHash, address indexed oldWallet, address indexed newWallet)"
+        ],
+        "functions": [
+            "registerPatient(bytes32 patientHash, address wallet)",
+            "verifyPatient(bytes32 patientHash)",
+            "updateWallet(bytes32 patientHash, address newWallet)",
+            "deactivatePatient(bytes32 patientHash)",
+            "isPatientVerified(bytes32 patientHash) view returns (bool)",
+            "getPatient(bytes32 patientHash) view returns (address, uint256, bool, bool)"
+        ]
+    },
+    "DoctorRegistry": {
+        "events": [
+            "DoctorRegistered(bytes32 indexed doctorHash, bytes32 licenseHash, bytes32 hospitalHash, address indexed wallet)",
+            "DoctorVerified(bytes32 indexed doctorHash, uint256 verifiedAt)",
+            "DoctorSuspended(bytes32 indexed doctorHash, uint256 suspendedAt)"
+        ],
+        "functions": [
+            "registerDoctor(bytes32 doctorHash, bytes32 licenseHash, bytes32 hospitalHash, address wallet)",
+            "verifyDoctor(bytes32 doctorHash)",
+            "suspendDoctor(bytes32 doctorHash)",
+            "isDoctorVerified(bytes32 doctorHash) view returns (bool)",
+            "getDoctor(bytes32 doctorHash) view returns (bytes32, bytes32, address, uint256, bool, bool)"
+        ]
+    },
+    "PharmacyRegistry": {
+        "events": [
+            "PharmacyRegistered(bytes32 indexed pharmacyHash, bytes32 licenseHash, address indexed owner)",
+            "PharmacyVerified(bytes32 indexed pharmacyHash, uint256 verifiedAt)",
+            "PharmacySuspended(bytes32 indexed pharmacyHash, uint256 suspendedAt)"
+        ],
+        "functions": [
+            "registerPharmacy(bytes32 pharmacyHash, bytes32 licenseHash, address owner)",
+            "verifyPharmacy(bytes32 pharmacyHash)",
+            "suspendPharmacy(bytes32 pharmacyHash)",
+            "isPharmacyVerified(bytes32 pharmacyHash) view returns (bool)",
+            "getPharmacy(bytes32 pharmacyHash) view returns (bytes32, address, uint256, bool, bool)"
+        ]
+    },
+    "MedicalRecordRegistry": {
+        "events": [
+            "RecordRegistered(bytes32 indexed recordHash, bytes32 indexed patientHash, uint256 registeredAt)",
+            "RecordVerified(bytes32 indexed recordHash, uint256 verifiedAt)",
+            "AccessGranted(bytes32 indexed recordHash, bytes32 indexed doctorHash, uint256 grantedAt)",
+            "AccessRevoked(bytes32 indexed recordHash, bytes32 indexed doctorHash, uint256 revokedAt)"
+        ],
+        "functions": [
+            "registerRecord(bytes32 recordHash, bytes32 patientHash)",
+            "verifyRecord(bytes32 recordHash)",
+            "grantAccess(bytes32 recordHash, bytes32 doctorHash)",
+            "revokeAccess(bytes32 recordHash, bytes32 doctorHash)",
+            "hasAccess(bytes32 recordHash, bytes32 doctorHash) view returns (bool)",
+            "getRecord(bytes32 recordHash) view returns (bytes32, uint256, bool)"
+        ]
+    },
+    "PrescriptionRegistry": {
+        "events": [
+            "PrescriptionCreated(bytes32 indexed prescriptionHash, bytes32 indexed patientHash, bytes32 indexed doctorHash, uint256 createdAt)",
+            "PrescriptionVerified(bytes32 indexed prescriptionHash, uint256 verifiedAt)",
+            "PrescriptionRevoked(bytes32 indexed prescriptionHash, uint256 revokedAt)"
+        ],
+        "functions": [
+            "createPrescription(bytes32 prescriptionHash, bytes32 patientHash, bytes32 doctorHash)",
+            "verifyPrescription(bytes32 prescriptionHash)",
+            "revokePrescription(bytes32 prescriptionHash)",
+            "isPrescriptionValid(bytes32 prescriptionHash) view returns (bool)",
+            "getPrescription(bytes32 prescriptionHash) view returns (bytes32, bytes32, uint256, bool, bool)"
+        ]
+    }
+}
+
+@router.get("/contracts/{name}", response_model=APIResponse[SmartContractDetail])
 @limiter.limit("20/minute")
 async def get_contract_details(
     request: Request,
@@ -1141,6 +1245,12 @@ async def get_contract_details(
     import json
     from pathlib import Path
     
+    alias_map = {
+        "ConsentManager": "ConsentManagement",
+        "RecordRegistry": "MedicalRecordRegistry",
+    }
+    canonical_name = alias_map.get(name, name)
+
     # Map contract names to env var keys
     env_key_map = {
         "ConsentManagement": ["CONSENT_MANAGER_ADDRESS", "CONSENTMANAGEMENT_ADDRESS"],
@@ -1151,19 +1261,19 @@ async def get_contract_details(
         "PrescriptionRegistry": ["PRESCRIPTION_REGISTRY_ADDRESS", "PRESCRIPTIONREGISTRY_ADDRESS"],
     }
     
-    if name not in env_key_map and name not in DEFAULT_AMOY_CONTRACTS:
+    if canonical_name not in env_key_map and canonical_name not in DEFAULT_AMOY_CONTRACTS:
         raise HTTPException(status_code=404, detail="Contract not found")
     
     # Get address from env vars or defaults
     address = None
-    if name in env_key_map:
-        for key in env_key_map[name]:
+    if canonical_name in env_key_map:
+        for key in env_key_map[canonical_name]:
             val = os.getenv(key)
             if val and val != "0x..." and val != "0x0000000000000000000000000000000000000000":
                 address = val
                 break
     if not address:
-        address = DEFAULT_AMOY_CONTRACTS.get(name)
+        address = DEFAULT_AMOY_CONTRACTS.get(canonical_name)
     
     if not address:
         raise HTTPException(status_code=404, detail="Contract address not configured")
@@ -1173,24 +1283,39 @@ async def get_contract_details(
     abi_functions = []
     try:
         project_root = Path(__file__).resolve().parent.parent.parent.parent.parent.parent.parent
-        abi_path = project_root / "apps" / "blockchain" / "abis" / f"{name}.json"
+        abi_path = project_root / "apps" / "blockchain" / "abis" / f"{canonical_name}.json"
         
         if not abi_path.exists():
-            docker_abi_path = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "abis" / f"{name}.json"
+            docker_abi_path = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "abis" / f"{canonical_name}.json"
             if docker_abi_path.exists():
                 abi_path = docker_abi_path
         
         if abi_path.exists():
             with open(abi_path, 'r') as f:
-                abi_data = json.load(f)
-                if isinstance(abi_data, list):
-                    abi_events = [e.get("name") for e in abi_data if e.get("type") == "event"]
-                    abi_functions = [e.get("name") for e in abi_data if e.get("type") == "function"]
-                elif isinstance(abi_data, dict) and "abi" in abi_data:
-                    abi_events = [e.get("name") for e in abi_data["abi"] if e.get("type") == "event"]
-                    abi_functions = [e.get("name") for e in abi_data["abi"] if e.get("type") == "function"]
+                raw_data = json.load(f)
+                abi_items = raw_data.get("abi", raw_data) if isinstance(raw_data, dict) else raw_data
+                if isinstance(abi_items, list):
+                    for item in abi_items:
+                        if not isinstance(item, dict):
+                            continue
+                        item_type = item.get("type")
+                        item_name = item.get("name")
+                        if not item_name:
+                            continue
+                        inputs_str = ", ".join(f"{inp.get('type', '')} {inp.get('name', '')}".strip() for inp in item.get("inputs", []))
+                        sig = f"{item_name}({inputs_str})"
+                        if item_type == "event":
+                            abi_events.append(sig)
+                        elif item_type == "function":
+                            abi_functions.append(sig)
     except Exception as e:
-        logger.warning(f"Failed to load ABI for {name}: {e}")
+        logger.warning(f"Failed to load ABI for {canonical_name}: {e}")
+
+    # Fallback to rich known ABI signatures if none parsed
+    if not abi_events and canonical_name in KNOWN_CONTRACT_ABIS:
+        abi_events = KNOWN_CONTRACT_ABIS[canonical_name]["events"]
+    if not abi_functions and canonical_name in KNOWN_CONTRACT_ABIS:
+        abi_functions = KNOWN_CONTRACT_ABIS[canonical_name]["functions"]
     
     # Check deployment status and on-chain balance via Web3
     deployment_status = "CONFIGURED"
@@ -1216,16 +1341,22 @@ async def get_contract_details(
     recent_txs = []
     try:
         from sqlalchemy import or_
+        alias_group = [canonical_name, name]
+        if canonical_name in ("ConsentManagement", "ConsentManager"):
+            alias_group = ["ConsentManagement", "ConsentManager"]
+        elif canonical_name in ("MedicalRecordRegistry", "RecordRegistry"):
+            alias_group = ["MedicalRecordRegistry", "RecordRegistry"]
+
         tx_stmt = select(BlockchainTransaction).where(
             or_(
-                BlockchainTransaction.contract_name == name,
+                BlockchainTransaction.contract_name.in_(alias_group),
                 func.lower(BlockchainTransaction.contract_address) == address.lower()
             )
         ).order_by(desc(BlockchainTransaction.created_at))
         
         count_stmt = select(func.count(BlockchainTransaction.transaction_hash)).where(
             or_(
-                BlockchainTransaction.contract_name == name,
+                BlockchainTransaction.contract_name.in_(alias_group),
                 func.lower(BlockchainTransaction.contract_address) == address.lower()
             )
         )
@@ -1236,25 +1367,27 @@ async def get_contract_details(
             recent_txs.append({
                 "hash": tx.transaction_hash,
                 "block": tx.block_number,
-                "time": tx.created_at.isoformat() if tx.created_at else None,
+                "time": str(int(tx.created_at.timestamp())) if tx.created_at else None,
                 "from": tx.wallet_address or blockchain_client.wallet_address,
                 "to": tx.contract_address or address
             })
     except Exception as db_err:
         logger.warning(f"Failed to query local contract transactions: {db_err}")
 
-    data = {
-        "name": name,
-        "address": address,
-        "events": abi_events,
-        "functions": abi_functions,
-        "health": deployment_status,
-        "explorer_url": address_url(address),
-        "balance": balance,
-        "transaction_count": tx_count,
-        "recent_transactions": recent_txs
-    }
+    data = SmartContractDetail(
+        name=canonical_name,
+        address=address,
+        version="1.0.0",
+        health=deployment_status,
+        explorer_url=address_url(address),
+        balance=balance,
+        transaction_count=tx_count,
+        events=abi_events,
+        functions=abi_functions,
+        recent_transactions=recent_txs
+    )
     return APIResponse(message="Contract details retrieved", data=data)
+
 
 @router.get("/network", response_model=APIResponse)
 @limiter.limit("20/minute")

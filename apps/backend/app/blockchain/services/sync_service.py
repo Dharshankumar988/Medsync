@@ -489,7 +489,21 @@ class BlockchainSyncService:
         from app.blockchain.contracts.loader import contract_loader
         
         contract_name = contract_called or f"{task.entity_type.value.capitalize()}Registry"
-        contract_address = receipt.get("toAddress") or contract_loader.addresses.get(contract_name)
+        FALLBACK_CONTRACTS = {
+            "PatientRegistry": "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3",
+            "DoctorRegistry": "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+            "PharmacyRegistry": "0x50dc448bf7260f736A0A3a10151Ccb1a495d3BE9",
+            "MedicalRecordRegistry": "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+            "RecordRegistry": "0xfC15AA7EF7759dAEF6C9d3dfB6EEc30DC4783104",
+            "PrescriptionRegistry": "0x94013b71F9A3eEbCdbcD11fE460E8E9253916A6D",
+            "ConsentManagement": "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+            "ConsentManager": "0x755F2DBB9Caaa78Eac77fF3115F92984BAc37e52",
+        }
+        raw_to = receipt.get("toAddress")
+        if not raw_to or raw_to == "0x0000000000000000000000000000000000000001" or raw_to.replace("0", "").lower() == "x":
+            contract_address = contract_loader.addresses.get(contract_name) or FALLBACK_CONTRACTS.get(contract_name, "0x9Dcd620f006555ffFA072d2280ef47506C5Da2A3")
+        else:
+            contract_address = raw_to
         gas_price_wei = receipt.get("effectiveGasPrice") or 35000000000
 
         # Save Transaction Metadata

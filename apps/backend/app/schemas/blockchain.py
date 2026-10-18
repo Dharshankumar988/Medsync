@@ -122,6 +122,21 @@ class SmartContractSummary(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
+class SmartContractDetail(BaseModel):
+    name: str
+    address: str
+    version: str = "1.0.0"
+    health: str = "DEPLOYED"
+    explorer_url: str
+    balance: str = "0.0000 POL"
+    transaction_count: int = 0
+    events: list[str] = []
+    functions: list[str] = []
+    recent_transactions: list[dict[str, Any]] = []
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
 class TransactionSyncResponse(BaseModel):
     synced_count: int
     message: str
