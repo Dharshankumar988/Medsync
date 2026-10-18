@@ -41,9 +41,7 @@ function PatientResetPasswordForm() {
   // 1. Verify token on page load (Strict 5-minute timeout check)
   useEffect(() => {
     if (!token) {
-      setIsExpiredOrNotFound(true);
-      setExpiryErrorMessage("404 - Password reset token was not provided or link is malformed.");
-      setIsVerifyingToken(false);
+      router.push(`/forgot-password${emailParam ? `?email=${encodeURIComponent(emailParam)}` : ""}`);
       return;
     }
 

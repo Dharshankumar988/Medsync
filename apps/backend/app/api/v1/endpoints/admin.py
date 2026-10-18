@@ -335,7 +335,9 @@ class AdminCreate(BaseModel):
 
 from app.models.user import UserStatus
 
-@router.post("/admins", response_model=APIResponse[dict])
+from app.schemas.auth import AdminCreateResponseData
+
+@router.post("/admins", response_model=APIResponse[AdminCreateResponseData])
 async def create_admin(
     payload: AdminCreate,
     db: AsyncSession = Depends(get_db),
@@ -408,7 +410,10 @@ async def create_admin(
         db.add(new_user)
         await db.commit()
 
-        return APIResponse(message="Admin created successfully", data={"email": clean_email, "id": str(user_id)})
+        return APIResponse(
+            message="Admin created successfully",
+            data=AdminCreateResponseData(id=str(user_id), email=clean_email)
+        )
     except HTTPException:
         await db.rollback()
         raise

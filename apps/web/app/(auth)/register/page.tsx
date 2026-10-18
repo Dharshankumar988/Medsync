@@ -220,6 +220,11 @@ export default function RegisterPage() {
         return;
       }
 
+      if (role === "DOCTOR" || role === "PHARMACY") {
+        router.push(`/login?registered=true&pending_approval=true&role=${encodeURIComponent(role)}`);
+        return;
+      }
+
       if (response.data?.needsEmailVerification) {
         router.push("/login?registered=true&verification=true");
         return;

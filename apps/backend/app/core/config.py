@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     SMTP_SSL: bool = False
     FRONTEND_URL: str = "http://localhost:3000"
     RESET_TOKEN_EXPIRE_MINUTES: int = 5  # Strict 5-minute timeout for Patient password reset
+    OTP_EXPIRE_MINUTES: int = 5  # Strict 5-minute timeout for Patient OTP codes
+    OTP_RATE_LIMIT_PER_10_MIN: int = 5  # Max OTP requests per email in 10 minutes
 
     @model_validator(mode="after")
     def set_supabase_keys(self):

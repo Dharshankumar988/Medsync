@@ -34,6 +34,7 @@ from app.models.doctor_collaboration import (
     DoctorReferral,
     ReferralStatus,
 )
+from app.models.otp import OTPVerification
 
 __all__ = [
     "Base",
@@ -92,4 +93,5 @@ __all__ = [
     "RecordRequestStatus",
     "DoctorReferral",
     "ReferralStatus",
+    "OTPVerification",
 ]

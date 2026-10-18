@@ -67,3 +67,57 @@ class ForceResetResponseData(BaseModel):
 class SyncUserResponseData(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     id: str
+
+class SendOTPRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    email: EmailStr
+    purpose: str = "EMAIL_VERIFY"  # "EMAIL_VERIFY" or "PASSWORD_RESET"
+
+class SendOTPResponseData(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    email: str
+    purpose: str
+    expires_in_seconds: int
+    message: str
+    preview_code: Optional[str] = None
+
+class VerifyOTPRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    email: EmailStr
+    otp_code: str
+    purpose: str = "EMAIL_VERIFY"
+
+class VerifyOTPResponseData(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    verified: bool
+    email: str
+    message: str
+    user_id: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+
+class ResetPasswordWithOTPRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    email: EmailStr
+    otp_code: str
+    new_password: str
+    confirm_password: str
+
+class LoginGuardRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    email: EmailStr
+
+class LoginGuardResponseData(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    allowed: bool
+    email: str
+    role: str
+    status: str
+    is_verified: bool
+    message: str
+
+class AdminCreateResponseData(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    id: str
+    email: str
+

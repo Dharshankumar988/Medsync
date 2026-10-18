@@ -69,16 +69,9 @@ export async function POST(req: NextRequest) {
     }
 
     const userRole = String(dbUser.role || '').toUpperCase();
-    if (userRole === 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Password reset is not permitted for Administrator accounts.' },
-        { status: 403 }
-      );
-    }
-
     if (userRole === 'PATIENT') {
       return NextResponse.json(
-        { error: 'Patient accounts must use the verified 5-minute email reset link. Direct reset is disallowed.' },
+        { error: 'Patient accounts must use the verified 5-minute email OTP code. Direct reset is disallowed.' },
         { status: 403 }
       );
     }

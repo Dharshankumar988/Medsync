@@ -117,9 +117,9 @@ function ProviderResetPasswordForm() {
         <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center mb-3 text-indigo-600 dark:text-indigo-400">
           <Stethoscope className="w-7 h-7" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">Provider Password Reset</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Staff & Provider Password Reset</h1>
         <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-          Direct reset portal for registered Doctors and Pharmacies. Always accessible for healthcare staff.
+          Direct reset portal for registered Doctors, Pharmacies, and Administrators. Instant access recovery.
         </p>
       </div>
 

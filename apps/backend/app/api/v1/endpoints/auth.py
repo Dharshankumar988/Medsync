@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.dependencies.db import get_db
 from app.schemas.response import APIResponse
 from app.schemas.user import UserSyncRequest
@@ -33,11 +33,22 @@ from app.schemas.auth import (
     AdminRegisterResponseData,
     ForceResetResponseData,
     SyncUserResponseData,
+    SendOTPRequest,
+    SendOTPResponseData,
+    VerifyOTPRequest,
+    VerifyOTPResponseData,
+    ResetPasswordWithOTPRequest,
+    LoginGuardRequest,
+    LoginGuardResponseData,
 )
 from app.utils.reset_token import (
     create_patient_reset_token,
     verify_patient_reset_token,
     consume_patient_reset_token,
+)
+from app.utils.otp import (
+    create_and_store_otp,
+    verify_and_consume_otp,
 )
 from app.services.email_service import email_service
 from app.core.config import settings
@@ -88,13 +99,12 @@ async def force_reset_password(payload: ForceResetRequest, db: AsyncSession = De
 async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     """
     Unified forgot password entry point.
-    - Admin: Password reset strictly forbidden.
-    - Doctor / Pharmacy: Redirects directly to the provider reset password page (always up).
-    - Patient: Dispatches a cryptographically signed reset link via Python SMTP, valid for 5 minutes only.
+    - Admin, Doctor, Pharmacy, Hospital: Direct redirect to instant password reset portal.
+    - Patient: Dispatches a 6-digit verification OTP code via Brevo SMTP (5-minute expiry).
     """
     target_email = payload.email.strip().lower()
     
-    result = await db.execute(select(User).where(User.email == target_email))
+    result = await db.execute(select(User).where(func.lower(User.email) == target_email))
     user = result.scalar_one_or_none()
     
     if not user:
@@ -103,70 +113,44 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
             detail="No account registered with this email address."
         )
         
-    # 1. Admin Role -> Denied
-    if user.role == UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Password reset is not permitted for Administrator accounts. Please contact system security."
-        )
-        
-    # 2. Doctor or Pharmacy Role -> Direct redirect to provider reset page (always up)
-    if user.role in [UserRole.DOCTOR, UserRole.PHARMACY, UserRole.HOSPITAL]:
+    # 1. Admin, Doctor, Pharmacy, Hospital -> Direct instant password reset
+    if user.role in [UserRole.ADMIN, UserRole.DOCTOR, UserRole.PHARMACY, UserRole.HOSPITAL]:
         redirect_url = f"/provider-reset-password?email={target_email}"
+        role_label = user.role.value.capitalize()
         return APIResponse(
-            message=f"{user.role.value.capitalize()} redirecting to provider password reset",
+            message=f"{role_label} redirecting to instant password reset",
             data=ForgotPasswordResponseData(
                 action="REDIRECT",
                 role=user.role.value,
                 redirect_url=redirect_url,
                 email=target_email,
-                message=f"Redirecting {user.role.value.capitalize()} to instant password reset portal."
+                message=f"Redirecting {role_label} to instant password reset portal."
             )
         )
         
-    # 3. Patient Role -> Send 5-minute cryptographic reset link via Python SMTP
+    # 2. Patient Role -> Send 6-digit OTP code via Brevo SMTP (valid for 5 minutes)
     if user.role == UserRole.PATIENT:
-        token = create_patient_reset_token(target_email, expire_minutes=settings.RESET_TOKEN_EXPIRE_MINUTES)
-        
         patient_stmt = select(Patient).where(Patient.user_id == user.id)
         pat_res = await db.execute(patient_stmt)
         patient = pat_res.scalar_one_or_none()
         patient_name = patient.full_name if (patient and patient.full_name) else "Patient"
-        
-        frontend_url = settings.FRONTEND_URL.rstrip('/')
-        reset_link = f"{frontend_url}/patient/reset-password?token={token}&email={target_email}"
 
-        dummy_domains = ("@medsync.com", "@example.com", "@test.com", "@dummy.com", "@demo.com", "@local.dev")
-        is_dummy = any(target_email.endswith(dom) for dom in dummy_domains) or target_email.startswith(("dummy", "test-patient", "demo-patient"))
-
-        if is_dummy:
-            return APIResponse(
-                message="This is a demo/dummy patient account. Password reset emails can only be delivered to actual registered email addresses.",
-                data=ForgotPasswordResponseData(
-                    action="DUMMY_ACCOUNT",
-                    role="PATIENT",
-                    redirect_url=None,
-                    email=target_email,
-                    message="This is a demo/dummy patient account. Password reset emails can only be delivered to actual registered email addresses.",
-                    preview_url=reset_link
-                )
-            )
-        
-        email_result = email_service.send_patient_password_reset_email(
+        otp_code, expires_in_seconds = await create_and_store_otp(db, target_email, "PASSWORD_RESET")
+        email_result = email_service.send_patient_reset_otp_email(
             to_email=target_email,
             patient_name=patient_name,
-            reset_link=reset_link
+            otp_code=otp_code
         )
         
         return APIResponse(
-            message="Password reset link sent to your registered email.",
+            message="A 6-digit verification code valid for 5 minutes has been sent to your registered email.",
             data=ForgotPasswordResponseData(
                 action="EMAIL_SENT",
                 role="PATIENT",
                 redirect_url=None,
                 email=target_email,
-                message="A one-time reset link valid for 5 minutes has been sent to your email.",
-                preview_url=email_result.get("preview_link")
+                message="A 6-digit verification code valid for 5 minutes has been sent to your email.",
+                preview_url=otp_code if email_result.get("method") == "preview_mode" else None
             )
         )
         
@@ -252,9 +236,9 @@ async def patient_reset_password(payload: PatientResetPasswordRequest, db: Async
 @router.post("/provider-reset-password", response_model=APIResponse[ResetPasswordSuccessResponseData])
 async def provider_reset_password(payload: ProviderResetPasswordRequest, db: AsyncSession = Depends(get_db)):
     """
-    Resets the password for Doctor and Pharmacy accounts.
-    Always up, direct reset without token requirement.
-    Strictly forbids Admin and Patient accounts.
+    Resets the password for Doctor, Pharmacy, Hospital, and Administrator accounts.
+    Direct reset without requiring email OTP verification.
+    Strictly forbids Patient accounts (patients must use OTP).
     """
     target_email = payload.email.strip().lower()
     if len(payload.new_password) < 6:
@@ -262,24 +246,21 @@ async def provider_reset_password(payload: ProviderResetPasswordRequest, db: Asy
     if payload.confirm_password and payload.new_password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="Passwords do not match.")
         
-    user_res = await db.execute(select(User).where(User.email == target_email))
+    user_res = await db.execute(select(User).where(func.lower(User.email) == target_email))
     user = user_res.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="No provider account found with this email.")
-        
-    if user.role == UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Password reset is not permitted for Administrator accounts.")
+        raise HTTPException(status_code=404, detail="No account found with this email.")
         
     if user.role == UserRole.PATIENT:
         raise HTTPException(
             status_code=403,
-            detail="Patient accounts must use the verified 5-minute email reset link. Direct provider reset is disallowed."
+            detail="Patient accounts must use the verified 5-minute email OTP code. Direct provider reset is disallowed."
         )
         
     from sqlalchemy import text
     try:
         result = await db.execute(
-            text("UPDATE auth.users SET encrypted_password = crypt(:pwd, gen_salt('bf')) WHERE email = :email"),
+            text("UPDATE auth.users SET encrypted_password = crypt(:pwd, gen_salt('bf')) WHERE lower(email) = :email"),
             {"pwd": payload.new_password, "email": target_email}
         )
         await db.commit()
@@ -316,12 +297,22 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         if payload.role == UserRole.ADMIN:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin creation is not allowed publicly.")
 
-        # Determine status (Patients are active and verified, others pending verification)
-        is_patient = payload.role == UserRole.PATIENT
-        
-        # Override: allow everyone, don't bother with manual verification
-        new_status = UserStatus.ACTIVE
-        is_verified = True
+        # Determine status and verification per role lifecycle contract:
+        # - Patient: PENDING until email OTP is verified
+        # - Doctor / Pharmacy: PENDING until administrator review and approval
+        # - Admin: ACTIVE and pre-verified immediately
+        if payload.role == UserRole.PATIENT:
+            new_status = UserStatus.PENDING
+            is_verified = False
+        elif payload.role in [UserRole.DOCTOR, UserRole.PHARMACY, UserRole.HOSPITAL]:
+            new_status = UserStatus.PENDING
+            is_verified = False
+        elif payload.role == UserRole.ADMIN:
+            new_status = UserStatus.ACTIVE
+            is_verified = True
+        else:
+            new_status = UserStatus.PENDING
+            is_verified = False
 
 
         # Determine default avatar based on role and gender
@@ -563,3 +554,286 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         logging.getLogger("medsync.auth").error(f"Failed to sync user: {e}", exc_info=True)
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Database synchronization failed: {str(e)}")
+
+
+@router.post("/login-guard", response_model=APIResponse[LoginGuardResponseData])
+async def check_login_guard(payload: LoginGuardRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Enforces role-based verification guards upon login:
+    - Admin: Allowed immediately (pre-verified).
+    - Patient: Strictly blocked if unverified (403 EMAIL_NOT_VERIFIED).
+    - Doctor & Pharmacy: Blocked with 403 PENDING_ADMIN_APPROVAL until reviewed and approved by admin.
+    """
+    clean_email = payload.email.strip().lower()
+    user_res = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+    user = user_res.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No user found with this email.")
+
+    # 1. Admin Role -> Pre-verified, allowed immediately
+    if user.role == UserRole.ADMIN:
+        return APIResponse(
+            message="Admin authentication verified.",
+            data=LoginGuardResponseData(
+                allowed=True,
+                email=clean_email,
+                role=user.role.value,
+                status=user.status.value,
+                is_verified=user.is_verified,
+                message="Admin authentication approved."
+            )
+        )
+
+    # 2. Suspended check across all roles
+    if user.status == UserStatus.SUSPENDED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ACCOUNT_SUSPENDED: Your account has been suspended. Please contact administrator support."
+        )
+
+    # 3. Patient Role -> Strictly blocked if unverified
+    if user.role == UserRole.PATIENT:
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="EMAIL_NOT_VERIFIED: Your email is not verified yet. Please enter the 6-digit OTP code sent to your email to verify and activate your account."
+            )
+        return APIResponse(
+            message="Patient login verified.",
+            data=LoginGuardResponseData(
+                allowed=True,
+                email=clean_email,
+                role=user.role.value,
+                status=user.status.value,
+                is_verified=user.is_verified,
+                message="Patient verified and active."
+            )
+        )
+
+    # 4. Doctor, Pharmacy, Hospital -> Blocked until approved by administrator
+    if user.role in [UserRole.DOCTOR, UserRole.PHARMACY, UserRole.HOSPITAL]:
+        if user.status != UserStatus.ACTIVE or not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="PENDING_ADMIN_APPROVAL: Awaiting administrator verification. Your application has been registered and is pending administrator review and approval."
+            )
+        return APIResponse(
+            message="Provider login verified.",
+            data=LoginGuardResponseData(
+                allowed=True,
+                email=clean_email,
+                role=user.role.value,
+                status=user.status.value,
+                is_verified=user.is_verified,
+                message="Provider authorized and active."
+            )
+        )
+
+    return APIResponse(
+        message="Login allowed.",
+        data=LoginGuardResponseData(
+            allowed=True,
+            email=clean_email,
+            role=user.role.value,
+            status=user.status.value,
+            is_verified=user.is_verified,
+            message="Account verified."
+        )
+    )
+
+
+@router.post("/send-verification-otp", response_model=APIResponse[SendOTPResponseData])
+async def send_verification_otp(payload: SendOTPRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Sends a 6-digit registration verification OTP via Brevo to a Patient.
+    Valid for 5 minutes with strict rate limiting.
+    """
+    target_email = payload.email.strip().lower()
+    user_res = await db.execute(select(User).where(func.lower(User.email) == target_email))
+    user = user_res.scalar_one_or_none()
+
+    patient_name = "Patient"
+    if user:
+        if user.role != UserRole.PATIENT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email OTP verification is exclusively for Patient accounts."
+            )
+        if user.is_verified:
+            return APIResponse(
+                message="Account is already verified.",
+                data=SendOTPResponseData(
+                    email=target_email,
+                    purpose="EMAIL_VERIFY",
+                    expires_in_seconds=0,
+                    message="Your email is already verified. You can log in directly."
+                )
+            )
+        pat_res = await db.execute(select(Patient).where(Patient.user_id == user.id))
+        pat = pat_res.scalar_one_or_none()
+        if pat and pat.full_name:
+            patient_name = pat.full_name
+
+    otp_code, expires_in_seconds = await create_and_store_otp(db, target_email, "EMAIL_VERIFY")
+    email_res = email_service.send_patient_verification_otp_email(
+        to_email=target_email,
+        patient_name=patient_name,
+        otp_code=otp_code
+    )
+
+    return APIResponse(
+        message=f"A 6-digit verification code has been sent to {target_email}.",
+        data=SendOTPResponseData(
+            email=target_email,
+            purpose="EMAIL_VERIFY",
+            expires_in_seconds=expires_in_seconds,
+            message="A 6-digit verification code valid for 5 minutes has been sent to your email.",
+            preview_code=otp_code if email_res.get("method") == "preview_mode" else None
+        )
+    )
+
+
+@router.post("/verify-email-otp", response_model=APIResponse[VerifyOTPResponseData])
+async def verify_email_otp(payload: VerifyOTPRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Verifies the 6-digit registration OTP code for a Patient.
+    Upon successful verification, activates the account and marks email as verified.
+    """
+    target_email = payload.email.strip().lower()
+    success, msg = await verify_and_consume_otp(db, target_email, payload.otp_code, "EMAIL_VERIFY")
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+
+    # Activate user in database
+    user_res = await db.execute(select(User).where(func.lower(User.email) == target_email))
+    user = user_res.scalar_one_or_none()
+    user_id_str = None
+    role_str = "PATIENT"
+    status_str = "ACTIVE"
+
+    if user:
+        user.is_verified = True
+        user.status = UserStatus.ACTIVE
+        user_id_str = str(user.id)
+        role_str = user.role.value
+        status_str = user.status.value
+
+        # Synchronize email_confirmed_at in auth.users if Supabase schema is present
+        try:
+            from sqlalchemy import text
+            await db.execute(
+                text("UPDATE auth.users SET email_confirmed_at = now() WHERE lower(email) = :email"),
+                {"email": target_email}
+            )
+        except Exception:
+            pass
+        await db.commit()
+
+    return APIResponse(
+        message="Email verified successfully! Your account is now active.",
+        data=VerifyOTPResponseData(
+            verified=True,
+            email=target_email,
+            message="Email verified successfully. You may now log in.",
+            user_id=user_id_str,
+            role=role_str,
+            status=status_str
+        )
+    )
+
+
+@router.post("/send-reset-otp", response_model=APIResponse[SendOTPResponseData])
+async def send_reset_otp(payload: SendOTPRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Sends a 6-digit password reset OTP to a Patient's registered email via Brevo.
+    Valid for 5 minutes.
+    """
+    target_email = payload.email.strip().lower()
+    user_res = await db.execute(select(User).where(func.lower(User.email) == target_email))
+    user = user_res.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account registered with this email address."
+        )
+
+    if user.role != UserRole.PATIENT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{user.role.value.capitalize()} accounts must use direct password reset."
+        )
+
+    pat_res = await db.execute(select(Patient).where(Patient.user_id == user.id))
+    pat = pat_res.scalar_one_or_none()
+    patient_name = pat.full_name if (pat and pat.full_name) else "Patient"
+
+    otp_code, expires_in_seconds = await create_and_store_otp(db, target_email, "PASSWORD_RESET")
+    email_res = email_service.send_patient_reset_otp_email(
+        to_email=target_email,
+        patient_name=patient_name,
+        otp_code=otp_code
+    )
+
+    return APIResponse(
+        message=f"Password reset code sent to {target_email}.",
+        data=SendOTPResponseData(
+            email=target_email,
+            purpose="PASSWORD_RESET",
+            expires_in_seconds=expires_in_seconds,
+            message="A 6-digit password reset code valid for 5 minutes has been sent to your email.",
+            preview_code=otp_code if email_res.get("method") == "preview_mode" else None
+        )
+    )
+
+
+@router.post("/verify-reset-otp", response_model=APIResponse[ResetPasswordSuccessResponseData])
+async def verify_reset_otp(payload: ResetPasswordWithOTPRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Verifies the 6-digit password reset OTP and immediately updates the patient password.
+    Requires password and confirm_password to match (minimum 6 characters).
+    """
+    target_email = payload.email.strip().lower()
+
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters.")
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match.")
+
+    user_res = await db.execute(select(User).where(func.lower(User.email) == target_email))
+    user = user_res.scalar_one_or_none()
+    if not user or user.role != UserRole.PATIENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password reset via email OTP is exclusively for Patient accounts."
+        )
+
+    success, msg = await verify_and_consume_otp(db, target_email, payload.otp_code, "PASSWORD_RESET")
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+
+    from sqlalchemy import text
+    try:
+        result = await db.execute(
+            text("UPDATE auth.users SET encrypted_password = crypt(:pwd, gen_salt('bf')) WHERE lower(email) = :email"),
+            {"pwd": payload.new_password, "email": target_email}
+        )
+        await db.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Auth account not found.")
+
+        return APIResponse(
+            message="Password reset successfully.",
+            data=ResetPasswordSuccessResponseData(
+                email=target_email,
+                role="PATIENT",
+                message="Password reset successfully. You can now log in with your new password."
+            )
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+

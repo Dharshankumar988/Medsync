@@ -53,9 +53,35 @@ export default function AdminSettings() {
   const [saving, setSaving] = useState(false);
   const [lastSynced, setLastSynced] = useState<string>("Just now");
 
+  // Administrator creation form states
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+  const [showAdminForm, setShowAdminForm] = useState(false);
+
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminEmail || !newAdminPassword) return;
+    try {
+      setIsCreatingAdmin(true);
+      await api.post('/api/v1/admin/admins', {
+        email: newAdminEmail.trim().toLowerCase(),
+        password: newAdminPassword,
+      });
+      toast.success(`Admin account (${newAdminEmail}) created successfully!`);
+      setNewAdminEmail("");
+      setNewAdminPassword("");
+      setShowAdminForm(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Failed to create administrator");
+    } finally {
+      setIsCreatingAdmin(false);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -368,6 +394,90 @@ export default function AdminSettings() {
                 ))}
               </div>
             </div>
+
+            {/* ADMINISTRATOR CREATION & PROVISIONING */}
+            <motion.div
+              whileHover={{ scale: 1.005 }}
+              className="p-5 rounded-2xl border border-white/10 bg-white/[0.02] hover:border-blue-500/30 hover:bg-white/[0.04] transition-all duration-300 space-y-4"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm text-foreground">Administrator Team & Provisioning</p>
+                      <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/10 text-[10px]">
+                        Full Governance
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground max-w-xl">
+                      Authorize and provision new system administrators with unrestricted dashboard governance, clinical review, and audit privileges.
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAdminForm(!showAdminForm)}
+                  className={`h-9 px-4 text-xs font-semibold rounded-xl border-blue-500/30 text-blue-400 hover:bg-blue-500/10 ${
+                    showAdminForm ? "bg-blue-500/10" : ""
+                  }`}
+                >
+                  {showAdminForm ? "Close Form" : "Create New Admin"}
+                </Button>
+              </div>
+
+              {showAdminForm && (
+                <form onSubmit={handleCreateAdmin} className="p-4 rounded-xl bg-muted/20 border border-white/10 space-y-3">
+                  <p className="text-xs font-medium text-foreground">Add New System Administrator</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Email</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="admin@medsync.health"
+                        value={newAdminEmail}
+                        onChange={(e) => setNewAdminEmail(e.target.value)}
+                        className="w-full flex h-9 rounded-lg border border-input bg-background px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Password</label>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        placeholder="•••••••• (min 6 characters)"
+                        value={newAdminPassword}
+                        onChange={(e) => setNewAdminPassword(e.target.value)}
+                        className="w-full flex h-9 rounded-lg border border-input bg-background px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setShowAdminForm(false)}
+                      className="h-8 text-xs"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isCreatingAdmin || !newAdminEmail || !newAdminPassword}
+                      className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium px-4"
+                    >
+                      {isCreatingAdmin ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                      Authorize Admin
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
           </CardContent>
         </Card>
       </motion.div>

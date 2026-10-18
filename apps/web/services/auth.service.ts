@@ -41,6 +41,28 @@ export const authService = {
     const resolvedRole = normalizeRole(dbRole ?? data.user.user_metadata?.role ?? data.user.app_metadata?.role);
     const resolvedStatus = String(dbStatus ?? data.user.user_metadata?.status ?? data.user.app_metadata?.status ?? 'ACTIVE').toUpperCase();
 
+    // Enforce role-based verification guard
+    try {
+      const { default: api } = await import('@/lib/api');
+      await api.post('/api/v1/auth/login-guard', { email: credentials.email });
+    } catch (guardErr: any) {
+      // Guard blocked login -> Sign out immediately so unverified session is discarded
+      await supabase.auth.signOut();
+      const status = guardErr.response?.status;
+      const detail = guardErr.response?.data?.detail || guardErr.message || 'Login verification failed.';
+      const err = new Error(detail);
+      (err as any).status = status;
+      (err as any).response = guardErr.response;
+      (err as any).code = detail?.includes('EMAIL_NOT_VERIFIED') 
+        ? 'EMAIL_NOT_VERIFIED' 
+        : detail?.includes('PENDING_ADMIN_APPROVAL') 
+        ? 'PENDING_ADMIN_APPROVAL' 
+        : detail?.includes('ACCOUNT_SUSPENDED')
+        ? 'ACCOUNT_SUSPENDED'
+        : 'LOGIN_BLOCKED';
+      throw err;
+    }
+
     const userProfile = {
       ...baseProfile,
       role: resolvedRole,
@@ -159,6 +181,18 @@ export const authService = {
         facility_type: data.facility_type,
         google_maps_url: data.google_maps_url,
       });
+
+      // Dispatch 6-digit OTP verification code via Brevo for Patient accounts
+      if (normalizedRole === 'patient') {
+        try {
+          await api.post('/api/v1/auth/send-verification-otp', {
+            email: data.email,
+            purpose: 'EMAIL_VERIFY',
+          });
+        } catch (otpErr) {
+          console.warn('Failed to dispatch initial verification OTP during signup:', otpErr);
+        }
+      }
     } catch (syncError: any) {
       console.error("Backend sync failed:", syncError);
       let message = "Failed to synchronize user data with backend.";
@@ -181,9 +215,43 @@ export const authService = {
         user: { id: userId, email: data.email, role: normalizedRole },
         session: authSession,
         role: normalizedRole,
-        needsEmailVerification: needsVerification,
+        needsEmailVerification: normalizedRole === 'patient' ? true : needsVerification,
       },
     };
+  },
+
+  sendVerificationOtp: async (email: string) => {
+    const { default: api } = await import('@/lib/api');
+    const res = await api.post('/api/v1/auth/send-verification-otp', {
+      email,
+      purpose: 'EMAIL_VERIFY',
+    });
+    return res.data;
+  },
+
+  verifyEmailOtp: async (email: string, otpCode: string) => {
+    const { default: api } = await import('@/lib/api');
+    const res = await api.post('/api/v1/auth/verify-email-otp', {
+      email,
+      otp_code: otpCode,
+      purpose: 'EMAIL_VERIFY',
+    });
+    return res.data;
+  },
+
+  sendResetOtp: async (email: string) => {
+    const { default: api } = await import('@/lib/api');
+    const res = await api.post('/api/v1/auth/send-reset-otp', {
+      email,
+      purpose: 'PASSWORD_RESET',
+    });
+    return res.data;
+  },
+
+  verifyResetOtp: async (payload: { email: string; otp_code: string; new_password: string; confirm_password: string }) => {
+    const { default: api } = await import('@/lib/api');
+    const res = await api.post('/api/v1/auth/verify-reset-otp', payload);
+    return res.data;
   },
 
   me: async () => {

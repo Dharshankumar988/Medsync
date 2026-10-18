@@ -154,13 +154,14 @@ export default function AdminUsers() {
     if (!newAdminEmail || !newAdminPassword) return;
     try {
       await api.post('/api/v1/admin/admins', { email: newAdminEmail, password: newAdminPassword });
-      toast.success("Admin created successfully!");
+      toast.success("Administrator account created and authorized successfully!");
       setNewAdminEmail("");
       setNewAdminPassword("");
+      setIsAddingAdmin(false);
       fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to create admin", err);
-      toast.error("Failed to create admin");
+      toast.error(err.response?.data?.detail || "Failed to create administrator");
     }
   };
 

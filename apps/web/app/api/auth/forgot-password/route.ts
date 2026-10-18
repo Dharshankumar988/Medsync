@@ -72,24 +72,14 @@ export async function POST(req: NextRequest) {
 
     const userRole = String(dbUser.role || '').toUpperCase();
 
-    // 1. Admin Role -> Strictly Denied
-    if (userRole === 'ADMIN') {
-      return NextResponse.json(
-        { 
-          error: 'Password reset is not permitted for Administrator accounts. Please contact system security.' 
-        },
-        { status: 403 }
-      );
-    }
-
-    // 2. Doctor or Pharmacy Role -> Direct redirect to provider reset password page (always up)
-    if (userRole === 'DOCTOR' || userRole === 'PHARMACY' || userRole === 'HOSPITAL') {
+    // 1. Admin, Doctor, Pharmacy, Hospital -> Direct redirect to instant password reset
+    if (userRole === 'ADMIN' || userRole === 'DOCTOR' || userRole === 'PHARMACY' || userRole === 'HOSPITAL') {
       return NextResponse.json({
         success: true,
         action: 'REDIRECT',
         role: userRole,
         redirectUrl: `/provider-reset-password?email=${encodeURIComponent(dbUser.email)}`,
-        message: `Redirecting ${userRole.toLowerCase()} to provider password reset...`,
+        message: `Redirecting ${userRole.toLowerCase()} to instant password reset...`,
       });
     }
 
