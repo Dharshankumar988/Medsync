@@ -86,7 +86,7 @@ export default function MedicalRecordsPage() {
 
   // Security
   const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(
-    userId,
+    user?.id || userId,
     user?.role?.toLowerCase()
   );
   const { openEnrollmentModal } = useSecurityStore();
@@ -696,7 +696,7 @@ export default function MedicalRecordsPage() {
                         {record.description?.replace(/\[PUBLIC\]/g, "").trim() || "No description provided."}
                       </p>
 
-                      <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border/50">
                         {/* Consent Toggle Button */}
                         <div>
                           {isPublic ? (

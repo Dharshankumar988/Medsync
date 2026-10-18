@@ -162,6 +162,42 @@ async def list_doctor_accessible_records(
 ):
     from app.models.patient import Patient
     from app.models.user import User
+    from app.models.appointment import Appointment
+    from app.models.prescription import Prescription
+    from app.models.doctor_referral import DoctorReferral
+    from app.models.consultation import Consultation
+    from sqlalchemy import or_
+
+    # 1. Identify patients treated / consulted with by this doctor
+    appt_pats = select(Appointment.patient_id).where(Appointment.doctor_id == current_user.id)
+    pres_pats = select(Prescription.patient_id).where(Prescription.doctor_id == current_user.id)
+    ref_pats = select(DoctorReferral.patient_id).where(
+        or_(
+            DoctorReferral.referring_doctor_id == current_user.id,
+            DoctorReferral.referred_to_doctor_id == current_user.id,
+        )
+    )
+    cons_pats = select(Consultation.patient_id).where(Consultation.doctor_id == current_user.id)
+    perm_pats = (
+        select(MedicalRecord.patient_id)
+        .join(RecordPermission, RecordPermission.record_id == MedicalRecord.id)
+        .where(
+            RecordPermission.granted_to == current_user.id,
+            RecordPermission.is_revoked.is_(False),
+        )
+    )
+    upload_pats = select(MedicalRecord.patient_id).where(MedicalRecord.uploaded_by == current_user.id)
+
+    treated_pats_query = appt_pats.union(pres_pats).union(ref_pats).union(cons_pats).union(perm_pats).union(upload_pats)
+    treated_res = await db.execute(treated_pats_query)
+    treated_patient_ids = set(treated_res.scalars().all())
+
+    # If patient_id param is provided, ensure we filter specifically for it
+    if patient_id:
+        treated_patient_ids = {patient_id}
+
+    if not treated_patient_ids:
+        return APIResponse(message="No treated patient records found", data=[])
 
     # Query all active permissions
     perm_stmt = select(RecordPermission).where(RecordPermission.is_revoked.is_(False))
@@ -173,14 +209,38 @@ async def list_doctor_accessible_records(
 
     query = (
         select(MedicalRecord)
-        .where(MedicalRecord.is_archived.is_(False))
+        .where(
+            MedicalRecord.is_archived.is_(False),
+            MedicalRecord.patient_id.in_(treated_patient_ids)
+        )
         .order_by(MedicalRecord.created_at.desc())
     )
-    if patient_id:
-        query = query.where(MedicalRecord.patient_id == patient_id)
 
     res = await db.execute(query)
     all_records = res.scalars().all()
+
+    # Pre-fetch patients in bulk
+    all_patient_user_ids = {r.patient_id for r in all_records}
+    patients_map = {}
+    if all_patient_user_ids:
+        p_stmt = select(Patient).where(Patient.user_id.in_(all_patient_user_ids))
+        p_res = await db.execute(p_stmt)
+        for pat in p_res.scalars().all():
+            patients_map[pat.user_id] = pat
+
+    users_map = {}
+    missing_ids = all_patient_user_ids - set(patients_map.keys())
+    if missing_ids:
+        u_stmt = select(User).where(User.id.in_(missing_ids))
+        u_res = await db.execute(u_stmt)
+        for u in u_res.scalars().all():
+            users_map[u.id] = u
+
+    # Compute latest interaction per patient
+    patient_latest_interaction = {}
+    for r in all_records:
+        if r.patient_id not in patient_latest_interaction or r.created_at > patient_latest_interaction[r.patient_id]:
+            patient_latest_interaction[r.patient_id] = r.created_at
 
     allowed = []
     for r in all_records:
@@ -188,13 +248,14 @@ async def list_doctor_accessible_records(
         is_shared = r.id in directly_shared_ids
         is_uploader = r.uploaded_by == current_user.id
         if is_pub or is_shared or is_uploader:
-            pat_stmt = select(Patient.full_name).where(Patient.user_id == r.patient_id)
-            pat_res = await db.execute(pat_stmt)
-            p_name = pat_res.scalar_one_or_none()
-            if not p_name:
-                u_stmt = select(User.full_name).where(User.id == r.patient_id)
-                u_res = await db.execute(u_stmt)
-                p_name = u_res.scalar_one_or_none() or "Patient"
+            pat = patients_map.get(r.patient_id)
+            user_obj = users_map.get(r.patient_id)
+            p_name = pat.full_name if pat else (user_obj.full_name if user_obj else "Patient")
+            p_gender = pat.gender if pat else None
+            p_dob = pat.date_of_birth if pat else None
+            p_blood_group = pat.blood_group if pat else None
+            p_phone = pat.phone_number if pat else None
+            latest_interaction = patient_latest_interaction.get(r.patient_id, r.created_at)
 
             v_stmt = select(MedicalRecordVersion.id).where(MedicalRecordVersion.record_id == r.id)
             v_res = await db.execute(v_stmt)
@@ -220,6 +281,11 @@ async def list_doctor_accessible_records(
                 description=clean_desc,
                 patient_id=r.patient_id,
                 patient_name=p_name,
+                patient_gender=p_gender,
+                patient_dob=p_dob,
+                patient_blood_group=p_blood_group,
+                patient_phone=p_phone,
+                latest_interaction_at=latest_interaction,
                 uploaded_by=r.uploaded_by,
                 created_at=r.created_at,
                 is_public=bool(is_pub),

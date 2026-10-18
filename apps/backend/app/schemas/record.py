@@ -92,6 +92,11 @@ class DoctorAccessibleRecordResponse(BaseModel):
     is_public: bool
     is_direct_shared: bool
     doctor_notes: List[DoctorNoteResponse] = []
+    patient_gender: Optional[str] = None
+    patient_dob: Optional[str] = None
+    patient_blood_group: Optional[str] = None
+    patient_phone: Optional[str] = None
+    latest_interaction_at: Optional[datetime] = None
 
     model_config = ConfigDict(use_enum_values=True, from_attributes=True)
 

@@ -53,7 +53,7 @@ export default function AppointmentsPage() {
   const router = useRouter();
 
   // Security
-  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(userId, user?.role?.toLowerCase());
+  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(user?.id || userId, user?.role?.toLowerCase());
   const { openEnrollmentModal } = useSecurityStore();
 
   // Booking dialog state

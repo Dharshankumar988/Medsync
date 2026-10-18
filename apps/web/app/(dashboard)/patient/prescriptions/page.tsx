@@ -27,7 +27,7 @@ export default function PrescriptionsPage() {
   const [selectedPrescriptionId, setSelectedPrescriptionId] = useState<string | null>(null);
 
   // Security
-  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(userId, user?.role?.toLowerCase());
+  const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(user?.id || userId, user?.role?.toLowerCase());
   const { openEnrollmentModal } = useSecurityStore();
   
   useEffect(() => {

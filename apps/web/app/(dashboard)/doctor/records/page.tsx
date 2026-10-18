@@ -20,7 +20,8 @@ import {
   Tabs,
   TabsContent,
   TabsList,
-  TabsTrigger
+  TabsTrigger,
+  Select
 } from "@medsync/ui";
 import {
   FileText,
@@ -38,8 +39,15 @@ import {
   XCircle,
   UserPlus,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Droplet,
+  Filter,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink
 } from "lucide-react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -69,6 +77,10 @@ export default function DoctorMedicalRecordsPage() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [bloodGroupFilter, setBloodGroupFilter] = useState<string>("ALL");
+  const [genderFilter, setGenderFilter] = useState<string>("ALL");
+  const [ageFilter, setAgeFilter] = useState<string>("ALL");
+  const [collapsedPatients, setCollapsedPatients] = useState<Record<string, boolean>>({});
 
   // Clinical Note Modal
   const [selectedRecordForNote, setSelectedRecordForNote] = useState<any | null>(null);
@@ -127,7 +139,14 @@ export default function DoctorMedicalRecordsPage() {
             created_at: r.created_at,
             isPublic: r.is_public,
             isDirectShared: r.is_direct_shared,
-            patient: { full_name: r.patient_name || "Patient" },
+            patient: {
+              full_name: r.patient_name || "Patient",
+              gender: r.patient_gender || null,
+              date_of_birth: r.patient_dob || null,
+              blood_group: r.patient_blood_group || null,
+              phone: r.patient_phone || null
+            },
+            latest_interaction_at: r.latest_interaction_at || r.created_at,
             medical_record_versions: [
               {
                 id: r.id,
@@ -203,14 +222,21 @@ export default function DoctorMedicalRecordsPage() {
         const patientIds = [...new Set(allowedRecords.map((r) => r.patient_id))];
         const { data: patients } = await supabase
           .from("patients")
-          .select("user_id, full_name")
+          .select("user_id, full_name, gender, date_of_birth, blood_group, phone_number")
           .in("user_id", patientIds);
 
         const enhancedData = allowedRecords.map((r) => {
           const p = patients?.find((pat) => pat.user_id === r.patient_id);
           return {
             ...r,
-            patient: { full_name: p?.full_name || r.patient?.full_name || "Patient" },
+            patient: {
+              full_name: p?.full_name || r.patient?.full_name || "Patient",
+              gender: p?.gender || null,
+              date_of_birth: p?.date_of_birth || null,
+              blood_group: p?.blood_group || null,
+              phone: p?.phone_number || null,
+            },
+            latest_interaction_at: r.created_at,
           };
         });
         setRecords(enhancedData);
@@ -466,11 +492,184 @@ export default function DoctorMedicalRecordsPage() {
 
   const pendingIncomingCount = incomingRequests.filter((r) => r.status === "PENDING").length;
 
-  const filteredRecords = records.filter(
-    (r) =>
-      (r.title || "").toLowerCase().includes(search.toLowerCase()) ||
-      (r.patient?.full_name || "").toLowerCase().includes(search.toLowerCase())
+  // Age calculation from date of birth
+  const calculateAge = (dobStr?: string | null): number | null => {
+    if (!dobStr) return null;
+    let birthDate = new Date(dobStr);
+    if (isNaN(birthDate.getTime())) {
+      const parts = dobStr.split(/[-/]/);
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          birthDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else if (parts[2].length === 4) {
+          birthDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      }
+    }
+    if (isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age >= 0 && age < 130 ? age : null;
+  };
+
+  const normalizeBloodGroup = (bg?: string | null): string => {
+    if (!bg) return "";
+    const cleaned = bg.toUpperCase().replace(/\s+/g, "");
+    if (cleaned.includes("OPOS") || cleaned === "O+") return "O+";
+    if (cleaned.includes("ONEG") || cleaned === "O-") return "O-";
+    if (cleaned.includes("ABPOS") || cleaned === "AB+") return "AB+";
+    if (cleaned.includes("ABNEG") || cleaned === "AB-") return "AB-";
+    if (cleaned.includes("APOS") || cleaned === "A+") return "A+";
+    if (cleaned.includes("ANEG") || cleaned === "A-") return "A-";
+    if (cleaned.includes("BPOS") || cleaned === "B+") return "B+";
+    if (cleaned.includes("BNEG") || cleaned === "B-") return "B-";
+    return cleaned;
+  };
+
+  const normalizeGender = (g?: string | null): string => {
+    if (!g) return "";
+    const lower = g.trim().toLowerCase();
+    if (lower.startsWith("m")) return "MALE";
+    if (lower.startsWith("f")) return "FEMALE";
+    return "OTHER";
+  };
+
+  const matchesAgeBracket = (age: number | null, bracket: string): boolean => {
+    if (bracket === "ALL") return true;
+    if (age === null) return false;
+    if (bracket === "UNDER_18") return age < 18;
+    if (bracket === "18_35") return age >= 18 && age <= 35;
+    if (bracket === "36_55") return age >= 36 && age <= 55;
+    if (bracket === "56_PLUS") return age >= 56;
+    return true;
+  };
+
+  // Filter individual records
+  const filteredRecords = records.filter((r) => {
+    // 1. Search Query
+    const q = search.toLowerCase().trim();
+    if (q) {
+      const matchTitle = (r.title || "").toLowerCase().includes(q);
+      const matchDesc = (r.description || "").toLowerCase().includes(q);
+      const matchPat = (r.patient?.full_name || "").toLowerCase().includes(q);
+      if (!matchTitle && !matchDesc && !matchPat) return false;
+    }
+
+    // 2. Blood Group Filter
+    if (bloodGroupFilter !== "ALL") {
+      const bg = normalizeBloodGroup(r.patient?.blood_group);
+      if (bg !== bloodGroupFilter) return false;
+    }
+
+    // 3. Gender Filter
+    if (genderFilter !== "ALL") {
+      const g = normalizeGender(r.patient?.gender);
+      if (g !== genderFilter) return false;
+    }
+
+    // 4. Age Bracket Filter
+    if (ageFilter !== "ALL") {
+      const age = calculateAge(r.patient?.date_of_birth);
+      if (!matchesAgeBracket(age, ageFilter)) return false;
+    }
+
+    return true;
+  });
+
+  // Group filtered records by Patient, with recent patients above older patients
+  interface PatientGroup {
+    patientId: string;
+    patientName: string;
+    gender?: string | null;
+    dateOfBirth?: string | null;
+    bloodGroup?: string | null;
+    phone?: string | null;
+    age: number | null;
+    latestDate: number;
+    records: any[];
+  }
+
+  const patientGroupsMap = new Map<string, PatientGroup>();
+
+  for (const record of filteredRecords) {
+    const pid = record.patient_id;
+    let group = patientGroupsMap.get(pid);
+    const recTimestamp = new Date(record.created_at).getTime() || 0;
+    const latestInterTimestamp = record.latest_interaction_at
+      ? new Date(record.latest_interaction_at).getTime() || recTimestamp
+      : recTimestamp;
+    const effectiveDate = Math.max(recTimestamp, latestInterTimestamp);
+
+    if (!group) {
+      group = {
+        patientId: pid,
+        patientName: record.patient?.full_name || "Patient",
+        gender: record.patient?.gender,
+        dateOfBirth: record.patient?.date_of_birth,
+        bloodGroup: record.patient?.blood_group,
+        phone: record.patient?.phone,
+        age: calculateAge(record.patient?.date_of_birth),
+        latestDate: effectiveDate,
+        records: [],
+      };
+      patientGroupsMap.set(pid, group);
+    } else {
+      group.latestDate = Math.max(group.latestDate, effectiveDate);
+    }
+    group.records.push(record);
+  }
+
+  // Sort groups: recent patients above old patients
+  const patientGroups = Array.from(patientGroupsMap.values()).sort(
+    (a, b) => b.latestDate - a.latestDate
   );
+
+  // Sort records within each patient descending by created_at
+  for (const g of patientGroups) {
+    g.records.sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }
+
+  const isAnyFilterActive =
+    search.trim() !== "" ||
+    bloodGroupFilter !== "ALL" ||
+    genderFilter !== "ALL" ||
+    ageFilter !== "ALL";
+
+  const resetFilters = () => {
+    setSearch("");
+    setBloodGroupFilter("ALL");
+    setGenderFilter("ALL");
+    setAgeFilter("ALL");
+  };
+
+  const togglePatientCollapse = (pid: string) => {
+    setCollapsedPatients((prev) => ({
+      ...prev,
+      [pid]: !prev[pid],
+    }));
+  };
+
+  const allCollapsed =
+    patientGroups.length > 0 &&
+    patientGroups.every((g) => !!collapsedPatients[g.patientId]);
+
+  const toggleAllCollapse = () => {
+    if (allCollapsed) {
+      setCollapsedPatients({});
+    } else {
+      const nextCollapsed: Record<string, boolean> = {};
+      patientGroups.forEach((g) => {
+        nextCollapsed[g.patientId] = true;
+      });
+      setCollapsedPatients(nextCollapsed);
+    }
+  };
 
   return (
     <div className="relative space-y-8 pb-12 max-w-7xl mx-auto">
@@ -536,123 +735,380 @@ export default function DoctorMedicalRecordsPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Active Records */}
+        {/* Tab 1: Active Records Segregated Patient-Wise */}
         <TabsContent value="records" className="pt-6 space-y-6">
+          {/* Clinical Filter Bar */}
+          <div className="bg-card/70 border border-border/60 backdrop-blur-md rounded-2xl p-4 shadow-sm space-y-3">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              {/* Search input */}
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search patient, record title, or notes..."
+                  className="pl-9 pr-8 rounded-xl h-9 text-xs bg-background/80"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Selects */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* Blood Group Filter */}
+                <div className="min-w-[130px]">
+                  <Select
+                    value={bloodGroupFilter}
+                    onChange={(e) => setBloodGroupFilter(e.target.value)}
+                    className="h-9 text-xs rounded-xl bg-background/80"
+                  >
+                    <option value="ALL">🩸 All Blood Groups</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                  </Select>
+                </div>
+
+                {/* Gender Filter */}
+                <div className="min-w-[120px]">
+                  <Select
+                    value={genderFilter}
+                    onChange={(e) => setGenderFilter(e.target.value)}
+                    className="h-9 text-xs rounded-xl bg-background/80"
+                  >
+                    <option value="ALL">All Genders</option>
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </Select>
+                </div>
+
+                {/* Age Filter */}
+                <div className="min-w-[135px]">
+                  <Select
+                    value={ageFilter}
+                    onChange={(e) => setAgeFilter(e.target.value)}
+                    className="h-9 text-xs rounded-xl bg-background/80"
+                  >
+                    <option value="ALL">All Ages</option>
+                    <option value="UNDER_18">Under 18 yrs</option>
+                    <option value="18_35">18 - 35 yrs</option>
+                    <option value="36_55">36 - 55 yrs</option>
+                    <option value="56_PLUS">56+ yrs</option>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Reset Filters button */}
+              {isAnyFilterActive && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetFilters}
+                  className="h-9 px-3 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-xl flex items-center gap-1.5 shrink-0"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Reset
+                </Button>
+              )}
+            </div>
+
+            {/* Active Filters Summary Bar */}
+            <div className="flex items-center justify-between text-xs text-muted-foreground pt-1.5 border-t border-border/40 flex-wrap gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-foreground">
+                  {patientGroups.length} {patientGroups.length === 1 ? "Patient" : "Patients"} Treated
+                </span>
+                <span>•</span>
+                <span>
+                  {filteredRecords.length} {filteredRecords.length === 1 ? "Record" : "Records"}
+                </span>
+                {filterPatientId && (
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                    Filtered by Patient ID
+                  </Badge>
+                )}
+                {bloodGroupFilter !== "ALL" && (
+                  <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/30">
+                    Blood Group: {bloodGroupFilter}
+                  </Badge>
+                )}
+                {genderFilter !== "ALL" && (
+                  <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/30 capitalize">
+                    Gender: {genderFilter.toLowerCase()}
+                  </Badge>
+                )}
+                {ageFilter !== "ALL" && (
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                    Age: {ageFilter.replace("_", " ")}
+                  </Badge>
+                )}
+              </div>
+
+              {patientGroups.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleAllCollapse}
+                  className="text-[11px] text-primary hover:underline font-medium"
+                >
+                  {allCollapsed ? "Expand All Patients" : "Collapse All Patients"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Records Content */}
           {loading ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <Skeleton key={i} className="h-44 w-full rounded-2xl" />
+            <div className="space-y-6">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-64 w-full rounded-2xl" />
               ))}
             </div>
-          ) : filteredRecords.length === 0 ? (
+          ) : records.length === 0 ? (
             <Card className="rounded-2xl border border-dashed bg-card/50">
               <CardContent className="flex flex-col items-center justify-center py-20 text-center">
                 <Globe className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                <p className="text-lg font-medium text-foreground">No patient records found</p>
+                <p className="text-lg font-medium text-foreground">No treated patient records found</p>
                 <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                  Once patients mark records as Public, share them directly, or other doctors approve your record request, they will appear here.
+                  Once you consult with patients or they share diagnostic records with you, their records will appear segregated here.
                 </p>
+              </CardContent>
+            </Card>
+          ) : patientGroups.length === 0 ? (
+            <Card className="rounded-2xl border border-dashed bg-card/50">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <Filter className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                <p className="text-base font-medium text-foreground">No records match the applied filters</p>
+                <p className="text-xs text-muted-foreground max-w-sm mt-1 mb-4">
+                  Adjust or clear your search query, blood group, age, or gender filters to see available patient records.
+                </p>
+                <Button variant="outline" size="sm" onClick={resetFilters} className="rounded-xl text-xs">
+                  <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Clear All Filters
+                </Button>
               </CardContent>
             </Card>
           ) : (
             <motion.div
-              className="grid gap-6 md:grid-cols-2 xl:grid-cols-3"
+              className="space-y-6"
               initial="hidden"
               animate="visible"
               variants={stagger}
             >
-              {filteredRecords.map((record) => {
-                const currentVersion =
-                  record.medical_record_versions?.find((v: any) => v.is_current) ||
-                  record.medical_record_versions?.[0];
-                const doctorNotes = currentVersion?.doctor_notes || [];
+              {patientGroups.map((group) => {
+                const isCollapsed = !!collapsedPatients[group.patientId];
 
                 return (
-                  <motion.div key={record.id} variants={fadeUp}>
-                    <Card className="group overflow-hidden rounded-2xl border border-border/60 bg-card/50 transition-all hover:-translate-y-1 hover:shadow-lg flex flex-col h-full">
-                      <CardHeader className="pb-3">
-                        <div className="flex justify-between items-start">
-                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 mb-3">
-                            <FileText className="h-5 w-5 text-blue-500" />
-                          </div>
-                          <div className="flex flex-col items-end gap-1.5 text-right">
-                            {record.isPublic ? (
-                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
-                                <Globe className="mr-1 h-3 w-3" /> Public Record
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-xs">
-                                <Lock className="mr-1 h-3 w-3" /> Directly Shared
+                  <motion.div
+                    key={group.patientId}
+                    variants={fadeUp}
+                    className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm overflow-hidden shadow-sm transition-all hover:border-border/80"
+                  >
+                    {/* Patient Header Section */}
+                    <div className="p-4 sm:p-5 bg-muted/20 border-b border-border/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-start sm:items-center gap-3.5">
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center shrink-0 border border-emerald-500/30 text-base shadow-inner">
+                          {group.patientName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-bold text-base text-foreground tracking-tight">
+                              {group.patientName}
+                            </h3>
+                            {group.bloodGroup && (
+                              <Badge
+                                variant="outline"
+                                className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25 text-xs font-semibold px-2 py-0.5"
+                              >
+                                <Droplet className="w-3 h-3 mr-1 fill-rose-500 text-rose-500" />
+                                {group.bloodGroup}
                               </Badge>
                             )}
-                            <Badge variant="outline" className="bg-emerald-500/5 text-emerald-600 border-emerald-500/20 text-[10px]">
-                              <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> PDF with QR
-                            </Badge>
+                            {group.gender && (
+                              <Badge
+                                variant="outline"
+                                className="bg-muted text-foreground/80 border-border/60 text-xs font-medium capitalize"
+                              >
+                                {group.gender.toLowerCase()}
+                              </Badge>
+                            )}
+                            {group.age !== null && (
+                              <Badge
+                                variant="outline"
+                                className="bg-muted text-foreground/80 border-border/60 text-xs font-medium"
+                              >
+                                {group.age} yrs
+                              </Badge>
+                            )}
                           </div>
-                        </div>
-                        <CardTitle className="text-base line-clamp-1">{record.title}</CardTitle>
-                        <p className="text-xs font-medium text-emerald-600">Patient: {record.patient?.full_name}</p>
-                      </CardHeader>
-                      <CardContent className="flex flex-col flex-1">
-                        <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
-                          {record.description || "No description provided."}
-                        </p>
-
-                        {doctorNotes.length > 0 && (
-                          <div className="mb-3 p-2.5 bg-muted/40 rounded-xl border border-border/50 space-y-1">
-                            <span className="text-[10px] uppercase font-semibold text-muted-foreground flex items-center gap-1">
-                              <MessageSquare className="w-3 h-3 text-primary" /> Doctor Referral Notes:
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
+                            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                              <Clock className="w-3 h-3" />
+                              Latest Activity: {new Date(group.latestDate).toLocaleDateString()}
                             </span>
-                            {doctorNotes.map((n: any, idx: number) => (
-                              <p key={idx} className="text-xs text-foreground/90 italic pl-1 border-l-2 border-primary/50">
-                                &ldquo;{n.note_text}&rdquo;
-                              </p>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between mt-auto pt-3 border-t border-border/50">
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(record.created_at).toLocaleDateString()}
-                          </span>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 rounded-lg"
-                              onClick={() => handleOpenReferralModal(record)}
-                            >
-                              <Send className="mr-1 h-3.5 w-3.5" /> Refer
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground rounded-lg"
-                              onClick={() => {
-                                setSelectedRecordForNote(record);
-                                setNoteText("");
-                              }}
-                            >
-                              <MessageSquare className="mr-1 h-3.5 w-3.5" /> Add Note
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white border-transparent shadow-sm rounded-lg"
-                              disabled={downloadingId === record.id}
-                              onClick={() => handleDownload(record.id)}
-                            >
-                              {downloadingId === record.id ? (
-                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Download className="mr-1.5 h-3.5 w-3.5" />
-                              )}
-                              Download PDF
-                            </Button>
+                            <span>•</span>
+                            <span>
+                              {group.records.length} {group.records.length === 1 ? "Record" : "Records"} Documented
+                            </span>
+                            {group.phone && (
+                              <>
+                                <span>•</span>
+                                <span>{group.phone}</span>
+                              </>
+                            )}
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                      </div>
+
+                      {/* Patient Level Actions */}
+                      <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-2.5 text-xs rounded-xl border-border/60 hover:bg-muted/60"
+                          asChild
+                        >
+                          <Link href={`/doctor/patients/${group.patientId}`}>
+                            Patient Profile <ExternalLink className="w-3 h-3 ml-1 text-muted-foreground" />
+                          </Link>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => togglePatientCollapse(group.patientId)}
+                          className="h-8 px-2 text-xs rounded-xl text-muted-foreground hover:text-foreground"
+                          title={isCollapsed ? "Expand records" : "Collapse records"}
+                        >
+                          {isCollapsed ? (
+                            <span className="flex items-center gap-1">
+                              Show Records ({group.records.length}) <ChevronDown className="w-4 h-4" />
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              Hide <ChevronUp className="w-4 h-4" />
+                            </span>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Patient Records Grid */}
+                    {!isCollapsed && (
+                      <div className="p-4 sm:p-5">
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {group.records.map((record) => {
+                            const currentVersion =
+                              record.medical_record_versions?.find((v: any) => v.is_current) ||
+                              record.medical_record_versions?.[0];
+                            const doctorNotes = currentVersion?.doctor_notes || [];
+
+                            return (
+                              <Card
+                                key={record.id}
+                                className="group overflow-hidden rounded-2xl border border-border/60 bg-card/60 transition-all hover:-translate-y-1 hover:shadow-md flex flex-col h-full"
+                              >
+                                <CardHeader className="pb-3">
+                                  <div className="flex justify-between items-start">
+                                    <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 mb-2">
+                                      <FileText className="h-4.5 w-4.5 text-blue-500" />
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1 text-right">
+                                      {record.isPublic ? (
+                                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[11px]">
+                                          <Globe className="mr-1 h-3 w-3" /> Public
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30 text-[11px]">
+                                          <Lock className="mr-1 h-3 w-3" /> Shared
+                                        </Badge>
+                                      )}
+                                      <Badge variant="outline" className="bg-emerald-500/5 text-emerald-600 border-emerald-500/20 text-[10px]">
+                                        <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> PDF with QR
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <CardTitle className="text-sm font-semibold line-clamp-1">{record.title}</CardTitle>
+                                </CardHeader>
+
+                                <CardContent className="flex flex-col flex-1 pt-0">
+                                  <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
+                                    {record.description || "No description provided."}
+                                  </p>
+
+                                  {doctorNotes.length > 0 && (
+                                    <div className="mb-3 p-2 bg-muted/40 rounded-xl border border-border/50 space-y-1">
+                                      <span className="text-[10px] uppercase font-semibold text-muted-foreground flex items-center gap-1">
+                                        <MessageSquare className="w-3 h-3 text-primary" /> Doctor Referral Notes:
+                                      </span>
+                                      {doctorNotes.map((n: any, idx: number) => (
+                                        <p key={idx} className="text-xs text-foreground/90 italic pl-1 border-l-2 border-primary/50">
+                                          &ldquo;{n.note_text}&rdquo;
+                                        </p>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  <div className="mt-auto pt-3 border-t border-border/50 space-y-2">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <Clock className="w-3.5 h-3.5 text-muted-foreground/70" />
+                                        {new Date(record.created_at).toLocaleDateString()}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 rounded-lg"
+                                          onClick={() => handleOpenReferralModal(record)}
+                                        >
+                                          <Send className="mr-1 h-3.5 w-3.5" /> Refer
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground rounded-lg"
+                                          onClick={() => {
+                                            setSelectedRecordForNote(record);
+                                            setNoteText("");
+                                          }}
+                                        >
+                                          <MessageSquare className="mr-1 h-3.5 w-3.5" /> Note
+                                        </Button>
+                                      </div>
+                                    </div>
+
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white border-transparent shadow-sm rounded-lg flex items-center justify-center font-medium"
+                                      disabled={downloadingId === record.id}
+                                      onClick={() => handleDownload(record.id)}
+                                    >
+                                      {downloadingId === record.id ? (
+                                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Download className="mr-1.5 h-3.5 w-3.5" />
+                                      )}
+                                      Download PDF
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 );
               })}
