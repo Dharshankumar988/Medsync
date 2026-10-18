@@ -11,7 +11,7 @@ cd "$SCRIPT_DIR"
 CONTAINERS_FILE="$SCRIPT_DIR/.runner_containers.txt"
 touch "$CONTAINERS_FILE"
 
-VERSION="1.0.2"
+VERSION="1.0.3"
 if [ -f "$SCRIPT_DIR/VERSION" ]; then
     VERSION="$(cat "$SCRIPT_DIR/VERSION" | tr -d '\r\n')"
 fi
