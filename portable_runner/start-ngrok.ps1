@@ -50,21 +50,30 @@ $AuthToken = ""
 $Url = ""
 $TargetPort = 8000
 
-if ($Mode -eq "Worker" -or $Mode -eq "AI") {
-    $TokenVar = "^(AI_NGROK_AUTHTOKEN|BACKEND_NGROK_AUTHTOKEN|NGROK_AUTHTOKEN)=(.*)"
-    $UrlVar = "^(AI_NGROK_URL|RAG_WORKER_NGROK_URL|WORKER_NGROK_URL)=(.*)"
-    $TargetPort = 7860
-} else {
-    $TokenVar = "^(BACKEND_NGROK_AUTHTOKEN|NGROK_AUTHTOKEN)=(.*)"
-    $UrlVar = "^BACKEND_NGROK_URL=(.*)"
-    $TargetPort = 8000
-}
-
 if (Test-Path -LiteralPath $EnvPath) {
     $envContent = Get-Content $EnvPath
     foreach ($line in $envContent) {
-        if ($line -match $TokenVar) { $AuthToken = $matches[2].Trim() }
-        if ($line -match $UrlVar) { $Url = $matches[2].Trim() }
+        $trimmed = $line.Trim()
+        if ($trimmed -and -not $trimmed.StartsWith("#") -and $trimmed.Contains("=")) {
+            $parts = $trimmed.Split("=", 2)
+            $k = $parts[0].Trim()
+            $v = $parts[1].Trim().Trim('"').Trim("'")
+            if ($Mode -eq "Worker" -or $Mode -eq "AI") {
+                if ($k -in @("AI_NGROK_AUTHTOKEN", "BACKEND_NGROK_AUTHTOKEN", "NGROK_AUTHTOKEN") -and -not $AuthToken) {
+                    $AuthToken = $v
+                }
+                if ($k -in @("AI_NGROK_URL", "RAG_WORKER_NGROK_URL", "WORKER_NGROK_URL") -and -not $Url) {
+                    $Url = $v
+                }
+            } else {
+                if ($k -in @("BACKEND_NGROK_AUTHTOKEN", "NGROK_AUTHTOKEN") -and -not $AuthToken) {
+                    $AuthToken = $v
+                }
+                if ($k -eq "BACKEND_NGROK_URL" -and -not $Url) {
+                    $Url = $v
+                }
+            }
+        }
     }
 }
 
@@ -98,7 +107,9 @@ $ngrokArgs += "$TargetPort"
 $process = Start-Process -FilePath $NgrokPath -ArgumentList $ngrokArgs -PassThru -WindowStyle Normal
 
 $PidFile = Join-Path $ScriptPath ".runner_pids.txt"
-$process.Id | Out-File -FilePath $PidFile -Append -Encoding utf8
+if ($process -and $process.Id) {
+    $process.Id | Out-File -FilePath $PidFile -Append -Encoding utf8
+}
 
 # 4.5 Wait for local server to be ready to avoid 502 Bad Gateway
 Write-Host "Waiting for local server on port $TargetPort to become healthy..."

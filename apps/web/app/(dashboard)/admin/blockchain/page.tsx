@@ -101,7 +101,7 @@ export default function AdminBlockchain() {
             <Skeleton className="h-4 w-96" />
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
@@ -200,7 +200,7 @@ export default function AdminBlockchain() {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4">
         {/* Wallet */}
         <Card className="group hover:shadow-md transition-all duration-200 border-border/50">
           <CardHeader className="pb-2">

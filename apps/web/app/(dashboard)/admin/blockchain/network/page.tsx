@@ -188,7 +188,7 @@ export default function NetworkMonitoring() {
           </div>
           <div className="h-10 w-36 bg-muted/50 animate-pulse rounded-full" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 md:gap-5">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-32 bg-muted/30 border border-border/40 animate-pulse rounded-2xl" />
           ))}
@@ -206,12 +206,12 @@ export default function NetworkMonitoring() {
   const contracts = network?.contracts || [];
 
   return (
-    <div className="space-y-8 pb-10">
+    <div className="space-y-8 pb-10 pt-1">
       {/* Dynamic Background Glow Effect */}
       <div className="pointer-events-none absolute -top-10 right-10 w-[500px] h-[350px] bg-emerald-500/[0.04] rounded-full blur-[120px]" />
 
       {/* ── Top Header & Real-time Telemetry Controls ── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5 mb-1.5">
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
@@ -231,9 +231,9 @@ export default function NetworkMonitoring() {
         </div>
 
         {/* Action Controls & Health Status Badge */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <div
-            className={`px-3.5 py-1.5 rounded-full border text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-sm transition-all ${
+            className={`px-3.5 py-1.5 rounded-full border text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-sm transition-all shrink-0 ${
               isHealthy
                 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500 dark:text-emerald-400"
                 : "bg-red-500/10 border-red-500/30 text-red-500"
@@ -260,7 +260,7 @@ export default function NetworkMonitoring() {
             size="sm"
             onClick={handlePingNode}
             disabled={isPinging}
-            className="rounded-xl border-border/70 text-xs font-medium hover:bg-muted/80 gap-1.5"
+            className="rounded-xl border-border/70 text-xs font-medium hover:bg-muted/80 gap-1.5 shrink-0"
             title="Measure live round-trip latency to the RPC endpoint"
           >
             <Radio className={`w-3.5 h-3.5 ${isPinging ? "animate-spin text-emerald-500" : "text-emerald-500"}`} />
@@ -272,7 +272,7 @@ export default function NetworkMonitoring() {
             size="sm"
             onClick={() => fetchNetwork(true)}
             disabled={refreshing}
-            className="rounded-xl border-border/70 text-xs font-medium hover:bg-muted/80 gap-1.5"
+            className="rounded-xl border-border/70 text-xs font-medium hover:bg-muted/80 gap-1.5 shrink-0"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
             <span>{autoRefresh ? `${countdown}s` : "Refresh"}</span>
@@ -282,7 +282,7 @@ export default function NetworkMonitoring() {
             href="https://amoy.polygonscan.com/"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/70 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/70 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
           >
             <ExternalLink className="w-3.5 h-3.5 text-primary" />
             <span>PolygonScan</span>
@@ -295,7 +295,7 @@ export default function NetworkMonitoring() {
         variants={stagger}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5"
+        className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4 md:gap-5"
       >
         {/* Card 1: RPC Provider & Node Gateway */}
         <motion.div variants={fadeUp}>
@@ -343,9 +343,19 @@ export default function NetworkMonitoring() {
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Latency: <strong className="text-foreground font-mono">{measuredPing !== null ? `${measuredPing} ms` : "..."}</strong></span>
-              <span>Status: <strong className="text-emerald-500 font-mono capitalize">{network?.status || "Connected"}</strong></span>
+            <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-2 gap-2 text-xs">
+              <div className="min-w-0">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">Latency</p>
+                <p className="font-mono font-semibold text-foreground truncate">
+                  {measuredPing !== null ? `${measuredPing} ms` : "..."}
+                </p>
+              </div>
+              <div className="min-w-0 text-right">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">Status</p>
+                <p className="font-mono font-semibold text-emerald-500 capitalize truncate">
+                  {network?.status || "Connected"}
+                </p>
+              </div>
             </div>
           </Card>
         </motion.div>
@@ -380,9 +390,15 @@ export default function NetworkMonitoring() {
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Token: <strong className="text-foreground">POL</strong></span>
-              <span>Network: <strong className="text-foreground">Polygon Testnet</strong></span>
+            <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-2 gap-2 text-xs">
+              <div className="min-w-0">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">Token</p>
+                <p className="font-semibold text-foreground truncate">POL</p>
+              </div>
+              <div className="min-w-0 text-right">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">Network</p>
+                <p className="font-semibold text-foreground truncate" title="Polygon Testnet">Polygon Testnet</p>
+              </div>
             </div>
           </Card>
         </motion.div>
@@ -405,7 +421,7 @@ export default function NetworkMonitoring() {
 
               <div className="mt-3">
                 <div className="flex items-center gap-2">
-                  <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+                  <p className="text-xl sm:text-2xl font-bold font-mono text-foreground tracking-tight truncate">
                     {network?.latest_block ? `#${network.latest_block.toLocaleString()}` : "—"}
                   </p>
                   {network?.latest_block ? (
@@ -413,7 +429,7 @@ export default function NetworkMonitoring() {
                       href={`https://amoy.polygonscan.com/block/${network.latest_block}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-muted-foreground hover:text-purple-500 transition-colors p-1"
+                      className="text-muted-foreground hover:text-purple-500 transition-colors p-1 shrink-0"
                       title="View block on PolygonScan"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -426,9 +442,15 @@ export default function NetworkMonitoring() {
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Cadence: <strong className="text-foreground font-mono">~2.0s</strong></span>
-              <span>Finality: <strong className="text-foreground font-mono">~32 blocks</strong></span>
+            <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-2 gap-2 text-xs">
+              <div className="min-w-0">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">Cadence</p>
+                <p className="font-mono font-semibold text-foreground truncate">~2.0s</p>
+              </div>
+              <div className="min-w-0 text-right">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">Finality</p>
+                <p className="font-mono font-semibold text-foreground truncate">~32 blocks</p>
+              </div>
             </div>
           </Card>
         </motion.div>
@@ -450,31 +472,39 @@ export default function NetworkMonitoring() {
 
               <div className="mt-3">
                 <div className="flex items-baseline gap-2">
-                  <p className="text-2xl font-bold font-mono text-foreground">
+                  <p className="text-xl sm:text-2xl font-bold font-mono text-foreground">
                     {network?.gas_price_gwei !== undefined ? `${network.gas_price_gwei.toFixed(2)}` : "—"}{" "}
-                    <span className="text-sm font-sans font-medium text-muted-foreground">Gwei</span>
+                    <span className="text-xs sm:text-sm font-sans font-medium text-muted-foreground">Gwei</span>
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="bg-muted/40 p-2 rounded-lg">
-                    <p className="text-[10px] text-muted-foreground">Base Fee</p>
-                    <p className="text-xs font-mono font-semibold text-foreground">
-                      {network?.base_fee_gwei !== undefined ? `${network.base_fee_gwei.toFixed(4)} Gwei` : "—"}
+                  <div className="bg-muted/40 p-2 rounded-lg min-w-0">
+                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider truncate">Base Fee</p>
+                    <p className="text-xs font-mono font-semibold text-foreground truncate" title={network?.base_fee_gwei !== undefined ? `${network.base_fee_gwei.toFixed(4)} Gwei` : "—"}>
+                      {network?.base_fee_gwei !== undefined ? `${network.base_fee_gwei.toFixed(4)}` : "—"}{" "}
+                      <span className="text-[10px] text-muted-foreground font-sans">Gwei</span>
                     </p>
                   </div>
-                  <div className="bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg">
-                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Priority Fee</p>
-                    <p className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
-                      {network?.priority_fee_gwei !== undefined ? `${network.priority_fee_gwei.toFixed(2)} Gwei` : "—"}
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg min-w-0">
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium uppercase tracking-wider truncate">Priority Fee</p>
+                    <p className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400 truncate" title={network?.priority_fee_gwei !== undefined ? `${network.priority_fee_gwei.toFixed(2)} Gwei` : "—"}>
+                      {network?.priority_fee_gwei !== undefined ? `${network.priority_fee_gwei.toFixed(2)}` : "—"}{" "}
+                      <span className="text-[10px] font-sans">Gwei</span>
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Oracle: <strong className="text-foreground">Real-Time Eth Gas</strong></span>
-              <span>Unit: <strong className="text-foreground">Gwei (10⁻⁹ POL)</strong></span>
+            <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-2 gap-2 text-xs">
+              <div className="min-w-0">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">Oracle</p>
+                <p className="font-semibold text-foreground truncate" title="Real-Time Eth Gas">Eth Gas</p>
+              </div>
+              <div className="min-w-0 text-right">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium truncate">Unit</p>
+                <p className="font-semibold text-foreground truncate" title="Gwei (10⁻⁹ POL)">Gwei</p>
+              </div>
             </div>
           </Card>
         </motion.div>
