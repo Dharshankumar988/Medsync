@@ -11,7 +11,7 @@ cd "$SCRIPT_DIR"
 CONTAINERS_FILE="$SCRIPT_DIR/.runner_containers.txt"
 touch "$CONTAINERS_FILE"
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 if [ -f "$SCRIPT_DIR/VERSION" ]; then
     VERSION="$(cat "$SCRIPT_DIR/VERSION" | tr -d '\r\n')"
 fi
@@ -94,16 +94,27 @@ echo -e "\033[36m--- Starting MedSync Full Backend on port $BACKEND_PORT ---\033
         if docker pull "$BACKEND_REGISTRY_IMAGE"; then
             BACKEND_IMAGE="$BACKEND_REGISTRY_IMAGE"
         else
-            echo -e "\033[33mRegistry pull failed. Attempting local build...\033[0m"
-            REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-            DF="$REPO_ROOT/apps/backend/Dockerfile.full"
-            [ ! -f "$DF" ] && DF="$REPO_ROOT/apps/backend/Dockerfile"
-            if [ -f "$DF" ]; then
-                docker build -t "$BACKEND_LOCAL_IMAGE" -f "$DF" "$REPO_ROOT"
-                BACKEND_IMAGE="$BACKEND_LOCAL_IMAGE"
+            echo -e "\033[33mInitial pull failed. Clearing stale ghcr.io credentials and retrying unauthenticated...\033[0m"
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            if docker pull "$BACKEND_REGISTRY_IMAGE"; then
+                BACKEND_IMAGE="$BACKEND_REGISTRY_IMAGE"
             else
-                echo -e "\033[31mERROR: Cannot pull image and source Dockerfile not found.\033[0m"
-                exit 1
+                echo -e "\033[33mRegistry pull failed. Attempting local build...\033[0m"
+                REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+                DF=""
+                if [ -f "$REPO_ROOT/apps/backend/Dockerfile.full" ]; then
+                    DF="$REPO_ROOT/apps/backend/Dockerfile.full"
+                elif [ -f "$REPO_ROOT/apps/backend/Dockerfile" ]; then
+                    DF="$REPO_ROOT/apps/backend/Dockerfile"
+                fi
+                if [ -n "$DF" ] && [ -f "$DF" ] && [ -d "$REPO_ROOT/apps/backend" ]; then
+                    docker build -t "$BACKEND_LOCAL_IMAGE" -f "$DF" "$REPO_ROOT"
+                    BACKEND_IMAGE="$BACKEND_LOCAL_IMAGE"
+                else
+                    echo -e "\033[31mERROR: Cannot pull image and source code not found.\033[0m"
+                    echo -e "\033[33mTip: Run 'docker logout ghcr.io' or check your network connection.\033[0m"
+                    exit 1
+                fi
             fi
         fi
     fi

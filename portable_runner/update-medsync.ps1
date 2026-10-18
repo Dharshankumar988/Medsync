@@ -28,6 +28,15 @@ $PORT = 8000
 # Pull latest image
 Write-Host "Pulling latest image: $IMAGE_NAME..."
 docker pull $IMAGE_NAME
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Initial pull failed. Clearing stale ghcr.io credentials and retrying unauthenticated..." -ForegroundColor Yellow
+    & docker logout ghcr.io 2>&1 | Out-Null
+    docker pull $IMAGE_NAME
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Failed to pull image $IMAGE_NAME." -ForegroundColor Red
+        exit 1
+    }
+}
 
 # Stop and remove existing container
 $existing = docker ps -a -q -f "name=^/${CONTAINER_NAME}$"

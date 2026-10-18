@@ -1,5 +1,6 @@
 import smtplib
 import logging
+import email.utils
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Dict, Any, Optional
@@ -115,7 +116,8 @@ class EmailService:
                         server.starttls()
                         
                 server.login(smtp_user, smtp_password)
-                server.sendmail(settings.SMTP_FROM, [to_email], message.as_string())
+                envelope_from = email.utils.parseaddr(settings.SMTP_FROM)[1] or settings.SMTP_FROM
+                server.sendmail(envelope_from, [to_email], message.as_string())
                 server.quit()
                 logger.info(f"Password reset email sent via SMTP to {to_email}")
                 return {
@@ -176,7 +178,8 @@ class EmailService:
                         server.starttls()
                         
                 server.login(smtp_user, smtp_password)
-                server.sendmail(settings.SMTP_FROM, [to_email], message.as_string())
+                envelope_from = email.utils.parseaddr(settings.SMTP_FROM)[1] or settings.SMTP_FROM
+                server.sendmail(envelope_from, [to_email], message.as_string())
                 server.quit()
                 logger.info(f"{log_label} sent via SMTP to {to_email}")
                 return {

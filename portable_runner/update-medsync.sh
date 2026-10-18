@@ -9,7 +9,11 @@ cd "$SCRIPT_DIR"
 IMAGE_NAME="ghcr.io/dharshankumar988/medsync-backend:latest"
 
 echo -e "\033[36mUpdating MedSync backend image...\033[0m"
-docker pull "$IMAGE_NAME"
+if ! docker pull "$IMAGE_NAME"; then
+    echo -e "\033[33mInitial pull failed. Clearing stale ghcr.io credentials and retrying unauthenticated...\033[0m"
+    docker logout ghcr.io >/dev/null 2>&1 || true
+    docker pull "$IMAGE_NAME"
+fi
 
 echo -e "\033[36mRestarting with updated image...\033[0m"
 ./stop-medsync.sh

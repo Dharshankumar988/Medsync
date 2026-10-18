@@ -21,7 +21,7 @@ if (-not (Test-Path $ContainersFile)) { New-Item $ContainersFile -ItemType File 
 if (-not (Test-Path $PidsFile)) { New-Item $PidsFile -ItemType File -Force | Out-Null }
 
 # Get version
-$VERSION = "1.0.1"
+$VERSION = "1.0.2"
 if (Test-Path "VERSION") {
     $VERSION = (Get-Content "VERSION" -Raw).Trim()
 }
@@ -102,16 +102,43 @@ function Start-Backend {
             $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
             Write-Host "`nUsing registry image: $BACKEND_IMAGE" -ForegroundColor Green
         } else {
-            Write-Host "`nRegistry pull failed. Building from source..." -ForegroundColor Yellow
-            $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
-            $df = if (Test-Path "$RepoRoot\apps\backend\Dockerfile.full") { "$RepoRoot\apps\backend\Dockerfile.full" } else { "$RepoRoot\apps\backend\Dockerfile" }
-            docker build -t $BACKEND_LOCAL_IMAGE -f "$df" "$RepoRoot"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "ERROR: Failed to build backend image." -ForegroundColor Red
-                exit 1
+            # Stale Docker desktop credentials for ghcr.io often cause 'error from registry: denied' on public images.
+            # Attempt an unauthenticated pull by logging out of ghcr.io.
+            Write-Host "`nInitial pull failed. Clearing stale ghcr.io credentials and retrying unauthenticated..." -ForegroundColor Yellow
+            & docker logout ghcr.io 2>&1 | Out-Null
+            $retryProcess = Start-Process -FilePath "docker" -ArgumentList $pullArgs -NoNewWindow -Wait -PassThru
+            if ($retryProcess.ExitCode -eq 0) {
+                $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
+                Write-Host "`nUsing registry image: $BACKEND_IMAGE" -ForegroundColor Green
+            } else {
+                Write-Host "`nRegistry pull failed. Checking for local source build..." -ForegroundColor Yellow
+                $RepoRoot = Resolve-Path (Join-Path $ScriptPath "..")
+                $df = if (Test-Path "$RepoRoot\apps\backend\Dockerfile.full") { 
+                    "$RepoRoot\apps\backend\Dockerfile.full" 
+                } elseif (Test-Path "$RepoRoot\apps\backend\Dockerfile") { 
+                    "$RepoRoot\apps\backend\Dockerfile" 
+                } else { 
+                    $null 
+                }
+
+                if ($df -and (Test-Path -Path $df) -and (Test-Path -Path "$RepoRoot\apps\backend")) {
+                    Write-Host "Building from source: $df..." -ForegroundColor Cyan
+                    docker build -t $BACKEND_LOCAL_IMAGE -f "$df" "$RepoRoot"
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Host "ERROR: Failed to build backend image." -ForegroundColor Red
+                        exit 1
+                    }
+                    $BACKEND_IMAGE = $BACKEND_LOCAL_IMAGE
+                    Write-Host "Using locally built image: $BACKEND_IMAGE" -ForegroundColor Green
+                } else {
+                    Write-Host "`nERROR: Unable to pull backend image and local source code is not available." -ForegroundColor Red
+                    Write-Host "Troubleshooting suggestions:" -ForegroundColor Yellow
+                    Write-Host "  1. If running the portable runner, check your network/internet connection." -ForegroundColor Yellow
+                    Write-Host "  2. If Docker has stale GitHub tokens, run: docker logout ghcr.io" -ForegroundColor Yellow
+                    Write-Host "  3. To build from source, run from within the full MedSync cloned repository." -ForegroundColor Yellow
+                    exit 1
+                }
             }
-            $BACKEND_IMAGE = $BACKEND_LOCAL_IMAGE
-            Write-Host "Using locally built image: $BACKEND_IMAGE" -ForegroundColor Green
         }
     }
 
