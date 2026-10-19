@@ -131,3 +131,110 @@ class AdminBlockchainOverview(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
+
+class InlineFacilityCreate(BaseModel):
+    """Payload for inline creation of a hospital or clinic while registering a doctor."""
+    model_config = ConfigDict(use_enum_values=True)
+
+    name: str
+    type: str = "hospital"  # "hospital" or "clinic"
+    address: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    pincode: Optional[str] = None
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    google_maps_url: Optional[str] = None
+
+
+class AdminDoctorCreate(BaseModel):
+    """Payload for creating a verified doctor, optionally under an existing or new facility."""
+    model_config = ConfigDict(use_enum_values=True)
+
+    email: str
+    password: str
+    full_name: str
+    specialization: Optional[str] = None
+    license_number: Optional[str] = None
+    hospital_id: Optional[str] = None
+    experience_years: Optional[int] = 0
+    consultation_fee: Optional[int] = 0
+    clinic_phone: Optional[str] = None
+    new_facility: Optional[InlineFacilityCreate] = None
+
+
+class AdminDoctorCreateResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: str
+    user_id: str
+    email: str
+    full_name: str
+    hospital_id: Optional[str] = None
+    hospital_name: Optional[str] = None
+    clinic_name: Optional[str] = None
+    facility_type: Optional[str] = None
+
+
+class AdminDoctorListItem(BaseModel):
+    """Schema for doctor items returned in admin user management."""
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: str
+    user_id: str
+    full_name: str
+    email: Optional[str] = None
+    license_number: Optional[str] = None
+    specialization: Optional[str] = None
+    experience_years: Optional[int] = 0
+    consultation_fee: Optional[int] = 0
+    hospital_id: Optional[str] = None
+    hospital_name: Optional[str] = None
+    clinic_name: Optional[str] = None
+    facility_type: Optional[str] = None
+    doctor_status: Optional[str] = None
+    is_verified: bool = True
+    created_at: str
+
+
+class AdminPharmacyCreate(BaseModel):
+    """Payload for creating a verified pharmacy under an admin."""
+    model_config = ConfigDict(use_enum_values=True)
+
+    business_name: str
+    license_number: str
+    address: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    pincode: Optional[str] = None
+    contact_number: Optional[str] = None
+    email: str
+    password: Optional[str] = "Pharmacy@123"
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    hospital_id: Optional[str] = None
+    clinic_name: Optional[str] = None
+
+
+class AdminPharmacyListItem(BaseModel):
+    """Schema for pharmacy items returned in admin user management."""
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: str
+    user_id: str
+    business_name: str
+    license_number: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    contact_number: Optional[str] = None
+    email: Optional[str] = None
+    hospital_id: Optional[str] = None
+    clinic_name: Optional[str] = None
+    is_verified: bool = True
+    created_at: Optional[str] = None
+

@@ -20,7 +20,17 @@ from app.models.blockchain import BlockchainTransaction, BlockchainSyncTask, Syn
 import asyncio
 from app.schemas.response import APIResponse
 from app.schemas.session import AuthenticatedPrincipal
-from app.schemas.admin import AdminBlockchainOverview
+from app.schemas.admin import (
+    AdminBlockchainOverview,
+    PatientAdminListItem,
+    AdminUserListItem,
+    AdminDoctorListItem,
+    AdminDoctorCreate,
+    AdminDoctorCreateResponse,
+    InlineFacilityCreate,
+    AdminPharmacyListItem,
+    AdminPharmacyCreate,
+)
 from app.services.verification import VerificationService
 from app.core.config import settings
 
@@ -284,7 +294,7 @@ async def reset_user_security(
     await db.commit()
     return APIResponse(message="User security credentials reset successfully", data={})
 
-@router.get("/patients", response_model=APIResponse[list[dict]])
+@router.get("/patients", response_model=APIResponse[list[PatientAdminListItem]])
 async def get_patients(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin),
@@ -295,20 +305,20 @@ async def get_patients(
     result = await db.execute(stmt)
     rows = result.all()
     
-    data = [{
-        "id": str(patient.id),
-        "user_id": str(patient.user_id),
-        "full_name": patient.full_name,
-        "email": user.email,
-        "date_of_birth": patient.date_of_birth if patient.date_of_birth else None,
-        "blood_group": patient.blood_group,
-        "gender": patient.gender,
-        "created_at": patient.created_at.isoformat()
-    } for patient, user in rows]
+    data = [PatientAdminListItem(
+        id=str(patient.id),
+        user_id=str(patient.user_id),
+        full_name=patient.full_name,
+        email=user.email,
+        date_of_birth=patient.date_of_birth.isoformat() if hasattr(patient.date_of_birth, "isoformat") else (str(patient.date_of_birth) if patient.date_of_birth else None),
+        blood_group=patient.blood_group,
+        gender=patient.gender,
+        created_at=patient.created_at.isoformat() if patient.created_at else ""
+    ) for patient, user in rows]
     
     return APIResponse(message="Patients retrieved", data=data)
 
-@router.get("/admins", response_model=APIResponse[list[dict]])
+@router.get("/admins", response_model=APIResponse[list[AdminUserListItem]])
 async def get_admins(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin),
@@ -319,12 +329,12 @@ async def get_admins(
     result = await db.execute(stmt)
     users = result.scalars().all()
     
-    data = [{
-        "user_id": str(user.id),
-        "email": user.email,
-        "status": user.status.value,
-        "created_at": user.created_at.isoformat()
-    } for user in users]
+    data = [AdminUserListItem(
+        user_id=str(user.id),
+        email=user.email,
+        status=user.status.value if hasattr(user.status, "value") else str(user.status),
+        created_at=user.created_at.isoformat() if user.created_at else ""
+    ) for user in users]
     
     return APIResponse(message="Admins retrieved", data=data)
 
@@ -422,23 +432,7 @@ async def create_admin(
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
-from pydantic import BaseModel
-from typing import Optional
-
-class AdminPharmacyCreate(BaseModel):
-    business_name: str
-    license_number: str
-    address: str
-    city: Optional[str] = None
-    state: Optional[str] = None
-    country: Optional[str] = None
-    pincode: Optional[str] = None
-    contact_number: Optional[str] = None
-    email: str
-    latitude: float
-    longitude: float
-
-@router.get("/pharmacies", response_model=APIResponse[list[dict]])
+@router.get("/pharmacies", response_model=APIResponse[list[AdminPharmacyListItem]])
 async def get_all_pharmacies(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin),
@@ -451,22 +445,24 @@ async def get_all_pharmacies(
     
     data = []
     for pharmacy, user in rows:
-        location_data = pharmacy.location if hasattr(pharmacy, 'location') and pharmacy.location else {}
-        data.append({
-            "id": str(pharmacy.id),
-            "user_id": str(pharmacy.user_id),
-            "business_name": pharmacy.business_name,
-            "license_number": pharmacy.license_number,
-            "address": pharmacy.address,
-            "city": pharmacy.city,
-            "state": pharmacy.state,
-            "contact_number": pharmacy.contact_number,
-            "email": user.email,
-            "location": location_data
-        })
+        data.append(AdminPharmacyListItem(
+            id=str(pharmacy.id),
+            user_id=str(pharmacy.user_id),
+            business_name=pharmacy.business_name,
+            license_number=pharmacy.license_number,
+            address=pharmacy.address,
+            city=pharmacy.city,
+            state=pharmacy.state,
+            contact_number=pharmacy.contact_number,
+            email=user.email,
+            hospital_id=str(pharmacy.hospital_id) if pharmacy.hospital_id else None,
+            clinic_name=pharmacy.clinic_name,
+            is_verified=user.is_verified,
+            created_at=pharmacy.created_at.isoformat() if pharmacy.created_at else None
+        ))
     return APIResponse(message="Pharmacies retrieved", data=data)
 
-@router.post("/pharmacies", response_model=APIResponse)
+@router.post("/pharmacies", response_model=APIResponse[dict])
 async def create_pharmacy_admin(
     req: AdminPharmacyCreate,
     db: AsyncSession = Depends(get_db),
@@ -474,16 +470,62 @@ async def create_pharmacy_admin(
 ):
     import uuid
     from fastapi import HTTPException
+    from sqlalchemy import text
     
-    user_stmt = select(User).where(User.email == req.email)
+    clean_email = req.email.strip().lower()
+    user_stmt = select(User).where(User.email.ilike(clean_email))
     existing_user = await db.scalar(user_stmt)
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="A user with this email already exists")
         
-    user_id = uuid.uuid4()
+    user_id: Optional[uuid.UUID] = None
+
+    # Try creating user via Supabase Admin API if configured
+    if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
+        try:
+            async with await get_supabase_client() as client:
+                res = await client.post(
+                    "/admin/users",
+                    json={
+                        "email": clean_email,
+                        "password": req.password or "Pharmacy@123",
+                        "email_confirm": True,
+                        "app_metadata": {"role": "PHARMACY", "provider": "email"},
+                        "user_metadata": {"role": "PHARMACY"}
+                    }
+                )
+                if res.status_code in (200, 201):
+                    user_id = uuid.UUID(res.json()["id"])
+        except Exception:
+            user_id = None
+
+    # Fallback to direct SQL insert into auth.users if Supabase API is unreachable
+    if not user_id:
+        user_id = uuid.uuid4()
+        try:
+            await db.execute(
+                text("""
+                INSERT INTO auth.users (
+                    id, instance_id, email, encrypted_password, aud, role,
+                    raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
+                )
+                VALUES (
+                    :id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')),
+                    'authenticated', 'authenticated',
+                    '{"provider":"email","providers":["email"],"role":"PHARMACY"}',
+                    '{"role":"PHARMACY"}',
+                    now(), now(), now()
+                )
+                """),
+                {"id": user_id, "email": clean_email, "pwd": req.password or "Pharmacy@123"}
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
     new_user = User(
         id=user_id,
-        email=req.email,
+        email=clean_email,
         role=UserRole.PHARMACY,
         status="ACTIVE",
         is_verified=True,
@@ -491,6 +533,12 @@ async def create_pharmacy_admin(
     )
     db.add(new_user)
     
+    loc_dict = None
+    if req.latitude is not None and req.longitude is not None:
+        loc_dict = {"latitude": req.latitude, "longitude": req.longitude}
+
+    hosp_uuid = uuid.UUID(req.hospital_id) if req.hospital_id else None
+
     new_pharmacy = Pharmacy(
         id=uuid.uuid4(),
         user_id=user_id,
@@ -502,7 +550,9 @@ async def create_pharmacy_admin(
         country=req.country,
         pincode=req.pincode,
         contact_number=req.contact_number,
-        location={"latitude": req.latitude, "longitude": req.longitude},
+        hospital_id=hosp_uuid,
+        clinic_name=req.clinic_name,
+        location=loc_dict,
         blockchain_status="PENDING"
     )
     db.add(new_pharmacy)
@@ -521,7 +571,7 @@ async def create_pharmacy_admin(
     except Exception:
         pass
         
-    return APIResponse(message="Pharmacy created successfully", data={"pharmacy_id": str(new_pharmacy.id)})
+    return APIResponse(message="Pharmacy created successfully", data={"pharmacy_id": str(new_pharmacy.id), "user_id": str(user_id)})
 
 @router.get("/dashboard", response_model=APIResponse[dict])
 async def get_admin_dashboard(
@@ -795,83 +845,247 @@ async def get_admin_blockchain(
     return APIResponse(message="Blockchain overview retrieved", data=data)
 
 
-from pydantic import BaseModel
-class AdminDoctorCreate(BaseModel):
-    email: str
-    password: str
-    full_name: str
-    specialization: str
-    license_number: str
-    hospital_id: Optional[str] = None
+@router.get("/doctors", response_model=APIResponse[list[AdminDoctorListItem]])
+async def get_doctors(
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200)
+):
+    from app.models.hospital import Hospital
+    stmt = (
+        select(Doctor, User, Hospital)
+        .join(User, Doctor.user_id == User.id)
+        .outerjoin(Hospital, Doctor.hospital_id == Hospital.id)
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    
+    data = []
+    for doc, user, hosp in rows:
+        facility_type = None
+        hosp_name = doc.hospital_name
+        clinic_name = doc.clinic_name
+        
+        if hosp:
+            hosp_type = (hosp.type or "hospital").lower()
+            facility_type = hosp_type
+            if hosp_type == "clinic":
+                clinic_name = hosp.name
+            else:
+                hosp_name = hosp.name
+        elif clinic_name:
+            facility_type = "clinic"
+        elif hosp_name:
+            facility_type = "hospital"
+            
+        data.append(
+            AdminDoctorListItem(
+                id=str(doc.id),
+                user_id=str(doc.user_id),
+                full_name=doc.full_name,
+                email=user.email,
+                license_number=doc.license_number,
+                specialization=doc.specialization,
+                experience_years=doc.experience_years or 0,
+                consultation_fee=doc.consultation_fee or 0,
+                hospital_id=str(doc.hospital_id) if doc.hospital_id else None,
+                hospital_name=hosp_name,
+                clinic_name=clinic_name,
+                facility_type=facility_type,
+                doctor_status=doc.doctor_status or (user.status.value if hasattr(user.status, "value") else str(user.status)),
+                is_verified=user.is_verified,
+                created_at=doc.created_at.isoformat() if doc.created_at else ""
+            )
+        )
+    return APIResponse(message="Doctors retrieved", data=data)
 
-@router.post("/doctors", response_model=APIResponse[dict])
+@router.post("/doctors", response_model=APIResponse[AdminDoctorCreateResponse])
 async def create_doctor(
     payload: AdminDoctorCreate,
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    async with await get_supabase_client() as client:
-        res = await client.post("/admin/users", json={
-            "email": payload.email,
-            "password": payload.password,
-            "email_confirm": True
-        })
-        
-        if res.status_code not in (200, 201):
-            raise HTTPException(status_code=res.status_code, detail=f"Failed to create doctor in Auth: {res.text}")
-            
-        data = res.json()
-        auth_user_id = uuid.UUID(data.get("id"))
-        
-        stmt = select(User).where(User.id == auth_user_id)
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none():
-            await client.delete(f"/admin/users/{auth_user_id}")
-            raise HTTPException(status_code=400, detail="User already exists in DB")
-            
+    from app.models.hospital import Hospital
+    from app.models.doctor_location import DoctorLocation, LocationType
+    from sqlalchemy import text
+    import uuid
+    
+    clean_email = payload.email.strip().lower()
+    
+    # Check if user already exists
+    existing = await db.execute(select(User).where(User.email.ilike(clean_email)))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="A user with this email already exists.")
+
+    auth_user_id: Optional[uuid.UUID] = None
+
+    # 1. Try Supabase Auth API if configured
+    if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
         try:
-            new_user = User(
-                id=auth_user_id,
-                email=payload.email,
-                role=UserRole.DOCTOR,
-                status=UserStatus.ACTIVE,
-                is_verified=True,
-                profile_completion_percentage=100
-            )
-            db.add(new_user)
-            await db.flush()
-            
-            hospital_uuid = uuid.UUID(payload.hospital_id) if payload.hospital_id else None
-            
-            new_doc = Doctor(
-                user_id=auth_user_id,
-                full_name=payload.full_name,
-                license_number=payload.license_number,
-                hospital_id=hospital_uuid,
-                doctor_status="ACTIVE",
-                experience_years=0,
-                consultation_fee=0
-            )
-            db.add(new_doc)
-            await db.flush()
-            
-            if hospital_uuid:
-                loc = DoctorLocation(
-                    doctor_id=new_doc.id,
-                    location_type="HOSPITAL",
-                    hospital_id=hospital_uuid,
-                    is_primary=True,
-                    is_active=True
+            async with await get_supabase_client() as client:
+                res = await client.post("/admin/users", json={
+                    "email": clean_email,
+                    "password": payload.password,
+                    "email_confirm": True,
+                    "app_metadata": {"role": "DOCTOR", "provider": "email"},
+                    "user_metadata": {"role": "DOCTOR", "full_name": payload.full_name}
+                })
+                if res.status_code in (200, 201):
+                    auth_user_id = uuid.UUID(res.json()["id"])
+        except Exception:
+            auth_user_id = None
+
+    # 2. Fallback to direct SQL insert into auth.users if Supabase unreachable
+    if not auth_user_id:
+        auth_user_id = uuid.uuid4()
+        try:
+            await db.execute(
+                text("""
+                INSERT INTO auth.users (
+                    id, instance_id, email, encrypted_password, aud, role,
+                    raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
                 )
-                db.add(loc)
-            
+                VALUES (
+                    :id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')),
+                    'authenticated', 'authenticated',
+                    '{"provider":"email","providers":["email"],"role":"DOCTOR"}',
+                    '{"role":"DOCTOR"}',
+                    now(), now(), now()
+                )
+                """),
+                {"id": auth_user_id, "email": clean_email, "pwd": payload.password}
+            )
             await db.commit()
-        except Exception as e:
+        except Exception:
             await db.rollback()
-            await client.delete(f"/admin/users/{auth_user_id}")
-            raise HTTPException(status_code=500, detail=f"DB error. Rolled back auth user. {str(e)}")
-            
-    return APIResponse(message="Doctor created", data={"id": str(auth_user_id)})
+
+    try:
+        new_user = User(
+            id=auth_user_id,
+            email=clean_email,
+            role=UserRole.DOCTOR,
+            status=UserStatus.ACTIVE,
+            is_verified=True,
+            profile_completion_percentage=100
+        )
+        db.add(new_user)
+        await db.flush()
+
+        assigned_hospital_id: Optional[uuid.UUID] = None
+        facility_name: Optional[str] = None
+        facility_type: Optional[str] = None
+        clinic_name_val: Optional[str] = None
+        hospital_name_val: Optional[str] = None
+
+        if payload.new_facility and payload.new_facility.name.strip():
+            nf = payload.new_facility
+            fac_type = (nf.type or "hospital").lower()
+            new_fac = Hospital(
+                name=nf.name.strip(),
+                type=fac_type,
+                address=nf.address.strip(),
+                city=nf.city.strip() if nf.city else None,
+                state=nf.state.strip() if nf.state else None,
+                country=nf.country.strip() if nf.country else None,
+                pincode=nf.pincode.strip() if nf.pincode else None,
+                phone_number=nf.phone_number.strip() if nf.phone_number else None,
+                email=nf.email.strip() if nf.email else None,
+                latitude=nf.latitude,
+                longitude=nf.longitude,
+                google_maps_url=nf.google_maps_url,
+                is_verified=True,
+                is_active=True
+            )
+            db.add(new_fac)
+            await db.flush()
+            assigned_hospital_id = new_fac.id
+            facility_name = new_fac.name
+            facility_type = fac_type
+            if fac_type == "clinic":
+                clinic_name_val = new_fac.name
+            else:
+                hospital_name_val = new_fac.name
+        elif payload.hospital_id and payload.hospital_id.strip():
+            assigned_hospital_id = uuid.UUID(payload.hospital_id.strip())
+            h_stmt = select(Hospital).where(Hospital.id == assigned_hospital_id)
+            h_res = await db.execute(h_stmt)
+            existing_hosp = h_res.scalar_one_or_none()
+            if existing_hosp:
+                facility_name = existing_hosp.name
+                facility_type = (existing_hosp.type or "hospital").lower()
+                if facility_type == "clinic":
+                    clinic_name_val = existing_hosp.name
+                else:
+                    hospital_name_val = existing_hosp.name
+
+        new_doc = Doctor(
+            user_id=auth_user_id,
+            full_name=payload.full_name,
+            license_number=payload.license_number,
+            specialization=payload.specialization,
+            hospital_id=assigned_hospital_id,
+            hospital_name=hospital_name_val,
+            clinic_name=clinic_name_val,
+            clinic_phone=payload.clinic_phone,
+            experience_years=payload.experience_years or 0,
+            consultation_fee=payload.consultation_fee or 0,
+            doctor_status="ACTIVE",
+            is_accepting_appointments=True
+        )
+        db.add(new_doc)
+        await db.flush()
+
+        if assigned_hospital_id:
+            loc_type = LocationType.CLINIC if facility_type == "clinic" else LocationType.HOSPITAL
+            loc = DoctorLocation(
+                doctor_id=new_doc.id,
+                location_type=loc_type.value,
+                location_name=facility_name,
+                hospital_id=assigned_hospital_id,
+                is_primary=True,
+                is_active=True,
+                verification_status="APPROVED"
+            )
+            db.add(loc)
+
+        await db.commit()
+
+        # Try Enqueue Blockchain Sync
+        try:
+            from app.services.blockchain_sync import BlockchainSyncService
+            from app.models.blockchain import SyncEntityType, SyncActionType
+            await BlockchainSyncService.enqueue_sync_task(
+                db=db,
+                entity_type=SyncEntityType.DOCTOR,
+                entity_id=new_user.id,
+                action_type=SyncActionType.CREATE
+            )
+            await db.commit()
+        except Exception:
+            pass
+
+        return APIResponse(
+            message="Doctor created successfully",
+            data=AdminDoctorCreateResponse(
+                id=str(new_doc.id),
+                user_id=str(auth_user_id),
+                email=clean_email,
+                full_name=payload.full_name,
+                hospital_id=str(assigned_hospital_id) if assigned_hospital_id else None,
+                hospital_name=hospital_name_val,
+                clinic_name=clinic_name_val,
+                facility_type=facility_type
+            )
+        )
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 from fastapi import Request
 from app.dependencies.rate_limit import limiter

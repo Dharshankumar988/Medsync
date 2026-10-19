@@ -124,7 +124,6 @@ const menuGroups = {
     {
       label: "OPERATIONS & AI",
       items: [
-        { name: "Facilities", href: "/admin/operations", icon: Activity },
         { name: "AI Management", href: "/admin/ai", icon: Brain, badge: "AI" },
         { name: "Scan QR", href: "/admin/scan-qr", icon: ScanLine },
         { name: "Pulse AI", href: "/admin/pulse-ai", icon: FileText, badge: "AI" },

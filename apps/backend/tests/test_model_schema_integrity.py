@@ -315,4 +315,62 @@ def test_prescription_and_doctor_note_contracts():
     assert dn.version_id == new_v_id
 
 
+def test_admin_doctor_pharmacy_facility_schemas():
+    """Verify AdminDoctorListItem, AdminPharmacyListItem, and InlineFacilityCreate serialization."""
+    from app.schemas.admin import (
+        AdminDoctorListItem,
+        AdminPharmacyListItem,
+        InlineFacilityCreate,
+        AdminDoctorCreate
+    )
+
+    fac = InlineFacilityCreate(
+        name="St. Jude Clinic",
+        type="clinic",
+        address="456 Health St",
+        city="Chicago",
+        phone_number="555-1234"
+    )
+    assert fac.type == "clinic"
+    assert fac.name == "St. Jude Clinic"
+
+    doc_create = AdminDoctorCreate(
+        email="doctor@test.com",
+        password="Password123!",
+        full_name="Dr. Gregory House",
+        specialization="Diagnostics",
+        license_number="LIC-12345",
+        new_facility=fac
+    )
+    assert doc_create.new_facility.name == "St. Jude Clinic"
+
+    doc_item = AdminDoctorListItem(
+        id="doc-1",
+        user_id="usr-1",
+        full_name="Dr. Gregory House",
+        email="doctor@test.com",
+        license_number="LIC-12345",
+        specialization="Diagnostics",
+        hospital_name="Princeton-Plainsboro",
+        facility_type="hospital",
+        created_at="2026-10-19T10:00:00"
+    )
+    doc_dump = doc_item.model_dump(mode="json")
+    assert doc_dump["full_name"] == "Dr. Gregory House"
+    assert doc_dump["facility_type"] == "hospital"
+
+    pharm_item = AdminPharmacyListItem(
+        id="ph-1",
+        user_id="usr-2",
+        business_name="Downtown Drugs",
+        license_number="PHARM-999",
+        contact_number="555-9999",
+        is_verified=True
+    )
+    pharm_dump = pharm_item.model_dump(mode="json")
+    assert pharm_dump["business_name"] == "Downtown Drugs"
+    assert pharm_dump["contact_number"] == "555-9999"
+    assert pharm_dump["is_verified"] is True
+
+
 
