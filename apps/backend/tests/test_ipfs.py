@@ -1,92 +1,48 @@
-import os
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 from app.services.ipfs import IPFSService, IPFSServiceError
-import httpx
 
 # ---------------------------------------------------------
-# A. UNIT TESTS (Mocked)
+# VERIFICATION THAT IPFS IS DISCONNECTED & DECOMMISSIONED
 # ---------------------------------------------------------
 
-@pytest.fixture
-def mock_env(monkeypatch):
-    monkeypatch.setenv("PINATA_JWT", "fake_test_jwt")
+def test_ipfs_service_is_disabled():
+    """Verify that IPFS is globally flagged as disabled/disconnected."""
+    assert IPFSService.IS_ENABLED is False
+    assert IPFSService.STATUS == "disconnected"
 
 @pytest.mark.asyncio
-async def test_ipfs_upload_synthetic_success(mock_env):
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"IpfsHash": "QmTest123Hash"}
-
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_post.return_value = mock_response
-        
-        cid = await IPFSService.upload_synthetic_test_content(b"Test content", "test.txt")
-        
-        assert cid == "QmTest123Hash"
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        assert kwargs["headers"]["Authorization"] == "Bearer fake_test_jwt"
-        assert kwargs["files"]["file"][0] == "test.txt"
+async def test_ipfs_upload_synthetic_disabled():
+    """Verify synthetic uploads are blocked and raise IPFSServiceError."""
+    with pytest.raises(IPFSServiceError, match="disconnected"):
+        await IPFSService.upload_synthetic_test_content(b"Test content")
 
 @pytest.mark.asyncio
-async def test_ipfs_missing_jwt(monkeypatch):
-    monkeypatch.setenv("PINATA_JWT", "")
-    
-    with pytest.raises(IPFSServiceError) as excinfo:
-        await IPFSService.upload_synthetic_test_content(b"Test")
-        
-    assert "PINATA_JWT environment variable is missing" in str(excinfo.value)
+async def test_ipfs_upload_encrypted_disabled():
+    """Verify encrypted uploads are blocked."""
+    with pytest.raises(IPFSServiceError, match="disconnected"):
+        await IPFSService.upload_encrypted_content(b"Encrypted data", "file.enc")
 
 @pytest.mark.asyncio
-async def test_ipfs_auth_failure(mock_env):
-    mock_response = MagicMock()
-    mock_response.status_code = 401
-
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_post.return_value = mock_response
-        
-        with pytest.raises(IPFSServiceError) as excinfo:
-            await IPFSService.upload_synthetic_test_content(b"Test")
-            
-        assert "Pinata authentication failed: 401" in str(excinfo.value)
+async def test_ipfs_retrieve_disabled():
+    """Verify retrievals are blocked."""
+    with pytest.raises(IPFSServiceError, match="disconnected"):
+        await IPFSService.retrieve_encrypted_content("QmTest123Hash")
 
 @pytest.mark.asyncio
-async def test_ipfs_rate_limit_retry_failure(mock_env):
-    mock_response = MagicMock()
-    mock_response.status_code = 429
-
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_post.return_value = mock_response
-        
-        with pytest.raises(IPFSServiceError) as excinfo:
-            await IPFSService.upload_synthetic_test_content(b"Test")
-            
-        assert "Pinata upload failed after 3 attempts" in str(excinfo.value)
-        assert mock_post.call_count == 3
-
-@pytest.mark.asyncio
-async def test_upload_file_disabled(mock_env):
-    with pytest.raises(NotImplementedError) as excinfo:
+async def test_upload_file_disabled():
+    """Verify file uploads raise NotImplementedError."""
+    with pytest.raises(NotImplementedError, match="disconnected"):
         await IPFSService.upload_file(None)
-    assert "Protected medical-document IPFS uploads are disabled" in str(excinfo.value)
-
-
-# ---------------------------------------------------------
-# B. INTEGRATION TEST (Real Pinata)
-# ---------------------------------------------------------
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.getenv("RUN_PINATA_INTEGRATION_TESTS") != "true", reason="Integration tests not enabled")
-async def test_real_pinata_integration():
-    """
-    This test runs only when RUN_PINATA_INTEGRATION_TESTS=true and a real PINATA_JWT is set.
-    It verifies end-to-end upload of synthetic content.
-    """
-    test_content = b"MedSync IPFS integration test"
-    
-    cid = await IPFSService.upload_synthetic_test_content(test_content, "integration_test.txt")
-    
-    assert cid is not None
-    assert isinstance(cid, str)
-    assert len(cid) > 10  # Basic CID length check
+async def test_upload_bytes_disabled():
+    """Verify byte uploads raise NotImplementedError."""
+    with pytest.raises(NotImplementedError, match="disconnected"):
+        await IPFSService.upload_bytes(b"test", "test.bin")
+
+def test_generate_hash_utility_remains_functional():
+    """Verify SHA-256 hash helper continues to work safely for system integrity."""
+    test_data = b"MedSync data integrity check"
+    digest = IPFSService.generate_hash(test_data)
+    assert isinstance(digest, str)
+    assert len(digest) == 64
