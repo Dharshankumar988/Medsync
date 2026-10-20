@@ -18,6 +18,7 @@ import { Card, CardContent } from '../../../components/common/Card';
 import { Button } from '../../../components/common/Button';
 import { patientService, AppointmentItem } from '../../../services/patient.service';
 import { Colors } from '../../../constants/theme';
+import { formatErrorMessage } from '../../../lib/api';
 
 export default function PatientAppointmentsScreen() {
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
@@ -93,7 +94,7 @@ export default function PatientAppointmentsScreen() {
               Alert.alert('Visit Cancelled', 'Your appointment has been cancelled.');
               loadAppointments();
             } catch (err: any) {
-              Alert.alert('Action Failed', err.response?.data?.detail || err.message || 'Could not cancel appointment.');
+              Alert.alert('Action Failed', formatErrorMessage(err));
             }
           },
         },
@@ -133,7 +134,7 @@ export default function PatientAppointmentsScreen() {
       Alert.alert('Success', 'Your appointment request has been submitted to the clinic.');
       loadAppointments();
     } catch (err: any) {
-      setBookingError(err.response?.data?.detail || err.message || 'Booking failed.');
+      setBookingError(formatErrorMessage(err));
     } finally {
       setBookingLoading(false);
     }
@@ -216,7 +217,20 @@ export default function PatientAppointmentsScreen() {
   return (
     <RoleGuard allowedRole="patient">
       <View style={styles.container}>
-        <ScreenHeader title="Appointments" subtitle="Clinic visits & schedule" />
+        <ScreenHeader
+          title="Appointments"
+          subtitle="Clinic visits & schedule"
+          rightElement={
+            <TouchableOpacity
+              style={styles.headerBookBtn}
+              onPress={openBookingModal}
+              activeOpacity={0.85}
+            >
+              <Plus size={15} color="#FFFFFF" />
+              <Text style={styles.headerBookBtnText}>Book</Text>
+            </TouchableOpacity>
+          }
+        />
 
         {/* Filter bar */}
         <View style={styles.filterRow}>
@@ -227,6 +241,7 @@ export default function PatientAppointmentsScreen() {
                 key={tab}
                 style={[styles.filterChip, isSelected && styles.filterChipActive]}
                 onPress={() => setStatusFilter(tab === 'ALL' ? undefined : tab)}
+                activeOpacity={0.75}
               >
                 <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
                   {tab}
@@ -265,20 +280,18 @@ export default function PatientAppointmentsScreen() {
                 <Text style={styles.emptySubtitle}>
                   You do not have any {statusFilter ? statusFilter.toLowerCase() : ''} clinic consultations on record.
                 </Text>
+                <TouchableOpacity
+                  style={styles.emptyBookBtn}
+                  onPress={openBookingModal}
+                  activeOpacity={0.85}
+                >
+                  <Plus size={16} color="#FFFFFF" />
+                  <Text style={styles.emptyBookBtnText}>Schedule Consultation</Text>
+                </TouchableOpacity>
               </View>
             ) : null
           }
         />
-
-        {/* Floating Book Button */}
-        <View style={styles.fabContainer}>
-          <Button
-            title="Book Consultation"
-            iconLeft={<Plus size={16} color="#FFFFFF" />}
-            onPress={openBookingModal}
-            style={styles.fabButton}
-          />
-        </View>
 
         {/* Booking Modal */}
         <Modal
@@ -306,6 +319,7 @@ export default function PatientAppointmentsScreen() {
               <Text style={styles.inputLabel}>Select Doctor</Text>
               {doctors.length > 0 ? (
                 <View style={styles.doctorsList}>
+                  {doctors.map((doc) => {
                     const isSelected = selectedDoctorId === doc.id;
                     const rawName = doc.full_name || doc.user?.full_name || 'Practitioner';
                     const docName = rawName.replace(/^Dr\.?\s*/i, '');
@@ -392,6 +406,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
+  headerBookBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#2563EB',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  headerBookBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -402,25 +435,34 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 20,
     backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   filterChipActive: {
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
   filterChipText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: '#64748B',
+    letterSpacing: 0.2,
   },
   filterChipTextActive: {
-    color: Colors.roles.patient.primary,
+    color: '#FFFFFF',
   },
   listContent: {
     padding: 16,
-    paddingBottom: 90,
+    paddingBottom: 120,
     gap: 12,
   },
   errorBanner: {
@@ -527,19 +569,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 19,
   },
-  fabContainer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-  },
-  fabButton: {
-    width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+  emptyBookBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#2563EB',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    marginTop: 14,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  emptyBookBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   modalContainer: {
     flex: 1,

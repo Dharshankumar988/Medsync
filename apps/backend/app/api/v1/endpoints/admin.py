@@ -3,11 +3,12 @@ import httpx
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, text
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import User, UserRole, UserStatus
 from app.models.doctor import Doctor
+from app.models.doctor_location import DoctorLocation, LocationType
 from app.models.pharmacy import Pharmacy
 from app.models.patient import Patient
 from app.models.hospital import Hospital
@@ -35,7 +36,11 @@ from app.schemas.admin import (
     UpdateUserStatusRequest,
     UpdateUserStatusResponseData,
     AdminActionResponseData,
+    PendingVerificationItem,
+    PendingVerificationProfile,
+    PendingFacilityDetails,
 )
+from app.models.doctor_location import LocationVerificationStatus
 from app.services.verification import VerificationService
 from app.core.config import settings
 
@@ -53,13 +58,19 @@ async def get_supabase_client():
     }
     return httpx.AsyncClient(base_url=f"{settings.SUPABASE_URL}/auth/v1", headers=headers)
 
-@router.get("/verifications/pending", response_model=APIResponse[list[dict]])
+@router.get("/verifications/pending", response_model=APIResponse[list[PendingVerificationItem]])
 async def get_pending_verifications(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200)
 ):
+    from app.models.hospital import Hospital
+    from app.models.doctor_location import DoctorLocation
+
+    data: list[PendingVerificationItem] = []
+
+    # 1. Fetch pending professional signup verification requests (Doctor & Pharmacy)
     stmt = select(VerificationRequest, User, Doctor, Pharmacy).join(
         User, VerificationRequest.user_id == User.id
     ).outerjoin(
@@ -72,15 +83,10 @@ async def get_pending_verifications(
     
     result = await db.execute(stmt)
     rows = result.all()
-    
-    from app.models.hospital import Hospital
-    from app.models.doctor_location import DoctorLocation
 
-    data = []
     for req, user, doctor, pharmacy in rows:
-        profile = None
+        profile_data = None
         if user.role == UserRole.DOCTOR and doctor:
-            # Parse GST if present in license_number string
             gst_no = None
             clean_lic = doctor.license_number or ""
             if " | GST: " in clean_lic:
@@ -92,7 +98,6 @@ async def get_pending_verifications(
             applied_hospital_info = None
             clinic_info = None
 
-            # Check if doctor has a registered clinic in hospitals table
             clinic_hosp_stmt = select(Hospital).where(
                 (Hospital.user_id == user.id) & (Hospital.type == "clinic")
             )
@@ -142,47 +147,26 @@ async def get_pending_verifications(
                     "google_maps_url": clinic_hosp.google_maps_url if clinic_hosp else None,
                 }
 
-            # Check doctor locations
-            loc_stmt = select(DoctorLocation).where(
-                (DoctorLocation.doctor_id == doctor.id) & (DoctorLocation.is_active == True)
+            profile_data = PendingVerificationProfile(
+                full_name=doctor.full_name,
+                specialization=doctor.specialization,
+                experience_years=doctor.experience_years,
+                qualifications=doctor.qualifications,
+                license_number=clean_lic,
+                gst_number=gst_no,
+                medical_council_reg_number=doctor.medical_council_reg_number,
+                practice_type=practice_type,
+                clinic_info=clinic_info,
+                applied_hospital_info=applied_hospital_info,
+                hospital_name=doctor.hospital_name or (applied_hospital_info["name"] if applied_hospital_info else None),
+                hospital_address=doctor.hospital_address or (applied_hospital_info["address"] if applied_hospital_info else None),
+                clinic_name=doctor.clinic_name or (clinic_info["name"] if clinic_info else None),
+                clinic_address=doctor.clinic_address or (clinic_info["address"] if clinic_info else None),
+                city=doctor.city or (clinic_info["city"] if clinic_info else None),
+                state=doctor.state or (clinic_info["state"] if clinic_info else None),
+                consultation_fee=doctor.consultation_fee,
+                clinic_phone=doctor.clinic_phone,
             )
-            loc_res = await db.execute(loc_stmt)
-            locations_list = [
-                {
-                    "location_type": loc.location_type,
-                    "location_name": loc.location_name,
-                    "address": loc.address,
-                    "city": loc.city,
-                    "working_days": loc.working_days,
-                    "consultation_hours": loc.consultation_hours
-                }
-                for loc in loc_res.scalars().all()
-            ]
-
-            profile = {
-                "full_name": doctor.full_name,
-                "specialization": doctor.specialization,
-                "experience_years": doctor.experience_years,
-                "qualifications": doctor.qualifications,
-                "license_number": clean_lic,
-                "gst_number": gst_no,
-                "medical_council_reg_number": doctor.medical_council_reg_number,
-                "practice_type": practice_type,
-                "clinic_info": clinic_info,
-                "applied_hospital_info": applied_hospital_info,
-                "hospital_name": doctor.hospital_name or (applied_hospital_info["name"] if applied_hospital_info else None),
-                "hospital_address": doctor.hospital_address or (applied_hospital_info["address"] if applied_hospital_info else None),
-                "clinic_name": doctor.clinic_name or (clinic_info["name"] if clinic_info else None),
-                "clinic_address": doctor.clinic_address or (clinic_info["address"] if clinic_info else None),
-                "city": doctor.city or (clinic_info["city"] if clinic_info else None),
-                "state": doctor.state or (clinic_info["state"] if clinic_info else None),
-                "consultation_fee": doctor.consultation_fee,
-                "consultation_hours": doctor.consultation_hours,
-                "verification_documents_url": doctor.verification_documents_url,
-                "certificates_url": doctor.certificates_url,
-                "government_id_url": doctor.government_id_url,
-                "locations": locations_list
-            }
         elif user.role == UserRole.PHARMACY and pharmacy:
             affiliated_info = None
             if pharmacy.hospital_id:
@@ -198,33 +182,113 @@ async def get_pending_verifications(
                         "address": aff_hosp.address
                     }
 
-            profile = {
-                "business_name": pharmacy.business_name,
-                "license_number": pharmacy.license_number,
-                "gst_number": pharmacy.gst_number,
-                "contact_number": pharmacy.contact_number or pharmacy.phone_number,
-                "address": pharmacy.address,
-                "city": pharmacy.city,
-                "state": pharmacy.state,
-                "pincode": pharmacy.pincode,
-                "operating_hours": pharmacy.operating_hours,
-                "clinic_name": pharmacy.clinic_name or (affiliated_info["name"] if affiliated_info and affiliated_info["type"] == "clinic" else None),
-                "hospital_id": str(pharmacy.hospital_id) if pharmacy.hospital_id else None,
-                "affiliated_info": affiliated_info,
-                "location": pharmacy.location if isinstance(pharmacy.location, dict) else None,
-                "verification_documents_url": pharmacy.verification_documents_url,
-                "supporting_documents_url": pharmacy.supporting_documents_url
-            }
-            
-        data.append({
-            "request_id": str(req.id),
-            "user_id": str(user.id),
-            "email": user.email,
-            "role": user.role.value,
-            "profile": profile,
-            "created_at": req.created_at.isoformat()
-        })
-        
+            profile_data = PendingVerificationProfile(
+                business_name=pharmacy.business_name,
+                license_number=pharmacy.license_number,
+                gst_number=pharmacy.gst_number,
+                contact_number=pharmacy.contact_number or pharmacy.phone_number,
+                address=pharmacy.address,
+                city=pharmacy.city,
+                state=pharmacy.state,
+                country=pharmacy.country,
+                clinic_name=pharmacy.clinic_name or (affiliated_info["name"] if affiliated_info and affiliated_info["type"] == "clinic" else None),
+                hospital_name=affiliated_info["name"] if affiliated_info else None,
+            )
+
+        data.append(PendingVerificationItem(
+            request_id=str(req.id),
+            user_id=str(user.id),
+            email=user.email,
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            verification_type="REGISTRATION",
+            profile=profile_data,
+            created_at=req.created_at.isoformat() if req.created_at else ""
+        ))
+
+    # 2. Fetch pending doctor practice / workplace affiliations
+    loc_stmt = (
+        select(DoctorLocation, Doctor, User)
+        .join(Doctor, DoctorLocation.doctor_id == Doctor.id)
+        .join(User, Doctor.user_id == User.id)
+        .where(DoctorLocation.verification_status == LocationVerificationStatus.PENDING)
+        .where(DoctorLocation.is_active == True)
+        .order_by(DoctorLocation.created_at.desc())
+    )
+    loc_res = await db.execute(loc_stmt)
+    loc_rows = loc_res.all()
+
+    for loc, doc, doc_user in loc_rows:
+        facility_info = None
+        facility_name = loc.location_name
+        if loc.hospital_id:
+            h_stmt = select(Hospital).where(Hospital.id == loc.hospital_id)
+            h_res = await db.execute(h_stmt)
+            h = h_res.scalar_one_or_none()
+            if h:
+                facility_name = facility_name or h.name
+                facility_info = PendingFacilityDetails(
+                    id=str(h.id),
+                    name=h.name,
+                    type=loc.location_type or h.type or "hospital",
+                    address=loc.address or h.address,
+                    city=loc.city or h.city,
+                    state=loc.state or h.state,
+                    phone=loc.phone or h.phone_number,
+                    working_days=loc.working_days,
+                    consultation_hours=loc.consultation_hours,
+                    is_primary=loc.is_primary,
+                )
+
+        if not facility_info:
+            facility_info = PendingFacilityDetails(
+                id=str(loc.hospital_id) if loc.hospital_id else None,
+                name=facility_name or "Medical Facility",
+                type=loc.location_type or "hospital",
+                address=loc.address,
+                city=loc.city,
+                state=loc.state,
+                phone=loc.phone,
+                working_days=loc.working_days,
+                consultation_hours=loc.consultation_hours,
+                is_primary=loc.is_primary,
+            )
+
+        clean_lic = doc.license_number or ""
+        gst_no = None
+        if " | GST: " in clean_lic:
+            parts = clean_lic.split(" | GST: ")
+            clean_lic = parts[0].strip()
+            gst_no = parts[1].strip()
+
+        doc_profile = PendingVerificationProfile(
+            full_name=doc.full_name,
+            specialization=doc.specialization,
+            experience_years=doc.experience_years,
+            qualifications=doc.qualifications,
+            license_number=clean_lic,
+            gst_number=gst_no,
+            medical_council_reg_number=doc.medical_council_reg_number,
+            practice_type=loc.location_type,
+            clinic_name=doc.clinic_name,
+            clinic_address=doc.clinic_address,
+            city=doc.city,
+            state=doc.state,
+            consultation_fee=doc.consultation_fee,
+            clinic_phone=doc.clinic_phone,
+        )
+
+        data.append(PendingVerificationItem(
+            request_id=str(loc.id),
+            user_id=str(doc_user.id),
+            email=doc_user.email,
+            role=UserRole.DOCTOR.value,
+            verification_type="WORKPLACE_AFFILIATION",
+            profile=doc_profile,
+            facility=facility_info,
+            location_id=str(loc.id),
+            created_at=loc.created_at.isoformat() if loc.created_at else ""
+        ))
+
     return APIResponse(message="Pending verifications retrieved", data=data)
 
 @router.post("/verifications/{request_id}/approve", response_model=APIResponse[AdminActionResponseData])
@@ -233,8 +297,48 @@ async def approve_verification(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    req = await VerificationService.approve_request(db, request_id, current_admin.id)
-    return APIResponse(message="Approved successfully", data=AdminActionResponseData(success=True, id=str(req.id)))
+    from datetime import datetime
+    from app.models.doctor_location import DoctorLocation, LocationVerificationStatus
+    from app.services.notification import NotificationService
+
+    # 1. Try approving VerificationRequest (User signup)
+    v_stmt = select(VerificationRequest).where(VerificationRequest.id == request_id)
+    v_res = await db.execute(v_stmt)
+    v_req = v_res.scalar_one_or_none()
+    if v_req:
+        req = await VerificationService.approve_request(db, request_id, current_admin.id)
+        return APIResponse(message="Approved successfully", data=AdminActionResponseData(success=True, id=str(req.id)))
+
+    # 2. Try approving DoctorLocation (Workplace affiliation)
+    loc_stmt = select(DoctorLocation).where(DoctorLocation.id == request_id)
+    loc_res = await db.execute(loc_stmt)
+    location = loc_res.scalar_one_or_none()
+    if location:
+        location.verification_status = LocationVerificationStatus.APPROVED
+        location.verified_by = current_admin.id
+        location.verified_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(location)
+
+        # Notify doctor
+        doc_res = await db.execute(select(Doctor).where(Doctor.id == location.doctor_id))
+        doc = doc_res.scalar_one_or_none()
+        if doc:
+            loc_display = location.location_name or location.address or "Practice Facility"
+            await NotificationService.send_notification(
+                db,
+                user_id=doc.user_id,
+                title="Workplace Facility Authorized",
+                message=f"Your practice affiliation with '{loc_display}' has been verified and authorized by MedSync Administration.",
+                type="FACILITY"
+            )
+
+        return APIResponse(
+            message="Doctor workplace affiliation approved successfully",
+            data=AdminActionResponseData(success=True, id=str(location.id))
+        )
+
+    raise HTTPException(status_code=404, detail="Pending verification request or workplace affiliation not found")
 
 @router.post("/verifications/{request_id}/reject", response_model=APIResponse[AdminActionResponseData])
 async def reject_verification(
@@ -242,8 +346,48 @@ async def reject_verification(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    req = await VerificationService.reject_request(db, request_id, current_admin.id, "Rejected by admin")
-    return APIResponse(message="Rejected successfully", data=AdminActionResponseData(success=True, id=str(req.id)))
+    from datetime import datetime
+    from app.models.doctor_location import DoctorLocation, LocationVerificationStatus
+    from app.services.notification import NotificationService
+
+    # 1. Try rejecting VerificationRequest (User signup)
+    v_stmt = select(VerificationRequest).where(VerificationRequest.id == request_id)
+    v_res = await db.execute(v_stmt)
+    v_req = v_res.scalar_one_or_none()
+    if v_req:
+        req = await VerificationService.reject_request(db, request_id, current_admin.id, "Rejected by admin")
+        return APIResponse(message="Rejected successfully", data=AdminActionResponseData(success=True, id=str(req.id)))
+
+    # 2. Try rejecting DoctorLocation (Workplace affiliation)
+    loc_stmt = select(DoctorLocation).where(DoctorLocation.id == request_id)
+    loc_res = await db.execute(loc_stmt)
+    location = loc_res.scalar_one_or_none()
+    if location:
+        location.verification_status = LocationVerificationStatus.REJECTED
+        location.verified_by = current_admin.id
+        location.verified_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(location)
+
+        # Notify doctor
+        doc_res = await db.execute(select(Doctor).where(Doctor.id == location.doctor_id))
+        doc = doc_res.scalar_one_or_none()
+        if doc:
+            loc_display = location.location_name or location.address or "Practice Facility"
+            await NotificationService.send_notification(
+                db,
+                user_id=doc.user_id,
+                title="Workplace Facility Affiliation Declined",
+                message=f"Your affiliation with '{loc_display}' could not be verified by MedSync Administration.",
+                type="FACILITY"
+            )
+
+        return APIResponse(
+            message="Doctor workplace affiliation rejected",
+            data=AdminActionResponseData(success=True, id=str(location.id))
+        )
+
+    raise HTTPException(status_code=404, detail="Pending verification request or workplace affiliation not found")
 
 @router.delete("/users/{user_id}", response_model=APIResponse[AdminActionResponseData])
 async def delete_user(
@@ -380,7 +524,7 @@ async def get_patients(
     return APIResponse(message="Patients retrieved", data=data)
 
 @router.get("/doctors", response_model=APIResponse[list[AdminDoctorListItem]])
-async def get_all_doctors(
+async def get_doctors(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin),
     skip: int = Query(0, ge=0),
@@ -397,94 +541,79 @@ async def get_all_doctors(
     rows = result.all()
     
     data = []
-    for doctor, user, hosp in rows:
-        data.append(AdminDoctorListItem(
-            id=str(doctor.id),
-            user_id=str(doctor.user_id),
-            full_name=doctor.full_name,
-            email=user.email,
-            license_number=doctor.license_number,
-            specialization=doctor.specialization,
-            experience_years=doctor.experience_years or 0,
-            consultation_fee=doctor.consultation_fee or 0,
-            hospital_id=str(doctor.hospital_id) if doctor.hospital_id else None,
-            hospital_name=hosp.name if hosp and hosp.type != "clinic" else None,
-            clinic_name=doctor.clinic_name or (hosp.name if hosp and hosp.type == "clinic" else None),
-            facility_type=hosp.type if hosp else ("clinic" if doctor.clinic_name else None),
-            doctor_status=doctor.doctor_status,
-            status=user.status.value if hasattr(user.status, "value") else str(user.status) if user.status else "ACTIVE",
-            is_verified=user.is_verified,
-            created_at=doctor.created_at.isoformat() if doctor.created_at else ""
-        ))
+    for doc, user, hosp in rows:
+        facility_type = None
+        hosp_name = doc.hospital_name
+        clinic_name = doc.clinic_name
+        
+        if hosp:
+            hosp_type = (hosp.type or "hospital").lower()
+            facility_type = hosp_type
+            if hosp_type == "clinic":
+                clinic_name = hosp.name
+            else:
+                hosp_name = hosp.name
+        elif clinic_name:
+            facility_type = "clinic"
+        elif hosp_name:
+            facility_type = "hospital"
+            
+        data.append(
+            AdminDoctorListItem(
+                id=str(doc.id),
+                user_id=str(doc.user_id),
+                full_name=doc.full_name,
+                email=user.email,
+                license_number=doc.license_number,
+                specialization=doc.specialization,
+                experience_years=doc.experience_years or 0,
+                consultation_fee=doc.consultation_fee or 0,
+                hospital_id=str(doc.hospital_id) if doc.hospital_id else None,
+                hospital_name=hosp_name,
+                clinic_name=clinic_name,
+                facility_type=facility_type,
+                doctor_status=doc.doctor_status or (user.status.value if hasattr(user.status, "value") else str(user.status)),
+                is_verified=user.is_verified,
+                created_at=doc.created_at.isoformat() if doc.created_at else ""
+            )
+        )
     return APIResponse(message="Doctors retrieved", data=data)
 
 @router.post("/doctors", response_model=APIResponse[AdminDoctorCreateResponse])
-async def create_doctor_admin(
-    req: AdminDoctorCreate,
+async def create_doctor(
+    payload: AdminDoctorCreate,
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    clean_email = req.email.strip().lower()
-    user_stmt = select(User).where(User.email.ilike(clean_email))
-    existing_user = await db.scalar(user_stmt)
-    if existing_user:
-        raise HTTPException(status_code=400, detail="A user with this email already exists")
+    clean_email = payload.email.strip().lower()
+    
+    # Check if user already exists
+    existing = await db.execute(select(User).where(User.email.ilike(clean_email)))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="A user with this email already exists.")
 
-    facility_id = None
-    facility_name = None
-    facility_type = None
-    if req.new_facility:
-        new_hosp = Hospital(
-            id=uuid.uuid4(),
-            name=req.new_facility.name,
-            type=req.new_facility.type or "hospital",
-            address=req.new_facility.address,
-            city=req.new_facility.city,
-            state=req.new_facility.state,
-            country=req.new_facility.country or "India",
-            pincode=req.new_facility.pincode,
-            phone_number=req.new_facility.phone_number,
-            email=req.new_facility.email,
-            latitude=req.new_facility.latitude,
-            longitude=req.new_facility.longitude,
-            google_maps_url=req.new_facility.google_maps_url,
-            is_verified=True
-        )
-        db.add(new_hosp)
-        await db.flush()
-        facility_id = new_hosp.id
-        facility_name = new_hosp.name
-        facility_type = new_hosp.type
-    elif req.hospital_id:
-        facility_id = uuid.UUID(req.hospital_id)
-        hosp_row = await db.scalar(select(Hospital).where(Hospital.id == facility_id))
-        if hosp_row:
-            facility_name = hosp_row.name
-            facility_type = hosp_row.type
+    auth_user_id: Optional[uuid.UUID] = None
 
-    user_id: Optional[uuid.UUID] = None
+    # 1. Try Supabase Auth API if configured
     if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
         try:
             async with await get_supabase_client() as client:
-                res = await client.post(
-                    "/admin/users",
-                    json={
-                        "email": clean_email,
-                        "password": req.password,
-                        "email_confirm": True,
-                        "app_metadata": {"role": "DOCTOR", "provider": "email"},
-                        "user_metadata": {"role": "DOCTOR", "full_name": req.full_name}
-                    }
-                )
+                res = await client.post("/admin/users", json={
+                    "email": clean_email,
+                    "password": payload.password,
+                    "email_confirm": True,
+                    "app_metadata": {"role": "DOCTOR", "provider": "email"},
+                    "user_metadata": {"role": "DOCTOR", "full_name": payload.full_name}
+                })
                 if res.status_code in (200, 201):
-                    user_id = uuid.UUID(res.json()["id"])
+                    auth_user_id = uuid.UUID(res.json()["id"])
         except Exception:
-            user_id = None
+            auth_user_id = None
 
-    if not user_id:
-        user_id = uuid.uuid4()
+    # 2. Fallback to direct SQL insert into auth.users if Supabase unreachable
+    if not auth_user_id:
+        auth_user_id = uuid.uuid4()
         try:
-            from sqlalchemy import text
             await db.execute(
                 text("""
                 INSERT INTO auth.users (
@@ -499,51 +628,140 @@ async def create_doctor_admin(
                     now(), now(), now()
                 )
                 """),
-                {"id": user_id, "email": clean_email, "pwd": req.password}
+                {"id": auth_user_id, "email": clean_email, "pwd": payload.password}
             )
             await db.commit()
         except Exception:
             await db.rollback()
 
-    new_user = User(
-        id=user_id,
-        email=clean_email,
-        role=UserRole.DOCTOR,
-        status=UserStatus.ACTIVE,
-        is_verified=True,
-        profile_completion_percentage=100
-    )
-    db.add(new_user)
-
-    new_doc = Doctor(
-        id=uuid.uuid4(),
-        user_id=user_id,
-        full_name=req.full_name,
-        specialization=req.specialization or "General Physician",
-        license_number=req.license_number or f"DOC-REG-{uuid.uuid4().hex[:6].upper()}",
-        hospital_id=facility_id,
-        clinic_name=facility_name if facility_type == "clinic" else None,
-        clinic_phone=req.clinic_phone,
-        experience_years=req.experience_years or 0,
-        consultation_fee=req.consultation_fee or 0,
-        doctor_status="ACTIVE"
-    )
-    db.add(new_doc)
-    await db.commit()
-
-    return APIResponse(
-        message="Doctor created successfully",
-        data=AdminDoctorCreateResponse(
-            id=str(new_doc.id),
-            user_id=str(user_id),
+    try:
+        new_user = User(
+            id=auth_user_id,
             email=clean_email,
-            full_name=new_doc.full_name,
-            hospital_id=str(facility_id) if facility_id else None,
-            hospital_name=facility_name if facility_type != "clinic" else None,
-            clinic_name=facility_name if facility_type == "clinic" else None,
-            facility_type=facility_type
+            role=UserRole.DOCTOR,
+            status=UserStatus.ACTIVE,
+            is_verified=True,
+            profile_completion_percentage=100
         )
-    )
+        db.add(new_user)
+        await db.flush()
+
+        assigned_hospital_id: Optional[uuid.UUID] = None
+        facility_name: Optional[str] = None
+        facility_type: Optional[str] = None
+        clinic_name_val: Optional[str] = None
+        hospital_name_val: Optional[str] = None
+
+        if payload.new_facility and payload.new_facility.name.strip():
+            nf = payload.new_facility
+            fac_type = (nf.type or "hospital").lower()
+            new_fac = Hospital(
+                name=nf.name.strip(),
+                type=fac_type,
+                address=nf.address.strip(),
+                city=nf.city.strip() if nf.city else None,
+                state=nf.state.strip() if nf.state else None,
+                country=nf.country.strip() if nf.country else None,
+                pincode=nf.pincode.strip() if nf.pincode else None,
+                phone_number=nf.phone_number.strip() if nf.phone_number else None,
+                email=nf.email.strip() if nf.email else None,
+                latitude=nf.latitude,
+                longitude=nf.longitude,
+                google_maps_url=nf.google_maps_url,
+                is_verified=True,
+                is_active=True
+            )
+            db.add(new_fac)
+            await db.flush()
+            assigned_hospital_id = new_fac.id
+            facility_name = new_fac.name
+            facility_type = fac_type
+            if fac_type == "clinic":
+                clinic_name_val = new_fac.name
+            else:
+                hospital_name_val = new_fac.name
+        elif payload.hospital_id and payload.hospital_id.strip():
+            try:
+                assigned_hospital_id = uuid.UUID(payload.hospital_id.strip())
+            except ValueError:
+                assigned_hospital_id = None
+            if assigned_hospital_id:
+                h_stmt = select(Hospital).where(Hospital.id == assigned_hospital_id)
+                h_res = await db.execute(h_stmt)
+                existing_hosp = h_res.scalar_one_or_none()
+                if existing_hosp:
+                    facility_name = existing_hosp.name
+                    facility_type = (existing_hosp.type or "hospital").lower()
+                    if facility_type == "clinic":
+                        clinic_name_val = existing_hosp.name
+                    else:
+                        hospital_name_val = existing_hosp.name
+
+        new_doc = Doctor(
+            user_id=auth_user_id,
+            full_name=payload.full_name,
+            license_number=payload.license_number,
+            specialization=payload.specialization,
+            hospital_id=assigned_hospital_id,
+            hospital_name=hospital_name_val,
+            clinic_name=clinic_name_val,
+            clinic_phone=payload.clinic_phone,
+            experience_years=payload.experience_years or 0,
+            consultation_fee=payload.consultation_fee or 0,
+            doctor_status="ACTIVE",
+            is_accepting_appointments=True
+        )
+        db.add(new_doc)
+        await db.flush()
+
+        if assigned_hospital_id:
+            loc_type = LocationType.CLINIC if facility_type == "clinic" else LocationType.HOSPITAL
+            loc = DoctorLocation(
+                doctor_id=new_doc.id,
+                location_type=loc_type.value,
+                location_name=facility_name,
+                hospital_id=assigned_hospital_id,
+                is_primary=True,
+                is_active=True,
+                verification_status="APPROVED"
+            )
+            db.add(loc)
+
+        await db.commit()
+
+        # Try Enqueue Blockchain Sync
+        try:
+            from app.services.blockchain_sync import BlockchainSyncService
+            from app.models.blockchain import SyncEntityType, SyncActionType
+            await BlockchainSyncService.enqueue_sync_task(
+                db=db,
+                entity_type=SyncEntityType.DOCTOR,
+                entity_id=new_user.id,
+                action_type=SyncActionType.CREATE
+            )
+            await db.commit()
+        except Exception:
+            pass
+
+        return APIResponse(
+            message="Doctor created successfully",
+            data=AdminDoctorCreateResponse(
+                id=str(new_doc.id),
+                user_id=str(auth_user_id),
+                email=clean_email,
+                full_name=payload.full_name,
+                hospital_id=str(assigned_hospital_id) if assigned_hospital_id else None,
+                hospital_name=hospital_name_val,
+                clinic_name=clinic_name_val,
+                facility_type=facility_type
+            )
+        )
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/admins", response_model=APIResponse[list[AdminUserListItem]])
 async def get_admins(
@@ -755,7 +973,7 @@ async def create_pharmacy_admin(
         id=user_id,
         email=clean_email,
         role=UserRole.PHARMACY,
-        status="ACTIVE",
+        status=UserStatus.ACTIVE,
         is_verified=True,
         profile_completion_percentage=100
     )
@@ -765,7 +983,12 @@ async def create_pharmacy_admin(
     if req.latitude is not None and req.longitude is not None:
         loc_dict = {"latitude": req.latitude, "longitude": req.longitude}
 
-    hosp_uuid = uuid.UUID(req.hospital_id) if req.hospital_id else None
+    hosp_uuid = None
+    if req.hospital_id and req.hospital_id.strip():
+        try:
+            hosp_uuid = uuid.UUID(req.hospital_id.strip())
+        except ValueError:
+            hosp_uuid = None
 
     new_pharmacy = Pharmacy(
         id=uuid.uuid4(),
@@ -781,6 +1004,8 @@ async def create_pharmacy_admin(
         hospital_id=hosp_uuid,
         clinic_name=req.clinic_name,
         location=loc_dict,
+        qr_identifier=f"pharm_{uuid.uuid4().hex[:12]}",
+        qr_status="ACTIVE",
         blockchain_status="PENDING"
     )
     db.add(new_pharmacy)
@@ -1076,247 +1301,6 @@ async def get_admin_blockchain(
     return APIResponse(message="Blockchain overview retrieved", data=data)
 
 
-@router.get("/doctors", response_model=APIResponse[list[AdminDoctorListItem]])
-async def get_doctors(
-    db: AsyncSession = Depends(get_db),
-    current_admin: AuthenticatedPrincipal = Depends(require_admin),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200)
-):
-    from app.models.hospital import Hospital
-    stmt = (
-        select(Doctor, User, Hospital)
-        .join(User, Doctor.user_id == User.id)
-        .outerjoin(Hospital, Doctor.hospital_id == Hospital.id)
-        .offset(skip)
-        .limit(limit)
-    )
-    result = await db.execute(stmt)
-    rows = result.all()
-    
-    data = []
-    for doc, user, hosp in rows:
-        facility_type = None
-        hosp_name = doc.hospital_name
-        clinic_name = doc.clinic_name
-        
-        if hosp:
-            hosp_type = (hosp.type or "hospital").lower()
-            facility_type = hosp_type
-            if hosp_type == "clinic":
-                clinic_name = hosp.name
-            else:
-                hosp_name = hosp.name
-        elif clinic_name:
-            facility_type = "clinic"
-        elif hosp_name:
-            facility_type = "hospital"
-            
-        data.append(
-            AdminDoctorListItem(
-                id=str(doc.id),
-                user_id=str(doc.user_id),
-                full_name=doc.full_name,
-                email=user.email,
-                license_number=doc.license_number,
-                specialization=doc.specialization,
-                experience_years=doc.experience_years or 0,
-                consultation_fee=doc.consultation_fee or 0,
-                hospital_id=str(doc.hospital_id) if doc.hospital_id else None,
-                hospital_name=hosp_name,
-                clinic_name=clinic_name,
-                facility_type=facility_type,
-                doctor_status=doc.doctor_status or (user.status.value if hasattr(user.status, "value") else str(user.status)),
-                is_verified=user.is_verified,
-                created_at=doc.created_at.isoformat() if doc.created_at else ""
-            )
-        )
-    return APIResponse(message="Doctors retrieved", data=data)
-
-@router.post("/doctors", response_model=APIResponse[AdminDoctorCreateResponse])
-async def create_doctor(
-    payload: AdminDoctorCreate,
-    db: AsyncSession = Depends(get_db),
-    current_admin: AuthenticatedPrincipal = Depends(require_admin)
-):
-    from app.models.hospital import Hospital
-    from app.models.doctor_location import DoctorLocation, LocationType
-    from sqlalchemy import text
-    import uuid
-    
-    clean_email = payload.email.strip().lower()
-    
-    # Check if user already exists
-    existing = await db.execute(select(User).where(User.email.ilike(clean_email)))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="A user with this email already exists.")
-
-    auth_user_id: Optional[uuid.UUID] = None
-
-    # 1. Try Supabase Auth API if configured
-    if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
-        try:
-            async with await get_supabase_client() as client:
-                res = await client.post("/admin/users", json={
-                    "email": clean_email,
-                    "password": payload.password,
-                    "email_confirm": True,
-                    "app_metadata": {"role": "DOCTOR", "provider": "email"},
-                    "user_metadata": {"role": "DOCTOR", "full_name": payload.full_name}
-                })
-                if res.status_code in (200, 201):
-                    auth_user_id = uuid.UUID(res.json()["id"])
-        except Exception:
-            auth_user_id = None
-
-    # 2. Fallback to direct SQL insert into auth.users if Supabase unreachable
-    if not auth_user_id:
-        auth_user_id = uuid.uuid4()
-        try:
-            await db.execute(
-                text("""
-                INSERT INTO auth.users (
-                    id, instance_id, email, encrypted_password, aud, role,
-                    raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
-                )
-                VALUES (
-                    :id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')),
-                    'authenticated', 'authenticated',
-                    '{"provider":"email","providers":["email"],"role":"DOCTOR"}',
-                    '{"role":"DOCTOR"}',
-                    now(), now(), now()
-                )
-                """),
-                {"id": auth_user_id, "email": clean_email, "pwd": payload.password}
-            )
-            await db.commit()
-        except Exception:
-            await db.rollback()
-
-    try:
-        new_user = User(
-            id=auth_user_id,
-            email=clean_email,
-            role=UserRole.DOCTOR,
-            status=UserStatus.ACTIVE,
-            is_verified=True,
-            profile_completion_percentage=100
-        )
-        db.add(new_user)
-        await db.flush()
-
-        assigned_hospital_id: Optional[uuid.UUID] = None
-        facility_name: Optional[str] = None
-        facility_type: Optional[str] = None
-        clinic_name_val: Optional[str] = None
-        hospital_name_val: Optional[str] = None
-
-        if payload.new_facility and payload.new_facility.name.strip():
-            nf = payload.new_facility
-            fac_type = (nf.type or "hospital").lower()
-            new_fac = Hospital(
-                name=nf.name.strip(),
-                type=fac_type,
-                address=nf.address.strip(),
-                city=nf.city.strip() if nf.city else None,
-                state=nf.state.strip() if nf.state else None,
-                country=nf.country.strip() if nf.country else None,
-                pincode=nf.pincode.strip() if nf.pincode else None,
-                phone_number=nf.phone_number.strip() if nf.phone_number else None,
-                email=nf.email.strip() if nf.email else None,
-                latitude=nf.latitude,
-                longitude=nf.longitude,
-                google_maps_url=nf.google_maps_url,
-                is_verified=True,
-                is_active=True
-            )
-            db.add(new_fac)
-            await db.flush()
-            assigned_hospital_id = new_fac.id
-            facility_name = new_fac.name
-            facility_type = fac_type
-            if fac_type == "clinic":
-                clinic_name_val = new_fac.name
-            else:
-                hospital_name_val = new_fac.name
-        elif payload.hospital_id and payload.hospital_id.strip():
-            assigned_hospital_id = uuid.UUID(payload.hospital_id.strip())
-            h_stmt = select(Hospital).where(Hospital.id == assigned_hospital_id)
-            h_res = await db.execute(h_stmt)
-            existing_hosp = h_res.scalar_one_or_none()
-            if existing_hosp:
-                facility_name = existing_hosp.name
-                facility_type = (existing_hosp.type or "hospital").lower()
-                if facility_type == "clinic":
-                    clinic_name_val = existing_hosp.name
-                else:
-                    hospital_name_val = existing_hosp.name
-
-        new_doc = Doctor(
-            user_id=auth_user_id,
-            full_name=payload.full_name,
-            license_number=payload.license_number,
-            specialization=payload.specialization,
-            hospital_id=assigned_hospital_id,
-            hospital_name=hospital_name_val,
-            clinic_name=clinic_name_val,
-            clinic_phone=payload.clinic_phone,
-            experience_years=payload.experience_years or 0,
-            consultation_fee=payload.consultation_fee or 0,
-            doctor_status="ACTIVE",
-            is_accepting_appointments=True
-        )
-        db.add(new_doc)
-        await db.flush()
-
-        if assigned_hospital_id:
-            loc_type = LocationType.CLINIC if facility_type == "clinic" else LocationType.HOSPITAL
-            loc = DoctorLocation(
-                doctor_id=new_doc.id,
-                location_type=loc_type.value,
-                location_name=facility_name,
-                hospital_id=assigned_hospital_id,
-                is_primary=True,
-                is_active=True,
-                verification_status="APPROVED"
-            )
-            db.add(loc)
-
-        await db.commit()
-
-        # Try Enqueue Blockchain Sync
-        try:
-            from app.services.blockchain_sync import BlockchainSyncService
-            from app.models.blockchain import SyncEntityType, SyncActionType
-            await BlockchainSyncService.enqueue_sync_task(
-                db=db,
-                entity_type=SyncEntityType.DOCTOR,
-                entity_id=new_user.id,
-                action_type=SyncActionType.CREATE
-            )
-            await db.commit()
-        except Exception:
-            pass
-
-        return APIResponse(
-            message="Doctor created successfully",
-            data=AdminDoctorCreateResponse(
-                id=str(new_doc.id),
-                user_id=str(auth_user_id),
-                email=clean_email,
-                full_name=payload.full_name,
-                hospital_id=str(assigned_hospital_id) if assigned_hospital_id else None,
-                hospital_name=hospital_name_val,
-                clinic_name=clinic_name_val,
-                facility_type=facility_type
-            )
-        )
-    except HTTPException:
-        await db.rollback()
-        raise
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
 
 from fastapi import Request
 from app.dependencies.rate_limit import limiter

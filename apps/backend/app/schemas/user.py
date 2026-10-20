@@ -1,6 +1,6 @@
 import uuid
-from typing import Optional
-from pydantic import BaseModel, EmailStr
+from typing import Optional, Any
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 from datetime import datetime
 from app.models.user import UserRole, UserStatus
 
@@ -22,7 +22,7 @@ class UserResponse(UserBase):
     profile_completion_percentage: int
     is_verified: bool
     
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 class UserSyncRequest(BaseModel):
     id: uuid.UUID
@@ -45,3 +45,23 @@ class UserSyncRequest(BaseModel):
     date_of_birth: Optional[str] = None
     facility_type: Optional[str] = None
     google_maps_url: Optional[str] = None
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    @field_validator("hospital_id", mode="before")
+    @classmethod
+    def clean_hospital_id(cls, v: Any) -> Optional[uuid.UUID]:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            clean_str = v.strip()
+            if not clean_str or clean_str.lower() in ("null", "undefined", "none"):
+                return None
+            try:
+                return uuid.UUID(clean_str)
+            except (ValueError, AttributeError):
+                return None
+        if isinstance(v, uuid.UUID):
+            return v
+        return None
+

@@ -24,12 +24,40 @@ class DoctorLocationService:
         db: AsyncSession, user_id: uuid.UUID, data: DoctorLocationCreate
     ) -> DoctorLocation:
         from fastapi import HTTPException
+        from app.models.hospital import Hospital
+
+        hospital = None
+        if data.hospital_id:
+            hosp_stmt = select(Hospital).where(Hospital.id == data.hospital_id)
+            hosp_res = await db.execute(hosp_stmt)
+            hospital = hosp_res.scalar_one_or_none()
+            if not hospital:
+                raise HTTPException(status_code=404, detail="Selected medical facility not found in MedSync network.")
+
         if data.location_type == "HOSPITAL" and not data.hospital_id:
-            raise HTTPException(status_code=400, detail="Hospital ID is required for HOSPITAL location type.")
-        if data.location_type == "CLINIC" and data.hospital_id:
-            raise HTTPException(status_code=400, detail="Hospital ID must not be provided for CLINIC location type.")
-        if data.location_type == "CLINIC" and not data.location_name:
-            raise HTTPException(status_code=400, detail="Location name is required for CLINIC location type.")
+            raise HTTPException(status_code=400, detail="Hospital ID is required for HOSPITAL location type. Please select from registered hospitals.")
+
+        loc_name = data.location_name
+        loc_address = data.address
+        loc_city = data.city
+        loc_state = data.state
+        loc_phone = data.phone
+        loc_gmaps = data.google_maps_url
+        loc_lat = data.latitude
+        loc_lng = data.longitude
+
+        if hospital:
+            loc_name = loc_name or hospital.name
+            loc_address = loc_address or hospital.address
+            loc_city = loc_city or hospital.city
+            loc_state = loc_state or hospital.state
+            loc_phone = loc_phone or hospital.phone_number
+            loc_gmaps = loc_gmaps or hospital.google_maps_url
+            loc_lat = loc_lat if loc_lat is not None else (float(hospital.latitude) if hospital.latitude is not None else None)
+            loc_lng = loc_lng if loc_lng is not None else (float(hospital.longitude) if hospital.longitude is not None else None)
+
+        if not loc_name:
+            raise HTTPException(status_code=400, detail="Facility name or registered facility selection is required.")
 
         doctor = await DoctorLocationService._get_doctor_profile(db, user_id)
 
@@ -37,18 +65,18 @@ class DoctorLocationService:
             id=uuid.uuid4(),
             doctor_id=doctor.id,
             location_type=data.location_type,
-            location_name=data.location_name,
+            location_name=loc_name,
             hospital_id=data.hospital_id,
-            address=data.address,
-            city=data.city,
-            state=data.state,
-            country=data.country,
-            pincode=data.pincode,
-            phone=data.phone,
-            email=data.email,
-            google_maps_url=data.google_maps_url,
-            latitude=data.latitude,
-            longitude=data.longitude,
+            address=loc_address,
+            city=loc_city,
+            state=loc_state,
+            country=data.country or (hospital.country if hospital else None),
+            pincode=data.pincode or (hospital.pincode if hospital else None),
+            phone=loc_phone,
+            email=data.email or (hospital.email if hospital else None),
+            google_maps_url=loc_gmaps,
+            latitude=loc_lat,
+            longitude=loc_lng,
             working_days=data.working_days,
             consultation_hours=data.consultation_hours,
             is_primary=data.is_primary,

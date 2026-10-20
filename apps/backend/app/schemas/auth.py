@@ -50,6 +50,11 @@ class ProviderResetPasswordRequest(BaseModel):
     new_password: str
     confirm_password: Optional[str] = None
 
+class SetOAuthPasswordRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    password: str
+    confirm_password: Optional[str] = None
+
 class ResetPasswordSuccessResponseData(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     email: str

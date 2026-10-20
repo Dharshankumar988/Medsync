@@ -82,6 +82,10 @@ export default function MyHealthPage() {
             emergency_contact_name: data.emergency_contact_name || "",
             emergency_contact_number: data.emergency_contact_number || ""
           });
+
+          if (data.date_of_birth && data.gender && data.blood_group) {
+            localStorage.setItem(`medsync_profile_completed_${userId}`, "true");
+          }
         }
       } catch (err) {
         console.error("Error loading profile:", err);
@@ -141,6 +145,10 @@ export default function MyHealthPage() {
 
       if (supaErr) {
         throw supaErr;
+      }
+
+      if (formData.date_of_birth && formData.gender && formData.blood_group) {
+        localStorage.setItem(`medsync_profile_completed_${userId}`, "true");
       }
 
       toast.success("Health profile and clinical details updated successfully");

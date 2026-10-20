@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { api } from '../lib/api';
+import { api, formatErrorMessage } from '../lib/api';
 
 interface PrescriptionUnlockModalProps {
   visible: boolean;
@@ -45,7 +45,7 @@ export const PrescriptionUnlockModal: React.FC<PrescriptionUnlockModalProps> = (
         throw new Error('Authorization reference not found in response.');
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Authorization failed.');
+      setError(formatErrorMessage(err));
       setPin('');
     } finally {
       setIsSubmitting(false);

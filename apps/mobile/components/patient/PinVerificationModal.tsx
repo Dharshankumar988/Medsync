@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityInd
 import { Shield, Lock, X } from 'lucide-react-native';
 import { Colors } from '../../constants/theme';
 import { Button } from '../common/Button';
+import { formatErrorMessage } from '../../lib/api';
 
 interface PinVerificationModalProps {
   visible: boolean;
@@ -37,8 +38,7 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
       setPin('');
       setError('');
     } catch (err: any) {
-      const detail = err.response?.data?.detail || err.message || 'Authorization failed.';
-      setError(detail);
+      setError(formatErrorMessage(err));
       setPin('');
     } finally {
       setLoading(false);

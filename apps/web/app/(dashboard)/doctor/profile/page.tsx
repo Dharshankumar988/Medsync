@@ -204,25 +204,18 @@ export default function DoctorProfilePage() {
         is_primary: false,
       };
 
-      if (practiceFormData.location_type === "HOSPITAL") {
-        if (!practiceFormData.hospital_id) {
-          toast.error("Please select a hospital facility");
-          setSubmittingPractice(false);
-          return;
-        }
-        payload.hospital_id = practiceFormData.hospital_id;
-        const matchedHosp = hospitals.find(h => h.id === practiceFormData.hospital_id);
-        payload.location_name = matchedHosp?.name || "Hospital Facility";
-        payload.address = payload.address || matchedHosp?.address;
-        payload.city = payload.city || matchedHosp?.city;
-      } else {
-        if (!practiceFormData.location_name || !practiceFormData.address) {
-          toast.error("Please enter clinic name and address");
-          setSubmittingPractice(false);
-          return;
-        }
-        payload.location_name = practiceFormData.location_name;
+      if (!practiceFormData.hospital_id) {
+        toast.error(`Please select a ${practiceFormData.location_type === "HOSPITAL" ? "hospital" : "clinic"} facility from the registered MedSync network`);
+        setSubmittingPractice(false);
+        return;
       }
+
+      payload.hospital_id = practiceFormData.hospital_id;
+      const matchedFacility = hospitals.find(h => h.id === practiceFormData.hospital_id);
+      payload.location_name = matchedFacility?.name || practiceFormData.location_name;
+      payload.address = practiceFormData.address || matchedFacility?.address || "";
+      payload.city = practiceFormData.city || matchedFacility?.city || "";
+      payload.phone = practiceFormData.phone || matchedFacility?.phone_number || "";
 
       const res = await api.post('/api/v1/doctor-locations', payload);
       toast.success("Additional facility added! Submitted for administrative verification.");
@@ -451,30 +444,31 @@ export default function DoctorProfilePage() {
 
                 <TabsContent value="CLINIC" className="space-y-4 mt-4">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground">Private Clinic Information</label>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => {
-                        setNewFacility(prev => ({ ...prev, type: "clinic" }));
-                        setIsAddFacilityOpen(true);
-                      }}
-                      className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Register New Clinic
-                    </Button>
+                    <label className="text-xs font-medium text-muted-foreground">Select Clinic (Existing Network)</label>
+                    <span className="text-[11px] text-muted-foreground">Clinics are verified by MedSync Administration</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Clinic Name</label>
-                      <Input name="clinic_name" value={doctorData.clinic_name || ""} onChange={handleInputChange} placeholder="e.g. Apex Care Clinic" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Clinic Address</label>
-                      <Input name="clinic_address" value={doctorData.clinic_address || ""} onChange={handleInputChange} placeholder="e.g. 45 Indiranagar 100ft Rd" />
-                    </div>
-                  </div>
+                  <Select 
+                    value={doctorData.hospital_id || (hospitals.find(h => h.name === doctorData.clinic_name)?.id) || ""} 
+                    onChange={(e) => {
+                      const sel = hospitals.find(h => h.id === e.target.value);
+                      if (sel) {
+                        setDoctorData((prev: any) => ({
+                          ...prev,
+                          hospital_id: sel.id,
+                          clinic_name: sel.name,
+                          clinic_address: sel.address
+                        }));
+                      }
+                    }}
+                  >
+                    <option value="" disabled>Select a clinic where you practice...</option>
+                    {hospitals.filter(h => (h.type || "").toLowerCase() === "clinic").map(h => (
+                      <option key={h.id} value={h.id}>
+                        {h.is_verified ? "🩺 " : "⏳ [Pending Approval] "}
+                        {h.name} - {h.city || "Bengaluru"} (Clinic)
+                      </option>
+                    ))}
+                  </Select>
 
                   {doctorData.clinic_name && (() => {
                     const matchedClinic = hospitals.find(h => 
@@ -482,15 +476,25 @@ export default function DoctorProfilePage() {
                       (doctorData.hospital_id && h.id === doctorData.hospital_id)
                     );
                     const isClinicVerified = (profile?.status === "ACTIVE") || matchedClinic?.is_verified;
-                    return isClinicVerified ? (
-                      <div className="p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span><strong>Verified Clinic:</strong> Your private clinic is verified and authorized by MedSync Administration.</span>
-                      </div>
-                    ) : (
-                      <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                        <span><strong>Pending Approval:</strong> Private clinic registration is under review by administrator.</span>
+                    return (
+                      <div className="space-y-2">
+                        {matchedClinic?.address && (
+                          <div className="p-2.5 rounded-lg border border-border/60 bg-muted/30 text-xs flex items-center gap-2 text-muted-foreground">
+                            <MapPin className="w-4 h-4 text-primary shrink-0" />
+                            <span><strong>Location:</strong> {matchedClinic.address}, {matchedClinic.city || "Bengaluru"}</span>
+                          </div>
+                        )}
+                        {isClinicVerified ? (
+                          <div className="p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-xs flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                            <span><strong>Verified Clinic:</strong> Your clinic affiliation is verified and authorized by MedSync Administration.</span>
+                          </div>
+                        ) : (
+                          <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                            <span><strong>Pending Approval:</strong> Clinic affiliation is under review by administrator.</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -612,47 +616,66 @@ export default function DoctorProfilePage() {
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={practiceFormData.location_type}
-                onChange={(e) => setPracticeFormData({ ...practiceFormData, location_type: e.target.value })}
+                onChange={(e) => {
+                  setPracticeFormData({
+                    ...practiceFormData,
+                    location_type: e.target.value,
+                    hospital_id: "",
+                    location_name: "",
+                    address: "",
+                    city: "",
+                    phone: ""
+                  });
+                }}
               >
                 <option value="HOSPITAL">Hospital / Medical Center</option>
                 <option value="CLINIC">Private Clinic / Consultation Chamber</option>
               </select>
             </div>
 
-            {practiceFormData.location_type === "HOSPITAL" ? (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Select Hospital *</label>
-                <Select 
-                  value={practiceFormData.hospital_id} 
-                  onChange={(e) => setPracticeFormData({ ...practiceFormData, hospital_id: e.target.value })}
-                >
-                  <option value="" disabled>Select hospital from MedSync network...</option>
-                  {hospitals.map(h => (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Select {practiceFormData.location_type === "HOSPITAL" ? "Hospital" : "Clinic"} from MedSync Network *
+              </label>
+              <Select 
+                value={practiceFormData.hospital_id} 
+                onChange={(e) => {
+                  const sel = hospitals.find(h => h.id === e.target.value);
+                  if (sel) {
+                    setPracticeFormData(prev => ({
+                      ...prev,
+                      hospital_id: sel.id,
+                      location_name: sel.name,
+                      address: sel.address || "",
+                      city: sel.city || "",
+                      phone: sel.phone_number || sel.clinic_phone || ""
+                    }));
+                  }
+                }}
+              >
+                <option value="" disabled>Select {practiceFormData.location_type === "HOSPITAL" ? "hospital" : "clinic"} from MedSync network...</option>
+                {hospitals
+                  .filter(h => practiceFormData.location_type === "HOSPITAL"
+                    ? (h.type || "").toLowerCase() !== "clinic"
+                    : (h.type || "").toLowerCase() === "clinic"
+                  )
+                  .map(h => (
                     <option key={h.id} value={h.id}>
+                      {practiceFormData.location_type === "HOSPITAL" ? "🏥 " : "🩺 "}
                       {h.name} - {h.city || "Bengaluru"}
                     </option>
                   ))}
-                </Select>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Clinic / Center Name *</label>
-                <Input 
-                  required
-                  value={practiceFormData.location_name}
-                  onChange={(e) => setPracticeFormData({ ...practiceFormData, location_name: e.target.value })}
-                  placeholder="e.g. HealthFirst Specialist Clinic"
-                />
-              </div>
-            )}
+              </Select>
+            </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Address / Area *</label>
+              <label className="text-xs font-medium text-muted-foreground">Facility Address</label>
               <Input 
                 required
+                readOnly
+                className="bg-muted/50 cursor-not-allowed"
                 value={practiceFormData.address}
-                onChange={(e) => setPracticeFormData({ ...practiceFormData, address: e.target.value })}
-                placeholder="e.g. 2nd Floor, 12th Main Road, Indiranagar"
+                placeholder="Select a registered facility above to view address"
               />
             </div>
 

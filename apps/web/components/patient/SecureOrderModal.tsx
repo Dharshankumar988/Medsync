@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@medsync/ui';
 import { Button } from '@medsync/ui';
 import { Input } from '@medsync/ui';
-import { Store, Lock, KeyRound, Loader2, UserSquare2, CheckCircle2 } from 'lucide-react';
+import { Store, Lock, KeyRound, Loader2, UserSquare2, CheckCircle2, MapPin, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { supabase } from '@/lib/supabase';
@@ -95,17 +95,47 @@ export default function SecureOrderModal({
     }
   }, [open]);
 
+  const [isLocating, setIsLocating] = useState(false);
+
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser');
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLatitude(pos.coords.latitude);
+        setLongitude(pos.coords.longitude);
+        setIsLocating(false);
+        toast.success('Current location detected successfully');
+      },
+      () => {
+        setIsLocating(false);
+        toast.error('Unable to retrieve current location. Please tap on the map or enter your address.');
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prescriptionId || !pharmacyId || !address || !latitude || pin.length !== 6) return;
+    if (!prescriptionId || !pharmacyId || !address.trim() || pin.length !== 6) {
+      if (!address.trim()) toast.error('Please enter your delivery address');
+      else if (!pharmacyId) toast.error('Please select a pharmacy');
+      else if (pin.length !== 6) toast.error('Please enter your 6-digit PIN');
+      return;
+    }
     setIsSubmitting(true);
 
     try {
       const formData = new FormData();
       formData.append('pharmacy_id', pharmacyId);
-      formData.append('delivery_address', address);
-      formData.append('delivery_latitude', latitude.toString());
-      formData.append('delivery_longitude', longitude.toString());
+      formData.append('delivery_address', address.trim());
+      if (latitude && longitude) {
+        formData.append('delivery_latitude', latitude.toString());
+        formData.append('delivery_longitude', longitude.toString());
+      }
       formData.append('pin', pin);
 
       await api.post(`/api/v1/prescriptions/${prescriptionId}/order-online`, formData);
@@ -152,7 +182,7 @@ export default function SecureOrderModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto bg-card border border-border/80 rounded-2xl shadow-2xl">
+      <DialogContent className="sm:max-w-xl max-h-[92vh] overflow-y-auto bg-card border border-border/80 rounded-2xl shadow-2xl p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             {isForgotPin ? (
@@ -271,17 +301,32 @@ export default function SecureOrderModal({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Delivery Point on Map</label>
-              <LocationPickerMap
-                initialLocation={latitude && longitude ? { lat: latitude, lng: longitude } : null}
-                onLocationSelect={(lat, lng) => {
-                  setLatitude(lat);
-                  setLongitude(lng);
-                }}
-                onAddressFound={(addr) => {
-                  setAddress(addr);
-                }}
-              />
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-primary" /> Delivery Point on Map
+                </label>
+                <button
+                  type="button"
+                  onClick={handleDetectLocation}
+                  disabled={isLocating}
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium disabled:opacity-50"
+                >
+                  {isLocating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
+                  {isLocating ? "Locating..." : "Use Current Location"}
+                </button>
+              </div>
+              <div className="rounded-xl overflow-hidden border border-border/80 h-[220px]">
+                <LocationPickerMap
+                  initialLocation={latitude && longitude ? { lat: latitude, lng: longitude } : null}
+                  onLocationSelect={(lat, lng) => {
+                    setLatitude(lat);
+                    setLongitude(lng);
+                  }}
+                  onAddressFound={(addr) => {
+                    setAddress(addr);
+                  }}
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -327,8 +372,7 @@ export default function SecureOrderModal({
               disabled={
                 isSubmitting ||
                 !pharmacyId ||
-                !address ||
-                !latitude ||
+                !address.trim() ||
                 pin.length !== 6
               }
             >

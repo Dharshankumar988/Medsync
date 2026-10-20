@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   scrollInner: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   centerLoading: {
     alignItems: 'center',

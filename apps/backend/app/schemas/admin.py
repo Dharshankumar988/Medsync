@@ -277,3 +277,61 @@ class AdminActionResponseData(BaseModel):
     message: Optional[str] = None
     id: Optional[str] = None
 
+
+class PendingVerificationProfile(BaseModel):
+    """Doctor or Pharmacy profile metadata in pending verification list."""
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
+
+    full_name: Optional[str] = None
+    specialization: Optional[str] = None
+    experience_years: Optional[int] = None
+    qualifications: Optional[str] = None
+    license_number: Optional[str] = None
+    gst_number: Optional[str] = None
+    medical_council_reg_number: Optional[str] = None
+    practice_type: Optional[str] = None
+    clinic_info: Optional[dict] = None
+    applied_hospital_info: Optional[dict] = None
+    hospital_name: Optional[str] = None
+    hospital_address: Optional[str] = None
+    clinic_name: Optional[str] = None
+    clinic_address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    consultation_fee: Optional[int] = None
+    clinic_phone: Optional[str] = None
+    business_name: Optional[str] = None
+    address: Optional[str] = None
+    contact_number: Optional[str] = None
+
+
+class PendingFacilityDetails(BaseModel):
+    """Workplace practice facility metadata for doctor affiliation verifications."""
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
+
+    id: Optional[str] = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    phone: Optional[str] = None
+    working_days: Optional[str] = None
+    consultation_hours: Optional[str] = None
+    is_primary: Optional[bool] = False
+
+
+class PendingVerificationItem(BaseModel):
+    """Item schema for all pending verifications (signups and doctor workplace affiliations)."""
+    model_config = ConfigDict(extra="allow", use_enum_values=True)
+
+    request_id: str
+    user_id: str
+    email: str
+    role: str
+    verification_type: str = "REGISTRATION"  # "REGISTRATION" | "WORKPLACE_AFFILIATION"
+    created_at: str
+    profile: Optional[PendingVerificationProfile] = None
+    facility: Optional[PendingFacilityDetails] = None
+    location_id: Optional[str] = None
+

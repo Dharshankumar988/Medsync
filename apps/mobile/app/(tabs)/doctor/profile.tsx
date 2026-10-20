@@ -45,6 +45,7 @@ import {
 } from '../../../services/doctor.service';
 import { authService } from '../../../services/auth.service';
 import { QRScanner } from '../../../components/common/QRScanner';
+import { formatErrorMessage } from '../../../lib/api';
 
 export default function DoctorProfileScreen() {
   const router = useRouter();
@@ -132,7 +133,7 @@ export default function DoctorProfileScreen() {
       await doctorService.updateDoctorProfile(profile);
       Alert.alert('Success', 'Doctor credentials and clinic settings updated successfully.');
     } catch (err: any) {
-      Alert.alert('Save Failed', err.response?.data?.detail || err.message || 'Failed to update profile.');
+      Alert.alert('Save Failed', formatErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -169,8 +170,7 @@ export default function DoctorProfileScreen() {
       setPassword('');
       fetchProfileData();
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || 'Failed to update PIN.';
-      setPinModalError(msg);
+      setPinModalError(formatErrorMessage(err));
     } finally {
       setPinLoading(false);
     }

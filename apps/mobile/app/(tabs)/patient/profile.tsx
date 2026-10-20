@@ -32,6 +32,7 @@ import { QRScanner } from '../../../components/common/QRScanner';
 import { useRole } from '../../../providers/role-provider';
 import { patientService, SecurityStatusInfo } from '../../../services/patient.service';
 import { Colors } from '../../../constants/theme';
+import { formatErrorMessage } from '../../../lib/api';
 
 export default function PatientProfileScreen() {
   const { user } = useRole();
@@ -111,7 +112,7 @@ export default function PatientProfileScreen() {
       Alert.alert('Profile Saved', 'Your medical profile has been updated in the database.');
       loadProfileData();
     } catch (err: any) {
-      Alert.alert('Save Failed', err.response?.data?.detail || err.message || 'Could not update profile.');
+      Alert.alert('Save Failed', formatErrorMessage(err));
     } finally {
       setEditSaving(false);
     }
@@ -144,7 +145,7 @@ export default function PatientProfileScreen() {
       setCurrentPassword('');
       loadProfileData();
     } catch (err: any) {
-      setPinError(err.response?.data?.detail || err.message || 'PIN configuration failed.');
+      setPinError(formatErrorMessage(err));
     } finally {
       setPinSaving(false);
     }

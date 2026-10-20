@@ -245,7 +245,7 @@ export default function PatientDashboard() {
             <ChevronRight size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
-          <View style={{ height: 32 }} />
+          <View style={{ height: 80 }} />
         </ScrollView>
       </View>
     </RoleGuard>

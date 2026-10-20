@@ -12,6 +12,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { formatDoctorName } from "@/lib/formatDoctorName";
+import GoogleCreatePasswordModal from "@/components/patient/GoogleCreatePasswordModal";
+import CompleteHealthProfileModal from "@/components/patient/CompleteHealthProfileModal";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -24,12 +26,75 @@ import { dashboardService } from "@/services/dashboard.service";
 
 export default function PatientDashboard() {
   const [userId, setUserId] = useState<string>("");
+  const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
+  const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUserId(data.user.id);
+    supabase.auth.getUser().then(async ({ data }) => {
+      const user = data.user;
+      if (!user) return;
+      setUserId(user.id);
+
+      // 1. Password setup: ONLY for patients who signed up with Google OAuth and haven't created a password
+      const isGoogleUser =
+        user.app_metadata?.provider === "google" ||
+        user.app_metadata?.providers?.includes("google") ||
+        user.identities?.some((id: any) => id.provider === "google");
+
+      const hasSetPassword =
+        user.user_metadata?.has_password === true ||
+        localStorage.getItem(`medsync_pwd_set_${user.id}`) === "true";
+
+      const skippedPasswordThisSession =
+        sessionStorage.getItem(`medsync_pwd_skipped_${user.id}`) === "true";
+
+      let passwordPromptActive = false;
+      if (isGoogleUser && !hasSetPassword && !skippedPasswordThisSession) {
+        passwordPromptActive = true;
+        setShowPasswordModal(true);
+      }
+
+      // 2. Health profile completion check: DOB, Gender, Blood Group
+      const profileCompletedInStorage =
+        localStorage.getItem(`medsync_profile_completed_${user.id}`) === "true";
+      const profileDismissedThisSession =
+        sessionStorage.getItem(`medsync_profile_popup_dismissed_${user.id}`) === "true";
+
+      if (!profileCompletedInStorage && !profileDismissedThisSession) {
+        try {
+          const { data: patientData } = await supabase
+            .from("patients")
+            .select("date_of_birth, gender, blood_group")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (
+            patientData?.date_of_birth &&
+            patientData?.gender &&
+            patientData?.blood_group
+          ) {
+            localStorage.setItem(`medsync_profile_completed_${user.id}`, "true");
+          } else if (!passwordPromptActive) {
+            setShowProfileModal(true);
+          }
+        } catch (err) {
+          console.warn("Patient health profile check notice:", err);
+        }
+      }
     });
   }, []);
+
+  const handlePasswordModalClose = () => {
+    setShowPasswordModal(false);
+    // Once password modal closes, check if health profile modal needs to be presented
+    if (userId) {
+      const profileCompleted = localStorage.getItem(`medsync_profile_completed_${userId}`) === "true";
+      const profileDismissed = sessionStorage.getItem(`medsync_profile_popup_dismissed_${userId}`) === "true";
+      if (!profileCompleted && !profileDismissed) {
+        setShowProfileModal(true);
+      }
+    }
+  };
 
   const { data: dashboardData = {
     upcoming_appointments: 0,
@@ -206,6 +271,24 @@ export default function PatientDashboard() {
           </Card>
         </motion.div>
       </motion.div>
+
+      {/* ─── Google OAuth Password Creation Modal (Google Signups Only) ─── */}
+      {userId && (
+        <GoogleCreatePasswordModal
+          isOpen={showPasswordModal}
+          onClose={handlePasswordModalClose}
+          userId={userId}
+        />
+      )}
+
+      {/* ─── Health Profile Completion Modal (First Login / Incomplete Health Info) ─── */}
+      {userId && (
+        <CompleteHealthProfileModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          userId={userId}
+        />
+      )}
 
     </div>
   );

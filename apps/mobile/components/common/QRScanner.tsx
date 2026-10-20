@@ -1,10 +1,13 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, Alert, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, Alert, TextInput, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { ScanLine, CheckCircle2, XCircle, Search, ShieldCheck } from 'lucide-react-native';
+import { ScanLine, CheckCircle2, XCircle, Search, ShieldCheck, ShoppingBag } from 'lucide-react-native';
 import { patientService } from '../../services/patient.service';
 import { Colors } from '../../constants/theme';
 import { Button } from './Button';
+import { formatErrorMessage } from '../../lib/api';
+import { MedicalLoadingIndicator } from './MedicalLoadingIndicator';
+import { OrderMedicinesModal } from '../patient/OrderMedicinesModal';
 
 interface QRScannerProps {
   onVerify?: (result: any) => void;
@@ -18,6 +21,7 @@ export function QRScanner({ onVerify, verifyHandler, role = 'patient' }: QRScann
   const [verifying, setVerifying] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [result, setResult] = useState<any | null>(null);
+  const [orderModalVisible, setOrderModalVisible] = useState(false);
 
   const verifyToken = useCallback(
     async (token: string) => {
@@ -36,7 +40,7 @@ export function QRScanner({ onVerify, verifyHandler, role = 'patient' }: QRScann
           onVerify(verifyData);
         }
       } catch (err: any) {
-        const errorMsg = err.response?.data?.detail || err.message || 'QR verification failed.';
+        const errorMsg = formatErrorMessage(err);
         setResult({
           is_valid: false,
           message: errorMsg,
@@ -129,8 +133,11 @@ export function QRScanner({ onVerify, verifyHandler, role = 'patient' }: QRScann
       {/* Verification Result Card */}
       {verifying && (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color={Colors.roles.patient.primary} size="small" />
-          <Text style={styles.loadingText}>Verifying with MedSync Blockchain & Backend...</Text>
+          <MedicalLoadingIndicator
+            message="Verifying with MedSync Blockchain..."
+            subMessage="Validating Polygon Amoy Testnet & Smart Contract Proof"
+            color={Colors.roles.patient.primary}
+          />
         </View>
       )}
 
@@ -138,14 +145,52 @@ export function QRScanner({ onVerify, verifyHandler, role = 'patient' }: QRScann
         <View style={[styles.resultCard, result.is_valid ? styles.resultCardValid : styles.resultCardInvalid]}>
           <View style={styles.resultHeader}>
             {result.is_valid ? (
-              <CheckCircle2 size={22} color="#10B981" />
+              <ShieldCheck size={24} color="#10B981" />
             ) : (
-              <XCircle size={22} color="#EF4444" />
+              <XCircle size={24} color="#EF4444" />
             )}
-            <Text style={[styles.resultTitle, { color: result.is_valid ? '#10B981' : '#EF4444' }]}>
-              {result.is_valid ? 'Authentic & Verified' : 'Verification Failed'}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.resultTitle, { color: result.is_valid ? '#047857' : '#EF4444' }]}>
+                {result.is_valid ? 'Authentic & Blockchain Verified' : 'Verification Failed'}
+              </Text>
+              <Text style={styles.resultSubtitle}>
+                {result.type === 'PHARMACY'
+                  ? 'Official MedSync Licensed Dispensary'
+                  : result.type === 'BLOCKCHAIN'
+                  ? 'Immutable Medical Blockchain Record'
+                  : 'MedSync Cryptographic Record'}
+              </Text>
+            </View>
           </View>
+
+          {/* Business / Entity Name if available */}
+          {result.business_name && (
+            <View style={styles.entityBox}>
+              <Text style={styles.entityName}>{result.business_name}</Text>
+              {result.address ? (
+                <Text style={styles.entityDetail}>
+                  📍 {result.address}{result.city ? `, ${result.city}` : ''}
+                </Text>
+              ) : null}
+              {result.phone ? (
+                <Text style={styles.entityDetail}>📞 {result.phone}</Text>
+              ) : null}
+            </View>
+          )}
+
+          {/* Blockchain & Security Badge */}
+          {result.verified_on_blockchain && (
+            <View style={styles.blockchainBadge}>
+              <Text style={styles.blockchainBadgeText}>
+                ⛓️ Verified on {result.network || 'Polygon Amoy Testnet'}
+              </Text>
+              {result.transaction_hash && (
+                <Text style={styles.blockchainHash} numberOfLines={1}>
+                  Tx: {result.transaction_hash}
+                </Text>
+              )}
+            </View>
+          )}
 
           <Text style={styles.resultMessage}>{result.message}</Text>
           {result.purpose ? (
@@ -154,8 +199,31 @@ export function QRScanner({ onVerify, verifyHandler, role = 'patient' }: QRScann
           {result.resource_id ? (
             <Text style={styles.resultMeta}>Reference: {result.resource_id}</Text>
           ) : null}
+
+          {/* Actionable Workflow: Order Medicines from this Scanned Pharmacy */}
+          {result.is_valid && (result.type === 'PHARMACY' || result.business_name || result.purpose === 'LICENSED_PHARMACY') && (
+            <TouchableOpacity
+              style={styles.orderCtaBtn}
+              onPress={() => setOrderModalVisible(true)}
+              activeOpacity={0.88}
+              accessibilityLabel="Order Medicines from this Pharmacy"
+            >
+              <ShoppingBag size={18} color="#FFFFFF" />
+              <Text style={styles.orderCtaText}>Order Medicines from this Pharmacy</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
+
+      {/* Interactive Order Medicines Modal */}
+      <OrderMedicinesModal
+        visible={orderModalVisible}
+        pharmacyData={result}
+        onClose={() => setOrderModalVisible(false)}
+        onOrderSuccess={() => {
+          setOrderModalVisible(false);
+        }}
+      />
     </View>
   );
 }
@@ -292,6 +360,51 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  resultSubtitle: {
+    fontSize: 11,
+    color: '#059669',
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  entityBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  entityName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  entityDetail: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 2,
+  },
+  blockchainBadge: {
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  blockchainBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  blockchainHash: {
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: '#64748B',
+    marginTop: 2,
+  },
   resultMessage: {
     fontSize: 13,
     color: '#334155',
@@ -301,5 +414,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
     marginTop: 4,
+  },
+  orderCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#059669',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 12,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  orderCtaText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

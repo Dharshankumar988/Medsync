@@ -148,7 +148,12 @@ export const authService = {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        const errorMsg = (error.message && error.message !== "{}" && error.message !== "[object Object]") 
+          ? error.message 
+          : "Unable to register account with authentication service. Please try again.";
+        throw new Error(errorMsg);
+      }
       if (!authData.user) throw new Error("Signup failed");
       
       // When email confirmation is enabled or user already exists, Supabase returns identities: []

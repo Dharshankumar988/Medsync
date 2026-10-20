@@ -232,32 +232,75 @@ async def download_prescription_by_ref(
     rx_res = await db.execute(rx_stmt)
     rx = rx_res.scalar_one_or_none()
 
-    if not rx or not rx.pdf_url:
-        raise HTTPException(status_code=404, detail="Prescription PDF not found")
+    if not rx:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    # Fetch raw PDF bytes from storage or reconstruct dynamically on-demand
+    raw_pdf_bytes = None
+    if rx.pdf_url:
+        try:
+            raw_pdf_bytes = await StorageService.download_record_file(rx.pdf_url)
+        except Exception as e:
+            import logging
+            logging.getLogger("medsync.prescriptions").warning(f"Storage download failed for prescription {rx.id}: {e}")
+
+    if not raw_pdf_bytes:
+        from app.models.prescription import PrescriptionItem
+        from app.models.doctor import Doctor
+        from app.models.patient import Patient
+
+        doc_stmt = select(Doctor).where(Doctor.user_id == rx.doctor_id)
+        doc_res = await db.execute(doc_stmt)
+        doc_prof = doc_res.scalar_one_or_none()
+
+        pat_stmt = select(Patient).where(Patient.user_id == rx.patient_id)
+        pat_res = await db.execute(pat_stmt)
+        pat_prof = pat_res.scalar_one_or_none()
+
+        doctor_data = {"name": doc_prof.full_name if doc_prof else "Doctor", "profile_image_url": rx.doctor_profile_image_url}
+        patient_data = {"name": pat_prof.full_name if pat_prof else "Patient", "id": str(rx.patient_id)}
+
+        items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == rx.id)
+        items_res = await db.execute(items_stmt)
+        items_list = [
+            {"medicine_name": i.medicine_name, "dosage": i.dosage, "frequency": i.frequency, "duration_days": i.duration_days, "special_instructions": i.special_instructions}
+            for i in items_res.scalars().all()
+        ]
+
+        qr_tok = rx.qr_token or f"MS-RX-{rx.id}"
+        qr_img = QRPdfService.generate_qr_code(qr_tok)
+        rx_dict = {"diagnosis": rx.diagnosis or "Clinical Prescription", "notes": rx.notes}
+        pdf_stream = QRPdfService.generate_prescription_pdf(
+            rx_dict, patient_data, doctor_data, items_list, qr_img, qr_token=qr_tok, pin=rx.pin
+        )
+        raw_pdf_bytes = pdf_stream.getvalue() if hasattr(pdf_stream, "getvalue") else pdf_stream.read()
 
     # Check if a PIN was used to authorize this download
     pin = DOWNLOAD_PIN_CACHE.pop(authorization_reference, None)
+    final_pdf_bytes = raw_pdf_bytes
     if pin:
         try:
-            raw_pdf_bytes = await StorageService.download_record_file(rx.pdf_url)
-            encrypted_pdf_bytes = QRPdfService.encrypt_pdf(raw_pdf_bytes, pin)
-            enc_object_path, _, _, _ = await StorageService.upload_prescription_bytes(
-                file_bytes=encrypted_pdf_bytes,
-                filename=f"prescription_{rx.id}_encrypted.pdf",
-                content_type="application/pdf",
-                patient_id=str(rx.patient_id),
-                prescription_id=str(rx.id),
-            )
-            signed_url = await StorageService.create_signed_download_url(enc_object_path, expires_in=300)
-            return APIResponse(message="Download URL generated (PIN encrypted)", data={"url": signed_url})
+            final_pdf_bytes = QRPdfService.encrypt_pdf(raw_pdf_bytes, pin)
         except Exception as e:
             import logging
             logging.getLogger("medsync.prescriptions").error(f"Error encrypting PDF with PIN: {e}", exc_info=True)
 
-    # Generate signed URL valid for 5 minutes
-    signed_url = await StorageService.create_signed_download_url(rx.pdf_url, expires_in=300)
-    
-    return APIResponse(message="Download URL generated", data={"url": signed_url})
+    # Try storing and generating signed URL, or fallback to direct download URL
+    try:
+        suffix = "encrypted" if pin else "authorized"
+        enc_object_path, _, _, _ = await StorageService.upload_prescription_bytes(
+            file_bytes=final_pdf_bytes,
+            filename=f"prescription_{rx.id}_{suffix}.pdf",
+            content_type="application/pdf",
+            patient_id=str(rx.patient_id),
+            prescription_id=str(rx.id),
+        )
+        signed_url = await StorageService.create_signed_download_url(enc_object_path, expires_in=600)
+        return APIResponse(message="Download URL generated", data={"url": signed_url})
+    except Exception as e:
+        import logging
+        logging.getLogger("medsync.prescriptions").warning(f"Storage upload fallback to streaming for prescription {rx.id}: {e}")
+        return APIResponse(message="Download URL generated", data={"url": f"/api/v1/prescriptions/{rx.id}/download"})
 
 @router.post("/{id}/dispense", response_model=APIResponse)
 async def dispense_prescription(

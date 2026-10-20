@@ -15,6 +15,7 @@ const api = axios.create({
   timeout: 15000,
 });
 
+api.interceptors.request.use(async (config) => {
   // Normalize redundant /api/v1 prefix if callers supply it
   if (config.url?.startsWith('/api/v1/')) {
     config.url = config.url.replace(/^\/api\/v1/, '');
@@ -47,6 +48,26 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export function formatErrorMessage(err: any): string {
+  if (!err) return 'An unexpected error occurred.';
+  const detail = err.response?.data?.detail ?? err.response?.data?.message;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d: any) => {
+        if (typeof d === 'string') return d;
+        if (d?.msg) {
+          const loc = Array.isArray(d.loc) ? d.loc.filter((l: any) => l !== 'body').join('.') : '';
+          return loc ? `${loc}: ${d.msg}` : d.msg;
+        }
+        return JSON.stringify(d);
+      })
+      .join('\n');
+  }
+  if (typeof detail === 'string') return detail;
+  if (typeof detail === 'object' && detail !== null) return JSON.stringify(detail);
+  return err.message || 'An unexpected error occurred.';
+}
 
 export { api };
 export default api;

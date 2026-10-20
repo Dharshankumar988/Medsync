@@ -111,16 +111,51 @@ export default function CreatePrescriptionPage() {
 
     async function fetchPharmacies() {
       try {
-        const [docRes, pharmsRes, affilsRes] = await Promise.all([
-          supabase.from("doctors").select("hospital_id, clinic_name").eq("user_id", userId).single(),
+        const [docRes, hospRes, locsRes, pharmsRes, affilsRes] = await Promise.all([
+          supabase.from("doctors").select("hospital_id, clinic_name").eq("user_id", userId).maybeSingle(),
+          api.get("/api/v1/hospitals").catch(() => ({ data: { data: [] } })),
+          api.get("/api/v1/doctor-locations").catch(() => ({ data: { data: [] } })),
           supabase.from("pharmacies").select("*"),
-          supabase.from("doctor_pharmacy_affiliations").select("pharmacy_id").eq("doctor_id", userId).eq("status", "ACTIVE")
+          api.get("/api/v1/doctor-locations/affiliate-pharmacy").catch(() => ({ data: { data: [] } }))
         ]);
 
         const doctorProfile = docRes.data;
+        const allHospitals = hospRes.data?.data || [];
+        const doctorLocations = locsRes.data?.data || [];
         const pharmacyProfiles = pharmsRes.data || [];
-        const affiliatedIds = new Set((affilsRes.data || []).map((a: any) => a.pharmacy_id));
-          
+        const directAffiliations = affilsRes.data?.data || [];
+
+        const affiliatedIds = new Set(directAffiliations.map((a: any) => String(a.pharmacy_id)));
+
+        // Facility lookup
+        const facilityIdMap = new Map<string, string>();
+        const facilityNameMap = new Map<string, string>();
+
+        if (doctorProfile?.hospital_id) {
+          const hospId = String(doctorProfile.hospital_id);
+          const matched = allHospitals.find((h: any) => h.id === doctorProfile.hospital_id);
+          const name = matched?.name || "Primary Hospital";
+          facilityIdMap.set(hospId, name);
+          facilityNameMap.set(name.toLowerCase(), name);
+        }
+
+        if (doctorProfile?.clinic_name) {
+          facilityNameMap.set(doctorProfile.clinic_name.trim().toLowerCase(), doctorProfile.clinic_name.trim());
+        }
+
+        allHospitals
+          .filter((h: any) => h.user_id === userId && (h.type || "").toLowerCase() === "clinic")
+          .forEach((h: any) => {
+            facilityIdMap.set(String(h.id), h.name.trim());
+            facilityNameMap.set(h.name.trim().toLowerCase(), h.name.trim());
+          });
+
+        doctorLocations.forEach((loc: any) => {
+          const name = loc.location_name || (loc.hospital_id ? allHospitals.find((h: any) => h.id === loc.hospital_id)?.name : "Workplace");
+          if (loc.hospital_id) facilityIdMap.set(String(loc.hospital_id), name);
+          if (name) facilityNameMap.set(name.toLowerCase(), name);
+        });
+
         if (pharmacyProfiles.length > 0) {
           const userIds = pharmacyProfiles.map(p => p.user_id);
           const { data: usersData } = await supabase
@@ -134,12 +169,25 @@ export default function CreatePrescriptionPage() {
                const user = usersData?.find(u => u.id === profile.user_id);
                if (!user) return null;
                
-               const isLinked = affiliatedIds.has(profile.user_id) || (doctorProfile && (
-                 (profile.hospital_id && doctorProfile.hospital_id && profile.hospital_id === doctorProfile.hospital_id) ||
-                 (profile.clinic_name && doctorProfile.clinic_name && profile.clinic_name === doctorProfile.clinic_name)
-               ));
+               const pUserId = String(profile.user_id);
+               const pHospitalId = profile.hospital_id ? String(profile.hospital_id) : "";
+               const pClinicName = (profile.clinic_name || "").trim().toLowerCase();
+
+               let isLinked = false;
+               let linkedFacilityName = "";
+
+               if (affiliatedIds.has(pUserId)) {
+                 isLinked = true;
+                 linkedFacilityName = "Direct Partner";
+               } else if (pHospitalId && facilityIdMap.has(pHospitalId)) {
+                 isLinked = true;
+                 linkedFacilityName = facilityIdMap.get(pHospitalId) || "Affiliated Facility";
+               } else if (pClinicName && facilityNameMap.has(pClinicName)) {
+                 isLinked = true;
+                 linkedFacilityName = facilityNameMap.get(pClinicName) || profile.clinic_name;
+               }
                
-               return { ...profile, ...user, isLinked };
+               return { ...profile, ...user, isLinked, linkedFacilityName };
             })
             .filter(Boolean);
             
@@ -215,10 +263,8 @@ export default function CreatePrescriptionPage() {
     }
     setLinkingPharmacy(true);
     try {
-      await supabase.from("doctor_pharmacy_affiliations").upsert({
-        doctor_id: userId,
-        pharmacy_id: pharmacyToLink,
-        status: "ACTIVE"
+      await api.post('/api/v1/doctor-locations/affiliate-pharmacy', {
+        pharmacy_id: pharmacyToLink
       });
       toast.success("Pharmacy linked to your clinic practice");
       setRoutedPharmacyId(pharmacyToLink);
@@ -226,25 +272,59 @@ export default function CreatePrescriptionPage() {
       setPharmacyToLink("");
 
       // Refresh pharmacies
-      const [docRes, pharmsRes, affilsRes] = await Promise.all([
-        supabase.from("doctors").select("hospital_id, clinic_name").eq("user_id", userId).single(),
+      const [docRes, hospRes, locsRes, pharmsRes, affilsRes] = await Promise.all([
+        supabase.from("doctors").select("hospital_id, clinic_name").eq("user_id", userId).maybeSingle(),
+        api.get("/api/v1/hospitals").catch(() => ({ data: { data: [] } })),
+        api.get("/api/v1/doctor-locations").catch(() => ({ data: { data: [] } })),
         supabase.from("pharmacies").select("*"),
-        supabase.from("doctor_pharmacy_affiliations").select("pharmacy_id").eq("doctor_id", userId).eq("status", "ACTIVE")
+        api.get("/api/v1/doctor-locations/affiliate-pharmacy").catch(() => ({ data: { data: [] } }))
       ]);
       const doctorProfile = docRes.data;
+      const allHospitals = hospRes.data?.data || [];
+      const doctorLocations = locsRes.data?.data || [];
       const pharmacyProfiles = pharmsRes.data || [];
-      const affiliatedIds = new Set((affilsRes.data || []).map((a: any) => a.pharmacy_id));
+      const directAffiliations = affilsRes.data?.data || [];
+      const affiliatedIds = new Set(directAffiliations.map((a: any) => String(a.pharmacy_id)));
+
+      const facilityIdMap = new Map<string, string>();
+      const facilityNameMap = new Map<string, string>();
+      if (doctorProfile?.hospital_id) {
+        const matched = allHospitals.find((h: any) => h.id === doctorProfile.hospital_id);
+        const name = matched?.name || "Primary Hospital";
+        facilityIdMap.set(String(doctorProfile.hospital_id), name);
+        facilityNameMap.set(name.toLowerCase(), name);
+      }
+      if (doctorProfile?.clinic_name) {
+        facilityNameMap.set(doctorProfile.clinic_name.trim().toLowerCase(), doctorProfile.clinic_name.trim());
+      }
+      doctorLocations.forEach((loc: any) => {
+        const name = loc.location_name || (loc.hospital_id ? allHospitals.find((h: any) => h.id === loc.hospital_id)?.name : "Workplace");
+        if (loc.hospital_id) facilityIdMap.set(String(loc.hospital_id), name);
+        if (name) facilityNameMap.set(name.toLowerCase(), name);
+      });
+
       if (pharmacyProfiles.length > 0) {
         const userIds = pharmacyProfiles.map(p => p.user_id);
         const { data: usersData } = await supabase.from("users").select("id, full_name, status").in("id", userIds).eq("status", "ACTIVE");
         const mapped = pharmacyProfiles.map(profile => {
           const user = usersData?.find(u => u.id === profile.user_id);
           if (!user) return null;
-          const isLinked = affiliatedIds.has(profile.user_id) || (doctorProfile && (
-            (profile.hospital_id && doctorProfile.hospital_id && profile.hospital_id === doctorProfile.hospital_id) ||
-            (profile.clinic_name && doctorProfile.clinic_name && profile.clinic_name === doctorProfile.clinic_name)
-          ));
-          return { ...profile, ...user, isLinked };
+          const pUserId = String(profile.user_id);
+          const pHospitalId = profile.hospital_id ? String(profile.hospital_id) : "";
+          const pClinicName = (profile.clinic_name || "").trim().toLowerCase();
+          let isLinked = false;
+          let linkedFacilityName = "";
+          if (affiliatedIds.has(pUserId)) {
+            isLinked = true;
+            linkedFacilityName = "Direct Partner";
+          } else if (pHospitalId && facilityIdMap.has(pHospitalId)) {
+            isLinked = true;
+            linkedFacilityName = facilityIdMap.get(pHospitalId) || "Affiliated Facility";
+          } else if (pClinicName && facilityNameMap.has(pClinicName)) {
+            isLinked = true;
+            linkedFacilityName = facilityNameMap.get(pClinicName) || profile.clinic_name;
+          }
+          return { ...profile, ...user, isLinked, linkedFacilityName };
         }).filter(Boolean);
         setLinkedPharmacies(mapped);
       }
@@ -291,10 +371,6 @@ export default function CreatePrescriptionPage() {
     }
 
     if (pinMode === "create") {
-      if (!currentPassword) {
-        toast.error("Please enter your account password");
-        return;
-      }
       if (confirmPin.length !== 6) {
         toast.error("Please confirm your 6-digit PIN");
         return;
@@ -307,22 +383,20 @@ export default function CreatePrescriptionPage() {
 
     setSaving(true);
     try {
-      // If creating PIN for first time, enroll it first
+      // If creating PIN for first time, enroll it directly
       if (pinMode === "create") {
-        
         const { data: session } = await supabase.auth.getSession();
         const token = session?.session?.access_token;
         const apiUrl = getApiUrl();
 
         const formData = new FormData();
-        formData.append('new_pin', pin);
-        formData.append('current_password', currentPassword);
+        formData.append('pin', pin);
 
-        await axios.post(`${apiUrl}/security/reset-pin-with-password`, formData, {
+        await axios.post(`${apiUrl}/security/enroll-pin`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
-        toast.success("PIN created successfully");
+        toast.success("Doctor Authorization PIN enrolled successfully");
         setHasPin(true);
       }
 
@@ -421,14 +495,14 @@ export default function CreatePrescriptionPage() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Route to Pharmacy
+                    Route to Pharmacy (Optional)
                   </label>
                   <button
                     type="button"
                     onClick={() => setIsLinkPharmacyModalOpen(true)}
                     className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
                   >
-                    + Link Clinic Pharmacy
+                    + Link Practice Pharmacy
                   </button>
                 </div>
                 <select 
@@ -436,21 +510,35 @@ export default function CreatePrescriptionPage() {
                   value={routedPharmacyId}
                   onChange={(e) => setRoutedPharmacyId(e.target.value)}
                 >
-                  <option value="">Give patient physical/digital copy only (Default to Patient)</option>
-                  <optgroup label="Linked Clinic Partners (Your Clinic)">
-                    {linkedPharmacies.filter(p => p.isLinked).map(p => (
-                      <option key={p.user_id} value={p.user_id}>{p.full_name || p.business_name} (Linked Clinic Partner)</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Other Network Pharmacies">
+                  <option value="">Send to Patient Only (Default - Patient Collects / Digital Copy)</option>
+                  {linkedPharmacies.filter(p => p.isLinked).length > 0 && (
+                    <optgroup label="Linked Workplace & Clinic Pharmacies">
+                      {linkedPharmacies.filter(p => p.isLinked).map(p => (
+                        <option key={p.user_id} value={p.user_id}>
+                          {p.business_name || p.full_name} ({p.linkedFacilityName || "Linked Partner"})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Other MedSync Network Pharmacies">
                     {linkedPharmacies.filter(p => !p.isLinked).map(p => (
-                      <option key={p.user_id} value={p.user_id}>{p.full_name || p.business_name}</option>
+                      <option key={p.user_id} value={p.user_id}>
+                        {p.business_name || p.full_name} ({p.city || "Bengaluru"})
+                      </option>
                     ))}
                   </optgroup>
                 </select>
-                <p className="text-[11px] text-muted-foreground">
-                  The prescription is automatically sent to the patient upon creation. Selecting a clinic pharmacy also routes an order directly to their dispensing queue.
-                </p>
+                <div className="mt-1">
+                  {!routedPharmacyId ? (
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      ✓ Default: Prescription is securely sent directly to the patient&apos;s digital health locker.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                      ✓ Sent to patient AND queued directly at the selected pharmacy for priority dispensing.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
@@ -594,18 +682,6 @@ export default function CreatePrescriptionPage() {
             </p>
 
             <div className="space-y-4">
-              {pinMode === "create" && (
-                <div className="space-y-1 text-left">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Account Password</label>
-                  <Input
-                    type="password"
-                    placeholder="Enter current password"
-                    className="h-11 rounded-xl"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
-                </div>
-              )}
               <div className="space-y-1 text-left">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {pinMode === "create" ? "Enter 6-Digit PIN" : "Enter Doctor PIN"}
@@ -649,7 +725,7 @@ export default function CreatePrescriptionPage() {
                 disabled={
                   saving ||
                   pin.length !== 6 ||
-                  (pinMode === "create" && (!currentPassword || confirmPin.length !== 6 || pin !== confirmPin))
+                  (pinMode === "create" && (confirmPin.length !== 6 || pin !== confirmPin))
                 }
                 onClick={handleConfirmSave}
               >

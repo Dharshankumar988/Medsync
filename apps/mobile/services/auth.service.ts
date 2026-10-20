@@ -62,6 +62,55 @@ export const authService = {
       },
     };
   },
+  register: async (payload: {
+    email: string;
+    password: string;
+    full_name: string;
+    role: 'patient' | 'doctor';
+    phone_number?: string;
+  }) => {
+    const cleanEmail = payload.email.trim().toLowerCase();
+    const roleUpper = payload.role.toUpperCase();
+
+    const { data: authData, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: payload.password,
+      options: {
+        data: {
+          full_name: payload.full_name.trim(),
+          role: roleUpper,
+          contact_number: payload.phone_number?.trim() || '',
+        },
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+    if (!authData.user) {
+      throw new Error('Registration failed. Please try again.');
+    }
+
+    if (authData.user.identities && authData.user.identities.length === 0) {
+      throw new Error('An account with this email already exists. Please log in.');
+    }
+
+    // Sync with backend API
+    try {
+      await api.post('/auth/sync', {
+        id: authData.user.id,
+        email: cleanEmail,
+        role: roleUpper,
+        full_name: payload.full_name.trim(),
+        contact_number: payload.phone_number?.trim() || '',
+        phone_number: payload.phone_number?.trim() || '',
+      });
+    } catch (syncErr) {
+      console.warn('Backend sync notice during registration:', syncErr);
+    }
+
+    return authData;
+  },
   me: async () => {
     const { data, error } = await supabase.auth.getUser();
     if (error) throw error;

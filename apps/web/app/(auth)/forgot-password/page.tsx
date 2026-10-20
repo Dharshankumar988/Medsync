@@ -119,12 +119,12 @@ function ForgotPasswordContent() {
         otpRefs.current[0]?.focus();
       }, 100);
     } catch (err: any) {
-      setError(
-        err.response?.data?.error ||
-        err.response?.data?.detail ||
-        err.message ||
-        "Failed to initiate password reset. Please check your email."
-      );
+      const errStr = err.response?.data?.error || err.response?.data?.detail || err.response?.data?.message || err.message;
+      if (typeof errStr === "string" && errStr.trim() && errStr.trim() !== "{}" && errStr.trim() !== "[object Object]") {
+        setError(errStr.trim());
+      } else {
+        setError("Failed to initiate password reset. Please check your email.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -211,8 +211,12 @@ function ForgotPasswordContent() {
         router.push("/login?reset=success");
       }, 2000);
     } catch (err: any) {
-      const detail = err.response?.data?.detail || err.message || "Failed to reset password.";
-      setError(detail);
+      const detail = err.response?.data?.detail || err.response?.data?.error || err.message;
+      if (typeof detail === "string" && detail.trim() && detail.trim() !== "{}" && detail.trim() !== "[object Object]") {
+        setError(detail.trim());
+      } else {
+        setError("Failed to reset password. Please check your verification code.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -234,7 +238,12 @@ function ForgotPasswordContent() {
         setDevOtpPreview(res.data.preview_code);
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to resend code.");
+      const detail = err.response?.data?.detail || err.response?.data?.error || err.message;
+      if (typeof detail === "string" && detail.trim() && detail.trim() !== "{}" && detail.trim() !== "[object Object]") {
+        setError(detail.trim());
+      } else {
+        setError("Failed to resend verification code. Please try again later.");
+      }
     } finally {
       setIsResending(false);
     }

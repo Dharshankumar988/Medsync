@@ -35,6 +35,7 @@ import {
   MedicineOrderItem,
 } from '../../../services/patient.service';
 import { Colors } from '../../../constants/theme';
+import { formatErrorMessage } from '../../../lib/api';
 
 type ViewTab = 'RECORDS' | 'PRESCRIPTIONS' | 'ORDERS';
 
@@ -144,7 +145,7 @@ export default function PatientRecordsScreen() {
       );
       loadData();
     } catch (err: any) {
-      Alert.alert('Update Failed', err.response?.data?.detail || err.message || 'Failed to update record privacy.');
+      Alert.alert('Update Failed', formatErrorMessage(err));
     }
   };
 
@@ -421,24 +422,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
     backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   segmentBtnActive: {
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
   segmentText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#64748B',
   },
   segmentTextActive: {
-    color: Colors.roles.patient.primary,
+    color: '#FFFFFF',
   },
   listContent: {
     padding: 16,
+    paddingBottom: 120,
     gap: 12,
   },
   errorBanner: {

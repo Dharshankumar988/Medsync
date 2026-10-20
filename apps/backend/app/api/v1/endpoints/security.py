@@ -166,11 +166,33 @@ async def reset_pin_with_password(
     if not password_ok:
         try:
             res = await db.execute(
-                text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
+                text("SELECT (encrypted_password = extensions.crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
                 {"pwd": current_password, "user_id": current_user.id}
             )
             matches = res.scalar()
             if matches:
+                password_ok = True
+        except Exception:
+            try:
+                res = await db.execute(
+                    text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
+                    {"pwd": current_password, "user_id": current_user.id}
+                )
+                matches = res.scalar()
+                if matches:
+                    password_ok = True
+            except Exception:
+                password_ok = False
+
+    if not password_ok:
+        try:
+            import bcrypt
+            res_hash = await db.execute(
+                text("SELECT encrypted_password FROM auth.users WHERE id = :user_id"),
+                {"user_id": current_user.id}
+            )
+            enc_pwd = res_hash.scalar()
+            if enc_pwd and isinstance(enc_pwd, str) and bcrypt.checkpw(current_password.encode('utf-8'), enc_pwd.encode('utf-8')):
                 password_ok = True
         except Exception:
             password_ok = False

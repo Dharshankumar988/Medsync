@@ -27,6 +27,7 @@ import { Button } from '../../../components/common/Button';
 import { Colors } from '../../../constants/theme';
 import { hospitalService, HospitalProfile } from '../../../services/hospital.service';
 import { authService } from '../../../services/auth.service';
+import { formatErrorMessage } from '../../../lib/api';
 
 export default function HospitalProfileScreen() {
   const router = useRouter();
@@ -82,7 +83,7 @@ export default function HospitalProfileScreen() {
       await hospitalService.updateProfile(profile.id, profile);
       Alert.alert('Profile Saved', 'Hospital credentials and facility details updated successfully.');
     } catch (err: any) {
-      Alert.alert('Save Failed', err.response?.data?.detail || err.message || 'Could not save profile.');
+      Alert.alert('Save Failed', formatErrorMessage(err));
     } finally {
       setSaving(false);
     }

@@ -4,6 +4,10 @@
   "scripts": {
     "build": "pnpm run -r build",
     "dev": "pnpm run --parallel --stream -r dev",
+    "mobile": "pnpm --filter medsync-mobile start",
+    "mobile:tunnel": "pnpm --filter medsync-mobile start --tunnel",
+    "mobile:android": "pnpm --filter medsync-mobile android",
+    "mobile:web": "pnpm --filter medsync-mobile web",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""

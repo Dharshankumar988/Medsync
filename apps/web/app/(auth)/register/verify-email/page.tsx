@@ -130,10 +130,12 @@ function VerifyEmailContent() {
       }, 1500);
     } catch (err: any) {
       const detail = err.response?.data?.detail;
-      if (typeof detail === "string") {
-        setError(detail);
+      if (typeof detail === "string" && detail.trim() && detail.trim() !== "{}" && detail.trim() !== "[object Object]") {
+        setError(detail.trim());
+      } else if (err.message && err.message !== "{}" && err.message !== "[object Object]") {
+        setError(err.message);
       } else {
-        setError(err.message || "Invalid or expired verification code. Please try again.");
+        setError("Invalid or expired verification code. Please try again.");
       }
     } finally {
       setIsVerifying(false);
@@ -156,7 +158,14 @@ function VerifyEmailContent() {
         setDevCode(res.data.preview_code);
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to resend code. Please try again later.");
+      const detail = err.response?.data?.detail;
+      if (typeof detail === "string" && detail.trim() && detail.trim() !== "{}" && detail.trim() !== "[object Object]") {
+        setError(detail.trim());
+      } else if (err.message && err.message !== "{}" && err.message !== "[object Object]") {
+        setError(err.message);
+      } else {
+        setError("Failed to resend code. Please try again later.");
+      }
     } finally {
       setIsResending(false);
     }

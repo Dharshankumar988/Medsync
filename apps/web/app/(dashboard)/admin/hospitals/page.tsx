@@ -30,7 +30,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 
 import api from "@/lib/api";
 import { Tabs, TabsList, TabsTrigger, TabsContent, Badge } from "@medsync/ui";
-import { Briefcase, Check, Clock } from "lucide-react";
+import { Briefcase, Check, Clock, X } from "lucide-react";
 
 export default function HospitalsManagementPage() {
   const [activeTab, setActiveTab] = useState<"HOSPITALS" | "DOCTOR_AFFILIATIONS">("HOSPITALS");
@@ -111,6 +111,16 @@ export default function HospitalsManagementPage() {
       loadHospitals();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || "Failed to authorize location");
+    }
+  };
+
+  const handleRejectLocation = async (id: string, locName: string) => {
+    try {
+      await api.post(`/api/v1/doctor-locations/${id}/reject`, { reason: "Workplace affiliation request declined by administrator" });
+      toast.success(`Practice workplace '${locName}' request rejected`);
+      loadHospitals();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to reject location");
     }
   };
 
@@ -447,13 +457,23 @@ export default function HospitalsManagementPage() {
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button 
-                      size="sm" 
-                      onClick={() => handleAuthorizeLocation(loc.id, loc.location_name || "Facility")}
-                      className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1 shadow-sm"
-                    >
-                      <ShieldCheck className="h-3.5 w-3.5" /> Authorize Workplace
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleRejectLocation(loc.id, loc.location_name || "Facility")}
+                        className="h-8 border-destructive/40 text-destructive hover:bg-destructive/10 text-xs gap-1 shadow-sm"
+                      >
+                        <X className="h-3.5 w-3.5" /> Reject
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={() => handleAuthorizeLocation(loc.id, loc.location_name || "Facility")}
+                        className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1 shadow-sm"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" /> Authorize Workplace
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

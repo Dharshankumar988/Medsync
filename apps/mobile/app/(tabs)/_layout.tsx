@@ -16,6 +16,9 @@ import {
 import { useRole } from '../../providers/role-provider';
 import { getRoleTheme } from '../../constants/theme';
 import { LoadingScreen } from '../../components/layout/LoadingScreen';
+import { PharmacyDesktopNotice } from '../../components/common/PharmacyDesktopNotice';
+import { FloatingQuickActions } from '../../components/common/FloatingQuickActions';
+import { View, StyleSheet } from 'react-native';
 
 export default function TabLayout() {
   const { role, isLoading, isAuthenticated } = useRole();
@@ -35,29 +38,41 @@ export default function TabLayout() {
     return <LoadingScreen message="Redirecting to sign in..." />;
   }
 
+  // Pharmacy is optimized for desktop browsers only
+  if (role === 'pharmacy') {
+    return <PharmacyDesktopNotice />;
+  }
+
   const roleTheme = getRoleTheme(role);
 
   const screenOptions = {
     headerShown: false,
     tabBarActiveTintColor: roleTheme.primary,
-    tabBarInactiveTintColor: '#64748B',
+    tabBarInactiveTintColor: '#94A3B8',
     tabBarStyle: {
       backgroundColor: '#FFFFFF',
       borderTopWidth: 1,
-      borderTopColor: '#E2E8F0',
-      height: Platform.OS === 'ios' ? 86 : 64,
-      paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+      borderTopColor: 'rgba(15, 23, 42, 0.08)',
+      height: Platform.OS === 'ios' ? 88 : 66,
+      paddingBottom: Platform.OS === 'ios' ? 24 : 10,
       paddingTop: 8,
+      shadowColor: '#0F172A',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.04,
+      shadowRadius: 12,
+      elevation: 8,
     },
     tabBarLabelStyle: {
-      fontSize: 11,
+      fontSize: 10.5,
       fontWeight: '600' as const,
-      letterSpacing: 0.1,
+      letterSpacing: 0.2,
+      marginTop: -2,
     },
   };
 
   return (
-    <Tabs screenOptions={screenOptions}>
+    <View style={styles.container}>
+      <Tabs screenOptions={screenOptions}>
       {/* ── PATIENT TABS ── */}
       <Tabs.Screen
         name="patient/dashboard"
@@ -147,7 +162,7 @@ export default function TabLayout() {
         name="pharmacy/dashboard"
         options={{
           title: 'Dashboard',
-          href: role === 'pharmacy' ? undefined : null,
+          href: null,
           tabBarIcon: ({ color, size }) => <LayoutDashboard size={size ?? 22} color={color} />,
         }}
       />
@@ -155,7 +170,7 @@ export default function TabLayout() {
         name="pharmacy/orders"
         options={{
           title: 'Orders',
-          href: role === 'pharmacy' ? undefined : null,
+          href: null,
           tabBarIcon: ({ color, size }) => <ShoppingBag size={size ?? 22} color={color} />,
         }}
       />
@@ -163,7 +178,7 @@ export default function TabLayout() {
         name="pharmacy/inventory"
         options={{
           title: 'Inventory',
-          href: role === 'pharmacy' ? undefined : null,
+          href: null,
           tabBarIcon: ({ color, size }) => <Package size={size ?? 22} color={color} />,
         }}
       />
@@ -171,7 +186,7 @@ export default function TabLayout() {
         name="pharmacy/pulse-ai"
         options={{
           title: 'Pulse AI',
-          href: role === 'pharmacy' ? undefined : null,
+          href: null,
           tabBarIcon: ({ color, size }) => <Activity size={size ?? 22} color={color} />,
         }}
       />
@@ -179,7 +194,7 @@ export default function TabLayout() {
         name="pharmacy/profile"
         options={{
           title: 'Profile',
-          href: role === 'pharmacy' ? undefined : null,
+          href: null,
           tabBarIcon: ({ color, size }) => <User size={size ?? 22} color={color} />,
         }}
       />
@@ -260,5 +275,15 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    <FloatingQuickActions />
+  </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    position: 'relative',
+  },
+});

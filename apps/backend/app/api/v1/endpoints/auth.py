@@ -23,7 +23,10 @@ async def register():
 async def login():
     raise HTTPException(status_code=status.HTTP_410_GONE, detail="Use Supabase Auth directly from the client.")
 
+from typing import Optional
 from pydantic import BaseModel
+from app.dependencies.auth import get_current_user
+from app.schemas.session import AuthenticatedPrincipal
 from app.schemas.auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponseData,
@@ -41,6 +44,7 @@ from app.schemas.auth import (
     ResetPasswordWithOTPRequest,
     LoginGuardRequest,
     LoginGuardResponseData,
+    SetOAuthPasswordRequest,
 )
 from app.utils.reset_token import (
     create_patient_reset_token,
@@ -67,18 +71,41 @@ async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depen
     from sqlalchemy import text
     import uuid
     user_id = uuid.uuid4()
+    clean_email = payload.email.strip().lower()
     try:
+        # Check if user already exists
+        existing = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
+        
         await db.execute(
             text("""
-            INSERT INTO auth.users (id, instance_id, email, encrypted_password, aud, role, email_confirmed_at) 
-            VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')), 'authenticated', 'authenticated', now())
+            INSERT INTO auth.users (id, instance_id, email, encrypted_password, aud, role, raw_app_meta_data, raw_user_meta_data, email_confirmed_at) 
+            VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')), 'authenticated', 'authenticated', '{"role":"ADMIN","provider":"email"}', '{"role":"ADMIN"}', now())
             """), 
-            {"id": user_id, "email": payload.email, "pwd": payload.password}
+            {"id": user_id, "email": clean_email, "pwd": payload.password}
         )
+        
+        # Ensure public.users entry with ADMIN role
+        admin_user = User(
+            id=user_id,
+            email=clean_email,
+            role=UserRole.ADMIN,
+            status=UserStatus.ACTIVE,
+            is_verified=True,
+            profile_completion_percentage=100
+        )
+        db.add(admin_user)
         await db.commit()
         return APIResponse(message="User created", data=AdminRegisterResponseData(id=str(user_id)))
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as e:
         await db.rollback()
+        err_str = str(e).lower()
+        if "unique constraint" in err_str or "duplicate key" in err_str:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/force-reset-password", response_model=APIResponse[ForceResetResponseData])
@@ -296,6 +323,60 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         existing = await db.execute(select(User).where(User.id == payload.id))
         existing_user_id = existing.scalar_one_or_none()
         if existing_user_id:
+            # Sync / update any profile fields provided in registration payload
+            if payload.role == UserRole.PATIENT:
+                pat_res = await db.execute(select(Patient).where(Patient.user_id == existing_user_id.id))
+                pat = pat_res.scalar_one_or_none()
+                if pat:
+                    if payload.full_name:
+                        pat.full_name = payload.full_name
+                    if payload.blood_group:
+                        pat.blood_group = payload.blood_group
+                    if payload.gender:
+                        pat.gender = payload.gender
+                    if payload.date_of_birth:
+                        pat.date_of_birth = payload.date_of_birth
+                else:
+                    pat = Patient(
+                        user_id=existing_user_id.id,
+                        full_name=payload.full_name,
+                        blood_group=payload.blood_group,
+                        gender=payload.gender,
+                        date_of_birth=payload.date_of_birth,
+                    )
+                    db.add(pat)
+                await db.commit()
+            elif payload.role == UserRole.DOCTOR:
+                doc_res = await db.execute(select(Doctor).where(Doctor.user_id == existing_user_id.id))
+                doc = doc_res.scalar_one_or_none()
+                if doc:
+                    if payload.full_name:
+                        doc.full_name = payload.full_name
+                    if payload.license_number:
+                        doc.license_number = payload.license_number
+                    if payload.hospital_name:
+                        doc.hospital_name = payload.hospital_name
+                    if payload.clinic_name:
+                        doc.clinic_name = payload.clinic_name
+                    if payload.hospital_id:
+                        doc.hospital_id = payload.hospital_id
+                await db.commit()
+            elif payload.role == UserRole.PHARMACY:
+                phm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == existing_user_id.id))
+                phm = phm_res.scalar_one_or_none()
+                if phm:
+                    if payload.business_name or payload.full_name:
+                        phm.business_name = payload.business_name or payload.full_name
+                    if payload.license_number:
+                        phm.license_number = payload.license_number
+                    if payload.gst_number:
+                        phm.gst_number = payload.gst_number
+                    if payload.contact_number:
+                        phm.contact_number = payload.contact_number
+                    if payload.hospital_id:
+                        phm.hospital_id = payload.hospital_id
+                await db.commit()
+
             return APIResponse(message="User already synced", data=SyncUserResponseData(id=str(payload.id)))
 
         # 2. Check if user already exists by Email
@@ -877,6 +958,63 @@ async def verify_reset_otp(payload: ResetPasswordWithOTPRequest, db: AsyncSessio
         )
     except HTTPException:
         raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/set-oauth-password", response_model=APIResponse[ResetPasswordSuccessResponseData])
+async def set_oauth_password(
+    payload: SetOAuthPasswordRequest,
+    current_user: AuthenticatedPrincipal = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Sets a permanent account password for a patient who signed up via Google OAuth.
+    """
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters.")
+    if payload.confirm_password and payload.password != payload.confirm_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match.")
+
+    from sqlalchemy import text
+    try:
+        try:
+            await db.execute(
+                text("""
+                UPDATE auth.users 
+                SET encrypted_password = extensions.crypt(:pwd, extensions.gen_salt('bf')),
+                    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"has_password": true}'::jsonb
+                WHERE id = :user_id
+                """),
+                {"pwd": payload.password, "user_id": current_user.id}
+            )
+        except Exception:
+            await db.execute(
+                text("""
+                UPDATE auth.users 
+                SET encrypted_password = crypt(:pwd, gen_salt('bf')),
+                    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"has_password": true}'::jsonb
+                WHERE id = :user_id
+                """),
+                {"pwd": payload.password, "user_id": current_user.id}
+            )
+        u_stmt = select(User).where(User.id == current_user.id)
+        u_res = await db.execute(u_stmt)
+        user = u_res.scalar_one_or_none()
+        if user:
+            user.is_verified = True
+            user.status = UserStatus.ACTIVE
+
+        await db.commit()
+        return APIResponse(
+            message="Password created successfully.",
+            data=ResetPasswordSuccessResponseData(
+                email=current_user.email,
+                role=current_user.role,
+                message="Password created successfully. You can now log in with either Google or email/password."
+            )
+        )
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

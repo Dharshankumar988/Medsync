@@ -2,9 +2,14 @@ import '../global.css';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, LogBox } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RoleProvider } from '../providers/role-provider';
+
+LogBox.ignoreLogs([
+  '[EventSource] Unable to identify the line ending character',
+  'No route named',
+]);
 
 const queryClient = new QueryClient();
 

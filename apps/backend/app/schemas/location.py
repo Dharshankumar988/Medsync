@@ -47,6 +47,10 @@ class DoctorLocationResponse(BaseModel):
     is_active: bool
     verification_status: str
     created_at: datetime
+    doctor_name: Optional[str] = None
+    doctor_specialization: Optional[str] = None
+    doctor_email: Optional[str] = None
+    facility_name: Optional[str] = None
 
 
 class DoctorLocationActionResponse(BaseModel):
@@ -54,6 +58,22 @@ class DoctorLocationActionResponse(BaseModel):
     id: uuid.UUID
     is_active: bool
     message: str
+
+
+class PharmacyAffiliationCreate(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    pharmacy_id: uuid.UUID
+    clinic_name: Optional[str] = None
+
+
+class PharmacyAffiliationResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    id: uuid.UUID
+    doctor_id: uuid.UUID
+    pharmacy_id: uuid.UUID
+    clinic_name: Optional[str] = None
+    status: str = "ACTIVE"
+    message: Optional[str] = None
 
 
 class PharmacyLocationCreate(BaseModel):

@@ -44,7 +44,8 @@ export const aiService = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ message, session_id: sessionId || null }),
-      });
+        lineEndingCharacter: '\n',
+      } as any);
 
       es.addEventListener('message', (event: any) => {
         if (event.data) {
