@@ -404,7 +404,7 @@ async def create_temporary_patient_access(
     # Validate PIN using existing security service
     try:
         from app.services.security_service import validate_patient_pin
-        is_valid = await validate_patient_pin(db, patient.id, request.patient_pin)
+        is_valid = await validate_patient_pin(db, patient.user_id or patient.id, request.patient_pin)
         if not is_valid:
             raise HTTPException(status_code=401, detail="Invalid PIN")
     except HTTPException:

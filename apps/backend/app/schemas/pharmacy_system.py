@@ -152,3 +152,24 @@ class PharmacyNetworkItem(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
+class AddInventoryItemResponseData(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    inventory_id: str
+    medicine_id: str
+    medicine_name: str
+    stock_quantity: int
+    batch_number: str
+    unit_price: float
+    expiry_date: str
+
+class RestockOrderResponseData(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    order_id: str
+    medicine_id: str
+    medicine_name: str
+    quantity: int
+    status: str
+    expected_delivery: str
+

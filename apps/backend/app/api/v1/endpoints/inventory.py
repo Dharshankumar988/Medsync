@@ -10,7 +10,14 @@ from app.dependencies.auth import get_current_user, RoleChecker
 from app.schemas.session import AuthenticatedPrincipal
 from app.models.user import User, UserRole
 from app.models.pharmacy_system import MedicineInventory, Medicine, Supplier, MedicineCategory
-from app.schemas.pharmacy_system import MedicineInventoryResponse, MedicineInventoryCreate, MedicineResponse, AddInventoryItemRequest
+from app.schemas.pharmacy_system import (
+    MedicineInventoryResponse,
+    MedicineInventoryCreate,
+    MedicineResponse,
+    AddInventoryItemRequest,
+    AddInventoryItemResponseData,
+    RestockOrderResponseData,
+)
 from app.schemas.response import APIResponse
 from app.utils.cache import async_ttl_cache
 
@@ -122,29 +129,74 @@ import uuid
 import datetime
 
 class RestockRequest(BaseModel):
-    medicine_id: uuid.UUID
+    medicine_id: Optional[uuid.UUID] = None
+    medicine_name: Optional[str] = None
     quantity: int
     pin: str
 
-@router.post("/restock", response_model=APIResponse)
+@router.post("/restock", response_model=APIResponse[RestockOrderResponseData])
 async def place_restock_order(
     req: RestockRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_pharmacy)
+    current_user: AuthenticatedPrincipal = Depends(require_pharmacy)
 ):
     from app.services.security_service import validate_pharmacy_pin
     is_valid = await validate_pharmacy_pin(db, current_user.id, req.pin)
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
 
-    from app.models.pharmacy_system import PharmacyRestockOrder
+    from app.models.pharmacy_system import PharmacyRestockOrder, Medicine, MedicineCategory
     
     if req.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be positive")
-        
+
+    target_med_id = req.medicine_id
+    target_med_name = req.medicine_name
+
+    if target_med_id:
+        med_res = await db.execute(select(Medicine).where(Medicine.id == target_med_id))
+        med_obj = med_res.scalar_one_or_none()
+        if not med_obj:
+            raise HTTPException(status_code=404, detail="Selected medicine not found in catalog")
+        target_med_name = med_obj.name
+    elif target_med_name and target_med_name.strip():
+        # Find or create medicine
+        clean_name = target_med_name.strip()
+        existing_med_res = await db.execute(select(Medicine).where(Medicine.name.ilike(clean_name)))
+        med_obj = existing_med_res.scalar_one_or_none()
+        if med_obj:
+            target_med_id = med_obj.id
+            target_med_name = med_obj.name
+        else:
+            cat_res = await db.execute(select(MedicineCategory).where(MedicineCategory.name.ilike("%General%")))
+            cat = cat_res.scalars().first()
+            if not cat:
+                cat_any = await db.execute(select(MedicineCategory).limit(1))
+                cat = cat_any.scalars().first()
+            if not cat:
+                cat = MedicineCategory(id=uuid.uuid4(), name="General Medicines", description="General pharmaceuticals")
+                db.add(cat)
+                await db.flush()
+
+            new_med = Medicine(
+                id=uuid.uuid4(),
+                name=clean_name,
+                generic_name=clean_name,
+                dosage_form="Tablet",
+                manufacturer="Generic Pharma",
+                price=10.0,
+                category_id=cat.id
+            )
+            db.add(new_med)
+            await db.flush()
+            target_med_id = new_med.id
+            target_med_name = new_med.name
+    else:
+        raise HTTPException(status_code=400, detail="Please select a medicine or provide a medicine name to order.")
+
     order = PharmacyRestockOrder(
         pharmacy_id=current_user.id,
-        medicine_id=req.medicine_id,
+        medicine_id=target_med_id,
         quantity=req.quantity,
         status="PENDING",
         expected_delivery=datetime.datetime.now() + datetime.timedelta(minutes=2)
@@ -154,7 +206,17 @@ async def place_restock_order(
     await db.commit()
     await db.refresh(order)
     
-    return APIResponse(message="Restock order placed successfully. Estimated delivery in 2 minutes.", data={"order_id": str(order.id)})
+    return APIResponse(
+        message=f"Restock order for {req.quantity} units of {target_med_name} placed successfully. Estimated delivery in 2 minutes.",
+        data=RestockOrderResponseData(
+            order_id=str(order.id),
+            medicine_id=str(target_med_id),
+            medicine_name=target_med_name,
+            quantity=order.quantity,
+            status=order.status,
+            expected_delivery=str(order.expected_delivery)
+        )
+    )
 
 @router.get("/restock", response_model=APIResponse)
 async def get_restock_orders(
@@ -204,7 +266,7 @@ async def discard_expired_stock(
     
     return APIResponse(message="Expired stock discarded successfully", data={"new_quantity": 0})
 
-@router.post("/items", response_model=APIResponse[dict])
+@router.post("/items", response_model=APIResponse[AddInventoryItemResponseData])
 async def add_inventory_item(
     req: AddInventoryItemRequest,
     db: AsyncSession = Depends(get_db),
@@ -284,15 +346,15 @@ async def add_inventory_item(
 
     return APIResponse(
         message=f"Added {req.stock_quantity} units of {med_name} to inventory successfully",
-        data={
-            "inventory_id": str(new_inventory.id),
-            "medicine_id": str(target_med_id),
-            "medicine_name": med_name,
-            "stock_quantity": new_inventory.stock_quantity,
-            "batch_number": new_inventory.batch_number,
-            "unit_price": new_inventory.unit_price,
-            "expiry_date": str(new_inventory.expiry_date)
-        }
+        data=AddInventoryItemResponseData(
+            inventory_id=str(new_inventory.id),
+            medicine_id=str(target_med_id),
+            medicine_name=med_name,
+            stock_quantity=new_inventory.stock_quantity,
+            batch_number=new_inventory.batch_number,
+            unit_price=new_inventory.unit_price,
+            expiry_date=str(new_inventory.expiry_date)
+        )
     )
 
 

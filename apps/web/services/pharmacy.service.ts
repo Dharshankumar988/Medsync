@@ -121,12 +121,22 @@ export const pharmacyService = {
     }
   },
 
-  placeRestockOrder: async (medicineId: string, quantity: number, pin: string): Promise<boolean> => {
+  placeRestockOrder: async (
+    target: string | { medicine_id?: string; medicine_name?: string; quantity: number; pin: string },
+    qty?: number,
+    pinCode?: string
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
-      await api.post(`/api/v1/inventory/restock`, { medicine_id: medicineId, quantity, pin });
-      return true;
-    } catch {
-      return false;
+      let body: any;
+      if (typeof target === 'object') {
+        body = target;
+      } else {
+        body = { medicine_id: target, quantity: qty, pin: pinCode };
+      }
+      const res = await api.post(`/api/v1/inventory/restock`, body);
+      return { success: true, message: res.data?.message || "Restock order placed successfully" };
+    } catch (e: any) {
+      return { success: false, message: e.response?.data?.detail || e.message || "Failed to place restock order" };
     }
   },
 

@@ -34,6 +34,8 @@ export default function PharmacyInventoryPage() {
   const [catalog, setCatalog] = useState<any[]>([]);
   const [restockOrders, setRestockOrders] = useState<any[]>([]);
   const [selectedMedicine, setSelectedMedicine] = useState("");
+  const [orderMode, setOrderMode] = useState<"CATALOG" | "CUSTOM">("CATALOG");
+  const [customMedicineName, setCustomMedicineName] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("50");
   const [pin, setPin] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -115,21 +117,42 @@ export default function PharmacyInventoryPage() {
   };
 
   const handlePlaceOrder = async () => {
-    if (!selectedMedicine || !orderQuantity) return;
+    const qty = parseInt(orderQuantity);
+    if (isNaN(qty) || qty <= 0) {
+      toast.error("Please enter a valid positive quantity.");
+      return;
+    }
+
+    if (orderMode === "CATALOG" && !selectedMedicine) {
+      toast.error("Please select a medicine from catalog or switch to Order New Medicine.");
+      return;
+    }
+
+    if (orderMode === "CUSTOM" && !customMedicineName.trim()) {
+      toast.error("Please enter the name of the new medicine to order.");
+      return;
+    }
+
     if (pin.length !== 6) {
       toast.error("Please enter your 6-digit Authorization PIN");
       return;
     }
+
     setIsSubmitting(true);
-    const success = await pharmacyService.placeRestockOrder(selectedMedicine, parseInt(orderQuantity), pin);
-    if (success) {
-      toast.success("Order placed! It will be delivered in 2 minutes.");
+    const payload = orderMode === "CATALOG" 
+      ? { medicine_id: selectedMedicine, quantity: qty, pin }
+      : { medicine_name: customMedicineName.trim(), quantity: qty, pin };
+
+    const res = await pharmacyService.placeRestockOrder(payload);
+    if (res.success) {
+      toast.success(res.message || "Order placed! It will be delivered in 2 minutes.");
       setIsRestockModalOpen(false);
       setSelectedMedicine("");
+      setCustomMedicineName("");
       setOrderQuantity("50");
       setPin("");
     } else {
-      toast.error("Failed to place order.");
+      toast.error(res.message || "Failed to place order.");
     }
     setIsSubmitting(false);
   };
@@ -314,47 +337,86 @@ export default function PharmacyInventoryPage() {
               <X className="h-4 w-4" />
             </Button>
             <h2 className="text-xl font-bold mb-1">Order Restock</h2>
-            <p className="text-sm text-muted-foreground mb-6">Orders are automatically delivered in 2 minutes.</p>
+            <p className="text-sm text-muted-foreground mb-4">Orders are placed with distributors and delivered in 2 minutes.</p>
             
+            {/* Mode Selector */}
+            <div className="flex rounded-xl p-1 bg-muted/50 mb-4 border border-border/40">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${orderMode === "CATALOG" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setOrderMode("CATALOG")}
+              >
+                From Catalog
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${orderMode === "CUSTOM" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setOrderMode("CUSTOM")}
+              >
+                + Order New Medicine
+              </button>
+            </div>
+
             <div className="space-y-4">
+              {orderMode === "CATALOG" ? (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Select Medicine</label>
+                  <select 
+                    className="w-full bg-background border border-input rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={selectedMedicine}
+                    onChange={(e) => setSelectedMedicine(e.target.value)}
+                  >
+                    <option value="">-- Choose Medicine --</option>
+                    {catalog.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} {c.dosage_form ? `(${c.dosage_form})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">New Medicine Name *</label>
+                  <Input 
+                    type="text" 
+                    placeholder="e.g., Atorvastatin 20mg, Azithromycin 500mg"
+                    value={customMedicineName} 
+                    onChange={(e) => setCustomMedicineName(e.target.value)}
+                    className="rounded-xl p-3"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-muted-foreground">Will be registered in catalog and delivered into inventory.</p>
+                </div>
+              )}
+
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Select Medicine</label>
-                <select 
-                  className="w-full bg-background border border-input rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={selectedMedicine}
-                  onChange={(e) => setSelectedMedicine(e.target.value)}
-                >
-                  <option value="">-- Choose Medicine --</option>
-                  {catalog.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} {c.dosage_form ? `(${c.dosage_form})` : ''}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Quantity</label>
+                <label className="text-sm font-medium">Order Quantity</label>
                 <Input 
                   type="number" min="1" 
                   value={orderQuantity} 
                   onChange={(e) => setOrderQuantity(e.target.value)}
-                  className="rounded-xl p-3"
+                  className="rounded-xl p-3 font-mono"
                 />
               </div>
+
               <div className="space-y-1.5 border-t border-border/40 pt-4 mt-2">
                 <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
                 <Input 
                   type="password" 
                   value={pin} 
-                  onChange={e => setPin(e.target.value)} 
+                  onChange={e => setPin(e.target.value.replace(/\D/g, ''))} 
                   placeholder="• • • • • •" 
                   maxLength={6}
-                  className="text-center tracking-[0.5em] rounded-xl"
+                  className="text-center tracking-[0.5em] rounded-xl font-mono text-lg"
                   required 
                 />
               </div>
               
-              <Button className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" disabled={isSubmitting || !selectedMedicine || !orderQuantity || pin.length !== 6} onClick={handlePlaceOrder}>
+              <Button 
+                className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" 
+                disabled={isSubmitting || (orderMode === "CATALOG" ? !selectedMedicine : !customMedicineName.trim()) || !orderQuantity || pin.length !== 6} 
+                onClick={handlePlaceOrder}
+              >
                 {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Package className="w-4 h-4 mr-2" />} 
-                Place Order
+                Place Restock Order
               </Button>
             </div>
           </div>

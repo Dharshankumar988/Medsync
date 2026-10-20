@@ -264,3 +264,16 @@ class UpdateUserStatusRequest(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     status: str
 
+class UpdateUserStatusResponseData(BaseModel):
+    """Response payload for user status updates."""
+    model_config = ConfigDict(use_enum_values=True)
+    user_id: str
+    status: str
+
+class AdminActionResponseData(BaseModel):
+    """Generic typed response payload for admin mutations (approve, reject, delete, reset)."""
+    model_config = ConfigDict(use_enum_values=True)
+    success: bool = True
+    message: Optional[str] = None
+    id: Optional[str] = None
+

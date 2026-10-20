@@ -72,8 +72,19 @@ async def log_audit_event(db: AsyncSession, user_id: uuid.UUID, action: str, ent
 async def enroll_patient_pin(db: AsyncSession, patient_id: uuid.UUID, pin: str):
     if len(pin) != 6 or not pin.isdigit():
         raise ValueError("PIN must be exactly 6 digits.")
+
+    from app.models.patient import Patient
+    # Resolve user_id if patient_id was passed as Patient.id
+    target_user_id = patient_id
+    patient_res = await db.execute(select(Patient).where((Patient.user_id == patient_id) | (Patient.id == patient_id)))
+    patient = patient_res.scalar_one_or_none()
+    if patient and patient.user_id:
+        target_user_id = patient.user_id
+        patient.pin_hash = hash_pin(pin)
+    elif patient:
+        patient.pin_hash = hash_pin(pin)
         
-    result = await db.execute(select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == patient_id))
+    result = await db.execute(select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == target_user_id))
     existing_cred = result.scalar_one_or_none()
     
     if existing_cred:
@@ -82,19 +93,40 @@ async def enroll_patient_pin(db: AsyncSession, patient_id: uuid.UUID, pin: str):
         existing_cred.locked_until = None
     else:
         new_cred = PatientSecurityCredential(
-            patient_id=patient_id,
+            patient_id=target_user_id,
             authorization_pin_hash=hash_pin(pin)
         )
         db.add(new_cred)
     
     await db.commit()
-    await log_audit_event(db, patient_id, "PIN_CREATED", "PatientSecurityCredential", patient_id)
+    await log_audit_event(db, target_user_id, "PIN_CREATED", "PatientSecurityCredential", target_user_id)
 
 async def validate_patient_pin(db: AsyncSession, patient_id: uuid.UUID, pin: str) -> bool:
+    from app.models.patient import Patient
+    
+    # 1. Lookup PatientSecurityCredential directly by passed ID (typically user_id)
     result = await db.execute(select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == patient_id))
     cred = result.scalar_one_or_none()
     
+    # 2. If not found, check if patient_id was the Patient primary key or lookup associated patient
+    patient = None
     if not cred:
+        p_res = await db.execute(select(Patient).where((Patient.id == patient_id) | (Patient.user_id == patient_id)))
+        patient = p_res.scalar_one_or_none()
+        if patient and patient.user_id:
+            cred_res = await db.execute(select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == patient.user_id))
+            cred = cred_res.scalar_one_or_none()
+    
+    if not cred:
+        # Fallback check against Patient.pin_hash if credential table wasn't populated
+        if patient and patient.pin_hash:
+            if verify_pin(pin, patient.pin_hash):
+                await log_audit_event(db, patient.user_id or patient_id, "PIN_VERIFICATION_SUCCESS")
+                return True
+            else:
+                await log_audit_event(db, patient.user_id or patient_id, "PIN_VERIFICATION_FAILURE", details={"reason": "Hash mismatch"})
+                return False
+
         await log_audit_event(db, patient_id, "PIN_VERIFICATION_FAILURE", details={"reason": "No PIN enrolled"})
         return False
         
@@ -122,6 +154,13 @@ async def get_security_status(db: AsyncSession, patient_id: uuid.UUID) -> str:
     pin_result = await db.execute(select(PatientSecurityCredential).where(PatientSecurityCredential.patient_id == patient_id))
     pin_obj = pin_result.scalars().first()
     has_pin = pin_obj is not None and getattr(pin_obj, 'is_active', True)
+
+    if not has_pin:
+        from app.models.patient import Patient
+        p_res = await db.execute(select(Patient).where((Patient.id == patient_id) | (Patient.user_id == patient_id)))
+        p = p_res.scalar_one_or_none()
+        if p and p.pin_hash:
+            has_pin = True
 
     if has_pin:
         return "COMPLETED"

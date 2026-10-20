@@ -33,6 +33,8 @@ from app.schemas.admin import (
     AdminPharmacyCreate,
     AdminPharmacyCreateResponse,
     UpdateUserStatusRequest,
+    UpdateUserStatusResponseData,
+    AdminActionResponseData,
 )
 from app.services.verification import VerificationService
 from app.core.config import settings
@@ -225,26 +227,25 @@ async def get_pending_verifications(
         
     return APIResponse(message="Pending verifications retrieved", data=data)
 
-@router.post("/verifications/{request_id}/approve", response_model=APIResponse[dict])
+@router.post("/verifications/{request_id}/approve", response_model=APIResponse[AdminActionResponseData])
 async def approve_verification(
     request_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
     req = await VerificationService.approve_request(db, request_id, current_admin.id)
-    return APIResponse(message="Approved successfully", data={"request_id": str(req.id)})
+    return APIResponse(message="Approved successfully", data=AdminActionResponseData(success=True, id=str(req.id)))
 
-@router.post("/verifications/{request_id}/reject", response_model=APIResponse[dict])
+@router.post("/verifications/{request_id}/reject", response_model=APIResponse[AdminActionResponseData])
 async def reject_verification(
     request_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    # Dummy reason for now
     req = await VerificationService.reject_request(db, request_id, current_admin.id, "Rejected by admin")
-    return APIResponse(message="Rejected successfully", data={"request_id": str(req.id)})
+    return APIResponse(message="Rejected successfully", data=AdminActionResponseData(success=True, id=str(req.id)))
 
-@router.delete("/users/{user_id}", response_model=APIResponse[dict])
+@router.delete("/users/{user_id}", response_model=APIResponse[AdminActionResponseData])
 async def delete_user(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -283,10 +284,10 @@ async def delete_user(
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Failed to delete user: {str(e)}")
         
-    return APIResponse(message="User deleted successfully", data={})
+    return APIResponse(message="User deleted successfully", data=AdminActionResponseData(success=True, id=str(user_id)))
 
-@router.patch("/users/{user_id}/status", response_model=APIResponse[dict])
-@router.post("/users/{user_id}/status", response_model=APIResponse[dict])
+@router.patch("/users/{user_id}/status", response_model=APIResponse[UpdateUserStatusResponseData])
+@router.post("/users/{user_id}/status", response_model=APIResponse[UpdateUserStatusResponseData])
 async def update_user_status(
     user_id: uuid.UUID,
     payload: UpdateUserStatusRequest,
@@ -310,10 +311,10 @@ async def update_user_status(
 
     return APIResponse(
         message=f"User status updated to {target_status}",
-        data={"user_id": str(user.id), "status": user.status.value}
+        data=UpdateUserStatusResponseData(user_id=str(user.id), status=user.status.value)
     )
 
-@router.post("/users/{user_id}/reset-security", response_model=APIResponse[dict])
+@router.post("/users/{user_id}/reset-security", response_model=APIResponse[AdminActionResponseData])
 async def reset_user_security(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -340,7 +341,7 @@ async def reset_user_security(
         await db.delete(bio_profile)
         
     await db.commit()
-    return APIResponse(message="User security credentials reset successfully", data={})
+    return APIResponse(message="User security credentials reset successfully", data=AdminActionResponseData(success=True, id=str(user_id)))
 
 @router.get("/patients", response_model=APIResponse[list[PatientAdminListItem]])
 async def get_patients(
