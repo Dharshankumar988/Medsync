@@ -151,6 +151,11 @@ export const authService = {
       if (error) throw error;
       if (!authData.user) throw new Error("Signup failed");
       
+      // When email confirmation is enabled or user already exists, Supabase returns identities: []
+      if (authData.user.identities && authData.user.identities.length === 0) {
+        throw new Error("An account with this email already exists. Please log in instead.");
+      }
+
       userId = authData.user.id;
       authSession = authData.session;
       needsVerification = !authData.session;

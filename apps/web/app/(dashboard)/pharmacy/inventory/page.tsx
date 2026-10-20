@@ -15,6 +15,21 @@ export default function PharmacyInventoryPage() {
   // Modals & State
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
+  const [isAddMedicineModalOpen, setIsAddMedicineModalOpen] = useState(false);
+
+  // Add Medicine Form State
+  const [newMedName, setNewMedName] = useState("");
+  const [newMedGeneric, setNewMedGeneric] = useState("");
+  const [newMedBrand, setNewMedBrand] = useState("");
+  const [newMedCategory, setNewMedCategory] = useState("General");
+  const [newMedBatch, setNewMedBatch] = useState("");
+  const [newMedStock, setNewMedStock] = useState("100");
+  const [newMedPrice, setNewMedPrice] = useState("10.00");
+  const [newMedExpiry, setNewMedExpiry] = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().split("T")[0];
+  });
   
   const [catalog, setCatalog] = useState<any[]>([]);
   const [restockOrders, setRestockOrders] = useState<any[]>([]);
@@ -48,6 +63,55 @@ export default function PharmacyInventoryPage() {
     setRestockOrders(orders);
     setIsSubmitting(false);
     setIsTrackingModalOpen(true);
+  };
+
+  const handleAddMedicine = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMedName.trim()) {
+      toast.error("Please provide a medicine name.");
+      return;
+    }
+    const qty = parseInt(newMedStock);
+    const price = parseFloat(newMedPrice);
+    if (isNaN(qty) || qty <= 0) {
+      toast.error("Stock quantity must be greater than 0.");
+      return;
+    }
+    if (isNaN(price) || price < 0) {
+      toast.error("Unit price must be a valid non-negative number.");
+      return;
+    }
+    if (!newMedExpiry) {
+      toast.error("Please provide an expiry date.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const res = await pharmacyService.addInventoryItem({
+      medicine_name: newMedName.trim(),
+      generic_name: newMedGeneric.trim() || undefined,
+      brand_name: newMedBrand.trim() || undefined,
+      category: newMedCategory.trim() || "General",
+      batch_number: newMedBatch.trim() || undefined,
+      stock_quantity: qty,
+      unit_price: price,
+      expiry_date: newMedExpiry
+    });
+
+    if (res.success) {
+      toast.success(res.message || "Medicine added to inventory!");
+      setIsAddMedicineModalOpen(false);
+      setNewMedName("");
+      setNewMedGeneric("");
+      setNewMedBrand("");
+      setNewMedBatch("");
+      setNewMedStock("100");
+      setNewMedPrice("10.00");
+      fetchInventory();
+    } else {
+      toast.error(res.message || "Failed to add medicine.");
+    }
+    setIsSubmitting(false);
   };
 
   const handlePlaceOrder = async () => {
@@ -111,14 +175,17 @@ export default function PharmacyInventoryPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">Inventory & Medicines</h1>
-          <p className="text-muted-foreground">Manage pharmaceutical stock, monitor expiry dates, and track low-stock items.</p>
+          <p className="text-muted-foreground">Manage pharmaceutical stock, add medicines, monitor expiry dates, and track low-stock items.</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={openTrackingModal} disabled={isSubmitting}>
             <Clock className="w-4 h-4 mr-2" /> Track Restocks
           </Button>
-          <Button onClick={openRestockModal} disabled={isSubmitting} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+          <Button onClick={openRestockModal} disabled={isSubmitting} variant="outline">
             <Plus className="w-4 h-4 mr-2" /> Order Restock
+          </Button>
+          <Button onClick={() => setIsAddMedicineModalOpen(true)} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Plus className="w-4 h-4 mr-2" /> Add Medicine
           </Button>
         </div>
       </div>
@@ -335,6 +402,131 @@ export default function PharmacyInventoryPage() {
                 })
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Medicine Modal */}
+      {isAddMedicineModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-card w-full max-w-lg p-6 rounded-2xl shadow-xl relative border border-border/50 max-h-[90vh] overflow-y-auto">
+            <Button variant="ghost" size="icon" className="absolute right-4 top-4" onClick={() => setIsAddMedicineModalOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+            <h2 className="text-xl font-bold mb-1">Add Medicine to Inventory</h2>
+            <p className="text-sm text-muted-foreground mb-6">Register a new medicine or batch into your pharmacy stock.</p>
+
+            <form onSubmit={handleAddMedicine} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Medicine Name *</label>
+                <Input
+                  type="text"
+                  placeholder="e.g., Amoxicillin 500mg, Paracetamol"
+                  value={newMedName}
+                  onChange={(e) => setNewMedName(e.target.value)}
+                  className="rounded-xl p-3"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Generic Name / Composition</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g., Amoxicillin Trihydrate"
+                    value={newMedGeneric}
+                    onChange={(e) => setNewMedGeneric(e.target.value)}
+                    className="rounded-xl p-3"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Brand Name / Manufacturer</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g., Moxatag, GlaxoSmithKline"
+                    value={newMedBrand}
+                    onChange={(e) => setNewMedBrand(e.target.value)}
+                    className="rounded-xl p-3"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Category</label>
+                  <select
+                    className="w-full bg-background border border-input rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={newMedCategory}
+                    onChange={(e) => setNewMedCategory(e.target.value)}
+                  >
+                    <option value="General">General</option>
+                    <option value="Antibiotics">Antibiotics</option>
+                    <option value="Analgesics">Analgesics & Pain Relief</option>
+                    <option value="Cardiovascular">Cardiovascular</option>
+                    <option value="Respiratory">Respiratory</option>
+                    <option value="Dermatology">Dermatology</option>
+                    <option value="Gastrointestinal">Gastrointestinal</option>
+                    <option value="Vitamins & Supplements">Vitamins & Supplements</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Batch Number</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g., BAT-2026-901"
+                    value={newMedBatch}
+                    onChange={(e) => setNewMedBatch(e.target.value)}
+                    className="rounded-xl p-3 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Stock Qty *</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={newMedStock}
+                    onChange={(e) => setNewMedStock(e.target.value)}
+                    className="rounded-xl p-3 font-mono"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Unit Price ($) *</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newMedPrice}
+                    onChange={(e) => setNewMedPrice(e.target.value)}
+                    className="rounded-xl p-3 font-mono"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Expiry Date *</label>
+                  <Input
+                    type="date"
+                    value={newMedExpiry}
+                    onChange={(e) => setNewMedExpiry(e.target.value)}
+                    className="rounded-xl p-3"
+                    required
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-3"
+                disabled={isSubmitting || !newMedName.trim()}
+              >
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                Add to Inventory
+              </Button>
+            </form>
           </div>
         </div>
       )}

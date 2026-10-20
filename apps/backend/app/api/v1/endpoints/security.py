@@ -127,7 +127,7 @@ async def reset_pin_with_password(
     current_password: str = Form(...),
     new_pin: str = Form(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: AuthenticatedPrincipal = Depends(get_current_user)
 ):
     """
     Reset PIN using account password for authorization.
@@ -138,23 +138,40 @@ async def reset_pin_with_password(
     if len(new_pin) != 6 or not new_pin.isdigit():
         raise HTTPException(status_code=400, detail="PIN must be exactly 6 digits.")
 
-    # Verify current password via Supabase
+    # Verify current password via Supabase Auth REST or directly via auth.users hash
+    from app.core.config import settings
+    import httpx
+    from sqlalchemy import text
+    password_ok = False
     try:
-        from supabase import create_client
-        supabase = create_client(
-            os.getenv("SUPABASE_URL"),
-            os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        )
+        supabase_url = settings.SUPABASE_URL.rstrip('/')
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(
+                f"{supabase_url}/auth/v1/token?grant_type=password",
+                headers={"apikey": settings.SUPABASE_KEY, "Content-Type": "application/json"},
+                json={"email": current_user.email, "password": current_password}
+            )
+            if res.status_code == 200:
+                password_ok = True
+    except Exception:
+        password_ok = False
 
-        # Re-authenticate with current password
-        auth_result = supabase.auth.sign_in_with_password({
-            "email": current_user.email,
-            "password": current_password
-        })
+    if not password_ok:
+        try:
+            res = await db.execute(
+                text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
+                {"pwd": current_password, "user_id": current_user.id}
+            )
+            matches = res.scalar()
+            if matches:
+                password_ok = True
+        except Exception:
+            password_ok = False
 
-        if not auth_result.user:
-            raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    if not password_ok:
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
 
+    try:
         # Password verified, update PIN
         if current_user.role.upper() == UserRole.PATIENT.value.upper():
             await enroll_patient_pin(db, current_user.id, new_pin)
@@ -174,13 +191,9 @@ async def reset_pin_with_password(
         await db.commit()
 
         return SecurityActionResponse(status="success", message="PIN reset successfully.")
-
     except Exception as e:
         if isinstance(e, HTTPException):
             raise
-        err_msg = str(e).lower()
-        if "invalid login credentials" in err_msg or "invalid credentials" in err_msg or "bad request" in err_msg or "authapierror" in type(e).__name__.lower():
-            raise HTTPException(status_code=400, detail="Current password is incorrect.")
         import logging
         logging.getLogger("medsync.security").error(f"Error during PIN reset: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to reset PIN.")

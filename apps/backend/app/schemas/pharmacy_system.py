@@ -64,6 +64,22 @@ class MedicineInventoryResponse(MedicineInventoryCreate):
     updated_at: datetime
     model_config = {"from_attributes": True}
 
+class AddInventoryItemRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    medicine_id: Optional[uuid.UUID] = None
+    medicine_name: Optional[str] = None
+    generic_name: Optional[str] = None
+    dosage_form: Optional[str] = None
+    strength: Optional[str] = None
+    batch_number: Optional[str] = None
+    stock_quantity: int
+    unit_price: float
+    expiry_date: date
+    minimum_stock: int = 10
+    manufacturing_date: Optional[date] = None
+    manufacturer: Optional[str] = None
+
 class OrderItemCreate(BaseModel):
     inventory_id: uuid.UUID
     quantity: int

@@ -47,11 +47,7 @@ export default function PharmacySettingsPage() {
   };
 
   const handleEnrollPin = async () => {
-    if (!currentPassword) {
-      toast.error("Please enter your current account password to update your PIN.");
-      return;
-    }
-    if (pin.length !== 6) {
+    if (pin.length !== 6 || !/^\d+$/.test(pin)) {
       toast.error("PIN must be exactly 6 digits.");
       return;
     }
@@ -63,6 +59,10 @@ export default function PharmacySettingsPage() {
       toast.error("New PIN and Confirm PIN do not match.");
       return;
     }
+    if (pinStatus !== "NOT_STARTED" && !currentPassword) {
+      toast.error("Please enter your current account password to update your PIN.");
+      return;
+    }
     
     setIsEnrollingPin(true);
     try {
@@ -72,13 +72,22 @@ export default function PharmacySettingsPage() {
 
       const apiUrl = getApiUrl();
       
-      const formData = new FormData();
-      formData.append('new_pin', pin);
-      formData.append('current_password', currentPassword);
+      if (currentPassword) {
+        const formData = new FormData();
+        formData.append('new_pin', pin);
+        formData.append('current_password', currentPassword);
 
-      await axios.post(`${apiUrl}/security/reset-pin-with-password`, formData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+        await axios.post(`${apiUrl}/security/reset-pin-with-password`, formData, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('pin', pin);
+
+        await axios.post(`${apiUrl}/security/enroll-pin`, formData, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
 
       toast.success(pinStatus === "NOT_STARTED" ? "PIN enrolled successfully!" : "PIN updated successfully!");
       setPin("");

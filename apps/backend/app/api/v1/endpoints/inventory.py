@@ -7,9 +7,10 @@ import datetime
 
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
+from app.schemas.session import AuthenticatedPrincipal
 from app.models.user import User, UserRole
-from app.models.pharmacy_system import MedicineInventory, Medicine, Supplier
-from app.schemas.pharmacy_system import MedicineInventoryResponse, MedicineInventoryCreate, MedicineResponse
+from app.models.pharmacy_system import MedicineInventory, Medicine, Supplier, MedicineCategory
+from app.schemas.pharmacy_system import MedicineInventoryResponse, MedicineInventoryCreate, MedicineResponse, AddInventoryItemRequest
 from app.schemas.response import APIResponse
 from app.utils.cache import async_ttl_cache
 
@@ -202,4 +203,96 @@ async def discard_expired_stock(
     await db.commit()
     
     return APIResponse(message="Expired stock discarded successfully", data={"new_quantity": 0})
+
+@router.post("/items", response_model=APIResponse[dict])
+async def add_inventory_item(
+    req: AddInventoryItemRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_pharmacy)
+):
+    """Add a new or existing medicine with stock to the pharmacy's inventory."""
+    if req.stock_quantity < 0:
+        raise HTTPException(status_code=400, detail="Stock quantity cannot be negative")
+    if req.unit_price < 0:
+        raise HTTPException(status_code=400, detail="Unit price cannot be negative")
+
+    target_med_id = req.medicine_id
+    med_name = req.medicine_name
+
+    if target_med_id:
+        med_stmt = select(Medicine).where(Medicine.id == target_med_id)
+        med_res = await db.execute(med_stmt)
+        med_obj = med_res.scalar_one_or_none()
+        if not med_obj:
+            raise HTTPException(status_code=404, detail="Selected medicine does not exist in catalog")
+        med_name = med_obj.name
+    else:
+        if not req.medicine_name or not req.medicine_name.strip():
+            raise HTTPException(status_code=400, detail="Please provide a medicine name or choose an existing medicine from the catalog")
+        
+        # Check if medicine already exists with same name
+        existing_med_res = await db.execute(select(Medicine).where(Medicine.name.ilike(req.medicine_name.strip())))
+        existing_med = existing_med_res.scalar_one_or_none()
+        if existing_med:
+            target_med_id = existing_med.id
+            med_name = existing_med.name
+        else:
+            # Find default category or create General
+            cat_res = await db.execute(select(MedicineCategory).where(MedicineCategory.name.ilike("%General%")))
+            cat = cat_res.scalars().first()
+            if not cat:
+                cat_any = await db.execute(select(MedicineCategory).limit(1))
+                cat = cat_any.scalars().first()
+            if not cat:
+                cat = MedicineCategory(id=uuid.uuid4(), name="General Medicines", description="General over the counter and prescribed pharmaceuticals")
+                db.add(cat)
+                await db.flush()
+
+            new_med = Medicine(
+                id=uuid.uuid4(),
+                name=req.medicine_name.strip(),
+                generic_name=req.generic_name or req.medicine_name.strip(),
+                dosage_form=req.dosage_form or "Tablet",
+                strength=req.strength or "",
+                manufacturer=req.manufacturer or "Generic Pharma",
+                price=req.unit_price,
+                category_id=cat.id
+            )
+            db.add(new_med)
+            await db.flush()
+            target_med_id = new_med.id
+            med_name = new_med.name
+
+    batch_num = req.batch_number.strip() if req.batch_number and req.batch_number.strip() else f"BATCH-{datetime.date.today().strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
+
+    new_inventory = MedicineInventory(
+        id=uuid.uuid4(),
+        pharmacy_id=current_user.id,
+        medicine_id=target_med_id,
+        batch_number=batch_num,
+        expiry_date=req.expiry_date,
+        manufacturing_date=req.manufacturing_date,
+        stock_quantity=req.stock_quantity,
+        minimum_stock=req.minimum_stock or 10,
+        maximum_stock=1000,
+        unit_price=req.unit_price,
+        selling_price=req.unit_price,
+        purchase_price=round(req.unit_price * 0.7, 2)
+    )
+    db.add(new_inventory)
+    await db.commit()
+
+    return APIResponse(
+        message=f"Added {req.stock_quantity} units of {med_name} to inventory successfully",
+        data={
+            "inventory_id": str(new_inventory.id),
+            "medicine_id": str(target_med_id),
+            "medicine_name": med_name,
+            "stock_quantity": new_inventory.stock_quantity,
+            "batch_number": new_inventory.batch_number,
+            "unit_price": new_inventory.unit_price,
+            "expiry_date": str(new_inventory.expiry_date)
+        }
+    )
+
 

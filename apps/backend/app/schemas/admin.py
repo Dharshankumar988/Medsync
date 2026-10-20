@@ -67,6 +67,18 @@ class PatientAdminListItem(BaseModel):
     blood_group: Optional[str] = None
     gender: Optional[str] = None
     created_at: str
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    pincode: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_number: Optional[str] = None
+    allergies: Optional[str] = None
+    chronic_diseases: Optional[str] = None
+    medical_alerts: Optional[str] = None
+    status: Optional[str] = "active"
 
 class AdminUserListItem(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
@@ -196,6 +208,7 @@ class AdminDoctorListItem(BaseModel):
     clinic_name: Optional[str] = None
     facility_type: Optional[str] = None
     doctor_status: Optional[str] = None
+    status: Optional[str] = "ACTIVE"
     is_verified: bool = True
     created_at: str
 
@@ -220,6 +233,12 @@ class AdminPharmacyCreate(BaseModel):
     clinic_name: Optional[str] = None
 
 
+class AdminPharmacyCreateResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    pharmacy_id: str
+    user_id: str
+
+
 class AdminPharmacyListItem(BaseModel):
     """Schema for pharmacy items returned in admin user management."""
     model_config = ConfigDict(use_enum_values=True)
@@ -235,6 +254,13 @@ class AdminPharmacyListItem(BaseModel):
     email: Optional[str] = None
     hospital_id: Optional[str] = None
     clinic_name: Optional[str] = None
+    status: Optional[str] = "ACTIVE"
     is_verified: bool = True
     created_at: Optional[str] = None
+
+
+class UpdateUserStatusRequest(BaseModel):
+    """Payload to update/suspend/activate a user."""
+    model_config = ConfigDict(use_enum_values=True)
+    status: str
 

@@ -137,5 +137,24 @@ export const pharmacyService = {
     } catch {
       return [];
     }
+  },
+
+  addInventoryItem: async (payload: {
+    medicine_id?: string;
+    medicine_name?: string;
+    generic_name?: string;
+    brand_name?: string;
+    category?: string;
+    batch_number?: string;
+    stock_quantity: number;
+    unit_price: number;
+    expiry_date: string;
+  }): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await api.post('/api/v1/inventory/items', payload);
+      return { success: true, message: res.data?.message || "Medicine added to inventory successfully" };
+    } catch (e: any) {
+      return { success: false, message: e.response?.data?.detail || e.message || "Failed to add medicine" };
+    }
   }
 };

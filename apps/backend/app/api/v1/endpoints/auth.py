@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
+from sqlalchemy.exc import IntegrityError
 from app.dependencies.db import get_db
 from app.schemas.response import APIResponse
 from app.schemas.user import UserSyncRequest
@@ -289,10 +290,39 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
     backend records and profiles, along with VerificationRequests if needed.
     """
     try:
-        # Check if user already exists
+        clean_email = payload.email.strip().lower()
+
+        # 1. Check if user already exists by ID
         existing = await db.execute(select(User).where(User.id == payload.id))
-        if existing.scalar_one_or_none():
+        existing_user_id = existing.scalar_one_or_none()
+        if existing_user_id:
             return APIResponse(message="User already synced", data=SyncUserResponseData(id=str(payload.id)))
+
+        # 2. Check if user already exists by Email
+        existing_email_res = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+        existing_user_email = existing_email_res.scalar_one_or_none()
+        if existing_user_email:
+            # Check if payload.id is the authoritative Supabase auth user for this email
+            auth_user = None
+            try:
+                auth_check = await db.execute(
+                    text("SELECT id FROM auth.users WHERE id = :id AND lower(email) = :email"),
+                    {"id": payload.id, "email": clean_email}
+                )
+                auth_user = auth_check.scalar_one_or_none()
+            except Exception:
+                auth_user = None
+
+            if auth_user:
+                # Update user ID to match new authoritative Supabase auth ID (cascades to profile tables)
+                existing_user_email.id = payload.id
+                await db.commit()
+                return APIResponse(message="User already synced and ID updated", data=SyncUserResponseData(id=str(payload.id)))
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="An account with this email already exists. Please log in instead."
+                )
 
         if payload.role == UserRole.ADMIN:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin creation is not allowed publicly.")
@@ -549,6 +579,20 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         return APIResponse(message="User synced successfully", data=SyncUserResponseData(id=str(new_user.id)))
     except HTTPException:
         raise
+    except IntegrityError as ie:
+        await db.rollback()
+        err_msg = str(ie).lower()
+        if "users_email_key" in err_msg or "unique constraint" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists. Please log in instead."
+            )
+        import logging
+        logging.getLogger("medsync.auth").error(f"IntegrityError syncing user: {ie}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Database integrity error during synchronization."
+        )
     except Exception as e:
         import logging
         logging.getLogger("medsync.auth").error(f"Failed to sync user: {e}", exc_info=True)

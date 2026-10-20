@@ -3,13 +3,14 @@ import httpx
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserStatus
 from app.models.doctor import Doctor
 from app.models.pharmacy import Pharmacy
 from app.models.patient import Patient
+from app.models.hospital import Hospital
 from app.models.verification import VerificationRequest, VerificationStatus
 from app.models.appointment import Appointment
 from app.models.prescription import Prescription
@@ -30,6 +31,8 @@ from app.schemas.admin import (
     InlineFacilityCreate,
     AdminPharmacyListItem,
     AdminPharmacyCreate,
+    AdminPharmacyCreateResponse,
+    UpdateUserStatusRequest,
 )
 from app.services.verification import VerificationService
 from app.core.config import settings
@@ -247,23 +250,68 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     current_admin: AuthenticatedPrincipal = Depends(require_admin)
 ):
-    # Delete from Supabase Auth
-    async with await get_supabase_client() as client:
-        res = await client.delete(f"/admin/users/{user_id}")
-        # Ignore 404 if not found in Supabase
-        if res.status_code not in (200, 204, 404):
-            raise HTTPException(status_code=500, detail=f"Failed to delete auth user: {res.text}")
-    
-    # Delete from local DB (Cascade should handle related profiles)
+    # Try deleting from Supabase Auth if credentials configured
+    if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
+        try:
+            async with await get_supabase_client() as client:
+                await client.delete(f"/admin/users/{user_id}")
+        except Exception:
+            pass
+
+    # Direct auth.users delete if postgres auth schema exists
+    try:
+        from sqlalchemy import text
+        await db.execute(text("DELETE FROM auth.users WHERE id = :uid"), {"uid": user_id})
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
+    # Clean up associated entity records first to prevent FK constraint failures
+    try:
+        await db.execute(delete(Doctor).where(Doctor.user_id == user_id))
+        await db.execute(delete(Patient).where(Patient.user_id == user_id))
+        await db.execute(delete(Pharmacy).where(Pharmacy.user_id == user_id))
+        await db.execute(delete(VerificationRequest).where(VerificationRequest.user_id == user_id))
+        
+        stmt = select(User).where(User.id == user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            await db.delete(user)
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Failed to delete user: {str(e)}")
+        
+    return APIResponse(message="User deleted successfully", data={})
+
+@router.patch("/users/{user_id}/status", response_model=APIResponse[dict])
+@router.post("/users/{user_id}/status", response_model=APIResponse[dict])
+async def update_user_status(
+    user_id: uuid.UUID,
+    payload: UpdateUserStatusRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
     stmt = select(User).where(User.id == user_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
-    
-    if user:
-        await db.delete(user)
-        await db.commit()
-        
-    return APIResponse(message="User deleted successfully", data={})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    target_status = payload.status.upper()
+    valid_statuses = [s.value for s in UserStatus]
+    if target_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status '{payload.status}'. Must be one of {valid_statuses}")
+
+    user.status = UserStatus(target_status)
+    await db.commit()
+    await db.refresh(user)
+
+    return APIResponse(
+        message=f"User status updated to {target_status}",
+        data={"user_id": str(user.id), "status": user.status.value}
+    )
 
 @router.post("/users/{user_id}/reset-security", response_model=APIResponse[dict])
 async def reset_user_security(
@@ -313,10 +361,188 @@ async def get_patients(
         date_of_birth=patient.date_of_birth.isoformat() if hasattr(patient.date_of_birth, "isoformat") else (str(patient.date_of_birth) if patient.date_of_birth else None),
         blood_group=patient.blood_group,
         gender=patient.gender,
-        created_at=patient.created_at.isoformat() if patient.created_at else ""
+        created_at=patient.created_at.isoformat() if patient.created_at else "",
+        phone_number=patient.phone_number,
+        address=patient.address,
+        city=patient.city,
+        state=patient.state,
+        country=patient.country,
+        pincode=patient.pincode,
+        emergency_contact_name=patient.emergency_contact_name,
+        emergency_contact_number=patient.emergency_contact_number,
+        allergies=patient.allergies,
+        chronic_diseases=patient.chronic_diseases,
+        medical_alerts=patient.medical_alerts,
+        status=user.status.value if hasattr(user.status, "value") else str(user.status)
     ) for patient, user in rows]
     
     return APIResponse(message="Patients retrieved", data=data)
+
+@router.get("/doctors", response_model=APIResponse[list[AdminDoctorListItem]])
+async def get_all_doctors(
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200)
+):
+    stmt = (
+        select(Doctor, User, Hospital)
+        .join(User, Doctor.user_id == User.id)
+        .outerjoin(Hospital, Doctor.hospital_id == Hospital.id)
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+    
+    data = []
+    for doctor, user, hosp in rows:
+        data.append(AdminDoctorListItem(
+            id=str(doctor.id),
+            user_id=str(doctor.user_id),
+            full_name=doctor.full_name,
+            email=user.email,
+            license_number=doctor.license_number,
+            specialization=doctor.specialization,
+            experience_years=doctor.experience_years or 0,
+            consultation_fee=doctor.consultation_fee or 0,
+            hospital_id=str(doctor.hospital_id) if doctor.hospital_id else None,
+            hospital_name=hosp.name if hosp and hosp.type != "clinic" else None,
+            clinic_name=doctor.clinic_name or (hosp.name if hosp and hosp.type == "clinic" else None),
+            facility_type=hosp.type if hosp else ("clinic" if doctor.clinic_name else None),
+            doctor_status=doctor.doctor_status,
+            status=user.status.value if hasattr(user.status, "value") else str(user.status) if user.status else "ACTIVE",
+            is_verified=user.is_verified,
+            created_at=doctor.created_at.isoformat() if doctor.created_at else ""
+        ))
+    return APIResponse(message="Doctors retrieved", data=data)
+
+@router.post("/doctors", response_model=APIResponse[AdminDoctorCreateResponse])
+async def create_doctor_admin(
+    req: AdminDoctorCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin)
+):
+    clean_email = req.email.strip().lower()
+    user_stmt = select(User).where(User.email.ilike(clean_email))
+    existing_user = await db.scalar(user_stmt)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="A user with this email already exists")
+
+    facility_id = None
+    facility_name = None
+    facility_type = None
+    if req.new_facility:
+        new_hosp = Hospital(
+            id=uuid.uuid4(),
+            name=req.new_facility.name,
+            type=req.new_facility.type or "hospital",
+            address=req.new_facility.address,
+            city=req.new_facility.city,
+            state=req.new_facility.state,
+            country=req.new_facility.country or "India",
+            pincode=req.new_facility.pincode,
+            phone_number=req.new_facility.phone_number,
+            email=req.new_facility.email,
+            latitude=req.new_facility.latitude,
+            longitude=req.new_facility.longitude,
+            google_maps_url=req.new_facility.google_maps_url,
+            is_verified=True
+        )
+        db.add(new_hosp)
+        await db.flush()
+        facility_id = new_hosp.id
+        facility_name = new_hosp.name
+        facility_type = new_hosp.type
+    elif req.hospital_id:
+        facility_id = uuid.UUID(req.hospital_id)
+        hosp_row = await db.scalar(select(Hospital).where(Hospital.id == facility_id))
+        if hosp_row:
+            facility_name = hosp_row.name
+            facility_type = hosp_row.type
+
+    user_id: Optional[uuid.UUID] = None
+    if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
+        try:
+            async with await get_supabase_client() as client:
+                res = await client.post(
+                    "/admin/users",
+                    json={
+                        "email": clean_email,
+                        "password": req.password,
+                        "email_confirm": True,
+                        "app_metadata": {"role": "DOCTOR", "provider": "email"},
+                        "user_metadata": {"role": "DOCTOR", "full_name": req.full_name}
+                    }
+                )
+                if res.status_code in (200, 201):
+                    user_id = uuid.UUID(res.json()["id"])
+        except Exception:
+            user_id = None
+
+    if not user_id:
+        user_id = uuid.uuid4()
+        try:
+            from sqlalchemy import text
+            await db.execute(
+                text("""
+                INSERT INTO auth.users (
+                    id, instance_id, email, encrypted_password, aud, role,
+                    raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
+                )
+                VALUES (
+                    :id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')),
+                    'authenticated', 'authenticated',
+                    '{"provider":"email","providers":["email"],"role":"DOCTOR"}',
+                    '{"role":"DOCTOR"}',
+                    now(), now(), now()
+                )
+                """),
+                {"id": user_id, "email": clean_email, "pwd": req.password}
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
+    new_user = User(
+        id=user_id,
+        email=clean_email,
+        role=UserRole.DOCTOR,
+        status=UserStatus.ACTIVE,
+        is_verified=True,
+        profile_completion_percentage=100
+    )
+    db.add(new_user)
+
+    new_doc = Doctor(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        full_name=req.full_name,
+        specialization=req.specialization or "General Physician",
+        license_number=req.license_number or f"DOC-REG-{uuid.uuid4().hex[:6].upper()}",
+        hospital_id=facility_id,
+        clinic_name=facility_name if facility_type == "clinic" else None,
+        clinic_phone=req.clinic_phone,
+        experience_years=req.experience_years or 0,
+        consultation_fee=req.consultation_fee or 0,
+        doctor_status="ACTIVE"
+    )
+    db.add(new_doc)
+    await db.commit()
+
+    return APIResponse(
+        message="Doctor created successfully",
+        data=AdminDoctorCreateResponse(
+            id=str(new_doc.id),
+            user_id=str(user_id),
+            email=clean_email,
+            full_name=new_doc.full_name,
+            hospital_id=str(facility_id) if facility_id else None,
+            hospital_name=facility_name if facility_type != "clinic" else None,
+            clinic_name=facility_name if facility_type == "clinic" else None,
+            facility_type=facility_type
+        )
+    )
 
 @router.get("/admins", response_model=APIResponse[list[AdminUserListItem]])
 async def get_admins(
@@ -457,12 +683,13 @@ async def get_all_pharmacies(
             email=user.email,
             hospital_id=str(pharmacy.hospital_id) if pharmacy.hospital_id else None,
             clinic_name=pharmacy.clinic_name,
+            status=user.status.value if hasattr(user.status, "value") else str(user.status) if user.status else "ACTIVE",
             is_verified=user.is_verified,
             created_at=pharmacy.created_at.isoformat() if pharmacy.created_at else None
         ))
     return APIResponse(message="Pharmacies retrieved", data=data)
 
-@router.post("/pharmacies", response_model=APIResponse[dict])
+@router.post("/pharmacies", response_model=APIResponse[AdminPharmacyCreateResponse])
 async def create_pharmacy_admin(
     req: AdminPharmacyCreate,
     db: AsyncSession = Depends(get_db),
@@ -571,7 +798,10 @@ async def create_pharmacy_admin(
     except Exception:
         pass
         
-    return APIResponse(message="Pharmacy created successfully", data={"pharmacy_id": str(new_pharmacy.id), "user_id": str(user_id)})
+    return APIResponse(
+        message="Pharmacy created successfully", 
+        data=AdminPharmacyCreateResponse(pharmacy_id=str(new_pharmacy.id), user_id=str(user_id))
+    )
 
 @router.get("/dashboard", response_model=APIResponse[dict])
 async def get_admin_dashboard(

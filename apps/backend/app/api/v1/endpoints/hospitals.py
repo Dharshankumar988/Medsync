@@ -113,13 +113,14 @@ async def create_hospital(
     current_user: AuthenticatedPrincipal = Depends(require_admin_or_doctor)
 ):
     new_hospital = Hospital(**payload.model_dump())
-    new_hospital.user_id = current_user.id
     
     # Admins create verified hospitals or clinics directly; doctors can only register private clinics
     if current_user.role.upper() == UserRole.ADMIN.value:
+        new_hospital.user_id = None
         new_hospital.is_verified = True
         msg = f"{'Hospital' if (payload.type or 'hospital').lower() == 'hospital' else 'Clinic'} created successfully"
     else:
+        new_hospital.user_id = current_user.id
         req_type = (payload.type or "hospital").lower()
         if req_type == "hospital":
             raise HTTPException(
