@@ -23,7 +23,7 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "users"
     
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), default="supabase_managed", server_default="supabase_managed", nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
     status: Mapped[UserStatus] = mapped_column(Enum(UserStatus), default=UserStatus.ACTIVE, index=True)
     profile_completion_percentage: Mapped[int] = mapped_column(default=0)
@@ -42,3 +42,8 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     pharmacy_profile = relationship("Pharmacy", back_populates="user", uselist=False)
     hospital_profile = relationship("Hospital", back_populates="user", uselist=False)
     admin_profile = relationship("Admin", back_populates="user", uselist=False)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("password_hash", "supabase_managed")
+        super().__init__(**kwargs)
+

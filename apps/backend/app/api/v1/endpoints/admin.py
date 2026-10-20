@@ -638,6 +638,7 @@ async def create_doctor(
         new_user = User(
             id=auth_user_id,
             email=clean_email,
+            password_hash="supabase_managed",
             role=UserRole.DOCTOR,
             status=UserStatus.ACTIVE,
             is_verified=True,
@@ -858,6 +859,7 @@ async def create_admin(
         new_user = User(
             id=user_id,
             email=clean_email,
+            password_hash="supabase_managed",
             role=UserRole.ADMIN,
             status=UserStatus.ACTIVE,
             is_verified=True,
@@ -972,6 +974,7 @@ async def create_pharmacy_admin(
     new_user = User(
         id=user_id,
         email=clean_email,
+        password_hash="supabase_managed",
         role=UserRole.PHARMACY,
         status=UserStatus.ACTIVE,
         is_verified=True,

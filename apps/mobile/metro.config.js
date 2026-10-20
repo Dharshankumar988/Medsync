@@ -32,16 +32,19 @@ const singletons = [
   '@react-native-community/netinfo',
 ];
 
-const fs = require('fs');
-
 const defaultResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   for (const pkg of singletons) {
     if (moduleName === pkg || moduleName.startsWith(pkg + '/')) {
-      const localPath = path.resolve(projectRoot, 'node_modules', moduleName);
-      const rootPath = path.resolve(monorepoRoot, 'node_modules', moduleName);
-      const targetPath = fs.existsSync(localPath) ? localPath : rootPath;
-      return context.resolveRequest(context, targetPath, platform);
+      try {
+        const filePath = require.resolve(moduleName, { paths: [projectRoot, monorepoRoot] });
+        return {
+          type: 'sourceFile',
+          filePath,
+        };
+      } catch (err) {
+        // Fallback to default resolver if require.resolve fails
+      }
     }
   }
   return defaultResolveRequest

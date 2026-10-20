@@ -22,12 +22,16 @@ import {
   Package,
   Truck,
   CheckCircle2,
+  Plus,
+  FileUp,
 } from 'lucide-react-native';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { ScreenHeader } from '../../../components/layout/ScreenHeader';
 import { Card, CardContent } from '../../../components/common/Card';
 import { Button } from '../../../components/common/Button';
 import { PinVerificationModal } from '../../../components/patient/PinVerificationModal';
+import { UploadRecordModal } from '../../../components/patient/UploadRecordModal';
+import { OrderMedicinesModal } from '../../../components/patient/OrderMedicinesModal';
 import {
   patientService,
   MedicalRecordItem,
@@ -52,6 +56,13 @@ export default function PatientRecordsScreen() {
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedEntityType, setSelectedEntityType] = useState<'RECORD' | 'PRESCRIPTION'>('RECORD');
   const [pinModalVisible, setPinModalVisible] = useState(false);
+
+  // Upload Record modal state
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+
+  // Order Medicines modal state (triggered from Prescriptions or Pharmacy)
+  const [orderModalVisible, setOrderModalVisible] = useState(false);
+  const [selectedPrescriptionForOrder, setSelectedPrescriptionForOrder] = useState<PrescriptionItem | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -101,34 +112,47 @@ export default function PatientRecordsScreen() {
     if (!selectedEntityId) return;
 
     if (selectedEntityType === 'RECORD') {
-      const data = await patientService.downloadRecordWithPin(selectedEntityId, pin);
-      setPinModalVisible(false);
-      setSelectedEntityId(null);
+      try {
+        const data = await patientService.downloadRecordWithPin(selectedEntityId, pin);
+        setPinModalVisible(false);
+        setSelectedEntityId(null);
 
-      if (data?.download_url) {
-        const supported = await Linking.canOpenURL(data.download_url);
-        if (supported) {
-          await Linking.openURL(data.download_url);
+        const downloadUrl = data?.url || data?.signed_url || data?.download_url;
+        if (downloadUrl) {
+          const supported = await Linking.canOpenURL(downloadUrl).catch(() => false);
+          if (supported) {
+            await Linking.openURL(downloadUrl);
+          } else {
+            Alert.alert('Download Ready', `File link generated: ${downloadUrl}`);
+          }
         } else {
-          Alert.alert('Download Ready', `File link generated: ${data.file_name || 'medical_record.pdf'}`);
+          Alert.alert('Notice', 'Authorized download URL could not be resolved.');
         }
-      } else {
-        Alert.alert('Notice', 'Authorized download URL could not be resolved.');
+      } catch (err: any) {
+        Alert.alert('Download Failed', formatErrorMessage(err));
       }
     } else {
-      const data = await patientService.authorizePrescriptionDownload(selectedEntityId, pin);
-      setPinModalVisible(false);
-      setSelectedEntityId(null);
+      try {
+        const data = await patientService.authorizePrescriptionDownload(selectedEntityId, pin);
+        setPinModalVisible(false);
+        setSelectedEntityId(null);
 
-      if (data?.download_url) {
-        const supported = await Linking.canOpenURL(data.download_url);
-        if (supported) {
-          await Linking.openURL(data.download_url);
+        const downloadUrl = data?.download_url || data?.url || data?.signed_url || data?.pdf_url;
+        if (downloadUrl) {
+          const supported = await Linking.canOpenURL(downloadUrl).catch(() => false);
+          if (supported) {
+            await Linking.openURL(downloadUrl);
+          } else {
+            Alert.alert('Download Ready', `Prescription PDF link: ${downloadUrl}`);
+          }
         } else {
-          Alert.alert('Download Ready', 'Prescription PDF link generated.');
+          Alert.alert(
+            'Prescription Authorized',
+            `Authorization PIN confirmed. Access reference: ${data?.authorization_reference || 'CONFIRMED'}`
+          );
         }
-      } else {
-        Alert.alert('Prescription Authorized', `Authorization token: ${data?.authorization_reference || 'Confirmed'}`);
+      } catch (err: any) {
+        Alert.alert('Authorization Failed', formatErrorMessage(err));
       }
     }
   };
@@ -185,14 +209,28 @@ export default function PatientRecordsScreen() {
               onPress={() => handleDownloadRecordPress(item.id)}
               style={styles.actionBtn}
             />
-            <Button
-              title={isPublic ? 'Make Private' : 'Make Public'}
-              size="sm"
-              variant="outline"
-              iconLeft={isPublic ? <Lock size={14} color="#64748B" /> : <Globe size={14} color="#10B981" />}
+            <TouchableOpacity
+              style={[
+                styles.consentBtn,
+                isPublic ? styles.consentBtnPrivate : styles.consentBtnPublic,
+              ]}
               onPress={() => handleToggleConsent(item)}
-              style={styles.actionBtn}
-            />
+              activeOpacity={0.8}
+            >
+              {isPublic ? (
+                <Lock size={14} color="#DC2626" />
+              ) : (
+                <Globe size={14} color="#059669" />
+              )}
+              <Text
+                style={[
+                  styles.consentBtnText,
+                  isPublic ? styles.consentTextPrivate : styles.consentTextPublic,
+                ]}
+              >
+                {isPublic ? 'Make Private' : 'Make Public'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </CardContent>
       </Card>
@@ -242,6 +280,19 @@ export default function PatientRecordsScreen() {
               onPress={() => handleDownloadPrescriptionPress(item.id)}
               style={styles.actionBtn}
             />
+            {!item.is_dispensed && (
+              <TouchableOpacity
+                style={styles.orderDeliveryBtn}
+                onPress={() => {
+                  setSelectedPrescriptionForOrder(item);
+                  setOrderModalVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <ShoppingBag size={14} color="#FFFFFF" />
+                <Text style={styles.orderDeliveryBtnText}>Order Delivery</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </CardContent>
       </Card>
@@ -286,7 +337,23 @@ export default function PatientRecordsScreen() {
   return (
     <RoleGuard allowedRole="patient">
       <View style={styles.container}>
-        <ScreenHeader title="Medical Records & Pharmacy" subtitle="Encrypted diagnostic files & prescriptions" />
+        <ScreenHeader
+          title="Medical Records & Pharmacy"
+          subtitle="Encrypted diagnostic files & prescriptions"
+          rightElement={
+            activeTab === 'RECORDS' ? (
+              <TouchableOpacity
+                style={styles.addRecordHeaderBtn}
+                onPress={() => setUploadModalVisible(true)}
+                activeOpacity={0.85}
+                accessibilityLabel="Add Medical Document"
+              >
+                <Plus size={15} color="#FFFFFF" />
+                <Text style={styles.addRecordHeaderBtnText}>Add</Text>
+              </TouchableOpacity>
+            ) : undefined
+          }
+        />
 
         {/* Tab Segment Controls */}
         <View style={styles.segmentContainer}>
@@ -320,6 +387,27 @@ export default function PatientRecordsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Document Action Subheader for Records tab */}
+        {activeTab === 'RECORDS' && (
+          <View style={styles.recordsActionBar}>
+            <View style={styles.recordsCountBadge}>
+              <FileText size={13} color="#2563EB" />
+              <Text style={styles.recordsCountText}>
+                {records.length} {records.length === 1 ? 'Record' : 'Records'} on Vault
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.uploadCtaBtn}
+              onPress={() => setUploadModalVisible(true)}
+              activeOpacity={0.85}
+              accessibilityLabel="Upload Document"
+            >
+              <Plus size={14} color="#FFFFFF" />
+              <Text style={styles.uploadCtaText}>Add Document</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {error && (
           <View style={styles.errorBanner}>
@@ -375,6 +463,17 @@ export default function PatientRecordsScreen() {
                     ? 'Prescriptions issued by your consulting doctors will appear here for download.'
                     : 'Pharmacy orders placed from prescriptions will appear here with live tracking.'}
                 </Text>
+
+                {activeTab === 'RECORDS' && (
+                  <Button
+                    title="Upload Your First Medical Record"
+                    size="sm"
+                    iconLeft={<Plus size={15} color="#FFFFFF" />}
+                    onPress={() => setUploadModalVisible(true)}
+                    style={{ marginBottom: 12 }}
+                  />
+                )}
+
                 <Button
                   title="Reload"
                   variant="outline"
@@ -397,6 +496,32 @@ export default function PatientRecordsScreen() {
           onCancel={() => {
             setPinModalVisible(false);
             setSelectedEntityId(null);
+          }}
+        />
+
+        {/* Upload Medical Document Modal */}
+        <UploadRecordModal
+          visible={uploadModalVisible}
+          onClose={() => setUploadModalVisible(false)}
+          onSuccess={() => {
+            loadData();
+          }}
+        />
+
+        {/* Order Medicines & Prescriptions Modal with Payment Spoof */}
+        <OrderMedicinesModal
+          visible={orderModalVisible}
+          pharmacyData={null}
+          initialPrescriptionId={selectedPrescriptionForOrder?.id}
+          onClose={() => {
+            setOrderModalVisible(false);
+            setSelectedPrescriptionForOrder(null);
+          }}
+          onOrderSuccess={() => {
+            setOrderModalVisible(false);
+            setSelectedPrescriptionForOrder(null);
+            loadData();
+            setActiveTab('ORDERS');
           }}
         />
       </View>
@@ -620,5 +745,106 @@ const styles = StyleSheet.create({
   },
   reloadBtn: {
     paddingHorizontal: 20,
+  },
+  addRecordHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    marginRight: 8,
+  },
+  addRecordHeaderBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  recordsActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  recordsCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  recordsCountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E40AF',
+  },
+  uploadCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  uploadCtaText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  consentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  consentBtnPublic: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  consentBtnPrivate: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  consentBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  consentTextPublic: {
+    color: '#059669',
+  },
+  consentTextPrivate: {
+    color: '#DC2626',
+  },
+  orderDeliveryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#059669',
+  },
+  orderDeliveryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

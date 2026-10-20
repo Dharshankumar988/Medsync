@@ -75,6 +75,8 @@ function CallbackHandler() {
             email: user.email,
             role: role,
             full_name: fullName,
+            is_verified: true,
+            auth_provider: "google",
           });
         } catch (syncErr) {
           console.warn("Backend OAuth sync warning:", syncErr);

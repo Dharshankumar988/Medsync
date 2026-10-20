@@ -26,7 +26,6 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
-      - PINATA_JWT=${PINATA_JWT}
       - CONTRACT_ADDRESSES_DIR=/blockchain/deployments
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsync}:${POSTGRES_PASSWORD:-medsync_dev_pass}@db:5432/${POSTGRES_DB:-medsync}
     env_file:

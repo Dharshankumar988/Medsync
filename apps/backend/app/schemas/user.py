@@ -29,6 +29,8 @@ class UserSyncRequest(BaseModel):
     email: str
     role: UserRole
     full_name: str
+    is_verified: Optional[bool] = None
+    auth_provider: Optional[str] = None
     hospital_id: Optional[uuid.UUID] = None
     hospital_name: Optional[str] = None
     hospital_address: Optional[str] = None

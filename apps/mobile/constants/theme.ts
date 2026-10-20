@@ -3,22 +3,22 @@
 
 export const Colors = {
   // ── Core surfaces ──
-  background:       '#0A0A0A',   // Root page background
-  card:             '#141414',   // Card surface
-  cardElevated:     '#1C1C1C',   // Slightly lighter card (inner sections)
-  input:            '#1C1C1E',   // Input field background
-  muted:            '#1C1C1E',   // Muted surface
+  background:       '#F8FAFC',   // Root page background (slate-50)
+  card:             '#FFFFFF',   // Pure white card surface
+  cardElevated:     '#F1F5F9',   // Light elevated card
+  input:            '#FFFFFF',   // Input field background
+  muted:            '#F1F5F9',   // Muted surface
 
   // ── Borders ──
-  border:           'rgba(255,255,255,0.08)',   // Default card border (matches border/60 in dark)
-  borderStrong:     'rgba(255,255,255,0.14)',   // Focused / hover border
-  divider:          'rgba(255,255,255,0.06)',   // Between items
+  border:           '#E2E8F0',   // Default card border (slate-200)
+  borderStrong:     '#CBD5E1',   // Focused / hover border
+  divider:          '#F1F5F9',   // Between items
 
   // ── Text ──
-  text:             '#F5F5F5',   // Primary text
-  textSecondary:    '#A1A1AA',   // Secondary text (zinc-400)
-  textMuted:        '#71717A',   // Muted text (zinc-500)
-  textSubtle:       '#52525B',   // Very muted (zinc-600)
+  text:             '#0F172A',   // Primary text (slate-900)
+  textSecondary:    '#475569',   // Secondary text (slate-600)
+  textMuted:        '#64748B',   // Muted text (slate-500)
+  textSubtle:       '#94A3B8',   // Very muted (slate-400)
 
   // ─────────────────────────────────────────────────────────────────────────
   // Role accent palettes — each role has a primary color that drives the
@@ -234,25 +234,25 @@ export const Typography = {
 // ── Shadow presets ────────────────────────────────────────────────────────
 export const Shadows = {
   card: {
-    shadowColor:   '#000',
-    shadowOffset:  { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius:  12,
-    elevation:     6,
+    shadowColor:   '#0F172A',
+    shadowOffset:  { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius:  8,
+    elevation:     2,
   },
   cardSubtle: {
-    shadowColor:   '#000',
-    shadowOffset:  { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius:  6,
-    elevation:     3,
+    shadowColor:   '#0F172A',
+    shadowOffset:  { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius:  4,
+    elevation:     1,
   },
   button: {
-    shadowColor:   '#000',
+    shadowColor:   '#0F172A',
     shadowOffset:  { width: 0, height: 2 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.08,
     shadowRadius:  4,
-    elevation:     4,
+    elevation:     2,
   },
 } as const;
 

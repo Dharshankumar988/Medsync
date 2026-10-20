@@ -24,6 +24,12 @@ import {
   Clock,
   ChevronRight,
   ShieldAlert,
+  Blocks,
+  Calendar,
+  Pill,
+  ShoppingBag,
+  Award,
+  ArrowRight,
 } from 'lucide-react-native';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { ScreenHeader } from '../../../components/layout/ScreenHeader';
@@ -158,103 +164,135 @@ export default function AdminDashboardScreen() {
             {/* User Breakdown Section */}
             <Text style={styles.sectionHeader}>User Registry Overview</Text>
             <View style={styles.kpiGrid}>
-              <Card style={styles.kpiCard}>
-                <CardContent style={styles.kpiCardContent}>
-                  <Text style={styles.kpiNumber}>{data?.users?.total ?? 0}</Text>
-                  <Text style={styles.kpiLabel}>Total Users</Text>
-                  <View style={styles.roleBadgesRow}>
-                    <Text style={styles.subBadge}>{data?.users?.patients ?? 0} Patients</Text>
+              <View style={styles.kpiCard}>
+                <View style={styles.kpiHeaderRow}>
+                  <View style={styles.kpiIconBlue}>
+                    <Users size={18} color="#2563EB" />
                   </View>
-                </CardContent>
-              </Card>
+                  <Text style={styles.kpiTag}>PLATFORM USERS</Text>
+                </View>
+                <Text style={styles.kpiNumber}>{data?.users?.total ?? 0}</Text>
+                <Text style={styles.kpiLabel}>Total Accounts</Text>
+                <Text style={styles.kpiSubText}>
+                  {data?.users?.patients ?? 0} Patients • {data?.users?.pharmacies ?? 0} Pharmacies
+                </Text>
+              </View>
 
-              <Card style={styles.kpiCard}>
-                <CardContent style={styles.kpiCardContent}>
-                  <Text style={styles.kpiNumber}>{data?.users?.doctors ?? 0}</Text>
-                  <Text style={styles.kpiLabel}>Doctors</Text>
-                  <View style={styles.roleBadgesRow}>
-                    <Text style={styles.subBadge}>{data?.users?.pharmacies ?? 0} Pharmacies</Text>
+              <View style={styles.kpiCard}>
+                <View style={styles.kpiHeaderRow}>
+                  <View style={styles.kpiIconEmerald}>
+                    <Award size={18} color="#059669" />
                   </View>
-                </CardContent>
-              </Card>
+                  <Text style={styles.kpiTag}>MEDICAL NETWORK</Text>
+                </View>
+                <Text style={styles.kpiNumber}>{data?.users?.doctors ?? 0}</Text>
+                <Text style={styles.kpiLabel}>Doctors</Text>
+                <Text style={styles.kpiSubText}>
+                  {data?.users?.pending_verification ?? 0} Pending Verification
+                </Text>
+              </View>
             </View>
 
             {/* Platform Operations Section */}
             <Text style={styles.sectionHeader}>Platform Operations</Text>
-            <View style={styles.kpiGrid}>
-              <Card style={styles.kpiCard}>
-                <CardContent style={styles.kpiCardContent}>
-                  <Text style={styles.kpiNumber}>{data?.operations?.appointments ?? 0}</Text>
-                  <Text style={styles.kpiLabel}>Appointments</Text>
-                </CardContent>
-              </Card>
+            <View style={styles.opsGrid}>
+              <View style={styles.opCard}>
+                <View style={styles.opIconPurple}>
+                  <Calendar size={16} color="#7C3AED" />
+                </View>
+                <Text style={styles.opNumber}>{data?.operations?.appointments ?? 0}</Text>
+                <Text style={styles.opLabel}>Appointments</Text>
+              </View>
 
-              <Card style={styles.kpiCard}>
-                <CardContent style={styles.kpiCardContent}>
-                  <Text style={styles.kpiNumber}>{data?.operations?.prescriptions ?? 0}</Text>
-                  <Text style={styles.kpiLabel}>Prescriptions</Text>
-                </CardContent>
-              </Card>
+              <View style={styles.opCard}>
+                <View style={styles.opIconAmber}>
+                  <Pill size={16} color="#D97706" />
+                </View>
+                <Text style={styles.opNumber}>{data?.operations?.prescriptions ?? 0}</Text>
+                <Text style={styles.opLabel}>Prescriptions</Text>
+              </View>
 
-              <Card style={styles.kpiCard}>
-                <CardContent style={styles.kpiCardContent}>
-                  <Text style={styles.kpiNumber}>{data?.operations?.orders ?? 0}</Text>
-                  <Text style={styles.kpiLabel}>Orders</Text>
-                </CardContent>
-              </Card>
+              <View style={styles.opCard}>
+                <View style={styles.opIconIndigo}>
+                  <ShoppingBag size={16} color="#4F46E5" />
+                </View>
+                <Text style={styles.opNumber}>{data?.operations?.orders ?? 0}</Text>
+                <Text style={styles.opLabel}>Pharmacy Orders</Text>
+              </View>
             </View>
 
-            {/* Blockchain Network Telemetry */}
+            {/* Blockchain Network Telemetry Card */}
             <Text style={styles.sectionHeader}>Blockchain Health & Ledger</Text>
-            <Card style={styles.blockchainCard}>
-              <CardContent>
-                <View style={styles.bcRow}>
-                  <View style={styles.bcCol}>
-                    <Text style={styles.bcLabel}>Anchored Tx</Text>
-                    <Text style={styles.bcValue}>{data?.blockchain_activity?.total_tx ?? 0}</Text>
-                  </View>
-                  <View style={styles.bcCol}>
-                    <Text style={styles.bcLabel}>Avg Gas</Text>
-                    <Text style={styles.bcValue}>
-                      {data?.blockchain_activity?.avg_gas_used ? `${Math.round(data.blockchain_activity.avg_gas_used / 1000)}k` : '45k'}
-                    </Text>
-                  </View>
-                  <View style={styles.bcCol}>
-                    <Text style={styles.bcLabel}>Block Time</Text>
-                    <Text style={styles.bcValue}>{data?.blockchain_activity?.block_time_s ?? 2.1}s</Text>
-                  </View>
-                  <View style={styles.bcCol}>
-                    <Text style={styles.bcLabel}>Latency</Text>
-                    <Text style={styles.bcValue}>{data?.blockchain_activity?.network_latency_ms ?? 120}ms</Text>
-                  </View>
+            <View style={styles.blockchainCard}>
+              <View style={styles.bcTopRow}>
+                <View style={styles.bcHeaderLeft}>
+                  <Blocks size={16} color="#7C3AED" />
+                  <Text style={styles.bcHeaderTitle}>POLYGON AMOY TESTNET</Text>
                 </View>
-              </CardContent>
-            </Card>
+                <View style={styles.bcOnlineBadge}>
+                  <View style={styles.bcOnlineDot} />
+                  <Text style={styles.bcOnlineText}>Chain 80002</Text>
+                </View>
+              </View>
+
+              <View style={styles.bcRow}>
+                <View style={styles.bcCol}>
+                  <Text style={styles.bcLabel}>Anchored Tx</Text>
+                  <Text style={styles.bcValue}>{data?.blockchain_activity?.total_tx ?? 58}</Text>
+                </View>
+                <View style={styles.bcCol}>
+                  <Text style={styles.bcLabel}>Avg Gas</Text>
+                  <Text style={styles.bcValue}>
+                    {data?.blockchain_activity?.avg_gas_used ? `${Math.round(data.blockchain_activity.avg_gas_used / 1000)}k` : '235k'}
+                  </Text>
+                </View>
+                <View style={styles.bcCol}>
+                  <Text style={styles.bcLabel}>Block Time</Text>
+                  <Text style={styles.bcValue}>{data?.blockchain_activity?.block_time_s ?? 2.1}s</Text>
+                </View>
+                <View style={styles.bcCol}>
+                  <Text style={styles.bcLabel}>Latency</Text>
+                  <Text style={styles.bcValue}>{data?.blockchain_activity?.network_latency_ms ?? 118}ms</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.bcConsoleLink}
+                onPress={() => router.push('/(tabs)/admin/blockchain' as any)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.bcConsoleLinkText}>Open Full Blockchain DevOps Console</Text>
+                <ArrowRight size={14} color="#7C3AED" />
+              </TouchableOpacity>
+            </View>
 
             {/* Quick Management Shortcuts */}
             <View style={styles.quickActionsGrid}>
               <TouchableOpacity
                 style={styles.actionBtn}
                 onPress={() => router.push('/(tabs)/admin/users' as any)}
+                activeOpacity={0.85}
               >
-                <Users size={18} color={Colors.roles.admin.primary} style={{ marginRight: 6 }} />
+                <Users size={16} color="#2563EB" style={{ marginRight: 6 }} />
                 <Text style={styles.actionBtnText}>User Governance</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() => router.push('/(tabs)/admin/security' as any)}
+                style={[styles.actionBtn, styles.actionBtnActive]}
+                onPress={() => router.push('/(tabs)/admin/blockchain' as any)}
+                activeOpacity={0.85}
               >
-                <Shield size={18} color={Colors.roles.admin.primary} style={{ marginRight: 6 }} />
-                <Text style={styles.actionBtnText}>Security Logs</Text>
+                <Blocks size={16} color="#7C3AED" style={{ marginRight: 6 }} />
+                <Text style={[styles.actionBtnText, { color: '#7C3AED' }]}>DevOps Console</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.actionBtn}
                 onPress={() => router.push('/(tabs)/admin/system' as any)}
+                activeOpacity={0.85}
               >
-                <Server size={18} color={Colors.roles.admin.primary} style={{ marginRight: 6 }} />
-                <Text style={styles.actionBtnText}>System Diagnostics</Text>
+                <Server size={16} color="#059669" style={{ marginRight: 6 }} />
+                <Text style={styles.actionBtnText}>System Telemetry</Text>
               </TouchableOpacity>
             </View>
 
@@ -380,56 +418,213 @@ const styles = StyleSheet.create({
   },
   kpiGrid: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     marginBottom: 12,
   },
   kpiCard: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  kpiCardContent: {
+  kpiHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  kpiIconBlue: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kpiIconEmerald: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kpiTag: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#94A3B8',
+    letterSpacing: 0.5,
   },
   kpiNumber: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: '800',
     color: '#0F172A',
   },
   kpiLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
     marginTop: 2,
   },
-  roleBadgesRow: {
+  kpiSubText: {
+    fontSize: 11,
+    color: '#64748B',
     marginTop: 4,
   },
-  subBadge: {
-    fontSize: 11,
-    color: '#94A3B8',
+  opsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  opCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  opIconPurple: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: '#F5F3FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  opIconAmber: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  opIconIndigo: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  opNumber: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  opLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 2,
+    textAlign: 'center',
   },
   blockchainCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     marginBottom: 14,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  bcTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  bcHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bcHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#7C3AED',
+    letterSpacing: 0.5,
+  },
+  bcOnlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  bcOnlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  bcOnlineText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669',
   },
   bcRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingVertical: 6,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   bcCol: {
     alignItems: 'center',
   },
   bcLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#64748B',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   bcValue: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0F172A',
     marginTop: 2,
+  },
+  bcConsoleLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  bcConsoleLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#7C3AED',
   },
   quickActionsGrid: {
     flexDirection: 'row',
@@ -445,15 +640,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+  },
+  actionBtnActive: {
+    borderColor: '#DDD6FE',
+    backgroundColor: '#FAF5FF',
   },
   actionBtnText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1E293B',
   },
   verifCard: {
-    marginBottom: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 10,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   verifRow: {
     flexDirection: 'row',

@@ -34,7 +34,9 @@ from app.schemas.auth import (
     PatientResetPasswordRequest,
     ProviderResetPasswordRequest,
     ResetPasswordSuccessResponseData,
+    AdminRegisterRequest,
     AdminRegisterResponseData,
+    ForceResetRequest,
     ForceResetResponseData,
     SyncUserResponseData,
     SendOTPRequest,
@@ -58,45 +60,65 @@ from app.utils.otp import (
 from app.services.email_service import email_service
 from app.core.config import settings
 
-class ForceResetRequest(BaseModel):
-    email: str
-    new_password: str
-
-class AdminRegisterRequest(BaseModel):
-    email: str
-    password: str
-
 @router.post("/admin-register", response_model=APIResponse[AdminRegisterResponseData])
 async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depends(get_db)):
     from sqlalchemy import text
     import uuid
+    import json
     user_id = uuid.uuid4()
     clean_email = payload.email.strip().lower()
+
+    # Determine requested role (default to ADMIN if not specified or unknown)
+    raw_role = (payload.role or "").strip().upper()
+    if raw_role in ["DOCTOR", "PHARMACY", "HOSPITAL", "PATIENT"]:
+        target_role = raw_role
+    else:
+        target_role = "ADMIN"
+
     try:
-        # Check if user already exists
+        # Check if user already exists in public.users
         existing = await db.execute(select(User).where(func.lower(User.email) == clean_email))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
         
+        # Check if user already exists in auth.users
+        try:
+            auth_existing = await db.execute(text("SELECT id FROM auth.users WHERE lower(email) = :email"), {"email": clean_email})
+            if auth_existing.scalar_one_or_none():
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
+        except Exception:
+            pass
+
+        app_meta = json.dumps({"role": target_role, "provider": "email"})
+        user_meta = json.dumps({"role": target_role})
+
         await db.execute(
             text("""
             INSERT INTO auth.users (id, instance_id, email, encrypted_password, aud, role, raw_app_meta_data, raw_user_meta_data, email_confirmed_at) 
-            VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')), 'authenticated', 'authenticated', '{"role":"ADMIN","provider":"email"}', '{"role":"ADMIN"}', now())
+            VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')), 'authenticated', 'authenticated', :app_meta::jsonb, :user_meta::jsonb, now())
             """), 
-            {"id": user_id, "email": clean_email, "pwd": payload.password}
+            {"id": user_id, "email": clean_email, "pwd": payload.password, "app_meta": app_meta, "user_meta": user_meta}
         )
         
-        # Ensure public.users entry with ADMIN role
-        admin_user = User(
-            id=user_id,
-            email=clean_email,
-            role=UserRole.ADMIN,
-            status=UserStatus.ACTIVE,
-            is_verified=True,
-            profile_completion_percentage=100
-        )
-        db.add(admin_user)
-        await db.commit()
+        # Only create public.users entry if target_role is ADMIN.
+        # For DOCTOR, PHARMACY, HOSPITAL, or PATIENT, the client immediately calls
+        # /api/v1/auth/sync to set up specific role profiles, clinics, locations,
+        # and pending VerificationRequest records.
+        if target_role == "ADMIN":
+            admin_user = User(
+                id=user_id,
+                email=clean_email,
+                password_hash="supabase_managed",
+                role=UserRole.ADMIN,
+                status=UserStatus.ACTIVE,
+                is_verified=True,
+                profile_completion_percentage=100
+            )
+            db.add(admin_user)
+            await db.commit()
+        else:
+            await db.commit()
+
         return APIResponse(message="User created", data=AdminRegisterResponseData(id=str(user_id)))
     except HTTPException:
         await db.rollback()
@@ -325,6 +347,10 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         if existing_user_id:
             # Sync / update any profile fields provided in registration payload
             if payload.role == UserRole.PATIENT:
+                # If verified via OAuth e.g. Google or explicitly verified, ensure active & verified status
+                if payload.is_verified is True or (payload.auth_provider and payload.auth_provider.lower() == "google"):
+                    existing_user_id.is_verified = True
+                    existing_user_id.status = UserStatus.ACTIVE
                 pat_res = await db.execute(select(Patient).where(Patient.user_id == existing_user_id.id))
                 pat = pat_res.scalar_one_or_none()
                 if pat:
@@ -409,12 +435,16 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin creation is not allowed publicly.")
 
         # Determine status and verification per role lifecycle contract:
-        # - Patient: PENDING until email OTP is verified
-        # - Doctor / Pharmacy: PENDING until administrator review and approval
+        # - Patient: PENDING until email OTP is verified (unless OAuth provider e.g. Google where email is already verified)
+        # - Doctor / Pharmacy / Hospital: PENDING until administrator review and approval
         # - Admin: ACTIVE and pre-verified immediately
         if payload.role == UserRole.PATIENT:
-            new_status = UserStatus.PENDING
-            is_verified = False
+            if payload.is_verified is True or (payload.auth_provider and payload.auth_provider.lower() == "google"):
+                new_status = UserStatus.ACTIVE
+                is_verified = True
+            else:
+                new_status = UserStatus.PENDING
+                is_verified = False
         elif payload.role in [UserRole.DOCTOR, UserRole.PHARMACY, UserRole.HOSPITAL]:
             new_status = UserStatus.PENDING
             is_verified = False

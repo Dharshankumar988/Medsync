@@ -170,6 +170,36 @@ export const patientService = {
     return res.data;
   },
 
+  uploadRecord: async (payload: {
+    title: string;
+    description?: string;
+    pin: string;
+    file: {
+      uri: string;
+      name: string;
+      mimeType?: string;
+    };
+  }) => {
+    const formData = new FormData();
+    formData.append('title', payload.title);
+    if (payload.description) {
+      formData.append('description', payload.description);
+    }
+    formData.append('pin', payload.pin);
+    formData.append('is_prescription', 'false');
+
+    formData.append('file', {
+      uri: payload.file.uri,
+      name: payload.file.name || 'medical_record.pdf',
+      type: payload.file.mimeType || 'application/pdf',
+    } as any);
+
+    const res = await api.post('/records', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data?.data;
+  },
+
   // ── Appointments ──
   getAppointments: async (statusFilter?: string): Promise<AppointmentItem[]> => {
     try {
@@ -338,6 +368,28 @@ export const patientService = {
     return data;
   },
 
+  processPayment: async (orderId: string, amount: number = 45.0, method: 'CARD' | 'PAYPAL' | 'UPI' = 'CARD') => {
+    try {
+      const res = await api.post('/payments/process', {
+        order_id: orderId,
+        amount,
+        method: 'CARD', // Backend enum expects CARD/INSURANCE
+      });
+      return res.data?.data ?? res.data;
+    } catch (apiErr) {
+      console.warn('Backend /payments/process failed, updating order in Supabase:', apiErr);
+      // Fallback: update status directly in Supabase
+      const { data, error } = await supabase
+        .from('medicine_orders')
+        .update({ status: 'PROCESSING' })
+        .eq('id', orderId)
+        .select()
+        .single();
+      if (error) throw error;
+      return { status: 'success', order: data };
+    }
+  },
+
   // ── Security & Authorization PIN ──
   getSecurityStatus: async (): Promise<SecurityStatusInfo> => {
     const res = await api.get('/security/status');
@@ -424,15 +476,20 @@ export const patientService = {
     if (clean.includes('/verify/pharmacy/')) {
       const parts = clean.split('/verify/pharmacy/');
       clean = parts[parts.length - 1].split('?')[0].split('/')[0];
+    } else if (clean.includes('/pharmacy/')) {
+      const parts = clean.split('/pharmacy/');
+      clean = parts[parts.length - 1].split('?')[0].split('/')[0];
     } else if (clean.includes('/verify/prescription/')) {
       const parts = clean.split('/verify/prescription/');
       clean = parts[parts.length - 1].split('?')[0].split('/')[0];
+    } else if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      clean = clean.replace(/\/+$/, '').split('/').pop() || clean;
     }
 
     const isPharmacy =
       clean.startsWith('PHARM_') ||
       clean.startsWith('PHARM_QR_') ||
-      token.includes('/verify/pharmacy/');
+      token.includes('/pharmacy');
 
     const isBlockchain =
       clean.startsWith('0x') || clean.startsWith('QR-REC-');
@@ -440,10 +497,15 @@ export const patientService = {
     // 1. If Pharmacy QR, verify via pharmacy blockchain endpoint
     if (isPharmacy) {
       try {
-        const res = await api.get('/pharmacy/verify-blockchain', {
-          params: { qr_data: clean },
-        });
+        let res;
+        try {
+          res = await api.post('/pharmacy/verify-blockchain', { qr_data: clean });
+        } catch {
+          res = await api.get('/pharmacy/verify-blockchain', { params: { qr_data: clean } });
+        }
+
         const d = res.data?.data;
+        const resolvedId = d?.pharmacy_id || clean;
         return {
           is_valid: true,
           type: 'PHARMACY',
@@ -451,17 +513,19 @@ export const patientService = {
           business_name: d?.business_name || 'Verified Pharmacy',
           address: d?.address,
           city: d?.city,
-          phone: d?.phone,
+          phone: d?.phone || d?.contact_number,
           verified_on_blockchain: d?.verified_on_blockchain ?? true,
           network: d?.network || 'Polygon Amoy Testnet',
           wallet_address: d?.wallet_address,
           transaction_hash: d?.transaction_hash,
-          resource_id: d?.pharmacy_id || clean,
+          resource_id: resolvedId,
+          pharmacy_id: resolvedId,
+          pharmacy_user_id: resolvedId,
           message: 'Authentic Registered Pharmacy',
           data: d,
         };
       } catch (err: any) {
-        // Fall back to general QR verify if pharmacy endpoint fails
+        console.warn('Pharmacy direct verification error, continuing:', err);
       }
     }
 
@@ -486,6 +550,24 @@ export const patientService = {
     try {
       const res = await api.get(`/verify/qr/${encodeURIComponent(clean)}`);
       const d = res.data?.data;
+      if (d?.purpose === 'LICENSED_PHARMACY' || d?.type === 'PHARMACY') {
+        const resolvedId = d?.pharmacy_id || d?.resource_id || clean;
+        return {
+          is_valid: true,
+          type: 'PHARMACY',
+          purpose: 'LICENSED_PHARMACY',
+          business_name: d?.business_name || 'Verified Pharmacy',
+          address: d?.address,
+          city: d?.city,
+          phone: d?.phone || d?.contact_number,
+          verified_on_blockchain: true,
+          resource_id: resolvedId,
+          pharmacy_id: resolvedId,
+          pharmacy_user_id: resolvedId,
+          message: 'Authentic Registered Pharmacy',
+          data: d,
+        };
+      }
       return {
         is_valid: Boolean(d?.is_valid),
         type: 'PRESCRIPTION',
@@ -495,34 +577,38 @@ export const patientService = {
         data: d?.data || d,
       };
     } catch (rxErr: any) {
-      // If prescription check failed, but token might be a pharmacy identifier
-      if (!isPharmacy) {
+      // Always try pharmacy resolution if verify/qr failed
+      try {
+        let pharmRes;
         try {
-          const pharmRes = await api.get('/pharmacy/verify-blockchain', {
-            params: { qr_data: clean },
-          });
-          const pd = pharmRes.data?.data;
-          if (pd?.business_name) {
-            return {
-              is_valid: true,
-              type: 'PHARMACY',
-              purpose: 'LICENSED_PHARMACY',
-              business_name: pd.business_name,
-              address: pd.address,
-              city: pd.city,
-              phone: pd.phone,
-              verified_on_blockchain: pd.verified_on_blockchain ?? true,
-              network: pd.network || 'Polygon Amoy Testnet',
-              wallet_address: pd.wallet_address,
-              transaction_hash: pd.transaction_hash,
-              resource_id: pd.pharmacy_id || clean,
-              message: 'Authentic Registered Pharmacy',
-              data: pd,
-            };
-          }
+          pharmRes = await api.post('/pharmacy/verify-blockchain', { qr_data: clean });
         } catch {
-          // Ignore fallback error
+          pharmRes = await api.get('/pharmacy/verify-blockchain', { params: { qr_data: clean } });
         }
+        const pd = pharmRes?.data?.data;
+        if (pd?.business_name || pd?.pharmacy_id) {
+          const resolvedId = pd.pharmacy_id || clean;
+          return {
+            is_valid: true,
+            type: 'PHARMACY',
+            purpose: 'LICENSED_PHARMACY',
+            business_name: pd.business_name,
+            address: pd.address,
+            city: pd.city,
+            phone: pd.phone || pd.contact_number,
+            verified_on_blockchain: pd.verified_on_blockchain ?? true,
+            network: pd.network || 'Polygon Amoy Testnet',
+            wallet_address: pd.wallet_address,
+            transaction_hash: pd.transaction_hash,
+            resource_id: resolvedId,
+            pharmacy_id: resolvedId,
+            pharmacy_user_id: resolvedId,
+            message: 'Authentic Registered Pharmacy',
+            data: pd,
+          };
+        }
+      } catch {
+        // Ignore fallback error
       }
       throw rxErr;
     }

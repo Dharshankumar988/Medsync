@@ -69,11 +69,20 @@ function LoginContent() {
         },
       });
       if (oauthError) {
-        setError(oauthError.message);
+        if (oauthError.message?.includes("provider is not enabled") || oauthError.message?.includes("Unsupported provider")) {
+          setError("Google Sign-In is not enabled on this Supabase project yet. Please sign in with your email & password, or enable Google Provider in your Supabase dashboard.");
+        } else {
+          setError(oauthError.message);
+        }
         setIsGoogleLoading(false);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to initiate Google sign-in.");
+      const msg = err.message || "";
+      if (msg.includes("provider is not enabled") || msg.includes("Unsupported provider")) {
+        setError("Google Sign-In is not enabled on this Supabase project yet. Please sign in with your email & password, or enable Google Provider in your Supabase dashboard.");
+      } else {
+        setError(msg || "Failed to initiate Google sign-in.");
+      }
       setIsGoogleLoading(false);
     }
   };

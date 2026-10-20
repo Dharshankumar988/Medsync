@@ -7,7 +7,7 @@ from app.models.patient import Patient
 from app.models.prescription import Prescription
 from app.models.record import DoctorNote
 from app.models.notification import Notification
-from app.models.user import UserRole, UserStatus
+from app.models.user import User, UserRole, UserStatus
 from app.models.verification import RoleType, VerificationStatus
 from app.models.blockchain import SyncEntityType, SyncActionType, SyncStatus
 from app.schemas.admin import (
@@ -371,6 +371,19 @@ def test_admin_doctor_pharmacy_facility_schemas():
     assert pharm_dump["business_name"] == "Downtown Drugs"
     assert pharm_dump["contact_number"] == "555-9999"
     assert pharm_dump["is_verified"] is True
+
+
+def test_user_model_password_hash_default():
+    """Verify User model provides default password_hash='supabase_managed' when omitted."""
+    u = User(
+        email="doctor@medsync.io",
+        role=UserRole.DOCTOR,
+        status=UserStatus.PENDING
+    )
+    assert u.email == "doctor@medsync.io"
+    assert u.role == UserRole.DOCTOR
+    assert u.password_hash == "supabase_managed"
+
 
 
 

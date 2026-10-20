@@ -61,9 +61,20 @@ class ResetPasswordSuccessResponseData(BaseModel):
     role: str
     message: str
 
+class AdminRegisterRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    email: str
+    password: str
+    role: Optional[str] = "ADMIN"
+
 class AdminRegisterResponseData(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     id: str
+
+class ForceResetRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    email: str
+    new_password: str
 
 class ForceResetResponseData(BaseModel):
     model_config = ConfigDict(use_enum_values=True)

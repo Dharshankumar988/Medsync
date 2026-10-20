@@ -107,16 +107,17 @@ export const authService = {
     let authSession = null;
     let needsVerification = false;
 
-    if (normalizedRole === "doctor" || normalizedRole === "pharmacy") {
-      // Bypass Supabase Auth completely for Doctor and Pharmacy as requested
+    if (normalizedRole === "doctor" || normalizedRole === "pharmacy" || normalizedRole === "hospital") {
+      // Direct authenticated provider account creation in Supabase auth.users
       const { default: api } = await import('@/lib/api');
       try {
         const response = await api.post('/api/v1/auth/admin-register', {
           email: data.email,
-          password: data.password
+          password: data.password,
+          role: normalizedRole.toUpperCase()
         });
         userId = response.data.data.id;
-        needsVerification = false; // Bypass verification
+        needsVerification = false; // Bypass email link verification; uses admin approval
       } catch (err: any) {
         throw new Error(err.response?.data?.detail || "Failed to create user account.");
       }

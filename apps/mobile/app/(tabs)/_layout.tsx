@@ -12,6 +12,7 @@ import {
   Package,
   Shield,
   Server,
+  Blocks,
 } from 'lucide-react-native';
 import { useRole } from '../../providers/role-provider';
 import { getRoleTheme } from '../../constants/theme';
@@ -251,11 +252,17 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="admin/blockchain"
+        options={{
+          title: 'Blockchain',
+          href: role === 'admin' ? undefined : null,
+          tabBarIcon: ({ color, size }) => <Blocks size={size ?? 22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="admin/security"
         options={{
-          title: 'Security',
-          href: role === 'admin' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Shield size={size ?? 22} color={color} />,
+          href: null,
         }}
       />
       <Tabs.Screen

@@ -112,3 +112,65 @@ async def test_sync_user_integrity_error_handled_as_409():
     finally:
         app.dependency_overrides.pop(get_db, None)
 
+
+@pytest.mark.asyncio
+async def test_admin_register_doctor_provider_success():
+    mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+
+    # Query public.users and auth.users return None
+    res_none = MagicMock()
+    res_none.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = res_none
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            response = await ac.post("/api/v1/auth/admin-register", json={
+                "email": "doctor50@medsync.com",
+                "password": "Password@123",
+                "role": "DOCTOR"
+            })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["message"] == "User created"
+        assert "id" in data["data"]
+        # Crucial: Doctor provider registration in admin-register must NOT insert public.users as ADMIN
+        mock_db.add.assert_not_called()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
+async def test_sync_google_oauth_patient_verified():
+    test_id = str(uuid.uuid4())
+    mock_db = AsyncMock()
+    added_objects = []
+    mock_db.add = MagicMock(side_effect=lambda obj: added_objects.append(obj))
+
+    res_none = MagicMock()
+    res_none.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = res_none
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            response = await ac.post("/api/v1/auth/sync", json={
+                "id": test_id,
+                "email": "patient@gmail.com",
+                "role": "PATIENT",
+                "full_name": "Google Patient",
+                "is_verified": True,
+                "auth_provider": "google"
+            })
+        assert response.status_code == 200
+        # Find added User instance and verify ACTIVE and is_verified=True
+        user_obj = next((o for o in added_objects if isinstance(o, User)), None)
+        assert user_obj is not None
+        assert user_obj.role == UserRole.PATIENT
+        assert user_obj.status == UserStatus.ACTIVE
+        assert user_obj.is_verified is True
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+

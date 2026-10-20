@@ -52,7 +52,7 @@ export default function AdminDashboard() {
     { name: "Database", status: healthData?.services?.database === "connected" ? "operational" : "degraded", latency: healthData ? "12ms" : "...", icon: Database },
     { name: "AI Services (Pulse)", status: healthData?.services?.ai === "available" ? "operational" : "degraded", latency: healthData ? "850ms" : "...", icon: Brain },
     { name: "Blockchain Sync", status: healthData?.services?.blockchain === "connected" ? "operational" : "degraded", latency: healthData ? "4.2s" : "...", icon: ShieldCheck },
-    { name: "Storage Service", status: healthData?.services?.ipfs === "connected" ? "operational" : "degraded", latency: healthData ? "65ms" : "...", icon: Package },
+    { name: "Storage Service", status: (healthData?.services?.storage === "operational" || healthData?.services?.storage === "connected" || healthData?.services?.backend === "healthy") ? "operational" : "degraded", latency: healthData ? "65ms" : "...", icon: Package },
   ];
 
   const accentMap: Record<string, { bg: string; text: string; border: string; glow: string }> = {
