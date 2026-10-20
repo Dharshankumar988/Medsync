@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { pharmacyService, PharmacyInventoryItem } from "@/services/pharmacy.service";
 import { Card, CardHeader, CardTitle, CardContent, Input, Badge, Button } from "@medsync/ui";
-import { Search, Package, AlertTriangle, ArrowUpDown, Filter, Plus, Clock, Loader2, X, Trash2 } from "lucide-react";
+import { Search, Package, AlertTriangle, ArrowUpDown, Filter, Plus, Clock, Loader2, X, Trash2, Eye, EyeOff, RefreshCw, Zap, ShieldCheck, CheckCircle2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 export default function PharmacyInventoryPage() {
@@ -38,6 +38,11 @@ export default function PharmacyInventoryPage() {
   const [customMedicineName, setCustomMedicineName] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("50");
   const [pin, setPin] = useState("");
+  const [showPin, setShowPin] = useState(false);
+  const [hasEnrolledPin, setHasEnrolledPin] = useState<boolean | null>(null);
+  const [isRefreshingTracking, setIsRefreshingTracking] = useState(false);
+  const [deliveringOrderId, setDeliveringOrderId] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchInventory = () => {
@@ -51,10 +56,46 @@ export default function PharmacyInventoryPage() {
     fetchInventory();
   }, []);
 
+  // Real-time 1-second countdown ticker when tracking modal is open
+  useEffect(() => {
+    let interval: any = null;
+    if (isTrackingModalOpen) {
+      interval = setInterval(() => {
+        setCurrentTime(Date.now());
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isTrackingModalOpen]);
+
+  // Polling for live restock order updates while tracking modal is open
+  useEffect(() => {
+    let pollInterval: any = null;
+    if (isTrackingModalOpen) {
+      pollInterval = setInterval(async () => {
+        const orders = await pharmacyService.getRestockOrders();
+        setRestockOrders(orders);
+        if (orders.some((o: any) => o.status === "DELIVERED")) {
+          fetchInventory();
+        }
+      }, 5000);
+    }
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [isTrackingModalOpen]);
+
   const openRestockModal = async () => {
     setIsSubmitting(true);
-    const meds = await pharmacyService.getMedicinesCatalog();
+    setPin("");
+    setShowPin(false);
+    const [meds, secStatus] = await Promise.all([
+      pharmacyService.getMedicinesCatalog(),
+      pharmacyService.getSecurityStatus()
+    ]);
     setCatalog(meds);
+    setHasEnrolledPin(secStatus.hasPin);
     setIsSubmitting(false);
     setIsRestockModalOpen(true);
   };
@@ -65,6 +106,26 @@ export default function PharmacyInventoryPage() {
     setRestockOrders(orders);
     setIsSubmitting(false);
     setIsTrackingModalOpen(true);
+  };
+
+  const refreshTrackingOrders = async () => {
+    setIsRefreshingTracking(true);
+    const orders = await pharmacyService.getRestockOrders();
+    setRestockOrders(orders);
+    setIsRefreshingTracking(false);
+  };
+
+  const handleDeliverOrder = async (orderId: string) => {
+    setDeliveringOrderId(orderId);
+    const res = await pharmacyService.deliverRestockOrder(orderId);
+    if (res.success) {
+      toast.success(res.message || "Order delivered and added to inventory!");
+      setRestockOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "DELIVERED" } : o));
+      fetchInventory();
+    } else {
+      toast.error(res.message || "Failed to deliver restock order.");
+    }
+    setDeliveringOrderId(null);
   };
 
   const handleAddMedicine = async (e: React.FormEvent) => {
@@ -151,6 +212,10 @@ export default function PharmacyInventoryPage() {
       setCustomMedicineName("");
       setOrderQuantity("50");
       setPin("");
+      // Fetch latest orders & open tracking modal immediately so user can see it in transit!
+      const orders = await pharmacyService.getRestockOrders();
+      setRestockOrders(orders);
+      setIsTrackingModalOpen(true);
     } else {
       toast.error(res.message || "Failed to place order.");
     }
@@ -397,17 +462,93 @@ export default function PharmacyInventoryPage() {
                 />
               </div>
 
-              <div className="space-y-1.5 border-t border-border/40 pt-4 mt-2">
-                <label className="text-sm font-medium text-blue-600">Authorization PIN *</label>
-                <Input 
-                  type="password" 
-                  value={pin} 
-                  onChange={e => setPin(e.target.value.replace(/\D/g, ''))} 
-                  placeholder="• • • • • •" 
-                  maxLength={6}
-                  className="text-center tracking-[0.5em] rounded-xl font-mono text-lg"
-                  required 
-                />
+              {/* PIN Section */}
+              <div className="space-y-2.5 border-t border-border/40 pt-4 mt-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                    <ShieldCheck className="w-4 h-4 text-amber-500" />
+                    Authorization PIN *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {pin.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPin("")}
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Clear
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowPin(!showPin)}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                    >
+                      {showPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      {showPin ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </div>
+
+                {hasEnrolledPin === false && (
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-500 flex items-start gap-2">
+                    <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span><strong>Setup PIN:</strong> You haven&apos;t enrolled an authorization PIN yet. Enter any 6-digit PIN below to register it and authorize this order.</span>
+                  </div>
+                )}
+
+                {/* 6-box discrete PIN Display */}
+                <div 
+                  className="relative flex items-center justify-center gap-2.5 py-1.5 cursor-text select-none"
+                  onClick={() => document.getElementById("pharmacy-auth-pin-input")?.focus()}
+                >
+                  {[0, 1, 2, 3, 4, 5].map((index) => {
+                    const digit = pin[index];
+                    const isFilled = index < pin.length;
+                    const isCurrent = index === pin.length;
+                    return (
+                      <div
+                        key={index}
+                        className={`w-11 h-12 rounded-xl border flex items-center justify-center text-xl font-mono font-bold transition-all duration-150 shadow-sm ${
+                          isCurrent
+                            ? "border-amber-500 ring-2 ring-amber-500/30 bg-background scale-105"
+                            : isFilled
+                            ? "border-border/80 bg-background text-foreground"
+                            : "border-border/40 bg-muted/20 text-muted-foreground/30"
+                        }`}
+                      >
+                        {isFilled ? (
+                          showPin ? digit : <span className="text-sm">●</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/30 font-sans">—</span>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Hidden Overlay Input that safely captures 6-digit input without browser password autofill */}
+                  <input
+                    id="pharmacy-auth-pin-input"
+                    type={showPin ? "text" : "password"}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="absolute inset-0 opacity-0 cursor-text w-full h-full text-transparent bg-transparent"
+                    autoComplete="one-time-code"
+                    name="pharmacy_restock_one_time_pin"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    autoFocus
+                  />
+                </div>
+
+                <p className="text-[11px] text-muted-foreground text-center">
+                  {hasEnrolledPin === false 
+                    ? "Choose any 6 digits (e.g. 123456) to secure your restock actions." 
+                    : "Enter your 6-digit PIN. (Demo default: 123456)"}
+                </p>
               </div>
               
               <Button 
@@ -426,43 +567,108 @@ export default function PharmacyInventoryPage() {
       {/* Tracking Modal */}
       {isTrackingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-2xl p-6 rounded-2xl shadow-xl relative border border-border/50 max-h-[80vh] flex flex-col">
+          <div className="bg-card w-full max-w-2xl p-6 rounded-2xl shadow-xl relative border border-border/50 max-h-[85vh] flex flex-col">
             <Button variant="ghost" size="icon" className="absolute right-4 top-4" onClick={() => setIsTrackingModalOpen(false)}>
               <X className="h-4 w-4" />
             </Button>
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Clock className="w-5 h-5"/> Track Restock Orders</h2>
+            <div className="flex items-center justify-between pr-8 mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-500" /> Track Restock Orders
+              </h2>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={refreshTrackingOrders} 
+                disabled={isRefreshingTracking}
+                className="text-xs text-muted-foreground hover:text-foreground rounded-xl"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isRefreshingTracking ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
             
-            <div className="overflow-y-auto pr-2 space-y-3">
+            <div className="overflow-y-auto pr-2 space-y-3 flex-1">
               {restockOrders.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No restock orders found.</p>
+                <div className="text-center py-12 space-y-3">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-muted/40 flex items-center justify-center text-muted-foreground">
+                    <Package className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">No restock orders found</p>
+                    <p className="text-xs text-muted-foreground mt-1">Place an order from catalog or order custom medicines to track delivery.</p>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    className="bg-amber-500 hover:bg-amber-600 text-black mt-2 rounded-xl"
+                    onClick={() => {
+                      setIsTrackingModalOpen(false);
+                      openRestockModal();
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" /> Order Restock Now
+                  </Button>
+                </div>
               ) : (
                 restockOrders.map(order => {
                   const expected = new Date(order.expected_delivery);
-                  const now = new Date();
                   const isPending = order.status === "PENDING";
-                  // Simple countdown calculation if pending
-                  const secondsLeft = isPending ? Math.max(0, Math.floor((expected.getTime() - now.getTime()) / 1000)) : 0;
+                  const secondsLeft = isPending 
+                    ? Math.max(0, Math.floor((expected.getTime() - currentTime) / 1000)) 
+                    : 0;
                   
                   return (
-                    <div key={order.id} className="p-4 border border-border/50 rounded-xl bg-muted/10 flex items-center justify-between gap-4">
+                    <div key={order.id} className="p-4 border border-border/50 rounded-xl bg-muted/10 hover:bg-muted/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
-                        <p className="font-semibold">{order.medicine_name}</p>
-                        <p className="text-sm text-muted-foreground">Qty: {order.quantity} • Ordered: {new Date(order.created_at).toLocaleTimeString()}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-foreground">{order.medicine_name}</p>
+                          {order.status === 'DELIVERED' ? (
+                            <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10 text-[10px]">Delivered</Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-amber-500/30 text-amber-500 bg-amber-500/10 animate-pulse text-[10px]">
+                              {secondsLeft > 0 ? `In Transit (~${secondsLeft}s)` : "Arriving..."}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Quantity: <span className="font-mono font-medium text-foreground">{order.quantity} units</span> • Ordered: {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </p>
                       </div>
-                      <div className="text-right flex flex-col items-end gap-1">
-                        {order.status === 'DELIVERED' ? (
-                          <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10">Delivered</Badge>
-                        ) : (
-                          <Badge variant="outline" className="border-amber-500/30 text-amber-500 bg-amber-500/10 animate-pulse">Pending Delivery</Badge>
+
+                      <div className="flex items-center gap-2 sm:self-center">
+                        {isPending && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs border-amber-500/40 text-amber-500 hover:bg-amber-500/10 rounded-xl h-8"
+                            disabled={deliveringOrderId === order.id}
+                            onClick={() => handleDeliverOrder(order.id)}
+                            title="Deliver order immediately for instant restock"
+                          >
+                            {deliveringOrderId === order.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                            ) : (
+                              <Zap className="w-3.5 h-3.5 mr-1 text-amber-500" />
+                            )}
+                            Deliver Now
+                          </Button>
                         )}
-                        {isPending && secondsLeft > 0 && (
-                          <span className="text-xs text-muted-foreground font-mono">~{secondsLeft}s remaining</span>
+                        {order.status === 'DELIVERED' && (
+                          <span className="text-xs text-emerald-500 flex items-center gap-1 font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Fulfilled
+                          </span>
                         )}
                       </div>
                     </div>
                   )
                 })
               )}
+            </div>
+
+            <div className="pt-4 border-t border-border/40 mt-3 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Orders auto-fulfill and deliver within 2 minutes.</span>
+              <Button variant="ghost" size="sm" onClick={() => setIsTrackingModalOpen(false)}>
+                Close
+              </Button>
             </div>
           </div>
         </div>

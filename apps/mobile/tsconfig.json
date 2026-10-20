@@ -8,7 +8,9 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@medsync/theme/*": ["../../packages/theme/*"],
+      "@medsync/theme": ["../../packages/theme/index.ts"]
     },
     "types": ["node"]
   },

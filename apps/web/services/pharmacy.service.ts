@@ -142,10 +142,29 @@ export const pharmacyService = {
 
   getRestockOrders: async (): Promise<any[]> => {
     try {
-      const res = await api.get(`/api/v1/inventory/restock`);
+      const res = await api.get(`/api/v1/inventory/restock?_t=${Date.now()}`);
       return res.data.data || [];
     } catch {
       return [];
+    }
+  },
+
+  deliverRestockOrder: async (orderId: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await api.post(`/api/v1/inventory/restock/${orderId}/deliver`);
+      return { success: true, message: res.data?.message || "Order fulfilled successfully" };
+    } catch (e: any) {
+      return { success: false, message: e.response?.data?.detail || e.message || "Failed to deliver restock order" };
+    }
+  },
+
+  getSecurityStatus: async (): Promise<{ hasPin: boolean }> => {
+    try {
+      const res = await api.get(`/api/v1/security/status?_t=${Date.now()}`);
+      const hasPin = res.data?.data?.has_pin ?? (res.data?.status === 'COMPLETED');
+      return { hasPin: Boolean(hasPin) };
+    } catch {
+      return { hasPin: false };
     }
   },
 

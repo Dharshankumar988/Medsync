@@ -110,8 +110,8 @@ export class TransferSyncService {
         const key = await this.getEncryptionKey();
         const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
         
-        let decrypted = decipher.update(ciphertext, undefined, 'utf8');
-        decrypted += decipher.final('utf8');
+        let decrypted = decipher.update(ciphertext).toString('utf8');
+        decrypted += decipher.final().toString('utf8');
         
         return JSON.parse(decrypted) as TransferRequest[];
       }
@@ -131,8 +131,9 @@ export class TransferSyncService {
       const iv = crypto.randomBytes(16);
       
       const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-      let ciphertext = cipher.update(plaintext, 'utf8');
-      ciphertext = Buffer.concat([ciphertext, cipher.final()]);
+      const part1 = cipher.update(plaintext, 'utf8');
+      const part2 = cipher.final();
+      const ciphertext = Buffer.concat([part1, part2]);
       
       const encryptedBuffer = Buffer.concat([iv, ciphertext]);
       const encryptedBase64 = encryptedBuffer.toString('base64');

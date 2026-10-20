@@ -14,7 +14,7 @@ async def process_restock_orders():
     async with AsyncSessionLocal() as db:
         try:
             # Find all pending restock orders that should be delivered by now
-            now = datetime.datetime.now()
+            now = datetime.datetime.utcnow()
             query = select(PharmacyRestockOrder).where(
                 PharmacyRestockOrder.status == "PENDING",
                 PharmacyRestockOrder.expected_delivery <= now

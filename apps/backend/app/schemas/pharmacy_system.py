@@ -173,3 +173,13 @@ class RestockOrderResponseData(BaseModel):
     status: str
     expected_delivery: str
 
+class RestockOrderItemResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: str
+    medicine_name: str
+    quantity: int
+    status: str
+    expected_delivery: str
+    created_at: str
+

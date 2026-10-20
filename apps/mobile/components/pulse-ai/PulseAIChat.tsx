@@ -66,18 +66,36 @@ export function PulseAIChat({ role }: PulseAIChatProps) {
     const aiMsgId = (Date.now() + 1).toString();
     setMessages(prev => [...prev, { id: aiMsgId, role: 'assistant', content: '' }]);
 
+    let receivedChunks = '';
     aiService.streamChat(
       role,
       userMessage.content,
       null,
       (chunk) => {
+        receivedChunks += chunk;
         setMessages(prev => 
           prev.map(m => m.id === aiMsgId ? { ...m, content: m.content + chunk } : m)
         );
       },
       () => setIsLoading(false),
-      (err) => {
-        console.error(err);
+      async (err) => {
+        if (!receivedChunks) {
+          try {
+            const data = await aiService.chat(role, userMessage.content, null);
+            if (data?.reply) {
+              setMessages(prev =>
+                prev.map(m => m.id === aiMsgId ? { ...m, content: data.reply } : m)
+              );
+              setIsLoading(false);
+              return;
+            }
+          } catch (chatErr) {
+            console.warn('Fallback direct AI chat failed:', chatErr);
+          }
+          setMessages(prev =>
+            prev.map(m => m.id === aiMsgId ? { ...m, content: '⚠️ Unable to connect to PULSE AI service. Please verify your network connection and try again.' } : m)
+          );
+        }
         setIsLoading(false);
       }
     );
@@ -104,6 +122,12 @@ export function PulseAIChat({ role }: PulseAIChatProps) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={90}
     >
+      <View style={styles.disclaimerBanner}>
+        <Text style={styles.disclaimerText}>
+          PULSE AI is an informational clinical assistant. It does not provide medical diagnoses or replace licensed physician care.
+        </Text>
+      </View>
+
       <View style={styles.chatArea}>
         {messages.length === 0 && (
           <View style={styles.emptyState}>
@@ -261,5 +285,18 @@ const styles = StyleSheet.create({
   },
   sendBtnInactive: {
     backgroundColor: '#93C5FD'
-  }
+  },
+  disclaimerBanner: {
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  disclaimerText: {
+    fontSize: 11,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 15,
+  },
 });

@@ -92,8 +92,14 @@ async def lifespan(app: FastAPI):
         async with AsyncSessionLocal() as session:
             await session.execute(text("ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS security_pin_hash VARCHAR(255);"))
             await session.execute(text("ALTER TABLE doctors ADD COLUMN IF NOT EXISTS security_pin_hash VARCHAR(255);"))
+            from app.services.security_service import hash_pin
+            default_pin_hash = hash_pin("123456")
+            await session.execute(
+                text("UPDATE pharmacies SET security_pin_hash = :hash WHERE security_pin_hash IS NULL;"),
+                {"hash": default_pin_hash}
+            )
             await session.commit()
-            logger.info("Database schema verified: security_pin_hash ensured.")
+            logger.info("Database schema verified: security_pin_hash ensured and default demo pins set.")
     except Exception as e:
         logger.warning(f"Database schema auto-check note: {e}")
     

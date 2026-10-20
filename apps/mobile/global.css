@@ -98,4 +98,11 @@
     --role-primary: 38 92% 50%;
     --role-primary-foreground: 224 71% 4%;
   }
+
+  /* Role: Hospital (Violet/Purple) */
+  :root[data-role="hospital"], .theme-hospital, .dark[data-role="hospital"], .dark.theme-hospital {
+    --role-primary: 280 65% 60%;
+    --role-primary-foreground: 210 40% 98%;
+  }
 }
+

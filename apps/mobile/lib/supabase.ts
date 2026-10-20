@@ -15,6 +15,13 @@ const createSupabaseStub = () => ({
     signOut: async () => ({ error: null }),
     resetPasswordForEmail: async () => ({ data: null, error: new Error('Supabase is not configured') }),
     refreshSession: async () => ({ data: { session: null }, error: null }),
+    onAuthStateChange: (_callback: (event: string, session: any) => void) => ({
+      data: {
+        subscription: {
+          unsubscribe: () => {},
+        },
+      },
+    }),
   },
 });
 
@@ -29,9 +36,8 @@ export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUr
     storage: secureStoreAdapter,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
   },
-}) : createSupabaseStub();
+}) : (createSupabaseStub() as unknown as ReturnType<typeof createClient>);
 
 export const normalizeRole = (role: unknown) => {
   if (typeof role !== 'string' || !role) return 'patient';

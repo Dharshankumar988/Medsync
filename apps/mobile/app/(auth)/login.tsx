@@ -29,8 +29,14 @@ export default function LoginScreen() {
         router.replace('/(tabs)/patient/dashboard');
       } else if (role === 'doctor') {
         router.replace('/(tabs)/doctor/dashboard');
+      } else if (role === 'pharmacy') {
+        router.replace('/(tabs)/pharmacy/dashboard');
+      } else if (role === 'hospital') {
+        router.replace('/(tabs)/hospital/dashboard');
+      } else if (role === 'admin') {
+        router.replace('/(tabs)/admin/dashboard');
       } else {
-        setError('Unsupported role for mobile app');
+        setError(`Unrecognized role: ${role}`);
       }
     } catch (err: any) {
       setError(err.message || 'Login failed');

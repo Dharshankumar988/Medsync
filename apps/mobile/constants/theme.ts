@@ -59,6 +59,28 @@ export const Colors = {
       badgeText:    '#FBBF24',
       badgeBorder:  'rgba(245,158,11,0.20)',
     },
+    hospital: {
+      primary:      '#8B5CF6',   // violet-500 (purple)
+      primaryDim:   '#7C3AED',   // violet-600
+      bg:           'rgba(139,92,246,0.10)',
+      bgGlow:       'rgba(139,92,246,0.04)',
+      bgGlowStrong: 'rgba(139,92,246,0.08)',
+      text:         '#A78BFA',   // violet-400
+      badgeBg:      'rgba(139,92,246,0.10)',
+      badgeText:    '#A78BFA',
+      badgeBorder:  'rgba(139,92,246,0.20)',
+    },
+    admin: {
+      primary:      '#EF4444',   // red-500
+      primaryDim:   '#DC2626',   // red-600
+      bg:           'rgba(239,68,68,0.10)',
+      bgGlow:       'rgba(239,68,68,0.04)',
+      bgGlowStrong: 'rgba(239,68,68,0.08)',
+      text:         '#F87171',   // red-400
+      badgeBg:      'rgba(239,68,68,0.10)',
+      badgeText:    '#F87171',
+      badgeBorder:  'rgba(239,68,68,0.20)',
+    },
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -253,4 +275,10 @@ export const StatusColors: Record<string, { bg: string; text: string; border: st
   ACTIVE:          Colors.emerald,
   REVOKED:         Colors.red,
   EXPIRED:         Colors.amber,
+};
+
+export const getRoleTheme = (role?: string | null) => {
+  if (!role) return Colors.roles.patient;
+  const key = role.toLowerCase() as keyof typeof Colors.roles;
+  return Colors.roles[key] ?? Colors.roles.patient;
 };

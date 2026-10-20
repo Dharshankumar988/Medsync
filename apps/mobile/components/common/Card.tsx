@@ -24,9 +24,9 @@ export const Card: React.FC<CardProps> = ({
     <View
       style={[
         styles.card,
-        !flat && Shadows.card,
-        accentColor && { borderLeftColor: accentColor, borderLeftWidth: 2 },
-        noPadding && { padding: 0 },
+        !flat ? Shadows.card : undefined,
+        accentColor ? { borderLeftColor: accentColor, borderLeftWidth: 2 } : undefined,
+        noPadding ? { padding: 0 } : undefined,
         style,
       ]}
     >

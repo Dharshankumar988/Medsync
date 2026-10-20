@@ -5,7 +5,7 @@ export class MobileStorageProvider implements IStorageProvider {
   private baseDir: string;
 
   constructor() {
-    this.baseDir = `${FileSystem.Paths.document}/vault/`;
+    this.baseDir = `${FileSystem.documentDirectory}vault/`;
     this.ensureDir();
   }
 

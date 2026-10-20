@@ -1,4 +1,5 @@
 packages:
   - 'apps/blockchain'
+  - 'apps/mobile'
   - 'apps/web'
   - 'packages/*'

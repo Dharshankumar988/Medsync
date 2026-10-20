@@ -16,7 +16,7 @@ export const BlockchainBadge = React.memo(function BlockchainBadge({ status, txH
     let bgColor = "#f3f4f6"; // gray-100
     let textColor = "#1f2937"; // gray-800
     let borderColor = "#e5e7eb"; // gray-200
-    let label = status;
+    let label: string = status;
 
     switch (status) {
       case 'SYNCED':

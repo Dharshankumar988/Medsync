@@ -17,6 +17,7 @@ from app.schemas.pharmacy_system import (
     AddInventoryItemRequest,
     AddInventoryItemResponseData,
     RestockOrderResponseData,
+    RestockOrderItemResponse,
 )
 from app.schemas.response import APIResponse
 from app.utils.cache import async_ttl_cache
@@ -194,17 +195,24 @@ async def place_restock_order(
     else:
         raise HTTPException(status_code=400, detail="Please select a medicine or provide a medicine name to order.")
 
+    expected_dt = datetime.datetime.utcnow() + datetime.timedelta(minutes=2)
     order = PharmacyRestockOrder(
         pharmacy_id=current_user.id,
         medicine_id=target_med_id,
         quantity=req.quantity,
         status="PENDING",
-        expected_delivery=datetime.datetime.now() + datetime.timedelta(minutes=2)
+        expected_delivery=expected_dt
     )
     
     db.add(order)
     await db.commit()
     await db.refresh(order)
+
+    exp_str = (
+        order.expected_delivery.isoformat() + ("Z" if not order.expected_delivery.tzinfo else "")
+        if isinstance(order.expected_delivery, datetime.datetime)
+        else str(order.expected_delivery)
+    )
     
     return APIResponse(
         message=f"Restock order for {req.quantity} units of {target_med_name} placed successfully. Estimated delivery in 2 minutes.",
@@ -214,32 +222,120 @@ async def place_restock_order(
             medicine_name=target_med_name,
             quantity=order.quantity,
             status=order.status,
-            expected_delivery=str(order.expected_delivery)
+            expected_delivery=exp_str
         )
     )
 
-@router.get("/restock", response_model=APIResponse)
+@router.get("/restock", response_model=APIResponse[List[RestockOrderItemResponse]])
 async def get_restock_orders(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_pharmacy)
+    current_user: AuthenticatedPrincipal = Depends(require_pharmacy)
 ):
     from app.models.pharmacy_system import PharmacyRestockOrder, Medicine
-    query = select(PharmacyRestockOrder, Medicine).join(Medicine).filter(PharmacyRestockOrder.pharmacy_id == current_user.id).order_by(desc(PharmacyRestockOrder.created_at))
+    query = (
+        select(PharmacyRestockOrder, Medicine)
+        .outerjoin(Medicine, PharmacyRestockOrder.medicine_id == Medicine.id)
+        .filter(PharmacyRestockOrder.pharmacy_id == current_user.id)
+        .order_by(desc(PharmacyRestockOrder.created_at))
+    )
     result = await db.execute(query)
     rows = result.all()
     
-    data = []
+    data: List[RestockOrderItemResponse] = []
     for order, med in rows:
-        data.append({
-            "id": str(order.id),
-            "medicine_name": med.name,
-            "quantity": order.quantity,
-            "status": order.status,
-            "expected_delivery": str(order.expected_delivery),
-            "created_at": str(order.created_at)
-        })
+        exp_delivery_str = (
+            order.expected_delivery.isoformat() + ("Z" if not order.expected_delivery.tzinfo else "")
+            if isinstance(order.expected_delivery, datetime.datetime)
+            else str(order.expected_delivery)
+        )
+        created_at_str = (
+            order.created_at.isoformat() + ("Z" if not order.created_at.tzinfo else "")
+            if isinstance(order.created_at, datetime.datetime)
+            else str(order.created_at)
+        )
+        data.append(
+            RestockOrderItemResponse(
+                id=str(order.id),
+                medicine_name=med.name if med else "Custom Medicine",
+                quantity=order.quantity,
+                status=order.status,
+                expected_delivery=exp_delivery_str,
+                created_at=created_at_str
+            )
+        )
         
     return APIResponse(message="Restock orders retrieved", data=data)
+
+@router.post("/restock/{order_id}/deliver", response_model=APIResponse[RestockOrderItemResponse])
+async def deliver_restock_order(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_pharmacy)
+):
+    from app.models.pharmacy_system import PharmacyRestockOrder, MedicineInventory, Medicine
+    res = await db.execute(
+        select(PharmacyRestockOrder)
+        .where(
+            PharmacyRestockOrder.id == order_id,
+            PharmacyRestockOrder.pharmacy_id == current_user.id
+        )
+    )
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Restock order not found")
+        
+    if order.status != "DELIVERED":
+        order.status = "DELIVERED"
+        inv_query = select(MedicineInventory).where(
+            MedicineInventory.pharmacy_id == order.pharmacy_id,
+            MedicineInventory.medicine_id == order.medicine_id
+        )
+        inv_result = await db.execute(inv_query)
+        inv = inv_result.scalar_one_or_none()
+        
+        if inv:
+            inv.stock_quantity += order.quantity
+        else:
+            new_inv = MedicineInventory(
+                pharmacy_id=order.pharmacy_id,
+                medicine_id=order.medicine_id,
+                batch_number=str(uuid.uuid4())[:8].upper(),
+                manufacturing_date=datetime.date.today(),
+                expiry_date=datetime.date.today() + datetime.timedelta(days=365*2),
+                stock_quantity=order.quantity,
+                unit_price=10.0
+            )
+            db.add(new_inv)
+            
+        await db.commit()
+        await db.refresh(order)
+
+    med_res = await db.execute(select(Medicine).where(Medicine.id == order.medicine_id))
+    med = med_res.scalar_one_or_none()
+    med_name = med.name if med else "Medicine"
+
+    exp_str = (
+        order.expected_delivery.isoformat() + ("Z" if not order.expected_delivery.tzinfo else "")
+        if isinstance(order.expected_delivery, datetime.datetime)
+        else str(order.expected_delivery)
+    )
+    created_str = (
+        order.created_at.isoformat() + ("Z" if not order.created_at.tzinfo else "")
+        if isinstance(order.created_at, datetime.datetime)
+        else str(order.created_at)
+    )
+
+    return APIResponse(
+        message=f"Restock order for {med_name} fulfilled and added to inventory.",
+        data=RestockOrderItemResponse(
+            id=str(order.id),
+            medicine_name=med_name,
+            quantity=order.quantity,
+            status=order.status,
+            expected_delivery=exp_str,
+            created_at=created_str
+        )
+    )
 
 @router.post("/{inventory_id}/discard", response_model=APIResponse)
 async def discard_expired_stock(
