@@ -54,6 +54,7 @@ export default function AppointmentsPage() {
 
   // Security
   const { status, isLoading: isSecurityLoading } = useSecurityEnrollment(user?.id || userId, user?.role?.toLowerCase());
+  const hasPin = status === "COMPLETED" || status === "PIN_CREATED";
   const { openEnrollmentModal } = useSecurityStore();
 
   // Booking dialog state
@@ -207,6 +208,14 @@ export default function AppointmentsPage() {
     e.preventDefault();
     if (!userId) return;
 
+    if (!hasPin && !isSecurityLoading) {
+      toast.error("Please set up your 6-digit Authorization PIN first.");
+      openEnrollmentModal(() => {
+        toast.info("PIN configured! Now enter your 6-digit PIN to book.");
+      });
+      return;
+    }
+
     setIsBooking(true);
     try {
       const endTime = bookingData.end_time || (() => {
@@ -231,7 +240,18 @@ export default function AppointmentsPage() {
       loadAppointments();
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.response?.data?.message || "Failed to book appointment";
-      toast.error(msg);
+      if (err?.response?.status === 401 || err?.response?.status === 400 || msg.toLowerCase().includes("pin")) {
+        toast.error(msg, {
+          action: {
+            label: "Set Up PIN",
+            onClick: () => openEnrollmentModal(() => {
+              toast.info("PIN updated! Please try booking again with your new PIN.");
+            }),
+          },
+        });
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsBooking(false);
     }
@@ -623,9 +643,44 @@ export default function AppointmentsPage() {
                       />
                     </div>
                     <div className="space-y-2 border-t border-border/40 pt-4 mt-4">
-                      <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                        <Lock className="h-4 w-4 text-primary" /> Authorization PIN *
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                          <Lock className="h-4 w-4 text-primary" /> Authorization PIN *
+                        </label>
+                        {!hasPin ? (
+                          <button
+                            type="button"
+                            onClick={() => openEnrollmentModal()}
+                            className="text-xs font-semibold text-amber-500 hover:underline flex items-center gap-1"
+                          >
+                            Set up PIN now
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openEnrollmentModal()}
+                            className="text-xs text-muted-foreground hover:text-primary transition-colors hover:underline"
+                          >
+                            Change PIN
+                          </button>
+                        )}
+                      </div>
+
+                      {!hasPin && !isSecurityLoading && (
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 flex items-center justify-between gap-2">
+                          <span>You haven&apos;t created your 6-digit PIN yet.</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 shrink-0"
+                            onClick={() => openEnrollmentModal()}
+                          >
+                            Set Up PIN
+                          </Button>
+                        </div>
+                      )}
+
                       <Input
                         type="password"
                         value={bookingData.pin}

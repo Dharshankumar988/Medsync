@@ -457,8 +457,15 @@ class BlockchainSyncService:
                 await self.db.commit()
 
         except Exception as e:
-            logger.error(f"Failed to execute sync task {task.id}: {e}")
-            await self._handle_failure(task, str(e))
+            err_str = str(e)
+            if "0xce447a4a" in err_str or "EntityAlreadyExists" in err_str or "already registered" in err_str.lower() or "VersionAlreadyExists" in err_str:
+                logger.info(f"Sync task {task.id} for {task.entity_type} {task.entity_id} already established on-chain. Marking CONFIRMED.")
+                task.status = SyncStatus.CONFIRMED
+                task.error_message = None
+                await self.db.commit()
+            else:
+                logger.error(f"Failed to execute sync task {task.id}: {e}")
+                await self._handle_failure(task, str(e))
 
     def _to_bytes32(self, val) -> bytes:
         """Safely convert any UUID, hex string, bytes, or arbitrary string into valid bytes32."""

@@ -79,7 +79,7 @@ export default function NewOnlineOrderPage() {
       
       // Append required fields
       const formData = new FormData();
-      formData.append('pharmacy_id', selectedPharmacy.id);
+      formData.append('pharmacy_id', selectedPharmacy.pharmacy_user_id || selectedPharmacy.user_id || selectedPharmacy.pharmacy_id || selectedPharmacy.id);
       formData.append('delivery_address', deliveryAddress);
       formData.append('delivery_latitude', latitude.toString());
       formData.append('delivery_longitude', longitude.toString());
@@ -88,18 +88,22 @@ export default function NewOnlineOrderPage() {
       const res = await api.post(`/api/v1/prescriptions/${selectedPrescription}/order-online`, formData);
       const resData = res.data;
       
-      // Now we need the order ID, but the endpoint only returns prescription_id.
-      // So we'll have to fetch the latest order.
-      const { data: latestOrder } = await supabase
-        .from('medicine_orders')
-        .select('id')
-        .eq('prescription_id', selectedPrescription)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-        
-      if (latestOrder) {
-        setCreatedOrderId(latestOrder.id);
+      // Capture order ID from response or fallback to database query
+      const returnedOrderId = resData?.data?.order_id;
+      if (returnedOrderId) {
+        setCreatedOrderId(returnedOrderId);
+      } else {
+        const { data: latestOrder } = await supabase
+          .from('medicine_orders')
+          .select('id')
+          .eq('prescription_id', selectedPrescription)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+          
+        if (latestOrder) {
+          setCreatedOrderId(latestOrder.id);
+        }
       }
       
       setStep("payment");

@@ -90,7 +90,7 @@ async def get_profile(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.DOCTOR, UserRole.PATIENT, UserRole.PHARMACY, UserRole.ADMIN]))
 ):
-    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+    if str(current_user.role).upper() != UserRole.ADMIN.value and current_user.id != user_id:
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException("You cannot view another user's profile")
 
@@ -190,7 +190,7 @@ async def update_profile_completion(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.DOCTOR, UserRole.PATIENT, UserRole.PHARMACY, UserRole.ADMIN]))
 ):
-    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+    if str(current_user.role).upper() != UserRole.ADMIN.value and current_user.id != user_id:
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException("You cannot modify another user's profile")
 

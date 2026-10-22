@@ -167,6 +167,11 @@ async def get_security_status(db: AsyncSession, patient_id: uuid.UUID) -> str:
     else:
         return "NOT_STARTED"
 
+async def has_enrolled_pin(db: AsyncSession, patient_id: uuid.UUID) -> bool:
+    """Check if patient has enrolled an authorization PIN."""
+    status = await get_security_status(db, patient_id)
+    return status == "COMPLETED"
+
 async def create_download_authorization(db: AsyncSession, patient_id: uuid.UUID, prescription_id: uuid.UUID, password_verified: bool, pin_verified: bool, face_verified: bool) -> str:
     auth_ref = str(uuid.uuid4())
     auth = PrescriptionDownloadAuthorization(

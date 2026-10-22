@@ -1,7 +1,7 @@
 import uuid
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, union
 from fastapi import HTTPException
 from app.models.doctor_collaboration import (
     RecordRequest,
@@ -590,8 +590,14 @@ class DoctorCollaborationService:
             )
         )
 
-        all_patient_ids_query = appt_pats.union(pres_pats).union(ref_pats).union(perm_pats)
-        stmt = select(Patient).where(Patient.user_id.in_(all_patient_ids_query)).order_by(Patient.full_name.asc())
+        all_patient_ids_query = union(appt_pats, pres_pats, ref_pats, perm_pats)
+        ids_res = await db.execute(all_patient_ids_query)
+        patient_ids = [pid for pid in set(ids_res.scalars().all()) if pid is not None]
+
+        if not patient_ids:
+            return []
+
+        stmt = select(Patient).where(or_(Patient.user_id.in_(patient_ids), Patient.id.in_(patient_ids))).order_by(Patient.full_name.asc())
         res = await db.execute(stmt)
         patients = res.scalars().all()
 

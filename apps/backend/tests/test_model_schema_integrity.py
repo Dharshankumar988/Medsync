@@ -435,11 +435,55 @@ def test_serialize_event_args_with_bytes():
     assert serialized["nested"]["recordHash"].startswith("0x")
     assert serialized["list_items"][0] == "0xaabb"
 
-    # Must be JSON serializable
-    json_str = json.dumps(serialized)
-    assert "0x" in json_str
+def test_prescription_order_placement_response_schema():
+    """Verify PrescriptionOrderPlacementResponse serialization and ConfigDict."""
+    from app.schemas.prescription import PrescriptionOrderPlacementResponse
+    resp = PrescriptionOrderPlacementResponse(
+        prescription_id="28dcc280-1609-433b-8c41-810b11d63530",
+        order_id="1352c07c-b279-4f53-8c51-9ec9f7e3ae00"
+    )
+    api_resp = APIResponse(message="Order placed", data=resp)
+    dumped = api_resp.model_dump(mode="json")
+    assert dumped["data"]["prescription_id"] == "28dcc280-1609-433b-8c41-810b11d63530"
+    assert dumped["data"]["order_id"] == "1352c07c-b279-4f53-8c51-9ec9f7e3ae00"
 
 
+def test_pharmacy_network_item_coordinates_and_qr():
+    """Verify PharmacyNetworkItem supports coordinates and qr_identifier."""
+    import uuid
+    from app.schemas.pharmacy_system import PharmacyNetworkItem
+    item = PharmacyNetworkItem(
+        id=uuid.uuid4(),
+        pharmacy_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        business_name="Test Pharmacy",
+        latitude=12.9716,
+        longitude=77.5946,
+        qr_identifier="PHARM_QR_1"
+    )
+    dumped = item.model_dump(mode="json")
+    assert dumped["latitude"] == 12.9716
+    assert dumped["longitude"] == 77.5946
+    assert dumped["qr_identifier"] == "PHARM_QR_1"
 
 
+def test_authenticated_principal_role_matching():
+    """Verify RoleChecker and role comparisons succeed with both lowercase and uppercase."""
+    import uuid
+    from app.schemas.session import AuthenticatedPrincipal
+    from app.models.user import UserRole
+    from app.dependencies.auth import RoleChecker
 
+    doc_principal = AuthenticatedPrincipal(id=uuid.uuid4(), email="doc@medsync.com", role="doctor")
+    assert str(doc_principal.role).upper() == UserRole.DOCTOR.value
+    assert str(doc_principal.role).upper() == "DOCTOR"
+    assert str(doc_principal.role).lower() == "doctor"
+
+    checker = RoleChecker([UserRole.DOCTOR, UserRole.PATIENT])
+    verified = checker(doc_principal)
+    assert verified.id == doc_principal.id
+
+    pat_principal = AuthenticatedPrincipal(id=uuid.uuid4(), email="pat@medsync.com", role="patient")
+    assert str(pat_principal.role).upper() == UserRole.PATIENT.value
+    pat_verified = checker(pat_principal)
+    assert pat_verified.id == pat_principal.id

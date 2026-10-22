@@ -172,7 +172,7 @@ async def list_doctor_accessible_records(
     from app.models.prescription import Prescription
     from app.models.doctor_collaboration import DoctorReferral
     from app.models.consultation import Consultation
-    from sqlalchemy import or_
+    from sqlalchemy import or_, union
 
     # 1. Identify patients treated / consulted with by this doctor
     appt_pats = select(Appointment.patient_id).where(Appointment.doctor_id == current_user.id)
@@ -194,13 +194,16 @@ async def list_doctor_accessible_records(
     )
     upload_pats = select(MedicalRecord.patient_id).where(MedicalRecord.uploaded_by == current_user.id)
 
-    treated_pats_query = appt_pats.union(pres_pats).union(ref_pats).union(cons_pats).union(perm_pats).union(upload_pats)
+    treated_pats_query = union(appt_pats, pres_pats, ref_pats, cons_pats, perm_pats, upload_pats)
     treated_res = await db.execute(treated_pats_query)
-    treated_patient_ids = set(treated_res.scalars().all())
+    treated_patient_ids = {pid for pid in treated_res.scalars().all() if pid is not None}
 
     # If patient_id param is provided, ensure we filter specifically for it
     if patient_id:
-        treated_patient_ids = {patient_id}
+        p_res = await db.execute(select(Patient).where(or_(Patient.id == patient_id, Patient.user_id == patient_id)))
+        target_pat = p_res.scalar_one_or_none()
+        resolved_pid = target_pat.user_id if target_pat else patient_id
+        treated_patient_ids = {resolved_pid}
 
     if not treated_patient_ids:
         return APIResponse(message="No treated patient records found", data=[])
@@ -361,7 +364,7 @@ async def update_record_consent(
         raise HTTPException(status_code=404, detail="Medical record not found")
         
     is_owner = record.patient_id == current_user.id
-    if not is_owner and current_user.role != UserRole.ADMIN:
+    if not is_owner and str(current_user.role).upper() != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="Only the patient or admin can modify consent")
 
     record.is_public = payload.is_public
@@ -415,9 +418,9 @@ async def download_record(
         raise HTTPException(status_code=404, detail="Record not found")
 
     is_owner = record.patient_id == current_user.id
-    is_doctor = current_user.role == UserRole.DOCTOR
+    is_doctor = str(current_user.role).upper() == UserRole.DOCTOR.value
     
-    if current_user.role == UserRole.PATIENT:
+    if str(current_user.role).upper() == UserRole.PATIENT.value:
         if not req.pin:
             raise HTTPException(status_code=400, detail="PIN is required for download.")
         from app.services.security_service import validate_patient_pin
@@ -543,12 +546,12 @@ async def download_record_raw(
         raise HTTPException(status_code=404, detail="Record not found")
 
     is_owner = record.patient_id == current_user.id
-    is_doctor = current_user.role == UserRole.DOCTOR
+    is_doctor = str(current_user.role).upper() == UserRole.DOCTOR.value
     if not is_owner and is_doctor:
         has_permission = await PermissionService.check_permission(db, record_id, current_user.id)
         if not has_permission:
             raise HTTPException(status_code=403, detail="You do not have access to this record")
-    elif not is_owner and current_user.role != UserRole.ADMIN:
+    elif not is_owner and str(current_user.role).upper() != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="You do not have access to this record")
 
     from app.services.qr_pdf_service import QRPdfService

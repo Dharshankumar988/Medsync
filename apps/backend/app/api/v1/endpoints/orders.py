@@ -24,9 +24,10 @@ async def list_orders(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role == UserRole.PATIENT:
+    user_role = str(current_user.role).upper()
+    if user_role == UserRole.PATIENT.value:
         stmt = select(MedicineOrder).where(MedicineOrder.patient_id == current_user.id).order_by(MedicineOrder.created_at.desc())
-    elif current_user.role == UserRole.PHARMACY:
+    elif user_role == UserRole.PHARMACY.value:
         stmt = select(MedicineOrder).where(MedicineOrder.pharmacy_id == current_user.id).order_by(MedicineOrder.created_at.desc())
     else:
         from app.core.exceptions import ForbiddenException
@@ -160,10 +161,11 @@ async def get_tracking(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Order not found")
         
-    if current_user.role == UserRole.PATIENT and order.patient_id != current_user.id:
+    user_role = str(current_user.role).upper()
+    if user_role == UserRole.PATIENT.value and order.patient_id != current_user.id:
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException("Unauthorized to track this order")
-    elif current_user.role == UserRole.PHARMACY and order.pharmacy_id != current_user.id:
+    elif user_role == UserRole.PHARMACY.value and order.pharmacy_id != current_user.id:
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException("Unauthorized to track this order")
         

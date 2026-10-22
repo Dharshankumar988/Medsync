@@ -14,10 +14,11 @@ elif "postgresql+asyncpg" in db_url and importlib.util.find_spec("asyncpg") is N
 engine_args = {"echo": False}
 if "sqlite" not in db_url:
     engine_args.update({
-        "pool_size": 20,
-        "max_overflow": 30,
+        "pool_size": 5,
+        "max_overflow": 5,
+        "pool_timeout": 30,
         "pool_pre_ping": True,
-        "pool_recycle": 300,
+        "pool_recycle": 180,
     })
 else:
     # Required for async SQLite in-memory

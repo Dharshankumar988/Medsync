@@ -162,9 +162,10 @@ async def decline_referral(
 )
 async def list_doctor_directory(
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(require_doctor),
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.DOCTOR, UserRole.PATIENT, UserRole.ADMIN])),
 ):
-    results = await DoctorCollaborationService.list_doctors_directory(db, exclude_user_id=current_user.id)
+    exclude_id = current_user.id if str(current_user.role).upper() == UserRole.DOCTOR.value else None
+    results = await DoctorCollaborationService.list_doctors_directory(db, exclude_user_id=exclude_id)
     return APIResponse(message="Doctor directory retrieved", data=results)
 
 

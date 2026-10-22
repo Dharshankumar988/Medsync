@@ -37,3 +37,9 @@ class PrescriptionResponse(BaseModel):
     qr_token: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+class PrescriptionOrderPlacementResponse(BaseModel):
+    prescription_id: str
+    order_id: Optional[str] = None
+    
+    model_config = ConfigDict(use_enum_values=True)

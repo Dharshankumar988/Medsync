@@ -203,7 +203,9 @@ export default function PatientQRScanPage() {
       const json = res.data;
 
       setPharmacy({ 
-        id: json.data.pharmacy_id, 
+        id: json.data.pharmacy_user_id || json.data.pharmacy_id, 
+        pharmacy_id: json.data.pharmacy_id,
+        pharmacy_user_id: json.data.pharmacy_user_id,
         name: json.data.business_name, 
         address: json.data.address || "Verified Network Location",
         city: json.data.city,
@@ -246,14 +248,16 @@ export default function PatientQRScanPage() {
 
     try {
       const formData = new FormData();
-      formData.append("pharmacy_id", pharmacy.id);
+      formData.append("pharmacy_id", pharmacy.pharmacy_user_id || pharmacy.id);
       formData.append("pin", authPin);
 
-      await api.post(`/api/v1/prescriptions/${selectedPrescription}/physical-pickup`, formData);
+      const pickupRes = await api.post(`/api/v1/prescriptions/${selectedPrescription}/physical-pickup`, formData);
+      const returnedOrderId = pickupRes.data?.data?.order_id;
 
       toast.success("Prescription authorized for in-store pickup!");
       setCompletedOrderResult({
         type: "PICKUP",
+        orderId: returnedOrderId,
         message: `Your prescription has been securely authorized. Present your ID and order code at ${pharmacy.name} to collect your medication.`,
       });
       setAuthPin("");
@@ -276,27 +280,32 @@ export default function PatientQRScanPage() {
 
     try {
       const formData = new FormData();
-      formData.append("pharmacy_id", pharmacy.id);
+      formData.append("pharmacy_id", pharmacy.pharmacy_user_id || pharmacy.id);
       formData.append("delivery_address", deliveryAddress);
       formData.append("delivery_latitude", deliveryLat.toString());
       formData.append("delivery_longitude", deliveryLng.toString());
       formData.append("pin", authPin);
 
-      await api.post(`/api/v1/prescriptions/${selectedPrescription}/order-online`, formData);
+      const orderRes = await api.post(`/api/v1/prescriptions/${selectedPrescription}/order-online`, formData);
+      const returnedOrderId = orderRes.data?.data?.order_id;
 
-      // Fetch the latest order ID
-      const { data: latestOrder } = await supabase
-        .from("medicine_orders")
-        .select("id")
-        .eq("prescription_id", selectedPrescription)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
+      // Fetch the latest order ID fallback if needed
+      let latestOrderId = returnedOrderId;
+      if (!latestOrderId) {
+        const { data: latestOrder } = await supabase
+          .from("medicine_orders")
+          .select("id")
+          .eq("prescription_id", selectedPrescription)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+        latestOrderId = latestOrder?.id;
+      }
 
       toast.success("Delivery order placed successfully!");
       setCompletedOrderResult({
         type: "DELIVERY",
-        orderId: latestOrder?.id,
+        orderId: latestOrderId,
         message: `Your delivery order has been routed directly to ${pharmacy.name}. It will be packaged and dispatched to your chosen doorstep location.`,
       });
       setAuthPin("");

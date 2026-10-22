@@ -108,11 +108,18 @@ class PrescriptionService:
             await prescription_item_repo.create(db, obj_in=item)
             
         if req.routed_pharmacy_id:
+            from app.models.pharmacy import Pharmacy
+            from sqlalchemy import or_
+            pharm_stmt = select(Pharmacy).where(or_(Pharmacy.id == req.routed_pharmacy_id, Pharmacy.user_id == req.routed_pharmacy_id))
+            pharm_res = await db.execute(pharm_stmt)
+            target_pharm = pharm_res.scalar_one_or_none()
+            resolved_routed_id = target_pharm.user_id if target_pharm else req.routed_pharmacy_id
+
             from app.models.pharmacy_system import MedicineOrder, OrderStatus
             order = MedicineOrder(
                 id=uuid.uuid4(),
                 patient_id=req.patient_id,
-                pharmacy_id=req.routed_pharmacy_id,
+                pharmacy_id=resolved_routed_id,
                 prescription_id=prescription.id,
                 status=OrderStatus.PENDING,
                 order_type="ROUTED_BY_DOCTOR",
@@ -135,7 +142,7 @@ class PrescriptionService:
             if req.routed_pharmacy_id:
                 await NotificationService.send_notification(
                     db,
-                    user_id=req.routed_pharmacy_id,
+                    user_id=resolved_routed_id,
                     title="New Prescription Routed",
                     message=f"Dr. {doc_name} routed a prescription order for patient diagnosis '{req.diagnosis}' to your pharmacy.",
                     type="PRESCRIPTION",

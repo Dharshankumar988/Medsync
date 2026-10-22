@@ -429,37 +429,6 @@ async def get_profile(db: AsyncSession = Depends(get_db), current_user: User = D
         "operating_hours": pharmacy.operating_hours
     })
 
-@router.get("/network")
-async def get_pharmacy_network(db: AsyncSession = Depends(get_db)):
-    """Returns a list of verified and active pharmacies with their locations for the map."""
-    from app.models.pharmacy_location import PharmacyLocation
-    stmt = select(Pharmacy, User, PharmacyLocation).join(
-        User, Pharmacy.user_id == User.id
-    ).join(
-        PharmacyLocation, PharmacyLocation.pharmacy_id == Pharmacy.user_id
-    ).where(
-        User.is_verified == True,
-        User.status == UserStatus.ACTIVE,
-        PharmacyLocation.is_active == True,
-        PharmacyLocation.verification_status == "APPROVED"
-    )
-    result = await db.execute(stmt)
-    rows = result.all()
-    
-    data = []
-    for pharmacy, user, location in rows:
-        data.append({
-            "pharmacy_id": str(pharmacy.user_id),
-            "business_name": pharmacy.business_name,
-            "address": location.address,
-            "contact_number": pharmacy.contact_number,
-            "latitude": float(location.latitude) if location.latitude else None,
-            "longitude": float(location.longitude) if location.longitude else None,
-            "is_24x7": pharmacy.is_24x7,
-            "qr_identifier": pharmacy.qr_identifier
-        })
-        
-    return APIResponse(message="Pharmacy network retrieved successfully", data=data)
 
 
 # ---------------------------------------------------------
@@ -673,9 +642,17 @@ async def get_network_pharmacies(
     current_user: AuthenticatedPrincipal | None = Depends(get_current_user_optional)
 ):
     """Retrieve all active network pharmacies for patient ordering and doctor affiliation."""
+    from app.models.pharmacy_location import PharmacyLocation
     stmt = (
-        select(Pharmacy, User)
+        select(Pharmacy, User, PharmacyLocation)
         .join(User, Pharmacy.user_id == User.id)
+        .outerjoin(
+            PharmacyLocation,
+            or_(
+                PharmacyLocation.pharmacy_id == Pharmacy.id,
+                PharmacyLocation.pharmacy_id == Pharmacy.user_id
+            )
+        )
         .where(User.status == UserStatus.ACTIVE)
         .order_by(Pharmacy.business_name.asc())
     )
@@ -683,16 +660,23 @@ async def get_network_pharmacies(
     rows = res.all()
 
     items: List[PharmacyNetworkItem] = []
-    for pharmacy, user in rows:
+    seen_ids = set()
+    for pharmacy, user, location in rows:
+        if pharmacy.id in seen_ids:
+            continue
+        seen_ids.add(pharmacy.id)
         phone_val = pharmacy.contact_number or pharmacy.phone_number
+        lat = float(location.latitude) if (location and location.latitude is not None) else None
+        lng = float(location.longitude) if (location and location.longitude is not None) else None
+        addr = (location.address if location and location.address else pharmacy.address) or "Network Pharmacy"
         items.append(PharmacyNetworkItem(
             id=pharmacy.id,
             pharmacy_id=pharmacy.user_id,
             user_id=pharmacy.user_id,
             business_name=pharmacy.business_name or user.full_name or "Pharmacy",
-            address=pharmacy.address,
-            city=pharmacy.city or "Local",
-            state=pharmacy.state,
+            address=addr,
+            city=pharmacy.city or (location.city if location else "Local"),
+            state=pharmacy.state or (location.state if location else None),
             contact_number=phone_val,
             phone=phone_val,
             license_number=pharmacy.license_number,
@@ -701,7 +685,10 @@ async def get_network_pharmacies(
             logo_url=pharmacy.logo_url,
             location=pharmacy.location if isinstance(pharmacy.location, dict) else None,
             clinic_name=pharmacy.clinic_name,
-            hospital_id=pharmacy.hospital_id
+            hospital_id=pharmacy.hospital_id,
+            latitude=lat,
+            longitude=lng,
+            qr_identifier=pharmacy.qr_identifier
         ))
 
     return APIResponse(message="Network pharmacies retrieved successfully", data=items)

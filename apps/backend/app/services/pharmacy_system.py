@@ -7,8 +7,15 @@ from app.models.pharmacy_system import OrderStatus
 class PharmacyService:
     @staticmethod
     async def place_order(db: AsyncSession, patient_id: uuid.UUID, req: MedicineOrderCreate):
-        from sqlalchemy import select
+        from sqlalchemy import select, or_
         from app.models.pharmacy_system import MedicineOrderItem, MedicineInventory
+        from app.models.pharmacy import Pharmacy
+
+        # Defensively resolve pharmacy user ID
+        pharm_stmt = select(Pharmacy).where(or_(Pharmacy.id == req.pharmacy_id, Pharmacy.user_id == req.pharmacy_id))
+        pharm_res = await db.execute(pharm_stmt)
+        target_pharm = pharm_res.scalar_one_or_none()
+        resolved_pharmacy_id = target_pharm.user_id if target_pharm else req.pharmacy_id
         
         total_amount = 0.0
         inventory_ids = [item.inventory_id for item in req.items]
@@ -30,7 +37,7 @@ class PharmacyService:
         
         order_in = {
             "patient_id": patient_id,
-            "pharmacy_id": req.pharmacy_id,
+            "pharmacy_id": resolved_pharmacy_id,
             "prescription_id": req.prescription_id,
             "delivery_address": req.delivery_address,
             "delivery_latitude": req.delivery_latitude,

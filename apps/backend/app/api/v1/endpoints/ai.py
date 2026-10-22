@@ -274,7 +274,8 @@ async def analyze_image(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    if current_user.role == UserRole.DOCTOR and patient_id:
+    is_doctor = str(current_user.role).upper() == UserRole.DOCTOR.value
+    if is_doctor and patient_id:
         from app.services.permission import PermissionService
         if not await PermissionService.can_access_patient(db, current_user.id, patient_id):
             raise HTTPException(status_code=403, detail="Not authorized to analyze images for this patient.")
@@ -294,7 +295,7 @@ async def analyze_image(
         
     try:
         # Determine user role for explanation style
-        user_role = "doctor" if current_user.role == UserRole.DOCTOR else "patient"
+        user_role = "doctor" if is_doctor else "patient"
         
         # Parse patient context if provided
         parsed_context = None
@@ -327,8 +328,8 @@ async def analyze_image(
             from app.models.ai_chat import AIChatSession
             session = AIChatSession(
                 id=uuid.uuid4(), user_id=current_user.id,
-                patient_id=patient_id if current_user.role == UserRole.DOCTOR else None,
-                title="Image Analysis", is_doctor_mode=current_user.role == UserRole.DOCTOR,
+                patient_id=patient_id if is_doctor else None,
+                title="Image Analysis", is_doctor_mode=is_doctor,
             )
             db.add(session)
             await db.flush()
@@ -354,7 +355,7 @@ async def analyze_image(
             version_data, record_data = row
             
             if record_data.patient_id != current_user.id:
-                if current_user.role == UserRole.DOCTOR:
+                if is_doctor:
                     from app.services.permission import PermissionService
                     has_perm = await PermissionService.check_permission(db, record_data.id, current_user.id)
                     if not has_perm:

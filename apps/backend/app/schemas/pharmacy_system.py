@@ -149,6 +149,9 @@ class PharmacyNetworkItem(BaseModel):
     location: Optional[dict] = None
     clinic_name: Optional[str] = None
     hospital_id: Optional[uuid.UUID] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    qr_identifier: Optional[str] = None
 
     model_config = ConfigDict(use_enum_values=True)
 

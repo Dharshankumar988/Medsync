@@ -8,7 +8,7 @@ from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import UserRole
 from app.schemas.response import APIResponse
 from app.schemas.session import AuthenticatedPrincipal
-from app.schemas.prescription import PrescriptionCreate, PrescriptionResponse
+from app.schemas.prescription import PrescriptionCreate, PrescriptionResponse, PrescriptionOrderPlacementResponse
 from app.services.prescription import PrescriptionService
 from app.services.qr_pdf_service import QRPdfService
 from sqlalchemy import select
@@ -58,14 +58,14 @@ async def authorize_prescription_download(
     if not rx:
         raise HTTPException(status_code=404, detail="Prescription not found")
         
-    if rx.patient_id != current_user.id and rx.doctor_id != current_user.id and current_user.role not in [UserRole.ADMIN]:
+    if rx.patient_id != current_user.id and rx.doctor_id != current_user.id and str(current_user.role).upper() != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="Unauthorized to download this prescription")
         
     if not rx.pdf_url:
         raise HTTPException(status_code=404, detail="PDF not generated for this prescription")
 
     # If the user is the patient, enforce MFA
-    if current_user.role == UserRole.PATIENT:
+    if str(current_user.role).upper() == UserRole.PATIENT.value:
         from app.models.user import User
         from app.services.security_service import validate_patient_pin, create_download_authorization
         from app.services.face_auth_service import face_auth_service
@@ -151,7 +151,7 @@ async def download_prescription_file(
     if not rx:
         raise HTTPException(status_code=404, detail="Prescription not found")
 
-    if rx.patient_id != current_user.id and rx.doctor_id != current_user.id and current_user.role not in [UserRole.ADMIN]:
+    if rx.patient_id != current_user.id and rx.doctor_id != current_user.id and str(current_user.role).upper() != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="Unauthorized to download this prescription")
 
     pdf_content = None
@@ -636,7 +636,7 @@ async def verify_prescription_auth(
 
 from fastapi import Form, UploadFile, File
 
-@router.post("/{id}/order-online", response_model=APIResponse)
+@router.post("/{id}/order-online", response_model=APIResponse[PrescriptionOrderPlacementResponse])
 async def order_prescription_online(
     id: uuid.UUID,
     pharmacy_id: uuid.UUID = Form(...),
@@ -717,28 +717,66 @@ async def order_prescription_online(
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
         
-    try:
-        from app.models.pharmacy_system import MedicineOrder, OrderStatus
-        order = MedicineOrder(
-            id=uuid.uuid4(),
-            pharmacy_id=pharmacy_id,
-            patient_id=current_user.id,
-            prescription_id=rx.id,
-            status=OrderStatus.PENDING,
-            delivery_address=delivery_address,
-            delivery_latitude=delivery_latitude,
-            delivery_longitude=delivery_longitude,
-            order_type="ONLINE_DELIVERY",
-            total_amount=0.0
-        )
-        db.add(order)
-        await db.commit()
-    except ImportError:
-        pass
-        
-    return APIResponse(message="Prescription order placed successfully", data={"prescription_id": str(rx.id)})
+    from app.models.pharmacy import Pharmacy
+    from app.models.user import User
+    from sqlalchemy import or_
 
-@router.post("/{id}/physical-pickup", response_model=APIResponse)
+    # Resolve target pharmacy user_id (pharmacy_id may be Pharmacy.id or User.id)
+    pharm_stmt = select(Pharmacy).where(or_(Pharmacy.id == pharmacy_id, Pharmacy.user_id == pharmacy_id))
+    pharm_res = await db.execute(pharm_stmt)
+    target_pharm = pharm_res.scalar_one_or_none()
+
+    if target_pharm:
+        resolved_pharmacy_user_id = target_pharm.user_id
+    else:
+        u_stmt = select(User).where(User.id == pharmacy_id, User.role == UserRole.PHARMACY)
+        u_res = await db.execute(u_stmt)
+        user_match = u_res.scalar_one_or_none()
+        if not user_match:
+            raise HTTPException(status_code=404, detail="Selected pharmacy not found or invalid.")
+        resolved_pharmacy_user_id = user_match.id
+
+    from app.models.pharmacy_system import MedicineOrder, OrderStatus
+    order = MedicineOrder(
+        id=uuid.uuid4(),
+        pharmacy_id=resolved_pharmacy_user_id,
+        patient_id=current_user.id,
+        prescription_id=rx.id,
+        status=OrderStatus.PENDING,
+        delivery_address=delivery_address,
+        delivery_latitude=delivery_latitude,
+        delivery_longitude=delivery_longitude,
+        order_type="ONLINE_DELIVERY",
+        total_amount=0.0
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    try:
+        from app.services.notification import NotificationService
+        patient_name = getattr(current_user, "full_name", None) or "A patient"
+        await NotificationService.send_notification(
+            db,
+            user_id=resolved_pharmacy_user_id,
+            title="New Online Medicine Order",
+            message=f"{patient_name} placed an online delivery order for prescription #{str(rx.id)[:8]}.",
+            type="ORDER",
+            link="/pharmacy/orders"
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger("prescriptions").warning(f"Failed to send pharmacy order notification: {e}")
+        
+    return APIResponse(
+        message="Prescription order placed successfully",
+        data=PrescriptionOrderPlacementResponse(
+            prescription_id=str(rx.id),
+            order_id=str(order.id)
+        )
+    )
+
+@router.post("/{id}/physical-pickup", response_model=APIResponse[PrescriptionOrderPlacementResponse])
 async def physical_pickup_prescription(
     id: uuid.UUID,
     pharmacy_id: uuid.UUID = Form(...),
@@ -815,23 +853,61 @@ async def physical_pickup_prescription(
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
         
+    from app.models.pharmacy import Pharmacy
+    from app.models.user import User
+    from sqlalchemy import or_
+
+    # Resolve target pharmacy user_id (pharmacy_id may be Pharmacy.id or User.id)
+    pharm_stmt = select(Pharmacy).where(or_(Pharmacy.id == pharmacy_id, Pharmacy.user_id == pharmacy_id))
+    pharm_res = await db.execute(pharm_stmt)
+    target_pharm = pharm_res.scalar_one_or_none()
+
+    if target_pharm:
+        resolved_pharmacy_user_id = target_pharm.user_id
+    else:
+        u_stmt = select(User).where(User.id == pharmacy_id, User.role == UserRole.PHARMACY)
+        u_res = await db.execute(u_stmt)
+        user_match = u_res.scalar_one_or_none()
+        if not user_match:
+            raise HTTPException(status_code=404, detail="Selected pharmacy not found or invalid.")
+        resolved_pharmacy_user_id = user_match.id
+
+    from app.models.pharmacy_system import MedicineOrder, OrderStatus
+    order = MedicineOrder(
+        id=uuid.uuid4(),
+        pharmacy_id=resolved_pharmacy_user_id,
+        patient_id=current_user.id,
+        prescription_id=rx.id,
+        status=OrderStatus.PENDING,
+        order_type="PHYSICAL_PICKUP",
+        total_amount=0.0
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
     try:
-        from app.models.pharmacy_system import MedicineOrder, OrderStatus
-        order = MedicineOrder(
-            id=uuid.uuid4(),
-            pharmacy_id=pharmacy_id,
-            patient_id=current_user.id,
-            prescription_id=rx.id,
-            status=OrderStatus.PENDING,
-            order_type="PHYSICAL_PICKUP",
-            total_amount=0.0
+        from app.services.notification import NotificationService
+        patient_name = getattr(current_user, "full_name", None) or "A patient"
+        await NotificationService.send_notification(
+            db,
+            user_id=resolved_pharmacy_user_id,
+            title="Prescription Pickup Authorization",
+            message=f"{patient_name} authorized in-store pickup for prescription #{str(rx.id)[:8]}.",
+            type="ORDER",
+            link="/pharmacy/orders"
         )
-        db.add(order)
-        await db.commit()
-    except ImportError:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("prescriptions").warning(f"Failed to send pharmacy pickup notification: {e}")
         
-    return APIResponse(message="Physical pickup authorized successfully", data={"prescription_id": str(rx.id)})
+    return APIResponse(
+        message="Physical pickup authorized successfully",
+        data=PrescriptionOrderPlacementResponse(
+            prescription_id=str(rx.id),
+            order_id=str(order.id)
+        )
+    )
 
 @router.post("/offline", response_model=APIResponse)
 async def upload_offline_prescription(
