@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
     SUPABASE_STORAGE_BUCKET: str = "medical-records"
     SUPABASE_STORAGE_MAX_UPLOAD_MB: int = 25
@@ -48,10 +49,12 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def set_supabase_keys(self):
         import os
+        if not self.SUPABASE_KEY:
+            self.SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or ""
         if not self.SUPABASE_SERVICE_ROLE_KEY:
-            self.SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or ""
+            self.SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or self.SUPABASE_KEY or ""
         if not self.SUPABASE_ANON_KEY:
-            self.SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_KEY") or ""
+            self.SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or self.SUPABASE_KEY or ""
         return self
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

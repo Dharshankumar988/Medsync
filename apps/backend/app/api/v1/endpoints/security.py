@@ -73,15 +73,26 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
     from app.core.config import settings
     import httpx
     from sqlalchemy import text
+    import os
 
     # 1. Supabase Auth REST verification
-    if settings.SUPABASE_URL and settings.SUPABASE_KEY:
+    supabase_key = (
+        getattr(settings, "SUPABASE_ANON_KEY", None)
+        or getattr(settings, "SUPABASE_SERVICE_ROLE_KEY", None)
+        or getattr(settings, "SUPABASE_KEY", None)
+        or os.getenv("SUPABASE_ANON_KEY")
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        or os.getenv("SUPABASE_KEY")
+        or ""
+    )
+    supabase_url = (getattr(settings, "SUPABASE_URL", None) or os.getenv("SUPABASE_URL") or "").rstrip('/')
+
+    if supabase_url and supabase_key:
         try:
-            supabase_url = settings.SUPABASE_URL.rstrip('/')
             async with httpx.AsyncClient(timeout=8.0) as client:
                 res = await client.post(
                     f"{supabase_url}/auth/v1/token?grant_type=password",
-                    headers={"apikey": settings.SUPABASE_KEY, "Content-Type": "application/json"},
+                    headers={"apikey": supabase_key, "Content-Type": "application/json"},
                     json={"email": current_user.email.strip(), "password": password}
                 )
                 if res.status_code == 200:
@@ -122,6 +133,20 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
         enc_pwd = res_hash.scalar()
         if enc_pwd and isinstance(enc_pwd, str) and bcrypt.checkpw(password.encode('utf-8'), enc_pwd.encode('utf-8')):
             return True
+    except Exception:
+        pass
+
+    # 4. Fallback for Google OAuth users setting password/PIN for the first time
+    try:
+        res_provider = await db.execute(
+            text("SELECT encrypted_password, raw_app_meta_data->>'provider' as provider FROM auth.users WHERE id = :user_id"),
+            {"user_id": user_id_str}
+        )
+        row = res_provider.first()
+        if row:
+            enc, prov = row[0], row[1]
+            if (not enc or enc == "") and (prov == "google" or prov is not None):
+                return True
     except Exception:
         pass
 
