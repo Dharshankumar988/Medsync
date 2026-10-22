@@ -136,12 +136,28 @@ class AdminAIService:
 
             tool_result = await AdminAITools.execute_tool(db, admin_id, session.id, function_name, kwargs)
 
+            # Serialize tool_call to a plain dict for the messages list
+            tool_call_dict = {
+                "id": tool_call.id,
+                "type": "function",
+                "function": {
+                    "name": tool_call.function.name,
+                    "arguments": tool_call.function.arguments
+                }
+            }
+
             # Send the tool result back to the model
-            messages.append({"role": "assistant", "content": None, "tool_calls": [tool_call]})
+            messages.append({"role": "assistant", "content": None, "tool_calls": [tool_call_dict]})
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "name": function_name, "content": tool_result})
 
             # When sending tool result, set tool_choice to "none" to prevent further tool calls
-            reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1, tool_choice="none")
+            try:
+                reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1, tools=tools, tool_choice="none")
+            except Exception as tool_follow_up_err:
+                # If the model still tries to call a tool despite tool_choice="none",
+                # fall back to a plain completion without tools
+                logger.warning(f"Follow-up with tool_choice=none failed: {tool_follow_up_err}. Retrying without tools.")
+                reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1)
         
         reply_content = AIOrchestrator.filter_output(reply_content, "admin")
         inference_time = int((time.time() - start_time) * 1000)

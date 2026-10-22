@@ -145,14 +145,11 @@ class GroqClient:
             if json_mode:
                 params["response_format"] = {"type": "json_object"}
             if tools:
-                if tool_choice == "none":
-                    pass
+                params["tools"] = tools
+                if tool_choice:
+                    params["tool_choice"] = tool_choice
                 else:
-                    params["tools"] = tools
-                    if tool_choice:
-                        params["tool_choice"] = tool_choice
-                    else:
-                        params["tool_choice"] = "auto"
+                    params["tool_choice"] = "auto"
 
             response = await self.client.chat.completions.create(**params)
 
