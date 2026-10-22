@@ -51,14 +51,6 @@ class UserSyncRequest(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
-class ProfileImageResponseData(BaseModel):
-    profile_image_url: str
-    model_config = ConfigDict(use_enum_values=True)
-
-class AvatarUpdateRequest(BaseModel):
-    avatar_url: str
-    model_config = ConfigDict(use_enum_values=True)
-
     @field_validator("hospital_id", mode="before")
     @classmethod
     def clean_hospital_id(cls, v: Any) -> Optional[uuid.UUID]:
@@ -75,4 +67,13 @@ class AvatarUpdateRequest(BaseModel):
         if isinstance(v, uuid.UUID):
             return v
         return None
+
+class ProfileImageResponseData(BaseModel):
+    profile_image_url: str
+    model_config = ConfigDict(use_enum_values=True)
+
+class AvatarUpdateRequest(BaseModel):
+    avatar_url: str
+    model_config = ConfigDict(use_enum_values=True)
+
 
