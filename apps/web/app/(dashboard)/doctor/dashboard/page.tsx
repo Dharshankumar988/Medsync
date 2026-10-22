@@ -24,12 +24,47 @@ import { dashboardService } from "@/services/dashboard.service";
 
 export default function DoctorDashboard() {
   const [userId, setUserId] = useState<string>("");
+  const [doctorName, setDoctorName] = useState<string>("");
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUserId(data.user.id);
+    supabase.auth.getUser().then(async ({ data }) => {
+      const user = data.user;
+      if (!user) return;
+      setUserId(user.id);
+
+      // Prefer name from Google account / metadata first, fallback to doctors table or email
+      const googleName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        user.user_metadata?.given_name;
+
+      if (googleName) {
+        setDoctorName(googleName);
+      } else {
+        try {
+          const { data: docData } = await supabase
+            .from("doctors")
+            .select("full_name")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (docData?.full_name) {
+            setDoctorName(docData.full_name);
+          } else if (user.email) {
+            setDoctorName(user.email.split("@")[0]);
+          }
+        } catch (e) {
+          if (user.email) setDoctorName(user.email.split("@")[0]);
+        }
+      }
     });
   }, []);
+
+  const formatDoctorGreeting = (rawName: string) => {
+    if (!rawName) return "Dr.";
+    const cleaned = rawName.replace(/^(dr\.?|doctor)\s+/i, "").trim();
+    return cleaned ? `Dr. ${cleaned}` : "Dr.";
+  };
 
   const { data: dashboardData = {
     today_appointments: 0,
@@ -119,9 +154,8 @@ export default function DoctorDashboard() {
         className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4"
       >
         <motion.div variants={fadeUp}>
-          <p className="text-sm font-medium tracking-widest uppercase text-emerald-500 mb-2">Doctor Dashboard</p>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.15]">
-            Clinical Overview
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.15] flex items-center flex-wrap gap-2">
+            Hi ! welcome back {formatDoctorGreeting(doctorName)} 👋
           </h1>
           <p className="text-muted-foreground mt-2 max-w-md leading-relaxed">
             Manage your patients, appointments, and daily schedule.

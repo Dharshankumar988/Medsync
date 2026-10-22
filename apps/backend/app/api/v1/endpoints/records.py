@@ -164,7 +164,7 @@ async def list_doctor_accessible_records(
     from app.models.user import User
     from app.models.appointment import Appointment
     from app.models.prescription import Prescription
-    from app.models.doctor_referral import DoctorReferral
+    from app.models.doctor_collaboration import DoctorReferral
     from app.models.consultation import Consultation
     from sqlalchemy import or_
 

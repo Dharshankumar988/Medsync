@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useState, useEffect } from "react";
 import { LogOut, User, Settings, ShoppingBag } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -18,6 +18,28 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 export const Header = memo(function Header({ role }: { role: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (data.user) {
+        const metaPic = data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture;
+        if (metaPic) {
+          setUserAvatar(metaPic);
+          return;
+        }
+
+        const r = role.toLowerCase();
+        if (r === "patient") {
+          const { data: p } = await supabase.from("patients").select("profile_picture_url").eq("user_id", data.user.id).maybeSingle();
+          if (p?.profile_picture_url) setUserAvatar(p.profile_picture_url);
+        } else if (r === "doctor") {
+          const { data: d } = await supabase.from("doctors").select("profile_picture_url").eq("user_id", data.user.id).maybeSingle();
+          if (d?.profile_picture_url) setUserAvatar(d.profile_picture_url);
+        }
+      }
+    });
+  }, [pathname, role]);
   
   const { paths, currentPage } = useMemo(() => {
     const pathsList = pathname.split('/').filter(Boolean);
@@ -60,8 +82,12 @@ export const Header = memo(function Header({ role }: { role: string }) {
         <div className="pl-1 md:pl-2 border-l border-border/40">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button aria-label="User profile" className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm ring-2 ring-transparent hover:ring-primary/20 transition-all outline-none">
-                {role.charAt(0).toUpperCase()}
+              <button aria-label="User profile" className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm ring-2 ring-transparent hover:ring-primary/20 transition-all outline-none overflow-hidden">
+                {userAvatar ? (
+                  <img src={userAvatar} alt="Profile" className="w-full h-full object-cover rounded-full" referrerPolicy="no-referrer" />
+                ) : (
+                  role.charAt(0).toUpperCase()
+                )}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="right" className="w-56 rounded-xl shadow-lg border-border/60">

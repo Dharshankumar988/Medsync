@@ -153,6 +153,12 @@ class AppointmentService:
             if pat:
                 appt_dict["patient_name"] = pat.full_name
                 appt_dict["patient_picture"] = pat.profile_picture_url
+            if not appt_dict.get("patient_picture"):
+                u_stmt = select(User.profile_image_url).where(User.id == appt.patient_id)
+                u_res = await db.execute(u_stmt)
+                u_pic = u_res.scalar_one_or_none()
+                if u_pic:
+                    appt_dict["patient_picture"] = u_pic
 
             # Fetch location info
             if appt.location_id:

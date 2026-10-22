@@ -104,7 +104,31 @@ export default function DoctorPatientsPage() {
         .in("user_id", distinctPatientIds);
 
       if (error) throw error;
-      setPatients(patientsData || []);
+
+      // Ensure fallback to users.profile_image_url if profile_picture_url is null
+      const missingAvatarIds = (patientsData || [])
+        .filter((p) => !p.profile_picture_url)
+        .map((p) => p.user_id);
+
+      let enrichedPatients = patientsData || [];
+      if (missingAvatarIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from("users")
+          .select("id, profile_image_url")
+          .in("id", missingAvatarIds);
+
+        const uMap = (usersData || []).reduce((acc: any, u: any) => {
+          acc[u.id] = u.profile_image_url;
+          return acc;
+        }, {});
+
+        enrichedPatients = enrichedPatients.map((p) => ({
+          ...p,
+          profile_picture_url: p.profile_picture_url || uMap[p.user_id],
+        }));
+      }
+
+      setPatients(enrichedPatients);
     } catch (err) {
       console.error("Error fetching patients:", err);
     } finally {

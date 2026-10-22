@@ -47,7 +47,16 @@ class UserSyncRequest(BaseModel):
     date_of_birth: Optional[str] = None
     facility_type: Optional[str] = None
     google_maps_url: Optional[str] = None
+    profile_picture_url: Optional[str] = None
 
+    model_config = ConfigDict(use_enum_values=True)
+
+class ProfileImageResponseData(BaseModel):
+    profile_image_url: str
+    model_config = ConfigDict(use_enum_values=True)
+
+class AvatarUpdateRequest(BaseModel):
+    avatar_url: str
     model_config = ConfigDict(use_enum_values=True)
 
     @field_validator("hospital_id", mode="before")

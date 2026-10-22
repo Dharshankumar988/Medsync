@@ -122,8 +122,20 @@ export default function PatientDetailPage() {
           .from("patients")
           .select("*")
           .eq("user_id", patientId)
-          .single();
-        setPatient(pData);
+          .maybeSingle();
+
+        let resolvedProfilePic = pData?.profile_picture_url;
+        if (!resolvedProfilePic) {
+          const { data: uData } = await supabase
+            .from("users")
+            .select("profile_image_url")
+            .eq("id", patientId)
+            .maybeSingle();
+          if (uData?.profile_image_url) {
+            resolvedProfilePic = uData.profile_image_url;
+          }
+        }
+        setPatient(pData ? { ...pData, profile_picture_url: resolvedProfilePic } : null);
 
         // 2. Fetch Medical Records for this patient
         const { data: recData } = await supabase

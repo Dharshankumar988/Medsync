@@ -11,6 +11,10 @@ const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
   ({ className, src, alt, fallback, ...props }, ref) => {
     const [error, setError] = React.useState(false);
 
+    React.useEffect(() => {
+      setError(false);
+    }, [src]);
+
     return (
       <div
         ref={ref}
@@ -22,6 +26,7 @@ const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
             src={src}
             alt={alt || "Avatar"}
             className="aspect-square h-full w-full object-cover"
+            referrerPolicy="no-referrer"
             onError={() => setError(true)}
           />
         ) : (

@@ -362,6 +362,9 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                         pat.gender = payload.gender
                     if payload.date_of_birth:
                         pat.date_of_birth = payload.date_of_birth
+                    if payload.profile_picture_url:
+                        pat.profile_picture_url = payload.profile_picture_url
+                        existing_user_id.profile_image_url = payload.profile_picture_url
                 else:
                     pat = Patient(
                         user_id=existing_user_id.id,
@@ -369,6 +372,7 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                         blood_group=payload.blood_group,
                         gender=payload.gender,
                         date_of_birth=payload.date_of_birth,
+                        profile_picture_url=payload.profile_picture_url or existing_user_id.profile_image_url
                     )
                     db.add(pat)
                 await db.commit()
@@ -457,23 +461,24 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
 
 
         # Determine default avatar based on role and gender
-        default_avatar = None
-        gender = (payload.gender or "").upper()
-        
-        if payload.role == UserRole.PATIENT:
-            if gender == "FEMALE":
-                default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Jocelyn&backgroundColor=ffdfbf"
-            else:
-                default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4"
-        elif payload.role == UserRole.DOCTOR:
-            if gender == "FEMALE":
-                default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9"
-            else:
-                default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Jude&backgroundColor=c0aede"
-        elif payload.role == UserRole.PHARMACY:
-            default_avatar = "https://api.dicebear.com/7.x/shapes/svg?seed=" + str(payload.id) + "&backgroundColor=b6e3f4"
-        elif payload.role == UserRole.HOSPITAL:
-            default_avatar = "https://api.dicebear.com/7.x/shapes/svg?seed=" + str(payload.id) + "&backgroundColor=c0aede"
+        default_avatar = payload.profile_picture_url
+        if not default_avatar:
+            gender = (payload.gender or "").upper()
+            
+            if payload.role == UserRole.PATIENT:
+                if gender == "FEMALE":
+                    default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Jocelyn&backgroundColor=ffdfbf"
+                else:
+                    default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4"
+            elif payload.role == UserRole.DOCTOR:
+                if gender == "FEMALE":
+                    default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9"
+                else:
+                    default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Jude&backgroundColor=c0aede"
+            elif payload.role == UserRole.PHARMACY:
+                default_avatar = "https://api.dicebear.com/7.x/shapes/svg?seed=" + str(payload.id) + "&backgroundColor=b6e3f4"
+            elif payload.role == UserRole.HOSPITAL:
+                default_avatar = "https://api.dicebear.com/7.x/shapes/svg?seed=" + str(payload.id) + "&backgroundColor=c0aede"
 
         # Create base user
         new_user = User(

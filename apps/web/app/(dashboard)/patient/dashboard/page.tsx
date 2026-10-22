@@ -26,6 +26,7 @@ import { dashboardService } from "@/services/dashboard.service";
 
 export default function PatientDashboard() {
   const [userId, setUserId] = useState<string>("");
+  const [patientName, setPatientName] = useState<string>("");
   const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
 
@@ -34,6 +35,32 @@ export default function PatientDashboard() {
       const user = data.user;
       if (!user) return;
       setUserId(user.id);
+
+      // Prefer name from Google account / metadata first, fallback to patients table or email
+      const googleName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        user.user_metadata?.given_name;
+
+      if (googleName) {
+        setPatientName(googleName);
+      } else {
+        try {
+          const { data: patientRow } = await supabase
+            .from("patients")
+            .select("full_name")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (patientRow?.full_name) {
+            setPatientName(patientRow.full_name);
+          } else if (user.email) {
+            setPatientName(user.email.split("@")[0]);
+          }
+        } catch (e) {
+          if (user.email) setPatientName(user.email.split("@")[0]);
+        }
+      }
 
       // 1. Password setup: ONLY for patients who signed up with Google OAuth and haven't created a password
       const isGoogleUser =
@@ -160,9 +187,8 @@ export default function PatientDashboard() {
       {/* ─── Header ─── */}
       <motion.div initial="hidden" animate="visible" variants={stagger} className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <motion.div variants={fadeUp}>
-          <p className="text-sm font-medium tracking-widest uppercase text-blue-500 mb-2">Patient Dashboard</p>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.15]">
-            Welcome back
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground leading-[1.15] flex items-center flex-wrap gap-2">
+            Hi ! welcome back {patientName || "there"} 👋
           </h1>
           <p className="text-muted-foreground mt-2 max-w-md leading-relaxed">
             Here is your health summary for today.

@@ -68,6 +68,8 @@ function CallbackHandler() {
           user.user_metadata?.name ||
           (user.email ? user.email.split("@")[0] : "Google User");
 
+        const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+
         // Sync with backend database
         try {
           await api.post("/api/v1/auth/sync", {
@@ -77,9 +79,19 @@ function CallbackHandler() {
             full_name: fullName,
             is_verified: true,
             auth_provider: "google",
+            profile_picture_url: avatarUrl || undefined,
           });
         } catch (syncErr) {
           console.warn("Backend OAuth sync warning:", syncErr);
+        }
+
+        if (avatarUrl) {
+          try {
+            await supabase.from("patients").update({ profile_picture_url: avatarUrl }).eq("user_id", user.id).is("profile_picture_url", null);
+            await supabase.from("users").update({ profile_image_url: avatarUrl }).eq("id", user.id).is("profile_image_url", null);
+          } catch (e) {
+            console.warn("Direct Supabase avatar update notice:", e);
+          }
         }
 
         // Set role in Supabase user metadata if missing
