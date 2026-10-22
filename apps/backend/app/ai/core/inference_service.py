@@ -77,8 +77,10 @@ class InferenceService:
         self._max_retries = ai_config.HF_MAX_RETRIES
         self._cold_start_wait = ai_config.HF_COLD_START_WAIT
         self._headers = {}
-        if settings.MEDSYNC_AI_TOKEN:
-            self._headers["Authorization"] = f"Bearer {settings.MEDSYNC_AI_TOKEN}"
+        token = settings.MEDSYNC_AI_TOKEN or getattr(settings, "AI_SERVICE_TOKEN", "") or os.getenv("MEDSYNC_AI_TOKEN") or os.getenv("AI_SERVICE_TOKEN") or ""
+        if token:
+            clean_token = token.strip('"').strip("'")
+            self._headers["Authorization"] = f"Bearer {clean_token}"
 
         # Persistent async client — connection pooling
         self._client = httpx.AsyncClient(

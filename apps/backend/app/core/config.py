@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     OTP_RATE_LIMIT_PER_10_MIN: int = 5  # Max OTP requests per email in 10 minutes
 
     @model_validator(mode="after")
-    def set_supabase_keys(self):
+    def post_init_keys(self):
         import os
         if not self.SUPABASE_KEY:
             self.SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or ""
@@ -55,9 +55,19 @@ class Settings(BaseSettings):
             self.SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or self.SUPABASE_KEY or ""
         if not self.SUPABASE_ANON_KEY:
             self.SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or self.SUPABASE_KEY or ""
+        if not self.MEDSYNC_AI_TOKEN:
+            self.MEDSYNC_AI_TOKEN = os.getenv("MEDSYNC_AI_TOKEN") or os.getenv("AI_SERVICE_TOKEN") or ""
         return self
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=[
+            ".env",
+            "apps/backend/.env",
+            "../.env",
+            "../../.env"
+        ],
+        extra="ignore"
+    )
 
 settings = Settings()
 
