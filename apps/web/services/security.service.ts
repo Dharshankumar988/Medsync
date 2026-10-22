@@ -9,9 +9,12 @@ export class SecurityService {
     return response.data;
   }
 
-  static async enrollPin(token: string, pin: string) {
+  static async enrollPin(token: string, pin: string, password?: string) {
     const formData = new FormData();
     formData.append('pin', pin);
+    if (password) {
+      formData.append('password', password);
+    }
     const response = await axios.post(`${getApiUrl()}/security/enroll-pin`, formData, {
       headers: { 
         Authorization: `Bearer ${token}`

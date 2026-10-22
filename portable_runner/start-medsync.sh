@@ -11,7 +11,7 @@ cd "$SCRIPT_DIR"
 CONTAINERS_FILE="$SCRIPT_DIR/.runner_containers.txt"
 touch "$CONTAINERS_FILE"
 
-VERSION="1.0.3"
+VERSION="1.0.7"
 if [ -f "$SCRIPT_DIR/VERSION" ]; then
     VERSION="$(cat "$SCRIPT_DIR/VERSION" | tr -d '\r\n')"
 fi
@@ -138,10 +138,13 @@ echo -e "\033[36m--- Starting MedSync Full Backend on port $BACKEND_PORT ---\033
 
     echo "Waiting for backend health check (http://127.0.0.1:${BACKEND_PORT}/health)..."
     healthy=false
-    for i in {1..30}; do
+    for i in {1..120}; do
         if curl -s -f "http://127.0.0.1:${BACKEND_PORT}/health" >/dev/null 2>&1; then
             healthy=true
             break
+        fi
+        if [ $((i % 15)) -eq 0 ]; then
+            echo -e "\033[33mStill waiting for backend initialization / model loading (${i}/120)...\033[0m"
         fi
         sleep 2
     done
@@ -149,7 +152,7 @@ echo -e "\033[36m--- Starting MedSync Full Backend on port $BACKEND_PORT ---\033
     if [ "$healthy" = true ]; then
         echo -e "\033[32mBackend is healthy on http://127.0.0.1:${BACKEND_PORT}\033[0m"
     else
-        echo -e "\033[31mWARNING: Backend healthcheck did not pass within 60s. Inspect logs with: docker logs $BACKEND_CONTAINER\033[0m"
+        echo -e "\033[31mWARNING: Backend healthcheck did not pass within 240s. Inspect logs with: docker logs $BACKEND_CONTAINER\033[0m"
     fi
 
     if [ "$FOLLOW_LOGS" = true ]; then

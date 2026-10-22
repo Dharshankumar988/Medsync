@@ -292,8 +292,9 @@ def test_prescription_and_doctor_note_contracts():
     from datetime import datetime
     from sqlalchemy import DateTime
 
-    # Check Prescription.expires_at type
+    # Check Prescription datetime column types
     assert isinstance(Prescription.expires_at.type, DateTime)
+    assert isinstance(Prescription.registered_at.type, DateTime)
 
     # Check DoctorNote attributes and aliases
     note_id = uuid.uuid4()

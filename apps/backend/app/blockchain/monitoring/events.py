@@ -24,12 +24,19 @@ class EventListenerFramework:
                     try:
                         # Attempt to decode the log with this specific event
                         decoded = event_type().process_log(log)
+                        tx_h = log.get('transactionHash')
+                        tx_str = tx_h.hex() if hasattr(tx_h, 'hex') else str(tx_h)
+                        blk = log.get('blockNumber', 0)
+                        blk_num = int(blk, 16) if isinstance(blk, str) else int(blk)
+                        idx = log.get('logIndex', 0)
+                        idx_num = int(idx, 16) if isinstance(idx, str) else int(idx)
+
                         decoded_events.append({
                             "event": event_name,
                             "args": dict(decoded.args),
-                            "blockNumber": log['blockNumber'],
-                            "transactionHash": log['transactionHash'].hex(),
-                            "logIndex": log.get('logIndex', 0)
+                            "blockNumber": blk_num,
+                            "transactionHash": tx_str,
+                            "logIndex": idx_num
                         })
                     except Exception:
                         # This log doesn't match this event type, skip
@@ -47,17 +54,23 @@ class EventListenerFramework:
             event_type = getattr(contract.events, event_name)
             
             events = event_type().get_logs(fromBlock=from_block, toBlock=to_block)
-            return [
-                {
+            results = []
+            for e in events:
+                tx_h = e.transactionHash
+                tx_str = tx_h.hex() if hasattr(tx_h, 'hex') else str(tx_h)
+                results.append({
                     "event": event_name,
                     "args": dict(e.args),
-                    "blockNumber": e.blockNumber,
-                    "transactionHash": e.transactionHash.hex(),
-                    "logIndex": e.logIndex
-                }
-                for e in events
-            ]
+                    "blockNumber": int(e.blockNumber),
+                    "transactionHash": tx_str,
+                    "logIndex": getattr(e, 'logIndex', 0)
+                })
+            return results
         except Exception as e:
+            err_msg = str(e)
+            if "429" in err_msg or "too many requests" in err_msg.lower() or "compute units" in err_msg.lower():
+                logger.warning(f"Rate limited (429) fetching past events {event_name} for {contract_name}: {err_msg[:120]}")
+                raise
             logger.error(f"Failed to fetch past events {event_name} for {contract_name}: {e}")
             return []
 

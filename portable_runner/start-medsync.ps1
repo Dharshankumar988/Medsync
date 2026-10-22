@@ -21,7 +21,7 @@ if (-not (Test-Path $ContainersFile)) { New-Item $ContainersFile -ItemType File 
 if (-not (Test-Path $PidsFile)) { New-Item $PidsFile -ItemType File -Force | Out-Null }
 
 # Get version
-$VERSION = "1.0.4"
+$VERSION = "1.0.7"
 if (Test-Path "VERSION") {
     $VERSION = (Get-Content "VERSION" -Raw).Trim()
 }
@@ -160,7 +160,7 @@ function Start-Backend {
 
     Write-Host "Waiting for backend to become healthy (HTTP 200)..."
     $healthy = $false
-    for ($i = 0; $i -lt 60; $i++) {
+    for ($i = 0; $i -lt 150; $i++) {
         Start-Sleep -Seconds 2
         try {
             $response = Invoke-WebRequest -Uri "http://127.0.0.1:${BACKEND_PORT}/health" -UseBasicParsing -ErrorAction SilentlyContinue
@@ -169,6 +169,9 @@ function Start-Backend {
                 break
             }
         } catch {}
+        if (($i + 1) % 15 -eq 0) {
+            Write-Host "Still waiting for backend initialization / model loading ($($i+1)/150)..." -ForegroundColor Yellow
+        }
     }
     
     if (-not $healthy) {

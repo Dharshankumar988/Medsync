@@ -63,7 +63,7 @@ def upgrade() -> None:
     op.execute("ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS block_number INTEGER")
     op.execute("ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS hash VARCHAR(64)")
     op.execute("ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1")
-    op.execute("ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS registered_at VARCHAR")
+    op.execute("ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS registered_at TIMESTAMP WITHOUT TIME ZONE")
 
 
 def downgrade() -> None:

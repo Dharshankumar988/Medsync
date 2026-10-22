@@ -89,7 +89,7 @@ export default function SecurityEnrollmentModal() {
     }
   };
 
-  const isFormValid = pin.length === 6 && confirmPin.length === 6 && pin === confirmPin;
+  const isFormValid = pin.length === 6 && confirmPin.length === 6 && pin === confirmPin && password.length > 0;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -117,6 +117,28 @@ export default function SecurityEnrollmentModal() {
             </p>
 
             <div className="space-y-4">
+              {/* Account Password */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account Password</label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-11 rounded-xl pr-10"
+                    placeholder="Enter account password to verify identity"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
               {/* New PIN */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">New 6-Digit PIN</label>
@@ -128,7 +150,6 @@ export default function SecurityEnrollmentModal() {
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                   className="text-center tracking-widest text-2xl font-mono h-12 rounded-xl"
                   placeholder="••••••"
-                  autoFocus
                 />
               </div>
 

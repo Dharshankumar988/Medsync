@@ -27,7 +27,7 @@ class Prescription(Base, UUIDMixin, TimestampMixin):
     hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     original_file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
-    registered_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    registered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     
     # IPFS Metadata
     ipfs_cid: Mapped[str | None] = mapped_column(String(255), nullable=True)

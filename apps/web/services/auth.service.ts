@@ -1,4 +1,5 @@
 import { supabase, getUserProfile, normalizeRole } from '@/lib/supabase';
+import { getRandomAvatarByGender } from '@/lib/avatars';
 
 export const authService = {
   login: async (credentials: { email: string; password: string }) => {
@@ -106,6 +107,7 @@ export const authService = {
     let userId = "";
     let authSession = null;
     let needsVerification = false;
+    const defaultPatientAvatar = normalizedRole === "patient" ? getRandomAvatarByGender(data.gender) : undefined;
 
     if (normalizedRole === "doctor" || normalizedRole === "pharmacy" || normalizedRole === "hospital") {
       // Direct authenticated provider account creation in Supabase auth.users
@@ -143,6 +145,8 @@ export const authService = {
             blood_group: data.blood_group,
             gender: data.gender,
             date_of_birth: data.date_of_birth,
+            avatar_url: defaultPatientAvatar,
+            picture: defaultPatientAvatar,
             facility_type: data.facility_type,
             google_maps_url: data.google_maps_url,
           },
@@ -189,9 +193,19 @@ export const authService = {
         blood_group: data.blood_group,
         gender: data.gender,
         date_of_birth: data.date_of_birth,
+        profile_picture_url: defaultPatientAvatar,
         facility_type: data.facility_type,
         google_maps_url: data.google_maps_url,
       });
+
+      if (defaultPatientAvatar) {
+        try {
+          await supabase.from("patients").update({ profile_picture_url: defaultPatientAvatar }).eq("user_id", userId);
+          await supabase.from("users").update({ profile_image_url: defaultPatientAvatar }).eq("id", userId);
+        } catch (e) {
+          console.warn("Direct patient avatar setup note:", e);
+        }
+      }
 
       // Dispatch 6-digit OTP verification code via Brevo for Patient accounts
       if (normalizedRole === 'patient') {

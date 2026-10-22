@@ -1,3 +1,4 @@
+import random
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
@@ -12,6 +13,18 @@ from app.models.pharmacy import Pharmacy
 from app.models.hospital import Hospital
 from app.models.doctor_location import DoctorLocation
 from app.models.verification import VerificationRequest, VerificationStatus, RoleType
+
+MALE_PATIENT_AVATARS = [
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver&backgroundColor=ccfbf1",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Liam&backgroundColor=e0f2fe",
+]
+
+FEMALE_PATIENT_AVATARS = [
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Jocelyn&backgroundColor=ffdfbf",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9",
+    "https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia&backgroundColor=fef3c7",
+]
 
 router = APIRouter()
 
@@ -365,14 +378,21 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                     if payload.profile_picture_url:
                         pat.profile_picture_url = payload.profile_picture_url
                         existing_user_id.profile_image_url = payload.profile_picture_url
+                    elif not pat.profile_picture_url and not existing_user_id.profile_image_url:
+                        gender = (payload.gender or pat.gender or "").strip().upper()
+                        allotted = random.choice(FEMALE_PATIENT_AVATARS) if gender == "FEMALE" else random.choice(MALE_PATIENT_AVATARS)
+                        pat.profile_picture_url = allotted
+                        existing_user_id.profile_image_url = allotted
                 else:
+                    gender = (payload.gender or "").strip().upper()
+                    allotted = random.choice(FEMALE_PATIENT_AVATARS) if gender == "FEMALE" else random.choice(MALE_PATIENT_AVATARS)
                     pat = Patient(
                         user_id=existing_user_id.id,
                         full_name=payload.full_name,
                         blood_group=payload.blood_group,
                         gender=payload.gender,
                         date_of_birth=payload.date_of_birth,
-                        profile_picture_url=payload.profile_picture_url or existing_user_id.profile_image_url
+                        profile_picture_url=payload.profile_picture_url or existing_user_id.profile_image_url or allotted
                     )
                     db.add(pat)
                 await db.commit()
@@ -463,13 +483,13 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         # Determine default avatar based on role and gender
         default_avatar = payload.profile_picture_url
         if not default_avatar:
-            gender = (payload.gender or "").upper()
+            gender = (payload.gender or "").strip().upper()
             
             if payload.role == UserRole.PATIENT:
                 if gender == "FEMALE":
-                    default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Jocelyn&backgroundColor=ffdfbf"
+                    default_avatar = random.choice(FEMALE_PATIENT_AVATARS)
                 else:
-                    default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4"
+                    default_avatar = random.choice(MALE_PATIENT_AVATARS)
             elif payload.role == UserRole.DOCTOR:
                 if gender == "FEMALE":
                     default_avatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9"

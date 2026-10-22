@@ -98,6 +98,20 @@ async def lifespan(app: FastAPI):
                 text("UPDATE pharmacies SET security_pin_hash = :hash WHERE security_pin_hash IS NULL;"),
                 {"hash": default_pin_hash}
             )
+            await session.execute(text("ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS registered_at TIMESTAMP WITHOUT TIME ZONE;"))
+            await session.execute(text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'prescriptions' 
+                        AND column_name = 'registered_at' 
+                        AND data_type = 'character varying'
+                    ) THEN
+                        ALTER TABLE prescriptions ALTER COLUMN registered_at TYPE TIMESTAMP WITHOUT TIME ZONE USING registered_at::timestamp without time zone;
+                    END IF;
+                END $$;
+            """))
             await session.commit()
             logger.info("Database schema verified: security_pin_hash ensured and default demo pins set.")
     except Exception as e:

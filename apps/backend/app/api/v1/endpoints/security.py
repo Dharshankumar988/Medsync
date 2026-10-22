@@ -66,6 +66,66 @@ async def get_status(
 
 from typing import List, Optional
 
+async def _verify_account_password(db: AsyncSession, current_user: AuthenticatedPrincipal, password: str) -> bool:
+    """Verifies user's account password via Supabase Auth REST or local DB auth tables."""
+    if not password:
+        return False
+    from app.core.config import settings
+    import httpx
+    from sqlalchemy import text
+
+    # 1. Supabase Auth REST verification
+    if settings.SUPABASE_URL and settings.SUPABASE_KEY:
+        try:
+            supabase_url = settings.SUPABASE_URL.rstrip('/')
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                res = await client.post(
+                    f"{supabase_url}/auth/v1/token?grant_type=password",
+                    headers={"apikey": settings.SUPABASE_KEY, "Content-Type": "application/json"},
+                    json={"email": current_user.email, "password": password}
+                )
+                if res.status_code == 200:
+                    return True
+        except Exception:
+            pass
+
+    # 2. Direct DB verification via extensions.crypt / crypt in auth.users
+    try:
+        res = await db.execute(
+            text("SELECT (encrypted_password = extensions.crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
+            {"pwd": password, "user_id": current_user.id}
+        )
+        match = res.scalar()
+        if match:
+            return True
+    except Exception:
+        try:
+            res = await db.execute(
+                text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
+                {"pwd": password, "user_id": current_user.id}
+            )
+            match = res.scalar()
+            if match:
+                return True
+        except Exception:
+            pass
+
+    # 3. Direct DB verification via bcrypt on encrypted_password
+    try:
+        import bcrypt
+        res_hash = await db.execute(
+            text("SELECT encrypted_password FROM auth.users WHERE id = :user_id"),
+            {"user_id": current_user.id}
+        )
+        enc_pwd = res_hash.scalar()
+        if enc_pwd and isinstance(enc_pwd, str) and bcrypt.checkpw(password.encode('utf-8'), enc_pwd.encode('utf-8')):
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 @router.post("/enroll-pin", response_model=SecurityActionResponse)
 async def enroll_pin(
     pin: str = Form(...),
@@ -79,42 +139,15 @@ async def enroll_pin(
     - For doctors: stored in Doctor.security_pin_hash
     - If password is provided, verifies identity against account credentials.
     """
-    if password:
-        # Verify password via Supabase Auth or DB hash
-        from app.core.config import settings
-        import httpx
-        from sqlalchemy import text
-        password_verified = False
+    if len(pin) != 6 or not pin.isdigit():
+        raise HTTPException(status_code=400, detail="PIN must be exactly 6 digits.")
 
-        if settings.SUPABASE_URL and settings.SUPABASE_KEY:
-            try:
-                supabase_url = settings.SUPABASE_URL.rstrip('/')
-                async with httpx.AsyncClient(timeout=4.0) as client:
-                    res = await client.post(
-                        f"{supabase_url}/auth/v1/token?grant_type=password",
-                        headers={"apikey": settings.SUPABASE_KEY, "Content-Type": "application/json"},
-                        json={"email": current_user.email, "password": password}
-                    )
-                    if res.status_code == 200:
-                        password_verified = True
-            except Exception:
-                pass
-
-        if not password_verified:
-            try:
-                res = await db.execute(
-                    text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
-                    {"pwd": password, "user_id": current_user.id}
-                )
-                match = res.scalar()
-                if match:
-                    password_verified = True
-            except Exception:
-                pass
-
-        # If password verification was attempted and failed explicitly against both Supabase and DB
-        # only reject if password was provided and user not already validly authenticated
-        # Note: current_user is already verified via JWT token bearer.
+    if password is not None:
+        if not password:
+            raise HTTPException(status_code=400, detail="Account password cannot be empty.")
+        is_pwd_valid = await _verify_account_password(db, current_user, password)
+        if not is_pwd_valid:
+            raise HTTPException(status_code=400, detail="Current account password is incorrect.")
 
     try:
         if current_user.role.upper() == UserRole.DOCTOR.value:
@@ -145,58 +178,7 @@ async def reset_pin_with_password(
     if len(new_pin) != 6 or not new_pin.isdigit():
         raise HTTPException(status_code=400, detail="PIN must be exactly 6 digits.")
 
-    # Verify current password via Supabase Auth REST or directly via auth.users hash
-    from app.core.config import settings
-    import httpx
-    from sqlalchemy import text
-    password_ok = False
-    try:
-        supabase_url = settings.SUPABASE_URL.rstrip('/')
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.post(
-                f"{supabase_url}/auth/v1/token?grant_type=password",
-                headers={"apikey": settings.SUPABASE_KEY, "Content-Type": "application/json"},
-                json={"email": current_user.email, "password": current_password}
-            )
-            if res.status_code == 200:
-                password_ok = True
-    except Exception:
-        password_ok = False
-
-    if not password_ok:
-        try:
-            res = await db.execute(
-                text("SELECT (encrypted_password = extensions.crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
-                {"pwd": current_password, "user_id": current_user.id}
-            )
-            matches = res.scalar()
-            if matches:
-                password_ok = True
-        except Exception:
-            try:
-                res = await db.execute(
-                    text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
-                    {"pwd": current_password, "user_id": current_user.id}
-                )
-                matches = res.scalar()
-                if matches:
-                    password_ok = True
-            except Exception:
-                password_ok = False
-
-    if not password_ok:
-        try:
-            import bcrypt
-            res_hash = await db.execute(
-                text("SELECT encrypted_password FROM auth.users WHERE id = :user_id"),
-                {"user_id": current_user.id}
-            )
-            enc_pwd = res_hash.scalar()
-            if enc_pwd and isinstance(enc_pwd, str) and bcrypt.checkpw(current_password.encode('utf-8'), enc_pwd.encode('utf-8')):
-                password_ok = True
-        except Exception:
-            password_ok = False
-
+    password_ok = await _verify_account_password(db, current_user, current_password)
     if not password_ok:
         raise HTTPException(status_code=400, detail="Current password is incorrect.")
 

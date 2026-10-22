@@ -21,7 +21,8 @@ import {
   Sparkles,
   Check,
   RefreshCw,
-  UserCheck
+  UserCheck,
+  Shuffle
 } from "lucide-react";
 import { SecurityService } from "@/services/security.service";
 import { supabase } from "@/lib/supabase";
@@ -29,36 +30,18 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useRouter } from "next/navigation";
-
-const PRESET_AVATARS = [
-  { id: "felix", name: "Felix", style: "Modern Guy", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4" },
-  { id: "jocelyn", name: "Jocelyn", style: "Casual Warm", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jocelyn&backgroundColor=ffdfbf" },
-  { id: "aneka", name: "Aneka", style: "Professional", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9" },
-  { id: "jude", name: "Jude", style: "Thoughtful", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jude&backgroundColor=c0aede" },
-  { id: "avery", name: "Avery", style: "Friendly Smile", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Avery&backgroundColor=d1fae5" },
-  { id: "maya", name: "Maya", style: "Creative", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Maya&backgroundColor=ffe4e6" },
-  { id: "liam", name: "Liam", style: "Minimalist", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Liam&backgroundColor=e0f2fe" },
-  { id: "sophia", name: "Sophia", style: "Energetic", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia&backgroundColor=fef3c7" },
-  { id: "oliver", name: "Oliver", style: "Casual Vibe", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver&backgroundColor=ccfbf1" },
-  { id: "elena", name: "Elena", style: "Gentle Spirit", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Elena&backgroundColor=ede9fe" },
-  { id: "lucas", name: "Lucas", style: "Sharp & Neat", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Lucas&backgroundColor=f1f5f9" },
-  { id: "zoe", name: "Zoe", style: "Vibrant", url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Zoe&backgroundColor=ffedd5" },
-  { id: "adv-sam", name: "Adventurer Sam", style: "Adventurer", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Sam&backgroundColor=b6e3f4" },
-  { id: "adv-mia", name: "Adventurer Mia", style: "Adventurer", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Mia&backgroundColor=ffdfbf" },
-  { id: "adv-leo", name: "Adventurer Leo", style: "Adventurer", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Leo&backgroundColor=d1d4f9" },
-  { id: "adv-nora", name: "Adventurer Nora", style: "Adventurer", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Nora&backgroundColor=ccfbf1" },
-];
+import { PRESET_AVATARS, MALE_AVATARS, FEMALE_AVATARS, getRandomAvatarByGender } from "@/lib/avatars";
 
 export default function SettingsPage() {
   const [userId, setUserId] = useState<string>("");
   const [userName, setUserName] = useState<string>("Patient");
+  const [patientGender, setPatientGender] = useState<string>("");
   const [avatarUrl, setAvatarUrl] = useState<string>("");
   const [googleAvatar, setGoogleAvatar] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [savingAvatar, setSavingAvatar] = useState<boolean>(false);
-  const [avatarTab, setAvatarTab] = useState<"presets" | "upload">("presets");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [prefs, setPrefs] = useState({
@@ -109,7 +92,7 @@ export default function SettingsPage() {
         // 2. Patient avatar & identity
         const { data: pData } = await supabase
           .from("patients")
-          .select("full_name, profile_picture_url")
+          .select("full_name, profile_picture_url, gender")
           .eq("user_id", userId)
           .maybeSingle();
 
@@ -125,9 +108,17 @@ export default function SettingsPage() {
 
         if (gPhoto) setGoogleAvatar(gPhoto);
         setUserName(pData?.full_name || gName || authUserData.user?.email?.split("@")[0] || "Patient");
+        if (pData?.gender) setPatientGender(pData.gender);
 
-        const activePic = pData?.profile_picture_url || uData?.profile_image_url || gPhoto || PRESET_AVATARS[0].url;
-        setAvatarUrl(activePic);
+        const activePic = pData?.profile_picture_url || uData?.profile_image_url || gPhoto;
+        if (activePic) {
+          setAvatarUrl(activePic);
+        } else {
+          // Proactively assign random avatar based on gender (3 male / 3 female)
+          const fallbackPic = getRandomAvatarByGender(pData?.gender);
+          setAvatarUrl(fallbackPic);
+          handleApplyAvatarUrl(fallbackPic);
+        }
       } catch (err) {
         console.error("Error loading settings", err);
       } finally {
@@ -140,6 +131,21 @@ export default function SettingsPage() {
 
   const handleSelectPreset = (url: string) => {
     setSelectedPreset(url);
+    setSelectedFile(null);
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
+      setFilePreview(null);
+    }
+  };
+
+  const handleRandomizeAvatar = () => {
+    const isFemale = patientGender ? patientGender.toLowerCase() === "female" : false;
+    const pool = isFemale ? FEMALE_AVATARS : MALE_AVATARS;
+    const remaining = pool.filter(a => a.url !== (selectedPreset || avatarUrl));
+    const chosen = remaining.length > 0 
+      ? remaining[Math.floor(Math.random() * remaining.length)].url 
+      : pool[Math.floor(Math.random() * pool.length)].url;
+    setSelectedPreset(chosen);
     setSelectedFile(null);
     if (filePreview) {
       URL.revokeObjectURL(filePreview);
@@ -402,85 +408,159 @@ export default function SettingsPage() {
         </Button>
       </div>
 
-      {/* ─── Profile Avatar & Photo ─── */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <Card className="border border-border/60 shadow-sm rounded-2xl overflow-hidden bg-card/80 backdrop-blur-sm">
-          <div className="h-2 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
-          <CardHeader className="pb-4">
+      {/* ─── Profile Avatar (Compact) ─── */}
+      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
+        <Card className="border border-border/60 shadow-sm rounded-xl overflow-hidden bg-card/90">
+          <div className="h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
+          <div className="p-4 sm:p-5 space-y-3">
+            {/* Header & Active Avatar Row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-xl font-bold">
-                  <Camera className="w-5 h-5 text-blue-500" /> Profile Avatar & Photo
-                </CardTitle>
-                <CardDescription className="mt-1">
-                  Choose a personalized avatar or upload your own photo. This avatar appears across your medical records, doctor consultations, and clinical profile.
-                </CardDescription>
-              </div>
-              <Badge variant="outline" className="self-start sm:self-auto bg-blue-500/10 text-blue-600 border-blue-500/20 px-3 py-1 text-xs font-semibold">
-                <Sparkles className="w-3.5 h-3.5 mr-1 text-blue-500" /> Customization
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Current Active Preview Banner */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-5 rounded-2xl bg-muted/40 border border-border/40">
-              <div className="flex items-center gap-4">
-                <div className="relative group">
+              <div className="flex items-center gap-3">
+                <div className="relative group shrink-0">
                   <Avatar
                     fallback={userName}
                     src={filePreview || selectedPreset || avatarUrl}
-                    className="w-20 h-20 sm:w-24 sm:h-24 border-4 border-background shadow-lg ring-2 ring-primary/20 transition-transform group-hover:scale-105"
+                    className="w-12 h-12 sm:w-14 sm:h-14 border-2 border-background shadow-xs ring-1 ring-border transition-transform group-hover:scale-105"
                   />
                   <button
                     type="button"
-                    onClick={() => {
-                      setAvatarTab("upload");
-                      fileInputRef.current?.click();
-                    }}
-                    className="absolute -bottom-1 -right-1 p-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-md transition-transform hover:scale-110"
-                    title="Upload photo"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute -bottom-1 -right-1 p-1 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow transition-transform hover:scale-110"
+                    title="Upload custom photo"
                   >
-                    <Camera className="w-3.5 h-3.5" />
+                    <Camera className="w-3 h-3" />
                   </button>
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                    {userName}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-sm text-foreground">{userName}</h3>
+                    {patientGender && (
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 capitalize font-normal border-border/70">
+                        {patientGender.toLowerCase()}
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {filePreview
-                      ? "Custom photo selected (preview)"
+                      ? "Custom photo chosen (preview)"
                       : selectedPreset
-                      ? "Preset avatar selected (preview)"
-                      : "Current active patient avatar"}
+                      ? "Preset chosen (preview)"
+                      : "Active patient avatar"}
                   </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge variant="secondary" className="text-[11px] font-normal">
-                      Patient ID: {userId ? `${userId.slice(0, 8)}...` : "--"}
-                    </Badge>
-                  </div>
                 </div>
               </div>
 
-              {/* Quick Actions (e.g. Google photo sync) */}
-              <div className="flex flex-wrap sm:flex-col items-start sm:items-end gap-2 shrink-0">
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  disabled={savingAvatar}
+                  onClick={handleRandomizeAvatar}
+                  className="h-7 text-xs px-2.5 rounded-lg border-border/70 hover:bg-muted gap-1.5"
+                  title="Randomly allot avatar by gender"
+                >
+                  <Shuffle className="w-3 h-3 text-muted-foreground" />
+                  <span>Randomize</span>
+                </Button>
+
                 {googleAvatar && (
                   <Button
                     variant="outline"
                     size="sm"
+                    type="button"
                     disabled={savingAvatar}
                     onClick={() => handleApplyAvatarUrl(googleAvatar)}
-                    className="text-xs rounded-xl border-border/70 hover:bg-muted gap-2"
+                    className="h-7 text-xs px-2.5 rounded-lg border-border/70 hover:bg-muted gap-1.5"
                   >
                     <img
                       src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
                       alt="Google"
-                      className="w-3.5 h-3.5"
+                      className="w-3 h-3"
                     />
-                    Use Google Photo
+                    <span>Google Photo</span>
                   </Button>
                 )}
-                {(selectedPreset || filePreview) && (
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-7 text-xs px-2.5 rounded-lg border-border/70 hover:bg-muted gap-1.5"
+                >
+                  <Upload className="w-3 h-3 text-muted-foreground" />
+                  <span>Upload Photo</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* 6 Curated Avatars (3 Male, 3 Female) */}
+            <div className="pt-2 border-t border-border/40">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  6 Curated Avatars (3 Male • 3 Female)
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  Click to select
+                </span>
+              </div>
+
+              <div className="grid grid-cols-6 gap-2">
+                {PRESET_AVATARS.map((preset) => {
+                  const isSelected = (selectedPreset || (!filePreview && avatarUrl)) === preset.url;
+                  return (
+                    <button
+                      type="button"
+                      key={preset.id}
+                      onClick={() => handleSelectPreset(preset.url)}
+                      className={`group relative flex flex-col items-center p-1.5 rounded-lg border transition-all text-center ${
+                        isSelected
+                          ? "border-blue-500 bg-blue-500/10 shadow-xs ring-1 ring-blue-500/40"
+                          : "border-border/50 hover:border-border hover:bg-muted/40"
+                      }`}
+                    >
+                      <div className="relative">
+                        <Avatar
+                          fallback={preset.name}
+                          src={preset.url}
+                          className="w-10 h-10 sm:w-11 sm:h-11 transition-transform group-hover:scale-105"
+                        />
+                        {isSelected && (
+                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-xs">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-medium text-foreground mt-1 truncate max-w-full">
+                        {preset.name}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground capitalize">
+                        {preset.gender}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Hidden File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {/* Pending Selection / Upload Bar */}
+            {(selectedPreset || (selectedFile && filePreview)) && (
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20 text-xs animate-in fade-in">
+                <span className="text-muted-foreground truncate max-w-[200px] sm:max-w-xs font-medium">
+                  {selectedFile ? `File: ${selectedFile.name}` : "New avatar selected"}
+                </span>
+                <div className="flex items-center gap-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -493,182 +573,36 @@ export default function SettingsPage() {
                         setFilePreview(null);
                       }
                     }}
-                    className="text-xs text-muted-foreground hover:text-foreground"
+                    className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
                   >
-                    Reset to Saved
+                    Cancel
                   </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Mode Switcher Tabs */}
-            <div className="flex items-center p-1 bg-muted/60 rounded-xl max-w-sm">
-              <button
-                type="button"
-                onClick={() => setAvatarTab("presets")}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                  avatarTab === "presets"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" /> Curated Presets
-              </button>
-              <button
-                type="button"
-                onClick={() => setAvatarTab("upload")}
-                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                  avatarTab === "upload"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Upload className="w-3.5 h-3.5" /> Upload Custom Photo
-              </button>
-            </div>
-
-            {/* Presets Gallery View */}
-            {avatarTab === "presets" && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-3">
-                  {PRESET_AVATARS.map((preset) => {
-                    const isSelected = (selectedPreset || (!filePreview && avatarUrl)) === preset.url;
-                    return (
-                      <div
-                        key={preset.id}
-                        onClick={() => handleSelectPreset(preset.url)}
-                        className={`group relative flex flex-col items-center p-3 rounded-xl border transition-all cursor-pointer ${
-                          isSelected
-                            ? "border-blue-500 bg-blue-500/10 shadow-sm ring-2 ring-blue-500/30"
-                            : "border-border/60 hover:border-border hover:bg-muted/40"
-                        }`}
-                      >
-                        <div className="relative">
-                          <Avatar
-                            fallback={preset.name}
-                            src={preset.url}
-                            className="w-16 h-16 sm:w-18 sm:h-18 transition-transform group-hover:scale-105"
-                          />
-                          {isSelected && (
-                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-sm">
-                              <Check className="w-3 h-3 stroke-[3]" />
-                            </div>
-                          )}
-                        </div>
-                        <span className="text-xs font-semibold text-foreground mt-2 truncate max-w-full">
-                          {preset.name}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground truncate max-w-full">
-                          {preset.style}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  <Button
+                    size="sm"
+                    disabled={savingAvatar}
+                    onClick={() => {
+                      if (selectedFile) {
+                        handleUploadCustomPhoto();
+                      } else if (selectedPreset) {
+                        handleApplyAvatarUrl(selectedPreset);
+                      }
+                    }}
+                    className="h-7 text-xs px-3 bg-blue-600 hover:bg-blue-500 text-white"
+                  >
+                    {savingAvatar ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin mr-1" /> Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3 h-3 mr-1" /> Apply
+                      </>
+                    )}
+                  </Button>
                 </div>
-
-                {selectedPreset && (
-                  <div className="flex justify-end pt-2">
-                    <Button
-                      onClick={() => handleApplyAvatarUrl(selectedPreset)}
-                      disabled={savingAvatar}
-                      className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-sm px-6"
-                    >
-                      {savingAvatar ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving Avatar...
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-4 h-4 mr-2" /> Apply Selected Avatar
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
               </div>
             )}
-
-            {/* Upload Custom Photo View */}
-            {avatarTab === "upload" && (
-              <div className="space-y-4">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-border/80 hover:border-blue-500/60 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-muted/20 hover:bg-muted/30 group"
-                >
-                  <div className="w-14 h-14 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                    <Upload className="w-6 h-6" />
-                  </div>
-                  <p className="text-sm font-semibold text-foreground">
-                    Click to browse or drop an image here
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                    Supports high-resolution PNG, JPG, or WEBP photos up to 5MB.
-                  </p>
-                </div>
-
-                {selectedFile && filePreview && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
-                    <div className="flex items-center gap-3">
-                      <Avatar
-                        fallback="Preview"
-                        src={filePreview}
-                        className="w-14 h-14 border-2 border-blue-500/40"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-foreground truncate max-w-[200px] sm:max-w-xs">
-                          {selectedFile.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {(selectedFile.size / 1024).toFixed(1)} KB • Ready to save
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={savingAvatar}
-                        onClick={() => {
-                          setSelectedFile(null);
-                          if (filePreview) {
-                            URL.revokeObjectURL(filePreview);
-                            setFilePreview(null);
-                          }
-                        }}
-                        className="rounded-xl flex-1 sm:flex-none text-muted-foreground hover:text-foreground"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={savingAvatar}
-                        onClick={handleUploadCustomPhoto}
-                        className="rounded-xl flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 text-white shadow-sm"
-                      >
-                        {savingAvatar ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Uploading...
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-3.5 h-3.5 mr-1.5" /> Save & Apply Photo
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
+          </div>
         </Card>
       </motion.div>
 

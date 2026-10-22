@@ -361,6 +361,7 @@ export default function CreatePrescriptionPage() {
     setPinMode(hasPin ? "verify" : "create");
     setPin("");
     setConfirmPin("");
+    setCurrentPassword("");
     setIsPinModalOpen(true);
   };
 
@@ -371,6 +372,10 @@ export default function CreatePrescriptionPage() {
     }
 
     if (pinMode === "create") {
+      if (!currentPassword) {
+        toast.error("Please enter your account password to verify identity");
+        return;
+      }
       if (confirmPin.length !== 6) {
         toast.error("Please confirm your 6-digit PIN");
         return;
@@ -383,7 +388,7 @@ export default function CreatePrescriptionPage() {
 
     setSaving(true);
     try {
-      // If creating PIN for first time, enroll it directly
+      // If creating PIN for first time, enroll it directly with account password verification
       if (pinMode === "create") {
         const { data: session } = await supabase.auth.getSession();
         const token = session?.session?.access_token;
@@ -391,6 +396,7 @@ export default function CreatePrescriptionPage() {
 
         const formData = new FormData();
         formData.append('pin', pin);
+        formData.append('password', currentPassword);
 
         await axios.post(`${apiUrl}/security/enroll-pin`, formData, {
           headers: { Authorization: `Bearer ${token}` }
@@ -682,6 +688,25 @@ export default function CreatePrescriptionPage() {
             </p>
 
             <div className="space-y-4">
+              {pinMode === "create" && (
+                <div className="space-y-1 text-left">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Current Account Password
+                  </label>
+                  <Input
+                    type="password"
+                    placeholder="Enter account password"
+                    className="h-11 rounded-xl text-sm"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Required to verify your account identity before creating your Authorization PIN.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-1 text-left">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {pinMode === "create" ? "Enter 6-Digit PIN" : "Enter Doctor PIN"}
@@ -693,7 +718,7 @@ export default function CreatePrescriptionPage() {
                   maxLength={6}
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                  autoFocus
+                  autoFocus={pinMode !== "create"}
                 />
               </div>
 
@@ -725,7 +750,7 @@ export default function CreatePrescriptionPage() {
                 disabled={
                   saving ||
                   pin.length !== 6 ||
-                  (pinMode === "create" && (confirmPin.length !== 6 || pin !== confirmPin))
+                  (pinMode === "create" && (!currentPassword || confirmPin.length !== 6 || pin !== confirmPin))
                 }
                 onClick={handleConfirmSave}
               >
