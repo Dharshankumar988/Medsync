@@ -217,27 +217,47 @@ class StorageService:
         StorageService._ensure_configured()
         
         safe_filename = StorageService._safe_name(filename)
-        object_path = f"profiles/{user_id}/{uuid.uuid4().hex}-{safe_filename}"
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
+        # Attempt upload to dedicated 'avatars' public bucket first, fallback to configured bucket
+        await StorageService._ensure_bucket("avatars")
+        
+        target_bucket = "avatars"
+        object_path = f"{user_id}/{uuid.uuid4().hex}-{safe_filename}"
+        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{target_bucket}/{object_path}"
         
         headers = {
             "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
             "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
-            "x-upsert": "false",
+            "x-upsert": "true",
             "Content-Type": content_type
         }
         
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(url, headers=headers, content=file_bytes)
-            if response.status_code in (400, 404) and ("Bucket not found" in response.text or "NoSuchBucket" in response.text):
-                await StorageService._ensure_bucket()
+            if response.status_code not in (200, 201):
+                # Fallback to configured bucket
+                target_bucket = settings.SUPABASE_STORAGE_BUCKET
+                object_path = f"profiles/{user_id}/{uuid.uuid4().hex}-{safe_filename}"
+                url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{target_bucket}/{object_path}"
                 response = await client.post(url, headers=headers, content=file_bytes)
             
         if response.status_code not in (200, 201):
             raise StorageServiceError(f"Supabase upload failed: {response.status_code} {response.text}")
             
-        public_url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{object_path}"
-        return public_url
+        # Try public URL first
+        public_url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{target_bucket}/{object_path}"
+        
+        # Verify if public URL is directly accessible
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                test_res = await client.head(public_url)
+                if test_res.status_code in (200, 304):
+                    return public_url
+        except Exception:
+            pass
+            
+        # If public access fails or bucket is private, generate 10-year signed URL
+        signed_url = await StorageService.create_signed_download_url(f"{target_bucket}/{object_path}", expires_in=315360000)
+        return signed_url
 
     @staticmethod
     def _clean_object_path(object_path: str) -> str:

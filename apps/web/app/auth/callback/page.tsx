@@ -87,8 +87,11 @@ function CallbackHandler() {
 
         if (avatarUrl) {
           try {
-            await supabase.from("patients").update({ profile_picture_url: avatarUrl }).eq("user_id", user.id).is("profile_picture_url", null);
-            await supabase.from("users").update({ profile_image_url: avatarUrl }).eq("id", user.id).is("profile_image_url", null);
+            await supabase.from("patients").update({ profile_picture_url: avatarUrl }).eq("user_id", user.id);
+            await supabase.from("users").update({ profile_image_url: avatarUrl }).eq("id", user.id);
+            try {
+              await api.put("/api/v1/users/me/avatar", { avatar_url: avatarUrl });
+            } catch {}
           } catch (e) {
             console.warn("Direct Supabase avatar update notice:", e);
           }
@@ -102,7 +105,7 @@ function CallbackHandler() {
         }
 
         if (isMounted) {
-          router.replace("/patient/dashboard?oauth=google");
+          router.replace("/patient/my-health?oauth=google&setup=true");
         }
       } catch (err: any) {
         console.error("Processing Google user failed:", err);

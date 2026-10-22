@@ -7,6 +7,7 @@ from app.database.session import AsyncSessionLocal
 from app.models.blockchain import BlockchainEventQueue, BlockchainSyncState
 from app.blockchain.client import blockchain_client
 from app.blockchain.contracts.loader import contract_loader
+from app.blockchain.monitoring.events import serialize_event_args
 
 logger = logging.getLogger("blockchain.listener")
 
@@ -109,7 +110,7 @@ async def fetch_and_enqueue_batch(from_block: int, to_block: int, db) -> bool:
                 transaction_hash=tx_str,
                 block_number=blk_num,
                 log_index=idx_num,
-                event_data=dict(decoded.args)
+                event_data=serialize_event_args(dict(decoded.args))
             )
             db.add(queue_item)
             try:

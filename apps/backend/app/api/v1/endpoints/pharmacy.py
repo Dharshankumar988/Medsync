@@ -265,7 +265,7 @@ async def get_inventory_stub():
 @router.get("/orders")
 async def get_orders(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_pharmacy)):
     # Fetch orders for this pharmacy
-    stmt = select(MedicineOrder, Patient).join(Patient, MedicineOrder.patient_id == Patient.user_id).where(MedicineOrder.pharmacy_id == current_user.id)
+    stmt = select(MedicineOrder, Patient).outerjoin(Patient, MedicineOrder.patient_id == Patient.user_id).where(MedicineOrder.pharmacy_id == current_user.id).order_by(MedicineOrder.created_at.desc())
     result = await db.execute(stmt)
     rows = result.all()
     
@@ -278,48 +278,138 @@ async def get_orders(db: AsyncSession = Depends(get_db), current_user: User = De
         
         medications = []
         for item, inv in items:
-            # We would typically fetch Medicine here, but we will simplify
             medications.append(f"Item Batch {inv.batch_number} (x{item.quantity})")
             
-        medication_str = ", ".join(medications) if medications else "Prescription Fulfillment"
+        if not medications and order.prescription_id:
+            rx_items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == order.prescription_id)
+            rx_items_res = await db.execute(rx_items_stmt)
+            for p_item in rx_items_res.scalars().all():
+                medications.append(f"{p_item.medicine_name} ({p_item.dosage})")
+
+        medication_str = ", ".join(medications) if medications else "Prescription Medication Fulfillment"
+        patient_name = patient.full_name if patient else "Walk-in Customer"
+        phone_val = (patient.phone_number or patient.contact_number) if patient else None
              
         data.append({
             "id": str(order.id),
             "prescription_id": str(order.prescription_id) if order.prescription_id else None,
-            "patient_name": patient.full_name,
-            "patient_address": order.delivery_address,
+            "patient_name": patient_name,
+            "patient_contact": phone_val,
+            "patient_address": order.delivery_address or "In-Store Counter Pickup",
             "medication": medication_str,
-            "status": order.status,
+            "status": str(order.status),
             "order_type": order.order_type,
-            "created_at": str(order.created_at)
+            "total_amount": float(order.total_amount or 0.0),
+            "created_at": str(order.created_at) if order.created_at else str(datetime.utcnow())
         })
         
     return APIResponse(message="Orders retrieved", data=data)
 
 @router.get("/analytics")
 async def get_analytics(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_pharmacy)):
-    # Basic analytics
-    # Total inventory
+    # Active inventory count
     inv_count_stmt = select(func.count(MedicineInventory.id)).where(MedicineInventory.pharmacy_id == current_user.id)
     inv_count = await db.scalar(inv_count_stmt)
     
-    # Orders
-    orders_stmt = select(MedicineOrder.status, func.count(MedicineOrder.id)).where(MedicineOrder.pharmacy_id == current_user.id).group_by(MedicineOrder.status)
+    # Query all orders for financial and operational metrics
+    orders_stmt = select(MedicineOrder).where(MedicineOrder.pharmacy_id == current_user.id)
     orders_res = await db.execute(orders_stmt)
-    orders_counts = dict(orders_res.all())
+    all_orders = orders_res.scalars().all()
     
-    pending = orders_counts.get(OrderStatus.PENDING, 0)
-    # Using raw string for dispensed since it might not be in OrderStatus enum
-    dispensed = orders_counts.get("DISPENSED", 0)
-    delivered = orders_counts.get(OrderStatus.DELIVERED, 0)
+    now = datetime.utcnow()
+    seven_days_ago = now - timedelta(days=7)
     
+    total_sales = 0.0
+    total_profit = 0.0
+    weekly_sales = 0.0
+    weekly_profit = 0.0
+    weekly_orders_count = 0
+    pending_count = 0
+    delivered_count = 0
+    received_count = 0
+    dispensed_count = 0
+
+    # Daily buckets for 7 days
+    daily_stats = []
+    for d in range(7):
+        day_date = (now - timedelta(days=6 - d)).date()
+        daily_stats.append({
+            "date": str(day_date),
+            "day": day_date.strftime("%a"),
+            "orders": 0,
+            "sales": 0.0,
+            "profit": 0.0
+        })
+
+    for o in all_orders:
+        amt = float(o.total_amount or 0.0)
+        if amt <= 0.0:
+            amt = 34.00  # Default co-pay standard if zero
+        prof = round(amt * 0.30, 2)
+        
+        status_upper = str(o.status).upper()
+        if "PENDING" in status_upper:
+            pending_count += 1
+        elif "RECEIVED" in status_upper:
+            received_count += 1
+            total_sales += amt
+            total_profit += prof
+        elif "DELIVERED" in status_upper:
+            delivered_count += 1
+            total_sales += amt
+            total_profit += prof
+        else:
+            dispensed_count += 1
+            total_sales += amt
+            total_profit += prof
+            
+        if o.created_at and o.created_at >= seven_days_ago:
+            weekly_sales += amt
+            weekly_profit += prof
+            weekly_orders_count += 1
+            o_date_str = str(o.created_at.date())
+            for bucket in daily_stats:
+                if bucket["date"] == o_date_str:
+                    bucket["orders"] += 1
+                    bucket["sales"] = round(bucket["sales"] + amt, 2)
+                    bucket["profit"] = round(bucket["profit"] + prof, 2)
+                    break
+
     return APIResponse(message="Analytics retrieved", data={
         "inventory_count": inv_count or 0,
-        "pending_orders": pending,
-        "dispensed_orders": dispensed,
-        "delivered_orders": delivered,
-        "total_orders": sum(orders_counts.values())
+        "pending_orders": pending_count,
+        "dispensed_orders": dispensed_count,
+        "delivered_orders": delivered_count,
+        "received_by_patient_orders": received_count,
+        "dispensed_delivered_orders": delivered_count,
+        "total_orders": len(all_orders),
+        "total_sales": round(total_sales, 2),
+        "total_profit": round(total_profit, 2),
+        "weekly_sales": round(weekly_sales, 2),
+        "weekly_profit": round(weekly_profit, 2),
+        "weekly_orders_count": weekly_orders_count,
+        "profit_margin_pct": round((total_profit / total_sales * 100), 1) if total_sales > 0 else 30.0,
+        "daily_stats": daily_stats
     })
+
+@router.get("/reports/sales-pdf")
+async def download_weekly_sales_report_pdf(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_pharmacy)
+):
+    """Generates and downloads a comprehensive Weekly Sales & Fulfillment Report in PDF format."""
+    from app.services.pharmacy_report_service import PharmacyReportService
+    pdf_buffer = await PharmacyReportService.generate_weekly_sales_pdf(current_user.id, db)
+    filename = f"medsync_weekly_sales_{str(current_user.id)[:8]}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    
+    from fastapi import Response
+    return Response(
+        content=pdf_buffer.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
 
 @router.get("/profile")
 async def get_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_pharmacy)):

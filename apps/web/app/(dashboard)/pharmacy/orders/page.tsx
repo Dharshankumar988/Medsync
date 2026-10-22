@@ -3,10 +3,11 @@
 import { useEffect, useState, useMemo } from "react";
 import { pharmacyService, PharmacyOrder } from "@/services/pharmacy.service";
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Input } from "@medsync/ui";
-import { Search, ShoppingBag, Truck, CheckCircle, PackageSearch, AlertCircle } from "lucide-react";
+import { Search, ShoppingBag, Truck, CheckCircle, PackageSearch, AlertCircle, Download, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { getBackendBaseUrl } from "@/lib/backend-config";
+import { toast } from "sonner";
 
 const DeliveryMap = dynamic(() => import("@/components/pharmacy/DeliveryMap").then(m => m.DeliveryMap), { ssr: false });
 
@@ -14,8 +15,9 @@ export default function PharmacyOrdersPage() {
   const [orders, setOrders] = useState<PharmacyOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"ALL" | "PENDING" | "DISPENSED" | "OUT_FOR_DELIVERY" | "DELIVERED">("ALL");
+  const [activeTab, setActiveTab] = useState<"ALL" | "PENDING" | "DISPENSED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "RECEIVED_BY_PATIENT">("ALL");
   const [dispensingOrderId, setDispensingOrderId] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     pharmacyService.getOrders().then(data => {
@@ -23,6 +25,23 @@ export default function PharmacyOrdersPage() {
       setLoading(false);
     });
   }, []);
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    toast.info("Generating Weekly Sales Report PDF...");
+    try {
+      const success = await pharmacyService.downloadWeeklySalesReport();
+      if (success) {
+        toast.success("Weekly Sales Report PDF downloaded successfully!");
+      } else {
+        toast.error("Failed to generate PDF report.");
+      }
+    } catch {
+      toast.error("An error occurred while downloading the sales report.");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   const [dispensingRxId, setDispensingRxId] = useState<string | null>(null);
   const [dispensingOrder, setDispensingOrder] = useState<string | null>(null);
@@ -116,22 +135,38 @@ export default function PharmacyOrdersPage() {
     <div className="space-y-8 pb-12 relative">
       <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-amber-500/[0.04] rounded-full blur-[100px]" />
       
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Orders & Delivery</h1>
-        <p className="text-muted-foreground">Manage fulfillments, track dispatches, and review order history.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight mb-1">Orders & Fulfillments</h1>
+          <p className="text-muted-foreground text-sm">Manage fulfillments, track dispatches, and review order history.</p>
+        </div>
+
+        <Button
+          onClick={handleDownloadPdf}
+          disabled={downloadingPdf}
+          variant="outline"
+          className="rounded-xl h-10 px-3.5 border-border/80 hover:bg-muted font-semibold text-xs gap-2 shrink-0 self-start sm:self-auto"
+        >
+          {downloadingPdf ? (
+            <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+          ) : (
+            <Download className="w-4 h-4 text-amber-500" />
+          )}
+          <span>Weekly Report (PDF)</span>
+        </Button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
         <div className="flex bg-muted/50 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
-          {["ALL", "PENDING", "DISPENSED", "OUT_FOR_DELIVERY", "DELIVERED"].map(tab => (
+          {["ALL", "PENDING", "DISPENSED", "OUT_FOR_DELIVERY", "DELIVERED", "RECEIVED_BY_PATIENT"].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
-                activeTab === tab ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${
+                activeTab === tab ? "bg-background shadow-xs text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {tab.replace(/_/g, ' ')}
+              {tab === "RECEIVED_BY_PATIENT" ? "Received by Patient" : tab === "DELIVERED" ? "Delivered" : tab.replace(/_/g, ' ')}
             </button>
           ))}
         </div>
@@ -141,7 +176,7 @@ export default function PharmacyOrdersPage() {
             placeholder="Search orders..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 rounded-xl"
+            className="pl-9 rounded-xl h-10 text-xs"
           />
         </div>
       </div>
@@ -170,24 +205,42 @@ export default function PharmacyOrdersPage() {
               <Card className="overflow-hidden rounded-2xl border-border/60 hover:border-amber-500/30 transition-colors group">
                 <CardHeader className="bg-muted/20 pb-4 border-b border-border/40">
                   <div className="flex justify-between items-start mb-2">
-                    <div className="flex gap-2 items-center">
+                    <div className="flex gap-2 items-center flex-wrap">
                       <Badge variant="outline" className="font-mono text-[10px] uppercase">{order.id.slice(0, 8)}</Badge>
                       {order.order_type === "ROUTED_BY_DOCTOR" && (
                         <Badge variant="outline" className="text-[10px] uppercase bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                           Routed by Doctor
                         </Badge>
                       )}
+                      {order.order_type === "WALK_IN_PICKUP" && (
+                        <Badge variant="outline" className="text-[10px] uppercase bg-blue-500/10 text-blue-600 border-blue-500/20">
+                          Walk-in
+                        </Badge>
+                      )}
                     </div>
-                    <Badge className={`
-                      ${order.status === "PENDING" ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" : ""}
-                      ${order.status === "DISPENSED" ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" : ""}
-                      ${order.status === "OUT_FOR_DELIVERY" ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20" : ""}
-                      ${order.status === "DELIVERED" ? "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20" : ""}
-                    `}>
-                      {order.status.replace(/_/g, ' ')}
+                    <Badge className={`text-[10px] font-medium ${
+                      order.status === "PENDING" ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" : ""
+                    } ${
+                      order.status === "DISPENSED" ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" : ""
+                    } ${
+                      order.status === "OUT_FOR_DELIVERY" ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20" : ""
+                    } ${
+                      order.status === "DELIVERED" ? "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20" : ""
+                    } ${
+                      order.status === "RECEIVED_BY_PATIENT" ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/30" : ""
+                    }`}>
+                      {order.status === "RECEIVED_BY_PATIENT" ? "Received by Patient" : order.status === "DELIVERED" ? "Dispensed & Delivered" : order.status.replace(/_/g, ' ')}
                     </Badge>
                   </div>
-                  <CardTitle className="text-base">{order.patient_name}</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">{order.patient_name}</CardTitle>
+                    {order.total_amount !== undefined && (
+                      <span className="text-xs font-bold text-foreground font-mono">${order.total_amount.toFixed(2)}</span>
+                    )}
+                  </div>
+                  {order.patient_contact && (
+                    <p className="text-[11px] text-muted-foreground font-mono mt-0.5">📞 {order.patient_contact}</p>
+                  )}
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4">
                   <div>
@@ -233,7 +286,12 @@ export default function PharmacyOrdersPage() {
                     )}
                     {order.status === "DELIVERED" && (
                       <Button variant="outline" className="w-full border-emerald-500/30 text-emerald-600 bg-emerald-500/5 cursor-default pointer-events-none">
-                        <CheckCircle className="h-4 w-4 mr-2" /> Delivery Completed
+                        <CheckCircle className="h-4 w-4 mr-2" /> Dispensed & Delivered
+                      </Button>
+                    )}
+                    {order.status === "RECEIVED_BY_PATIENT" && (
+                      <Button variant="outline" className="w-full border-emerald-500/30 text-emerald-600 bg-emerald-500/5 cursor-default pointer-events-none font-medium">
+                        <CheckCircle className="h-4 w-4 mr-2 text-emerald-500" /> Received by Patient (Walk-in)
                       </Button>
                     )}
                   </div>

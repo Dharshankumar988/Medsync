@@ -82,9 +82,9 @@ export default function AppointmentsPage() {
     });
   }, []);
 
-  const loadAppointments = useCallback(async () => {
+  const loadAppointments = useCallback(async (silent = false) => {
     if (!userId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const params: any = {};
       if (statusFilter) params.status = statusFilter;
@@ -127,7 +127,7 @@ export default function AppointmentsPage() {
         toast.error("Failed to load appointments");
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [userId, statusFilter]);
 
@@ -238,18 +238,22 @@ export default function AppointmentsPage() {
   };
 
   const handleCancelAppointment = async (appointmentId: string) => {
+    // Instant optimistic UI update
+    setAppointments((prev) =>
+      prev.map((a: any) => (a.id === appointmentId ? { ...a, status: "CANCELLED" } : a))
+    );
     try {
       await api.patch(`${API_PREFIX}/appointments/${appointmentId}/status`, {
         status: "CANCELLED",
         reason: "Cancelled by patient",
       });
       toast.success("Appointment cancelled");
-      loadAppointments();
+      loadAppointments(true);
     } catch {
       // Fallback
       await supabase.from("appointments").update({ status: "CANCELLED" }).eq("id", appointmentId);
       toast.success("Appointment cancelled");
-      loadAppointments();
+      loadAppointments(true);
     }
   };
 

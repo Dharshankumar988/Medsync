@@ -117,12 +117,12 @@ export default function DoctorDashboard() {
       href: "/doctor/prescriptions",
     },
     {
-      title: "Patient Records",
-      value: (((dashboardData as any)?.pending_records !== undefined && (dashboardData as any).pending_records > 0) ? (dashboardData as any).pending_records : "View").toString(),
-      subtitle: "Public & shared records",
-      icon: FileText,
+      title: "Patients & Records",
+      value: (((dashboardData as any)?.pending_records !== undefined && (dashboardData as any).pending_records > 0) ? (dashboardData as any).pending_records : "Manage").toString(),
+      subtitle: "Patients, files & clinical history",
+      icon: Users,
       accent: "blue",
-      href: "/doctor/records",
+      href: "/doctor/patients",
     },
     {
       title: "Today's Revenue",
@@ -282,7 +282,7 @@ export default function DoctorDashboard() {
         {[
           { icon: Brain, title: "Pulse AI Assistant", desc: "Get AI clinical insights", href: "/doctor/pulse-ai", color: "text-violet-500", bg: "bg-violet-500/10" },
           { icon: Stethoscope, title: "Consultations", desc: "Manage your consultations", href: "/doctor/appointments", color: "text-emerald-500", bg: "bg-emerald-500/10" },
-          { icon: FileText, title: "Medical Records", desc: "Review patient records", href: "/doctor/records", color: "text-blue-500", bg: "bg-blue-500/10" },
+          { icon: Users, title: "Patients & Medical Records", desc: "View patients, records & referrals", href: "/doctor/patients", color: "text-blue-500", bg: "bg-blue-500/10" },
         ].map((item, i) => (
           <motion.div key={i} variants={fadeUp}>
             <Link href={item.href}>

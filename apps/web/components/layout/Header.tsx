@@ -20,25 +20,60 @@ export const Header = memo(function Header({ role }: { role: string }) {
   const router = useRouter();
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (data.user) {
-        const metaPic = data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture;
-        if (metaPic) {
-          setUserAvatar(metaPic);
-          return;
-        }
+  const fetchAvatar = async () => {
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data?.user) return;
 
-        const r = role.toLowerCase();
-        if (r === "patient") {
-          const { data: p } = await supabase.from("patients").select("profile_picture_url").eq("user_id", data.user.id).maybeSingle();
-          if (p?.profile_picture_url) setUserAvatar(p.profile_picture_url);
-        } else if (r === "doctor") {
-          const { data: d } = await supabase.from("doctors").select("profile_picture_url").eq("user_id", data.user.id).maybeSingle();
-          if (d?.profile_picture_url) setUserAvatar(d.profile_picture_url);
-        }
+      const r = role.toLowerCase();
+      let customPic: string | null = null;
+
+      if (r === "patient") {
+        const { data: p } = await supabase.from("patients").select("profile_picture_url").eq("user_id", data.user.id).maybeSingle();
+        if (p?.profile_picture_url) customPic = p.profile_picture_url;
+      } else if (r === "doctor") {
+        const { data: d } = await supabase.from("doctors").select("profile_picture_url").eq("user_id", data.user.id).maybeSingle();
+        if (d?.profile_picture_url) customPic = d.profile_picture_url;
+      } else if (r === "pharmacy") {
+        const { data: ph } = await supabase.from("pharmacies").select("logo_url").eq("user_id", data.user.id).maybeSingle();
+        if (ph?.logo_url) customPic = ph.logo_url;
       }
-    });
+
+      if (!customPic) {
+        const { data: u } = await supabase.from("users").select("profile_image_url").eq("id", data.user.id).maybeSingle();
+        if (u?.profile_image_url) customPic = u.profile_image_url;
+      }
+
+      if (customPic) {
+        setUserAvatar(customPic);
+        return;
+      }
+
+      // Fallback to Google / OAuth metadata avatar if no custom photo was set
+      const metaPic = data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture;
+      if (metaPic) {
+        setUserAvatar(metaPic);
+      }
+    } catch (err) {
+      console.warn("Could not load header avatar:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvatar();
+
+    const handleAvatarUpdate = (e: any) => {
+      if (e?.detail?.url) {
+        setUserAvatar(e.detail.url);
+      } else {
+        fetchAvatar();
+      }
+    };
+
+    window.addEventListener("medsync:avatar-updated", handleAvatarUpdate);
+    return () => {
+      window.removeEventListener("medsync:avatar-updated", handleAvatarUpdate);
+    };
   }, [pathname, role]);
   
   const { paths, currentPage } = useMemo(() => {

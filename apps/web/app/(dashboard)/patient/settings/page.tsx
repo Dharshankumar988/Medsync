@@ -110,7 +110,15 @@ export default function SettingsPage() {
         setUserName(pData?.full_name || gName || authUserData.user?.email?.split("@")[0] || "Patient");
         if (pData?.gender) setPatientGender(pData.gender);
 
-        const activePic = pData?.profile_picture_url || uData?.profile_image_url || gPhoto;
+        const isGoogleAuth = authUserData.user?.app_metadata?.provider === "google" || !!gPhoto;
+        let activePic = pData?.profile_picture_url || uData?.profile_image_url;
+
+        if (isGoogleAuth && gPhoto && !activePic) {
+          // Automatically use Google photo if no photo was ever configured
+          activePic = gPhoto;
+          handleApplyAvatarUrl(gPhoto);
+        }
+
         if (activePic) {
           setAvatarUrl(activePic);
         } else {
@@ -176,9 +184,13 @@ export default function SettingsPage() {
         .eq("id", userId);
 
       // 3. Update Supabase Auth user metadata
-      await supabase.auth.updateUser({
-        data: { avatar_url: targetUrl, picture: targetUrl }
-      });
+      try {
+        await supabase.auth.updateUser({
+          data: { avatar_url: targetUrl, picture: targetUrl }
+        });
+      } catch (authErr) {
+        console.warn("Auth user metadata update notice:", authErr);
+      }
 
       setAvatarUrl(targetUrl);
       setSelectedPreset(null);
@@ -187,6 +199,12 @@ export default function SettingsPage() {
         setFilePreview(null);
       }
       setSelectedFile(null);
+
+      // Notify header and layout components
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("medsync:avatar-updated", { detail: { url: targetUrl } }));
+      }
+
       toast.success("Avatar updated successfully!");
     } catch (err: any) {
       console.error("Failed to update avatar:", err);
@@ -227,9 +245,7 @@ export default function SettingsPage() {
       try {
         const formData = new FormData();
         formData.append("file", selectedFile);
-        const { data: res } = await api.post("/api/v1/users/me/profile-image", formData, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
+        const { data: res } = await api.post("/api/v1/users/me/profile-image", formData);
         if (res?.data?.profile_image_url) {
           uploadedUrl = res.data.profile_image_url;
         }
@@ -237,7 +253,7 @@ export default function SettingsPage() {
         console.warn("Backend image upload notice:", apiErr);
       }
 
-      // 2. If backend didn't return public url, attempt Supabase storage upload
+      // 2. If backend didn't return url, attempt Supabase storage upload
       if (!uploadedUrl) {
         const fileExt = selectedFile.name.split('.').pop() || "jpg";
         const filePath = `${userId}/avatar_${Date.now()}.${fileExt}`;
@@ -260,11 +276,47 @@ export default function SettingsPage() {
         }
       }
 
+      // 3. Robust fallback: convert to high-quality compressed Data URL so image never fails to display
       if (!uploadedUrl) {
-        throw new Error("Unable to upload image file to storage. Please try again.");
+        uploadedUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              const maxSize = 400;
+              let width = img.width;
+              let height = img.height;
+              if (width > height) {
+                if (width > maxSize) {
+                  height *= maxSize / width;
+                  width = maxSize;
+                }
+              } else {
+                if (height > maxSize) {
+                  width *= maxSize / height;
+                  height = maxSize;
+                }
+              }
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              ctx?.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL("image/jpeg", 0.85));
+            };
+            img.onerror = () => resolve(e.target?.result as string);
+            img.src = e.target?.result as string;
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(selectedFile);
+        });
       }
 
-      // 3. Persist to Supabase tables and Auth
+      if (!uploadedUrl) {
+        throw new Error("Unable to process image file. Please try another image.");
+      }
+
+      // 4. Persist to Supabase tables and Auth
       await supabase
         .from("patients")
         .update({ profile_picture_url: uploadedUrl })
@@ -275,9 +327,13 @@ export default function SettingsPage() {
         .update({ profile_image_url: uploadedUrl })
         .eq("id", userId);
 
-      await supabase.auth.updateUser({
-        data: { avatar_url: uploadedUrl, picture: uploadedUrl }
-      });
+      try {
+        await supabase.auth.updateUser({
+          data: { avatar_url: uploadedUrl, picture: uploadedUrl }
+        });
+      } catch (authErr) {
+        console.warn("Auth user metadata update notice:", authErr);
+      }
 
       setAvatarUrl(uploadedUrl);
       setSelectedFile(null);
@@ -285,6 +341,12 @@ export default function SettingsPage() {
         URL.revokeObjectURL(filePreview);
         setFilePreview(null);
       }
+
+      // Notify header and layout components
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("medsync:avatar-updated", { detail: { url: uploadedUrl } }));
+      }
+
       toast.success("Profile photo uploaded and saved successfully!");
     } catch (err: any) {
       console.error("Upload photo error:", err);
@@ -465,23 +527,6 @@ export default function SettingsPage() {
                   <span>Randomize</span>
                 </Button>
 
-                {googleAvatar && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    disabled={savingAvatar}
-                    onClick={() => handleApplyAvatarUrl(googleAvatar)}
-                    className="h-7 text-xs px-2.5 rounded-lg border-border/70 hover:bg-muted gap-1.5"
-                  >
-                    <img
-                      src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                      alt="Google"
-                      className="w-3 h-3"
-                    />
-                    <span>Google Photo</span>
-                  </Button>
-                )}
 
                 <Button
                   variant="outline"

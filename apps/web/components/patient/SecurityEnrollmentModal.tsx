@@ -60,6 +60,21 @@ export default function SecurityEnrollmentModal() {
     setIsSubmitting(true);
 
     try {
+      // Sync password with Supabase Auth for Google OAuth or general accounts
+      if (password) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.auth.updateUser({
+              password: password,
+              data: { has_password: true }
+            });
+          }
+        } catch (authErr) {
+          console.warn("Supabase auth password sync during PIN enrollment:", authErr);
+        }
+      }
+
       const formData = new FormData();
       formData.append('pin', pin);
       if (password) {

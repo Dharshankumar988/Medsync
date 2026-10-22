@@ -386,5 +386,60 @@ def test_user_model_password_hash_default():
     assert u.password_hash == "supabase_managed"
 
 
+def test_prescription_response_with_null_appointment():
+    """Verify PrescriptionResponse can validate when appointment_id is None (appointment-free prescription)."""
+    from app.schemas.prescription import PrescriptionResponse
+    from app.schemas.response import APIResponse
+    from datetime import datetime
+    import uuid
+
+    rx_id = uuid.uuid4()
+    patient_id = uuid.uuid4()
+    doctor_id = uuid.uuid4()
+
+    rx = PrescriptionResponse(
+        id=rx_id,
+        appointment_id=None,
+        patient_id=patient_id,
+        doctor_id=doctor_id,
+        diagnosis="Acute Bronchitis",
+        notes="Rest and hydration",
+        is_finalized=True,
+        is_dispensed=False,
+        created_at=datetime.utcnow()
+    )
+
+    api_resp = APIResponse(message="Prescription created", data=rx)
+    dumped = api_resp.model_dump(mode="json")
+    assert dumped["data"]["appointment_id"] is None
+    assert dumped["data"]["id"] == str(rx_id)
+    assert dumped["data"]["diagnosis"] == "Acute Bronchitis"
+
+
+def test_serialize_event_args_with_bytes():
+    """Verify serialize_event_args properly converts bytes32 to hex string without TypeError."""
+    from app.blockchain.monitoring.events import serialize_event_args
+
+    raw_event = {
+        "prescriptionHash": b"%`E\xf5F\xb4\x98\xe9",
+        "doctorAddress": "0x260d8C75009B62009aA2762c1d76d8daAeA1A7A9",
+        "nested": {
+            "recordHash": b"\x12\x34\x56"
+        },
+        "list_items": [b"\xaa\xbb", "text"]
+    }
+
+    serialized = serialize_event_args(raw_event)
+    assert isinstance(serialized["prescriptionHash"], str)
+    assert serialized["prescriptionHash"].startswith("0x")
+    assert serialized["nested"]["recordHash"].startswith("0x")
+    assert serialized["list_items"][0] == "0xaabb"
+
+    # Must be JSON serializable
+    json_str = json.dumps(serialized)
+    assert "0x" in json_str
+
+
+
 
 

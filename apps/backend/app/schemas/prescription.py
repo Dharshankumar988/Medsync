@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 class PrescriptionItemBase(BaseModel):
@@ -21,19 +21,19 @@ class PrescriptionCreate(BaseModel):
 
 class PrescriptionItemResponse(PrescriptionItemBase):
     id: uuid.UUID
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 class PrescriptionResponse(BaseModel):
     id: uuid.UUID
-    appointment_id: uuid.UUID
+    appointment_id: Optional[uuid.UUID] = None
     patient_id: uuid.UUID
-    doctor_id: uuid.UUID
-    diagnosis: Optional[str]
-    notes: Optional[str]
+    doctor_id: Optional[uuid.UUID] = None
+    diagnosis: Optional[str] = None
+    notes: Optional[str] = None
     is_finalized: bool
     is_dispensed: bool
     created_at: datetime
     pdf_url: Optional[str] = None
     qr_token: Optional[str] = None
     
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)

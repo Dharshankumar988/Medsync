@@ -88,18 +88,40 @@ export default function PharmacyPatientsPage() {
                       <div>
                         <h3 className="font-semibold text-foreground">{patient.name}</h3>
                         <p className="text-xs text-muted-foreground">{patient.orderCount} total fulfillments</p>
+                        {patient.lastOrder.patient_contact && (
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5">{patient.lastOrder.patient_contact}</p>
+                        )}
                       </div>
                     </div>
                   </div>
                   
                   <div className="bg-muted/30 rounded-xl p-3 mt-4 space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Most Recent Order</div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium line-clamp-1 flex-1">{patient.lastOrder.medication}</span>
-                      <Badge variant="outline" className="ml-2 text-[10px] shrink-0">{patient.lastOrder.status.replace(/_/g, ' ')}</Badge>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Most Recent Fulfillment</span>
+                      {patient.lastOrder.total_amount && (
+                        <span className="text-xs font-bold text-foreground">${patient.lastOrder.total_amount.toFixed(2)}</span>
+                      )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(patient.lastOrder.created_at).toLocaleDateString()}
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-sm font-medium line-clamp-1 flex-1">{patient.lastOrder.medication}</span>
+                      <Badge className={`text-[10px] shrink-0 font-medium ${
+                        patient.lastOrder.status === "RECEIVED_BY_PATIENT" 
+                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                          : patient.lastOrder.status === "DELIVERED"
+                          ? "bg-blue-500/10 text-blue-600 border-blue-500/30"
+                          : "bg-muted text-muted-foreground"
+                      }`}>
+                        {patient.lastOrder.status === "RECEIVED_BY_PATIENT" 
+                          ? "Received by Patient" 
+                          : patient.lastOrder.status === "DELIVERED" 
+                          ? "Dispensed & Delivered" 
+                          : patient.lastOrder.status.replace(/_/g, ' ')}
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {new Date(patient.lastOrder.created_at).toLocaleDateString(undefined, {
+                        month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit"
+                      })}
                     </div>
                   </div>
                 </CardContent>

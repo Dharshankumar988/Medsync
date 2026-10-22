@@ -5,6 +5,21 @@ from app.blockchain.contracts.loader import contract_loader
 
 logger = logging.getLogger("blockchain.monitoring.events")
 
+def serialize_event_args(obj: Any) -> Any:
+    """
+    Recursively converts HexBytes/bytes to hex strings and complex types
+    so that event dictionaries are safely JSON serializable for JSONB storage.
+    """
+    if isinstance(obj, (bytes, bytearray)):
+        return "0x" + obj.hex()
+    elif isinstance(obj, dict):
+        return {str(k): serialize_event_args(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
+        return [serialize_event_args(item) for item in obj]
+    elif hasattr(obj, "hex") and callable(getattr(obj, "hex")):
+        return "0x" + obj.hex()
+    return obj
+
 class EventListenerFramework:
     """
     Decodes events from transaction receipts or queries past events.
@@ -33,7 +48,7 @@ class EventListenerFramework:
 
                         decoded_events.append({
                             "event": event_name,
-                            "args": dict(decoded.args),
+                            "args": serialize_event_args(dict(decoded.args)),
                             "blockNumber": blk_num,
                             "transactionHash": tx_str,
                             "logIndex": idx_num
@@ -60,7 +75,7 @@ class EventListenerFramework:
                 tx_str = tx_h.hex() if hasattr(tx_h, 'hex') else str(tx_h)
                 results.append({
                     "event": event_name,
-                    "args": dict(e.args),
+                    "args": serialize_event_args(dict(e.args)),
                     "blockNumber": int(e.blockNumber),
                     "transactionHash": tx_str,
                     "logIndex": getattr(e, 'logIndex', 0)

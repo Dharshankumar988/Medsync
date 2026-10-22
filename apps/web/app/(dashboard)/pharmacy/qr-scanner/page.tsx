@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, Badge } from "@medsync/ui";
 import { 
   QrCode, ScanLine, Key, Loader2, CheckCircle2, ShieldCheck, FileText, 
   AlertTriangle, Camera, Link as LinkIcon, FileJson, Activity, Copy,
-  CreditCard, Receipt, FileSignature
+  CreditCard, Receipt, FileSignature, Truck, UserCheck, ArrowRight, Store,
+  DollarSign, PackageCheck
 } from "lucide-react";
 import { pharmacyService } from "@/services/pharmacy.service";
 import { blockchainService, BlockchainVerifyResult } from "@/services/blockchain.service";
@@ -15,9 +17,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
 type FlowType = "IDLE" | "PRESCRIPTION" | "BLOCKCHAIN" | "URL" | "TEXT";
-type PrescriptionStep = "PAYMENT" | "SUCCESS";
+type PrescriptionStep = "PAYMENT" | "SUCCESS" | "CONFIRMED";
 
 export default function PharmacyQRScannerPage() {
+  const router = useRouter();
   // Base State
   const [showCamera, setShowCamera] = useState(false);
   const [manualInput, setManualInput] = useState("");
@@ -34,6 +37,8 @@ export default function PharmacyQRScannerPage() {
   const [pin, setPin] = useState("");
   const [authPin, setAuthPin] = useState("");
   const [faceImage, setFaceImage] = useState<File | null>(null);
+  const [fulfillmentType, setFulfillmentType] = useState<"DISPENSED_AND_DELIVERED" | "RECEIVED_BY_PATIENT">("RECEIVED_BY_PATIENT");
+  const [fulfillmentResult, setFulfillmentResult] = useState<any>(null);
 
   // Smart Routing Engine
   const handleProcessQR = async (data: string) => {
@@ -152,17 +157,30 @@ export default function PharmacyQRScannerPage() {
       return;
     }
     setIsLoading(true);
+    setError(null);
     try {
-      await pharmacyService.dispensePrescription(basicData.prescription_id, authPin, pin);
+      const res = await pharmacyService.dispensePrescription(
+        basicData.prescription_id, 
+        authPin, 
+        pin,
+        fulfillmentType
+      );
       
-      // Reset
-      setFlow("IDLE");
-      setBasicData(null);
-      setFullPrescriptionData(null);
-      setPin("");
-      setAuthPin("");
-    } catch (err) {
-      alert("Failed to dispense prescription.");
+      if (res.success) {
+        setFulfillmentResult(res.data);
+        setStep("CONFIRMED");
+        toast.success(
+          fulfillmentType === "RECEIVED_BY_PATIENT"
+            ? "Prescription marked as Received by Patient!"
+            : "Prescription Dispensed & Dispatched for Delivery!"
+        );
+      } else {
+        setError(res.error || "Failed to dispense prescription.");
+        toast.error(res.error || "Failed to dispense prescription.");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to dispense prescription.");
+      toast.error("Failed to dispense prescription.");
     } finally {
       setIsLoading(false);
     }
@@ -285,15 +303,18 @@ export default function PharmacyQRScannerPage() {
                   <div className="h-16 w-16 bg-amber-500/10 rounded-full flex items-center justify-center shadow-inner border border-amber-500/20">
                     {step === "PAYMENT" && <CreditCard className="h-8 w-8 text-amber-600" />}
                     {step === "SUCCESS" && <CheckCircle2 className="h-8 w-8 text-emerald-500" />}
+                    {step === "CONFIRMED" && <PackageCheck className="h-8 w-8 text-emerald-500" />}
                   </div>
                 </div>
                 <CardTitle className="text-2xl relative z-10">
                   {step === "PAYMENT" && "Payment & Co-Pay"}
-                  {step === "SUCCESS" && "Verification Complete"}
+                  {step === "SUCCESS" && "Verification & Fulfillment"}
+                  {step === "CONFIRMED" && "Prescription Fulfilled!"}
                 </CardTitle>
                 <CardDescription className="relative z-10">
                   {step === "PAYMENT" && "Review the order summary and collect the required co-pay before dispensing."}
-                  {step === "SUCCESS" && "The prescription is fully authorized and ready for dispensing."}
+                  {step === "SUCCESS" && "Select fulfillment method and enter Pharmacy PIN to complete order."}
+                  {step === "CONFIRMED" && "Patient linked, inventory stock deducted, and sales recorded."}
                 </CardDescription>
               </CardHeader>
               
@@ -373,16 +394,57 @@ export default function PharmacyQRScannerPage() {
                   </motion.div>
                 )}
 
-                {/* STEP 3: SUCCESS & DISPENSE */}
+                {/* STEP 2: SUCCESS & DISPENSE WITH FULFILLMENT CHOICE */}
                 {step === "SUCCESS" && fullPrescriptionData && (
                   <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="space-y-6">
                     <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl flex items-start gap-3">
                       <ShieldCheck className="h-6 w-6 text-emerald-600 shrink-0" />
                       <div>
-                        <h4 className="font-semibold text-emerald-700 mb-1">Payment & Authentication Successful</h4>
+                        <h4 className="font-semibold text-emerald-700 mb-1">Prescription Verified & Authorized</h4>
                         <p className="text-sm text-emerald-600/80">
-                          The co-pay was processed and the patient has authorized access to this prescription.
+                          Patient co-pay is processed. Ready to select fulfillment and dispense medication.
                         </p>
+                      </div>
+                    </div>
+
+                    {/* Fulfillment Method Selection */}
+                    <div className="bg-muted/30 p-4 rounded-2xl border border-border/60 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-foreground uppercase tracking-wider">Select Fulfillment Type</span>
+                        <Badge variant="outline" className="text-[10px] uppercase font-bold text-amber-600 bg-amber-500/10">Required</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFulfillmentType("RECEIVED_BY_PATIENT")}
+                          className={`p-3 rounded-xl border text-left transition-all ${
+                            fulfillmentType === "RECEIVED_BY_PATIENT"
+                              ? "border-emerald-500 bg-emerald-500/10 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-500/30"
+                              : "border-border/60 hover:bg-muted/40 text-muted-foreground"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <Store className="w-4 h-4 text-emerald-600" />
+                            <span className="text-xs font-bold text-foreground">Received by Patient</span>
+                          </div>
+                          <p className="text-[11px] leading-tight text-muted-foreground">In-person walk-in pickup at pharmacy counter.</p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFulfillmentType("DISPENSED_AND_DELIVERED")}
+                          className={`p-3 rounded-xl border text-left transition-all ${
+                            fulfillmentType === "DISPENSED_AND_DELIVERED"
+                              ? "border-blue-500 bg-blue-500/10 text-blue-950 dark:text-blue-200 ring-2 ring-blue-500/30"
+                              : "border-border/60 hover:bg-muted/40 text-muted-foreground"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <Truck className="w-4 h-4 text-blue-600" />
+                            <span className="text-xs font-bold text-foreground">Dispensed & Delivered</span>
+                          </div>
+                          <p className="text-[11px] leading-tight text-muted-foreground">Doorstep delivery dispatch to patient address.</p>
+                        </button>
                       </div>
                     </div>
 
@@ -414,7 +476,7 @@ export default function PharmacyQRScannerPage() {
                         ))}
                         </ul>
                       </div>
-                      </div>
+                    </div>
 
                     <div className="bg-muted/30 p-5 rounded-2xl border border-border/60">
                       <h4 className="font-semibold mb-3 border-b border-border/60 pb-2">Pharmacy Authorization</h4>
@@ -430,8 +492,108 @@ export default function PharmacyQRScannerPage() {
                     </div>
                     
                     <Button onClick={handleDispense} className="w-full h-14 text-md rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-500/20" size="lg" disabled={isLoading || authPin.length !== 6}>
-                      {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Dispense Medications & Complete Order"}
+                      {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : `Fulfill as ${fulfillmentType === "RECEIVED_BY_PATIENT" ? "Received by Patient" : "Dispensed & Delivered"}`}
                     </Button>
+                  </motion.div>
+                )}
+
+                {/* STEP 3: CONFIRMED & SAVED COMPLETION VIEW */}
+                {step === "CONFIRMED" && (
+                  <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="space-y-6">
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl flex items-start gap-3">
+                      <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h4 className="font-semibold text-emerald-800 dark:text-emerald-300">Prescription Fulfillment Complete</h4>
+                        <p className="text-xs text-emerald-700/80 dark:text-emerald-400">
+                          Status: <strong className="font-semibold">{fulfillmentResult?.fulfillment_label || (fulfillmentType === "RECEIVED_BY_PATIENT" ? "Received by Patient" : "Dispensed & Delivered")}</strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Patient Linked Card */}
+                    <div className="bg-muted/30 p-5 rounded-2xl border border-border/60 space-y-3">
+                      <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <UserCheck className="w-3.5 h-3.5 text-blue-500" /> Patient Details (Saved)
+                        </span>
+                        <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 text-[10px]">
+                          Linked to Customers
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Patient Name:</span>
+                        <span className="font-semibold text-foreground">{fulfillmentResult?.patient_name || basicData?.patient_name}</span>
+                      </div>
+                      {fulfillmentResult?.patient_contact && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Contact Phone:</span>
+                          <span className="font-mono text-xs font-medium">{fulfillmentResult.patient_contact}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Prescription Ref:</span>
+                        <span className="font-mono text-xs">{basicData?.prescription_id?.slice(0, 8)}...</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground pt-1">
+                        ✓ Patient profile and prescription record are now permanently saved in your <strong>Patients & Customers</strong> directory.
+                      </p>
+                    </div>
+
+                    {/* Inventory & Financial Impact */}
+                    <div className="bg-card p-5 rounded-2xl border border-border/60 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                          <DollarSign className="w-3.5 h-3.5 text-amber-500" /> Inventory & Revenue Impact
+                        </span>
+                        <Badge variant="outline" className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 border-emerald-500/20">
+                          Stock Deducted
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div className="p-3 rounded-xl bg-muted/40 border border-border/40">
+                          <span className="text-[11px] text-muted-foreground block">Gross Sales Added</span>
+                          <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                            ${Number(fulfillmentResult?.total_sales || 34).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-muted/40 border border-border/40">
+                          <span className="text-[11px] text-muted-foreground block">Net Profit Recorded</span>
+                          <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                            ${Number(fulfillmentResult?.profit || 10.20).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+                        <PackageCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span>Medicine inventory stock quantity successfully decremented for all prescribed items.</span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 rounded-xl h-12 text-xs font-semibold"
+                        onClick={() => {
+                          setFlow("IDLE");
+                          setStep("PAYMENT");
+                          setBasicData(null);
+                          setFullPrescriptionData(null);
+                          setFulfillmentResult(null);
+                          setAuthPin("");
+                          setPin("");
+                        }}
+                      >
+                        Scan Next Prescription
+                      </Button>
+                      <Button
+                        className="flex-1 rounded-xl h-12 text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white shadow-md gap-1.5"
+                        onClick={() => router.push("/pharmacy/orders")}
+                      >
+                        <span>View Orders & Sales</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </motion.div>
                 )}
               </CardContent>

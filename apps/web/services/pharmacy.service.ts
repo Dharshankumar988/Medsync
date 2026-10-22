@@ -14,10 +14,12 @@ export interface PharmacyOrder {
   id: string;
   prescription_id: string;
   patient_name: string;
+  patient_contact?: string;
   patient_address?: string;
   medication: string;
-  status: "PENDING" | "DISPENSED" | "REJECTED" | "OUT_FOR_DELIVERY" | "DELIVERED" | string;
+  status: "PENDING" | "DISPENSED" | "REJECTED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "RECEIVED_BY_PATIENT" | string;
   order_type?: string;
+  total_amount?: number;
   created_at: string;
 }
 
@@ -48,14 +50,44 @@ export const pharmacyService = {
     }
   },
 
-  dispensePrescription: async (prescriptionId: string, authPin: string, prescriptionPin?: string): Promise<boolean> => {
+  dispensePrescription: async (
+    prescriptionId: string, 
+    authPin: string, 
+    prescriptionPin?: string,
+    fulfillmentType: "DISPENSED_AND_DELIVERED" | "RECEIVED_BY_PATIENT" = "DISPENSED_AND_DELIVERED"
+  ): Promise<{ success: boolean; data?: any; error?: string }> => {
     try {
       const formData = new FormData();
       formData.append("auth_pin", authPin);
+      formData.append("fulfillment_type", fulfillmentType);
       if (prescriptionPin) formData.append("pin", prescriptionPin);
-      await api.post(`/api/v1/prescriptions/${prescriptionId}/dispense`, formData);
+      const res = await api.post(`/api/v1/prescriptions/${prescriptionId}/dispense`, formData);
+      return { success: true, data: res.data?.data };
+    } catch (err: any) {
+      return { 
+        success: false, 
+        error: err.response?.data?.detail || err.message || "Failed to dispense prescription" 
+      };
+    }
+  },
+
+  downloadWeeklySalesReport: async (): Promise<boolean> => {
+    try {
+      const res = await api.get('/api/v1/pharmacy/reports/sales-pdf', {
+        responseType: 'blob'
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `medsync_weekly_sales_report_${new Date().toISOString().slice(0, 10)}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
       return true;
-    } catch {
+    } catch (err) {
+      console.error("Failed to download sales report PDF:", err);
       return false;
     }
   },

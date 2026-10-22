@@ -61,7 +61,6 @@ const menuGroups = {
     {
       label: "CLINICAL",
       items: [
-        { name: "Patient Records", href: "/doctor/records", icon: FileText },
         { name: "Prescriptions", href: "/doctor/prescriptions", icon: Pill },
         { name: "Scan QR", href: "/doctor/qr-scanner", icon: ScanLine },
         { name: "Pulse AI", href: "/doctor/pulse-ai", icon: Activity, badge: "AI" },

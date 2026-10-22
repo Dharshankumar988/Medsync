@@ -214,6 +214,8 @@ export default function AdminUsers() {
   // Actions
   const handleApprove = async (id: string) => {
     setActionLoading(id);
+    // Instant optimistic UI update
+    setVerifications((prev) => prev.filter((r) => r.request_id !== id && r.id !== id));
     try {
       await api.post(`/api/v1/admin/verifications/${id}/approve`);
       toast.success("Application approved and verified successfully!");
@@ -222,6 +224,7 @@ export default function AdminUsers() {
     } catch (err: any) {
       console.error("Failed to approve", err);
       toast.error(err.response?.data?.detail || "Failed to approve verification");
+      fetchData();
     } finally {
       setActionLoading(null);
     }
@@ -230,6 +233,8 @@ export default function AdminUsers() {
   const handleReject = async (id: string) => {
     if (!confirm("Are you sure you want to reject this verification request?")) return;
     setActionLoading(id);
+    // Instant optimistic UI update
+    setVerifications((prev) => prev.filter((r) => r.request_id !== id && r.id !== id));
     try {
       await api.post(`/api/v1/admin/verifications/${id}/reject`);
       toast.success("Verification request rejected");
@@ -238,6 +243,7 @@ export default function AdminUsers() {
     } catch (err: any) {
       console.error("Failed to reject", err);
       toast.error(err.response?.data?.detail || "Failed to reject verification");
+      fetchData();
     } finally {
       setActionLoading(null);
     }

@@ -40,10 +40,10 @@ export default function DoctorAppointmentsPage() {
     });
   }, []);
 
-  const fetchAppointments = useCallback(async () => {
+  const fetchAppointments = useCallback(async (silent = false) => {
     if (!userId) return;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       // Try API first
       try {
@@ -51,8 +51,11 @@ export default function DoctorAppointmentsPage() {
         if (statusFilter) params.status = statusFilter;
         const res = await api.get(`${API_PREFIX}/appointments`, { params });
         const data = res.data?.data;
-        setAppointments(data?.appointments || []);
-        return;
+        if (data?.appointments) {
+          setAppointments(data.appointments);
+          if (!silent) setLoading(false);
+          return;
+        }
       } catch {
         // Fallback to Supabase
       }
@@ -89,7 +92,7 @@ export default function DoctorAppointmentsPage() {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [userId, statusFilter]);
 
@@ -99,18 +102,23 @@ export default function DoctorAppointmentsPage() {
 
   const handleUpdateStatus = async (id: string, status: string, reason?: string) => {
     setUpdatingId(id);
+    // Instant optimistic update
+    setAppointments((prev) =>
+      prev.map((a: any) => (a.id === id ? { ...a, status } : a))
+    );
     try {
       await api.patch(`${API_PREFIX}/appointments/${id}/status`, { status, reason });
       toast.success(`Appointment ${status.toLowerCase()}`);
-      fetchAppointments();
+      fetchAppointments(true);
     } catch {
       // Fallback
       const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
       if (!error) {
         toast.success(`Appointment ${status.toLowerCase()}`);
-        fetchAppointments();
+        fetchAppointments(true);
       } else {
         toast.error("Failed to update status");
+        fetchAppointments(true);
       }
     } finally {
       setUpdatingId("");

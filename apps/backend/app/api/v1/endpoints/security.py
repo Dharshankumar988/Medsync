@@ -82,18 +82,20 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
                 res = await client.post(
                     f"{supabase_url}/auth/v1/token?grant_type=password",
                     headers={"apikey": settings.SUPABASE_KEY, "Content-Type": "application/json"},
-                    json={"email": current_user.email, "password": password}
+                    json={"email": current_user.email.strip(), "password": password}
                 )
                 if res.status_code == 200:
                     return True
         except Exception:
             pass
 
+    user_id_str = str(current_user.id)
+
     # 2. Direct DB verification via extensions.crypt / crypt in auth.users
     try:
         res = await db.execute(
             text("SELECT (encrypted_password = extensions.crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
-            {"pwd": password, "user_id": current_user.id}
+            {"pwd": password, "user_id": user_id_str}
         )
         match = res.scalar()
         if match:
@@ -102,7 +104,7 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
         try:
             res = await db.execute(
                 text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
-                {"pwd": password, "user_id": current_user.id}
+                {"pwd": password, "user_id": user_id_str}
             )
             match = res.scalar()
             if match:
@@ -115,7 +117,7 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
         import bcrypt
         res_hash = await db.execute(
             text("SELECT encrypted_password FROM auth.users WHERE id = :user_id"),
-            {"user_id": current_user.id}
+            {"user_id": user_id_str}
         )
         enc_pwd = res_hash.scalar()
         if enc_pwd and isinstance(enc_pwd, str) and bcrypt.checkpw(password.encode('utf-8'), enc_pwd.encode('utf-8')):

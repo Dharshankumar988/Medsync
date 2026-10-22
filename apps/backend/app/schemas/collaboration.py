@@ -98,4 +98,5 @@ class ConsultedPatientItem(BaseModel):
     date_of_birth: Optional[str] = None
     blood_group: Optional[str] = None
     medical_alerts: Optional[str] = None
+    profile_picture_url: Optional[str] = None
 

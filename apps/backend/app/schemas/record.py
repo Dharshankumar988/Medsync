@@ -101,3 +101,53 @@ class DoctorAccessibleRecordResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True, from_attributes=True)
 
 
+class PatientDoctorPermissionItem(BaseModel):
+    permission_id: uuid.UUID
+    record_id: uuid.UUID
+    record_title: str
+    doctor_id: uuid.UUID
+    doctor_name: str
+    doctor_specialization: Optional[str] = None
+    hospital_name: Optional[str] = None
+    access_level: str
+    granted_at: datetime
+    is_revoked: bool
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class PatientAccessLogItem(BaseModel):
+    id: uuid.UUID
+    record_id: uuid.UUID
+    record_title: str
+    doctor_id: uuid.UUID
+    doctor_name: str
+    doctor_specialization: Optional[str] = None
+    accessed_at: datetime
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class PatientDoctorAccessOverview(BaseModel):
+    active_permissions: List[PatientDoctorPermissionItem] = []
+    access_logs: List[PatientAccessLogItem] = []
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class RevokeDoctorAccessRequest(BaseModel):
+    doctor_id: uuid.UUID
+    record_id: Optional[uuid.UUID] = None
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class GrantDoctorAccessRequest(BaseModel):
+    doctor_id: uuid.UUID
+    record_id: Optional[uuid.UUID] = None
+    pin: Optional[str] = None
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+

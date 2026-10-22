@@ -92,8 +92,8 @@ export default function DoctorSettingsPage() {
       toast.error("New PIN and Confirm PIN do not match.");
       return;
     }
-    if (pinStatus !== "NOT_STARTED" && !currentPassword) {
-      toast.error("Please enter your current account password to update your PIN.");
+    if (!currentPassword) {
+      toast.error("Please enter your current account password to verify identity.");
       return;
     }
     
@@ -105,7 +105,7 @@ export default function DoctorSettingsPage() {
 
       const apiUrl = getApiUrl();
       
-      if (currentPassword) {
+      if (pinStatus !== "NOT_STARTED") {
         const formData = new FormData();
         formData.append('new_pin', pin);
         formData.append('current_password', currentPassword);
@@ -116,6 +116,7 @@ export default function DoctorSettingsPage() {
       } else {
         const formData = new FormData();
         formData.append('pin', pin);
+        formData.append('password', currentPassword);
 
         await axios.post(`${apiUrl}/security/enroll-pin`, formData, {
           headers: { Authorization: `Bearer ${token}` }

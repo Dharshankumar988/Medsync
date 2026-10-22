@@ -57,44 +57,53 @@ export default function DoctorPatientsPage() {
     });
   }, []);
 
-  const fetchPatients = useCallback(async () => {
+  const fetchPatients = useCallback(async (silent = false) => {
     if (!userId) return;
     try {
-      setLoading(true);
-      // Find authorized patients via appointments
-      const { data: appts } = await supabase
-        .from("appointments")
-        .select("patient_id")
-        .eq("doctor_id", userId);
+      if (!silent) setLoading(true);
 
-      // Find authorized patients via prescriptions
-      const { data: pres } = await supabase
-        .from("prescriptions")
-        .select("patient_id")
-        .eq("doctor_id", userId);
+      // 1. Try backend consulted-patients endpoint first (handles appointments, prescriptions, referrals & permissions)
+      try {
+        const res = await api.get("/api/v1/doctor-collaboration/consulted-patients");
+        if (res.data?.data && Array.isArray(res.data.data)) {
+          setPatients(res.data.data);
+          if (!silent) setLoading(false);
+          return;
+        }
+      } catch (backendErr) {
+        console.warn("Backend consulted-patients endpoint fallback:", backendErr);
+      }
 
-      // Also authorized patients via record permissions granted to this doctor
-      const { data: perms } = await supabase
-        .from("record_permissions")
-        .select("medical_records:record_id(patient_id)")
-        .eq("granted_to", userId)
-        .eq("is_revoked", false);
+      // 2. Fallback: Query Supabase
+      const [apptsRes, presRes, permsRes, refsRes] = await Promise.all([
+        supabase.from("appointments").select("patient_id").eq("doctor_id", userId),
+        supabase.from("prescriptions").select("patient_id").eq("doctor_id", userId),
+        supabase
+          .from("record_permissions")
+          .select("medical_records:record_id(patient_id)")
+          .eq("granted_to", userId)
+          .eq("is_revoked", false),
+        supabase
+          .from("doctor_referrals")
+          .select("patient_id")
+          .or(`referring_doctor_id.eq.${userId},referred_to_doctor_id.eq.${userId}`),
+      ]);
 
-      const permPatientIds = (perms || [])
+      const permPatientIds = (permsRes.data || [])
         .map((p: any) => p?.medical_records?.patient_id)
         .filter(Boolean);
 
-      const apptPatientIds = appts?.map((a) => a.patient_id) || [];
-      const presPatientIds = pres?.map((p) => p.patient_id) || [];
+      const apptPatientIds = apptsRes.data?.map((a: any) => a.patient_id) || [];
+      const presPatientIds = presRes.data?.map((p: any) => p.patient_id) || [];
+      const refPatientIds = refsRes.data?.map((r: any) => r.patient_id) || [];
 
       // Distinct patient IDs
       const distinctPatientIds = Array.from(
-        new Set([...apptPatientIds, ...presPatientIds, ...permPatientIds])
+        new Set([...apptPatientIds, ...presPatientIds, ...permPatientIds, ...refPatientIds])
       );
 
       if (distinctPatientIds.length === 0) {
-        setPatients([]);
-        setLoading(false);
+        setPatients((prev) => (prev.length > 0 && silent ? prev : []));
         return;
       }
 
@@ -132,14 +141,14 @@ export default function DoctorPatientsPage() {
     } catch (err) {
       console.error("Error fetching patients:", err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [userId]);
 
-  const fetchReferrals = useCallback(async () => {
+  const fetchReferrals = useCallback(async (silent = false) => {
     if (!userId) return;
     try {
-      setReferralsLoading(true);
+      if (!silent) setReferralsLoading(true);
       const [incRes, outRes] = await Promise.all([
         api.get("/api/v1/doctor-collaboration/referrals/incoming"),
         api.get("/api/v1/doctor-collaboration/referrals/outgoing"),
@@ -149,7 +158,7 @@ export default function DoctorPatientsPage() {
     } catch (err) {
       console.error("Error fetching referrals:", err);
     } finally {
-      setReferralsLoading(false);
+      if (!silent) setReferralsLoading(false);
     }
   }, [userId]);
 
@@ -162,13 +171,41 @@ export default function DoctorPatientsPage() {
 
   const handleAcceptReferral = async (referralId: string) => {
     setProcessingReferralId(referralId);
+    // 1. Instant optimistic UI update: status changes to ACCEPTED immediately
+    const acceptedRef = incomingReferrals.find((r) => r.id === referralId);
+    setIncomingReferrals((prev) =>
+      prev.map((r) => (r.id === referralId ? { ...r, status: "ACCEPTED" } : r))
+    );
+
+    // 2. Add patient to local state immediately so patient tab reflects acceptance instantly
+    if (acceptedRef?.patient_id) {
+      setPatients((prev) => {
+        if (prev.some((p) => (p.user_id || p.id) === acceptedRef.patient_id)) return prev;
+        return [
+          {
+            id: acceptedRef.patient_id,
+            user_id: acceptedRef.patient_id,
+            full_name: acceptedRef.patient_name || "Patient",
+            phone_number: acceptedRef.patient_phone || null,
+          },
+          ...prev,
+        ];
+      });
+    }
+
     try {
-      await api.post(`/api/v1/doctor-collaboration/referrals/${referralId}/accept`);
+      const res = await api.post(`/api/v1/doctor-collaboration/referrals/${referralId}/accept`);
+      if (res.data?.data) {
+        setIncomingReferrals((prev) =>
+          prev.map((r) => (r.id === referralId ? { ...r, ...res.data.data, status: "ACCEPTED" } : r))
+        );
+      }
       toast.success("Referral accepted. You now have clinical access to the patient's records.");
-      fetchReferrals();
-      fetchPatients();
+      await Promise.all([fetchReferrals(true), fetchPatients(true)]);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Failed to accept referral");
+      fetchReferrals(true);
+      fetchPatients(true);
     } finally {
       setProcessingReferralId(null);
     }
@@ -176,12 +213,22 @@ export default function DoctorPatientsPage() {
 
   const handleDeclineReferral = async (referralId: string) => {
     setProcessingReferralId(referralId);
+    // Instant optimistic UI update
+    setIncomingReferrals((prev) =>
+      prev.map((r) => (r.id === referralId ? { ...r, status: "REJECTED" } : r))
+    );
     try {
-      await api.post(`/api/v1/doctor-collaboration/referrals/${referralId}/decline`);
+      const res = await api.post(`/api/v1/doctor-collaboration/referrals/${referralId}/decline`);
+      if (res.data?.data) {
+        setIncomingReferrals((prev) =>
+          prev.map((r) => (r.id === referralId ? { ...r, ...res.data.data, status: "REJECTED" } : r))
+        );
+      }
       toast.info("Referral declined.");
-      fetchReferrals();
+      await fetchReferrals(true);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Failed to decline referral");
+      fetchReferrals(true);
     } finally {
       setProcessingReferralId(null);
     }

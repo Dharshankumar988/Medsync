@@ -20,6 +20,11 @@ from app.schemas.record import (
     RecordConsentResponse,
     PermissionActionResponse,
     DoctorAccessibleRecordResponse,
+    PatientDoctorPermissionItem,
+    PatientAccessLogItem,
+    PatientDoctorAccessOverview,
+    RevokeDoctorAccessRequest,
+    GrantDoctorAccessRequest,
 )
 from app.services.record import MedicalRecordService
 from app.services.permission import PermissionService
@@ -76,8 +81,8 @@ async def list_my_records(
 
 class GrantPermissionReq(BaseModel):
     granted_to: uuid.UUID
-    expires_at: str = None
-    pin: str
+    expires_at: Optional[str] = None
+    pin: Optional[str] = None
 
 @router.post("/{record_id}/permissions", response_model=APIResponse[PermissionActionResponse])
 async def grant_permission(
@@ -86,10 +91,11 @@ async def grant_permission(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(require_patient)
 ):
-    from app.services.security_service import validate_patient_pin
-    is_valid = await validate_patient_pin(db, current_user.id, req.pin)
-    if not is_valid:
-        raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+    if req.pin:
+        from app.services.security_service import validate_patient_pin
+        is_valid = await validate_patient_pin(db, current_user.id, req.pin)
+        if not is_valid:
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
 
     record = await record_repo.get(db, record_id)
     if not record or record.patient_id != current_user.id:
@@ -561,5 +567,201 @@ async def download_record_raw(
             "Content-Disposition": f'attachment; filename="{clean_filename}"'
         }
     )
+
+
+@router.get("/patient/doctor-access", response_model=APIResponse[PatientDoctorAccessOverview])
+async def get_patient_doctor_access(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_patient),
+):
+    from app.models.doctor import Doctor
+    from app.models.download_audit_log import DownloadAuditLog
+
+    # 1. Fetch active permissions for records owned by this patient
+    stmt = (
+        select(RecordPermission, MedicalRecord, Doctor)
+        .join(MedicalRecord, MedicalRecord.id == RecordPermission.record_id)
+        .join(Doctor, Doctor.user_id == RecordPermission.granted_to)
+        .where(
+            MedicalRecord.patient_id == current_user.id,
+            RecordPermission.is_revoked.is_(False),
+            RecordPermission.granted_to != current_user.id,
+        )
+        .order_by(RecordPermission.created_at.desc())
+    )
+    res = await db.execute(stmt)
+    perm_rows = res.all()
+
+    active_perms: List[PatientDoctorPermissionItem] = []
+    for perm, rec, doc in perm_rows:
+        active_perms.append(
+            PatientDoctorPermissionItem(
+                permission_id=perm.id,
+                record_id=rec.id,
+                record_title=rec.title,
+                doctor_id=doc.user_id,
+                doctor_name=doc.full_name,
+                doctor_specialization=doc.specialization,
+                hospital_name=doc.hospital_name,
+                access_level=perm.access_level,
+                granted_at=perm.created_at,
+                is_revoked=perm.is_revoked,
+            )
+        )
+
+    # 2. Fetch doctor access audit logs for records owned by this patient
+    log_stmt = (
+        select(DownloadAuditLog, MedicalRecord, Doctor)
+        .join(MedicalRecord, MedicalRecord.id == DownloadAuditLog.entity_id)
+        .join(Doctor, Doctor.user_id == DownloadAuditLog.user_id)
+        .where(
+            MedicalRecord.patient_id == current_user.id,
+            DownloadAuditLog.entity_type == "MEDICAL_RECORD",
+        )
+        .order_by(DownloadAuditLog.created_at.desc())
+        .limit(50)
+    )
+    log_res = await db.execute(log_stmt)
+    log_rows = log_res.all()
+
+    access_logs: List[PatientAccessLogItem] = []
+    for log, rec, doc in log_rows:
+        access_logs.append(
+            PatientAccessLogItem(
+                id=log.id,
+                record_id=rec.id,
+                record_title=rec.title,
+                doctor_id=doc.user_id,
+                doctor_name=doc.full_name,
+                doctor_specialization=doc.specialization,
+                accessed_at=log.created_at,
+            )
+        )
+
+    return APIResponse(
+        message="Patient doctor access overview fetched",
+        data=PatientDoctorAccessOverview(
+            active_permissions=active_perms,
+            access_logs=access_logs,
+        ),
+    )
+
+
+@router.post("/patient/revoke-doctor-access", response_model=APIResponse[PermissionActionResponse])
+async def revoke_doctor_access(
+    req: RevokeDoctorAccessRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_patient),
+):
+    from app.services.permission import PermissionService
+    from app.models.consent import ConsentHistory
+    from app.models.record import RecordPermission
+
+    if req.record_id:
+        record = await record_repo.get(db, req.record_id)
+        if not record or record.patient_id != current_user.id:
+            from app.core.exceptions import ForbiddenException
+            raise ForbiddenException("You don't own this record")
+        await PermissionService.revoke_permission(db, req.record_id, current_user.id, req.doctor_id)
+    else:
+        # Revoke across all records belonging to this patient
+        records_stmt = select(MedicalRecord.id).where(MedicalRecord.patient_id == current_user.id)
+        rec_res = await db.execute(records_stmt)
+        patient_rec_ids = rec_res.scalars().all()
+
+        if patient_rec_ids:
+            perms_stmt = select(RecordPermission).where(
+                RecordPermission.record_id.in_(patient_rec_ids),
+                RecordPermission.granted_to == req.doctor_id,
+                RecordPermission.is_revoked.is_(False),
+            )
+            perm_res = await db.execute(perms_stmt)
+            for perm in perm_res.scalars().all():
+                perm.is_revoked = True
+
+            # Log ConsentHistory
+            consent_log = ConsentHistory(
+                id=uuid.uuid4(),
+                patient_id=current_user.id,
+                doctor_id=req.doctor_id,
+                action="REVOKED",
+            )
+            db.add(consent_log)
+            await db.commit()
+
+    return APIResponse(
+        message="Access permission successfully revoked",
+        data=PermissionActionResponse(
+            status="REVOKED",
+            message="Doctor's access has been revoked and recorded on ledger."
+        ),
+    )
+
+
+@router.post("/patient/grant-doctor-access", response_model=APIResponse[PermissionActionResponse])
+async def grant_doctor_access(
+    req: GrantDoctorAccessRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_patient),
+):
+    from app.services.permission import PermissionService
+    from app.models.consent import ConsentHistory
+    from app.models.record import RecordPermission
+
+    if req.pin:
+        from app.services.security_service import validate_patient_pin
+        is_valid = await validate_patient_pin(db, current_user.id, req.pin)
+        if not is_valid:
+            raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+
+    if req.record_id:
+        record = await record_repo.get(db, req.record_id)
+        if not record or record.patient_id != current_user.id:
+            from app.core.exceptions import ForbiddenException
+            raise ForbiddenException("You don't own this record")
+        await PermissionService.grant_permission(db, req.record_id, current_user.id, req.doctor_id)
+    else:
+        # Grant across all records belonging to this patient
+        records_stmt = select(MedicalRecord.id).where(MedicalRecord.patient_id == current_user.id)
+        rec_res = await db.execute(records_stmt)
+        patient_rec_ids = rec_res.scalars().all()
+
+        for r_id in patient_rec_ids:
+            existing_perm = select(RecordPermission).where(
+                RecordPermission.record_id == r_id,
+                RecordPermission.granted_to == req.doctor_id,
+            )
+            res = await db.execute(existing_perm)
+            perm = res.scalar_one_or_none()
+            if perm:
+                perm.is_revoked = False
+            else:
+                db.add(
+                    RecordPermission(
+                        id=uuid.uuid4(),
+                        record_id=r_id,
+                        granted_to=req.doctor_id,
+                        granted_by=current_user.id,
+                        access_level="READ",
+                        is_revoked=False,
+                    )
+                )
+        consent_log = ConsentHistory(
+            id=uuid.uuid4(),
+            patient_id=current_user.id,
+            doctor_id=req.doctor_id,
+            action="GRANTED",
+        )
+        db.add(consent_log)
+        await db.commit()
+
+    return APIResponse(
+        message="Access permission successfully granted",
+        data=PermissionActionResponse(
+            status="GRANTED",
+            message="Doctor has been granted access to medical records."
+        ),
+    )
+
 
 

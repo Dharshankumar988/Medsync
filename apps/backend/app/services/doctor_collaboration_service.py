@@ -605,6 +605,7 @@ class DoctorCollaborationService:
                 date_of_birth=p.date_of_birth,
                 blood_group=p.blood_group,
                 medical_alerts=p.medical_alerts,
+                profile_picture_url=p.profile_picture_url,
             )
             for p in patients
         ]
