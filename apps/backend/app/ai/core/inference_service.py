@@ -4,6 +4,7 @@ cold-start detection, caching, retries, and connection pooling.
 """
 import hashlib
 import logging
+import os
 import time
 import asyncio
 from typing import Dict, Any, Optional
