@@ -12,6 +12,8 @@ jobs:
   update:
     name: Publish EAS Over-The-Air Update
     runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
@@ -19,7 +21,7 @@ jobs:
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: 📦 Setup pnpm
         uses: pnpm/action-setup@v3
