@@ -60,12 +60,19 @@ export function AppointmentsAndOrdersOverview({
 
   // Calendar state
   const today = useMemo(() => new Date(), []);
+  const getLocalDateString = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayStr = useMemo(() => getLocalDateString(today), [today]);
   const [currentDate, setCurrentDate] = useState(
     new Date(today.getFullYear(), today.getMonth(), 1)
   );
-  const [selectedDateStr, setSelectedDateStr] = useState<string>(
-    today.toISOString().split('T')[0]
-  );
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
+  const [viewAllAppointments, setViewAllAppointments] = useState<boolean>(false);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -118,7 +125,6 @@ export function AppointmentsAndOrdersOverview({
     }
 
     // Days in current month
-    const todayStr = today.toISOString().split('T')[0];
     for (let day = 1; day <= daysInMonth; day++) {
       const monthStr = String(currentMonth + 1).padStart(2, '0');
       const dayStr = String(day).padStart(2, '0');
@@ -138,15 +144,15 @@ export function AppointmentsAndOrdersOverview({
     }
 
     return cells;
-  }, [currentYear, currentMonth, today, selectedDateStr, appointmentDatesMap]);
+  }, [currentYear, currentMonth, todayStr, selectedDateStr, appointmentDatesMap]);
 
-  // Appointments on selected date or all upcoming if none on selected date
-  const filteredAppointments = useMemo(() => {
-    const onSelected = appointmentDatesMap.get(selectedDateStr) || [];
-    if (onSelected.length > 0) return onSelected;
-    // Fallback: return upcoming appointments sorted
-    return appointments.slice(0, 4);
-  }, [selectedDateStr, appointmentDatesMap, appointments]);
+  // Appointments for the active view
+  const displayedAppointments = useMemo(() => {
+    if (viewAllAppointments) {
+      return appointments;
+    }
+    return appointmentDatesMap.get(selectedDateStr) || [];
+  }, [viewAllAppointments, appointments, appointmentDatesMap, selectedDateStr]);
 
   return (
     <View style={styles.container}>
@@ -321,7 +327,12 @@ export function AppointmentsAndOrdersOverview({
                         { backgroundColor: '#2563EB' },
                       ],
                     ]}
-                    onPress={() => cell.dateStr && setSelectedDateStr(cell.dateStr)}
+                    onPress={() => {
+                      if (cell.dateStr) {
+                        setSelectedDateStr(cell.dateStr);
+                        setViewAllAppointments(false);
+                      }
+                    }}
                     activeOpacity={0.75}
                   >
                     <Text
@@ -421,25 +432,46 @@ export function AppointmentsAndOrdersOverview({
             </View>
           </View>
 
-          {/* Schedule on Selected Date */}
+          {/* Schedule Header Row */}
           <View style={styles.scheduleHeaderRow}>
-            <Text style={[styles.scheduleTitle, { color: theme.text }]}>
-              {selectedDateStr === today.toISOString().split('T')[0]
-                ? "Today's Schedule"
-                : `Schedule for ${selectedDateStr}`}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.scheduleTitle, { color: theme.text }]}>
+                {viewAllAppointments
+                  ? 'All Scheduled Consultations'
+                  : selectedDateStr === todayStr
+                  ? "Today's Schedule"
+                  : `Schedule for ${selectedDateStr}`}
+              </Text>
+              {!viewAllAppointments && (
+                <Text style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
+                  {displayedAppointments.length} appointment{displayedAppointments.length === 1 ? '' : 's'} on this date
+                </Text>
+              )}
+            </View>
 
             <TouchableOpacity
-              onPress={() => router.push('/(tabs)/patient/appointments')}
+              onPress={() => setViewAllAppointments(!viewAllAppointments)}
+              style={[
+                styles.viewToggleBtn,
+                {
+                  backgroundColor: viewAllAppointments ? '#3B82F6' : (isDark ? '#1F2430' : '#E2E8F0'),
+                  borderColor: viewAllAppointments ? '#2563EB' : theme.border,
+                },
+              ]}
               activeOpacity={0.8}
             >
-              <Text style={[styles.scheduleLink, { color: '#3B82F6' }]}>
-                View All <ArrowRight size={12} color="#3B82F6" />
+              <Text
+                style={[
+                  styles.viewToggleBtnText,
+                  { color: viewAllAppointments ? '#FFFFFF' : theme.text },
+                ]}
+              >
+                {viewAllAppointments ? 'Selected Day' : 'View All'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {filteredAppointments.length === 0 ? (
+          {displayedAppointments.length === 0 ? (
             <View
               style={[
                 styles.emptyCard,
@@ -449,25 +481,46 @@ export function AppointmentsAndOrdersOverview({
                 },
               ]}
             >
-              <CalendarIcon size={24} color={theme.textMuted} />
+              <CalendarIcon size={28} color={theme.textMuted} />
               <Text style={[styles.emptyCardTitle, { color: theme.text }]}>
-                No consultations on this date
+                No consultations on {selectedDateStr}
               </Text>
               <Text style={[styles.emptyCardSub, { color: theme.textMuted }]}>
-                Select another highlighted date with a dot on the calendar, or schedule a new consultation.
+                Select a date marked with a dot (●) on the calendar, or tap below to schedule a new visit.
               </Text>
 
-              <TouchableOpacity
-                style={styles.bookActionBtn}
-                onPress={() => router.push('/(tabs)/patient/appointments')}
-                activeOpacity={0.85}
-              >
-                <Plus size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.bookActionBtnText}>Book Clinic Visit</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={styles.bookActionBtn}
+                  onPress={() => router.push('/(tabs)/patient/appointments')}
+                  activeOpacity={0.85}
+                >
+                  <Plus size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.bookActionBtnText}>Book Visit</Text>
+                </TouchableOpacity>
+
+                {appointments.length > 0 && (
+                  <TouchableOpacity
+                    style={[
+                      styles.bookActionBtn,
+                      {
+                        backgroundColor: isDark ? '#1F2430' : '#E2E8F0',
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                    onPress={() => setViewAllAppointments(true)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.bookActionBtnText, { color: theme.text }]}>
+                      Show All ({appointments.length})
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           ) : (
-            filteredAppointments.map((appt) => {
+            displayedAppointments.map((appt) => {
               const isConfirmed = appt.status === 'CONFIRMED';
               return (
                 <View
@@ -884,6 +937,16 @@ const styles = StyleSheet.create({
   },
   scheduleLink: {
     fontSize: 12,
+    fontWeight: '700',
+  },
+  viewToggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  viewToggleBtnText: {
+    fontSize: 11.5,
     fontWeight: '700',
   },
   emptyCard: {

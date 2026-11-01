@@ -19,12 +19,12 @@ export function FloatingQuickActions() {
   const pathname = usePathname();
   const [scannerVisible, setScannerVisible] = useState(false);
 
-  // Only show for patient role
-  if (role !== 'patient') {
+  const isPulseScreen = pathname?.includes('pulse-ai');
+
+  // Hide completely on Pulse AI screen or if not a patient, so chat input is never obstructed
+  if (role !== 'patient' || isPulseScreen) {
     return null;
   }
-
-  const isPulseScreen = pathname?.includes('pulse-ai');
 
   const handleOpenAi = () => {
     router.push('/(tabs)/patient/pulse-ai');

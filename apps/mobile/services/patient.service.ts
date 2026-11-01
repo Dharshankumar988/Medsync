@@ -266,6 +266,29 @@ export const patientService = {
     return data ?? [];
   },
 
+  getHospitals: async (type?: string) => {
+    try {
+      const res = await api.get('/hospitals', { params: type ? { type } : {} });
+      return res.data?.data || [];
+    } catch (err) {
+      console.warn('Failed to fetch hospitals from API, querying Supabase directly:', err);
+      let query = supabase.from('hospitals').select('*').eq('is_active', true);
+      if (type) query = query.eq('type', type);
+      const { data } = await query;
+      return data || [];
+    }
+  },
+
+  getDoctorsAtHospital: async (hospitalId: string) => {
+    try {
+      const res = await api.get(`/hospitals/${hospitalId}/doctors`);
+      return res.data?.data || [];
+    } catch (err) {
+      console.warn('Failed to fetch doctors at hospital:', err);
+      return [];
+    }
+  },
+
   // ── Prescriptions ──
   getPrescriptions: async (): Promise<PrescriptionItem[]> => {
     const { data: { user } } = await supabase.auth.getUser();

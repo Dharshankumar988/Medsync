@@ -31,6 +31,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react-native';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
+import { Avatar } from '../../../components/common/Avatar';
 import { patientService, PatientDashboardSummary } from '../../../services/patient.service';
 import { useRole } from '../../../providers/role-provider';
 import { useTheme } from '../../../context/ThemeContext';
@@ -101,6 +102,26 @@ export default function PatientDashboard() {
     if (user?.email) return user.email.split('@')[0];
     return 'Patient';
   }, [profile, user]);
+
+  const userAvatarUrl = useMemo(() => {
+    return (
+      profile?.profile_picture_url ||
+      (user as any)?.profile_picture_url ||
+      (user as any)?.profile_image_url ||
+      (user?.user_metadata as any)?.avatar_url ||
+      (user?.user_metadata as any)?.picture ||
+      null
+    );
+  }, [profile, user]);
+
+  const userInitials = useMemo(() => {
+    const name = patientDisplayName || 'Patient';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  }, [patientDisplayName]);
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -174,19 +195,8 @@ export default function PatientDashboard() {
             onPress={() => router.push('/(tabs)/patient/profile')}
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.avatarCircle,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-            >
-              <Image
-                source={require('../../../assets/images/app-logo.png')}
-                style={styles.avatarImage}
-                resizeMode="cover"
-              />
-            </View>
-            <View style={{ marginLeft: 12 }}>
+            <Avatar src={userAvatarUrl} fallback={userInitials} size={44} />
+            <View style={{ marginLeft: 12, flexShrink: 1 }}>
               <Text style={[styles.greetingText, { color: theme.textMuted }]}>
                 {greeting},
               </Text>
@@ -200,32 +210,6 @@ export default function PatientDashboard() {
           </TouchableOpacity>
 
           <View style={styles.headerRightActions}>
-            {/* Quick QR Scanner */}
-            <TouchableOpacity
-              style={[
-                styles.iconButton,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-              onPress={() => setQrScannerVisible(true)}
-              activeOpacity={0.8}
-              accessibilityLabel="Quick QR Scanner"
-            >
-              <Scan size={18} color={theme.text} />
-            </TouchableOpacity>
-
-            {/* Quick Pulse AI */}
-            <TouchableOpacity
-              style={[
-                styles.iconButton,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-              onPress={() => router.push('/(tabs)/patient/pulse-ai')}
-              activeOpacity={0.8}
-              accessibilityLabel="Quick Pulse AI"
-            >
-              <Sparkles size={18} color="#38BDF8" />
-            </TouchableOpacity>
-
             {/* Theme Switcher Button */}
             <TouchableOpacity
               style={[
