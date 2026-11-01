@@ -423,21 +423,6 @@ export default function PatientRecordsScreen() {
         <ScreenHeader
           title="Medical Records"
           subtitle="Encrypted diagnostic files & prescriptions"
-          rightElement={
-            activeTab === 'RECORDS' ? (
-              <TouchableOpacity
-                style={[styles.addRecordHeaderBtn, { backgroundColor: theme.primaryButton }]}
-                onPress={() => setUploadModalVisible(true)}
-                activeOpacity={0.85}
-                accessibilityLabel="Add Medical Document"
-              >
-                <Plus size={15} color={theme.primaryButtonText} />
-                <Text style={[styles.addRecordHeaderBtnText, { color: theme.primaryButtonText }]}>
-                  Add
-                </Text>
-              </TouchableOpacity>
-            ) : undefined
-          }
         />
 
         {/* Tab Segment Controls */}
