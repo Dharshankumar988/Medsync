@@ -63,6 +63,8 @@ export default function SmartContractsList() {
     }
   ];
 
+
+
   useEffect(() => {
     const fetchContracts = async () => {
       try {

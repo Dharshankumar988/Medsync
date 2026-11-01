@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState, useEffect } from "react";
+import { memo, useMemo, useState, useEffect, useCallback } from "react";
 import { LogOut, User, Settings, ShoppingBag } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -21,7 +21,7 @@ export const Header = memo(function Header({ role }: { role: string }) {
   const router = useRouter();
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
-  const fetchAvatar = async () => {
+  const fetchAvatar = useCallback(async () => {
     try {
       const { data } = await supabase.auth.getUser();
       if (!data?.user) return;
@@ -58,7 +58,7 @@ export const Header = memo(function Header({ role }: { role: string }) {
     } catch (err) {
       console.warn("Could not load header avatar:", err);
     }
-  };
+  }, [role]);
 
   useEffect(() => {
     fetchAvatar();
@@ -75,7 +75,7 @@ export const Header = memo(function Header({ role }: { role: string }) {
     return () => {
       window.removeEventListener("medsync:avatar-updated", handleAvatarUpdate);
     };
-  }, [pathname, role]);
+  }, [fetchAvatar, pathname]);
   
   const { paths, currentPage } = useMemo(() => {
     const pathsList = pathname.split('/').filter(Boolean);
@@ -120,6 +120,7 @@ export const Header = memo(function Header({ role }: { role: string }) {
             <DropdownMenuTrigger asChild>
               <button aria-label="User profile" className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm ring-2 ring-transparent hover:ring-primary/20 transition-all outline-none overflow-hidden">
                 {userAvatar ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={userAvatar} alt="Profile" className="w-full h-full object-cover rounded-full" referrerPolicy="no-referrer" />
                 ) : (
                   role.charAt(0).toUpperCase()

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@medsync/ui';
 import { Truck, Clock, CheckCircle, CheckCircle2, Loader2, MapPin, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
@@ -106,7 +106,7 @@ export default function DeliveryTracking() {
     }
   };
 
-  const fetchDeliveries = async () => {
+  const fetchDeliveries = useCallback(async () => {
     try {
       const response = await (api as any).get('/api/v1/delivery/tracking/active', { noCache: true });
       const rawDeliveries = response.data?.data ?? response.data;
@@ -119,14 +119,14 @@ export default function DeliveryTracking() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [confirmedIds]);
 
   useEffect(() => {
     fetchDeliveries();
     // Poll every 5 seconds for updates
     const interval = setInterval(fetchDeliveries, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchDeliveries]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {

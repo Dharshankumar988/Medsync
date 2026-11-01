@@ -170,11 +170,10 @@ export function CreatePrescriptionCard() {
                       key={d}
                       type="button"
                       onClick={() => setDiagnosis(d)}
-                      className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
-                        diagnosis === d
-                          ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/40 font-medium"
-                          : "bg-muted/40 text-muted-foreground hover:bg-muted border-border/60"
-                      }`}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${diagnosis === d
+                        ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/40 font-medium"
+                        : "bg-muted/40 text-muted-foreground hover:bg-muted border-border/60"
+                        }`}
                     >
                       {d}
                     </button>
@@ -193,11 +192,10 @@ export function CreatePrescriptionCard() {
                       key={med}
                       type="button"
                       onClick={() => setSelectedMed(med)}
-                      className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
-                        selectedMed === med
-                          ? "bg-primary/20 text-primary border-primary/40 font-medium"
-                          : "bg-muted/40 text-muted-foreground hover:bg-muted border-border/60"
-                      }`}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${selectedMed === med
+                        ? "bg-primary/20 text-primary border-primary/40 font-medium"
+                        : "bg-muted/40 text-muted-foreground hover:bg-muted border-border/60"
+                        }`}
                     >
                       + {med}
                     </button>
@@ -230,9 +228,8 @@ export function CreatePrescriptionCard() {
                     </div>
                     <Badge
                       variant="outline"
-                      className={`text-[10px] px-2 py-0.5 shrink-0 ${
-                        rx.is_dispensed ? "text-muted-foreground border-border" : "text-emerald-600 border-emerald-500/30 bg-emerald-500/10"
-                      }`}
+                      className={`text-[10px] px-2 py-0.5 shrink-0 ${rx.is_dispensed ? "text-muted-foreground border-border" : "text-emerald-600 border-emerald-500/30 bg-emerald-500/10"
+                        }`}
                     >
                       {rx.is_dispensed ? "Dispensed" : "Active"}
                     </Badge>

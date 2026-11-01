@@ -744,7 +744,7 @@ function MyHealthContent() {
                 ))}
               </div>
               <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                <span>Didn't receive the email?</span>
+                <span>Didn&apos;t receive the email?</span>
                 {canResendResetOtp ? (
                   <button
                     type="button"
@@ -866,6 +866,7 @@ function MyHealthContent() {
                 <div className="relative group shrink-0">
                   <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary/30 bg-primary/10 shadow-sm flex items-center justify-center">
                     {avatarUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
                       <UserCheck className="w-8 h-8 text-primary" />
@@ -974,6 +975,7 @@ function MyHealthContent() {
                 <div className="relative group shrink-0">
                   <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary/30 bg-primary/10 shadow-sm flex items-center justify-center">
                     {avatarUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
                       <UserCheck className="w-8 h-8 text-primary" />

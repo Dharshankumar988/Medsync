@@ -47,4 +47,9 @@ jobs:
 
       - name: 📲 Publish Over-The-Air Update to Production
         working-directory: apps/mobile
-        run: eas update --auto --channel production
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::warning title=Missing EXPO_TOKEN::EXPO_TOKEN secret is not configured in GitHub repository secrets. Skipping EAS Over-The-Air update. To enable automatic OTA updates, generate a token at https://expo.dev/accounts/[your-username]/settings/access-tokens and add it as EXPO_TOKEN in GitHub Repo Settings -> Secrets and variables -> Actions."
+            exit 0
+          fi
+          eas update --auto --channel production

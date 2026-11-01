@@ -437,7 +437,7 @@ function CallbackHandler() {
           <div className="space-y-1">
             <h2 className="text-xl font-bold tracking-tight text-foreground">Authenticated with Google!</h2>
             <p className="text-sm text-muted-foreground">
-              Opening your MedSync mobile app. If it doesn't open automatically, tap below:
+              Opening your MedSync mobile app. If it doesn&apos;t open automatically, tap below:
             </p>
           </div>
           <div className="pt-2">

@@ -78,7 +78,7 @@ function PatientResetPasswordForm() {
     return () => {
       isMounted = false;
     };
-  }, [token, emailParam]);
+  }, [token, emailParam, router]);
 
   // Countdown timer for remaining seconds if available
   useEffect(() => {

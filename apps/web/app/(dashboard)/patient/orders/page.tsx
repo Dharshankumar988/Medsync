@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@medsync/ui";
 import { ShoppingBag, Truck, CheckCircle2, AlertCircle, ChevronRight, Plus, CreditCard, Banknote, ShieldCheck, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -26,7 +26,7 @@ export default function OrdersPage() {
     });
   }, []);
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
       // 1. Fetch from backend API
@@ -125,12 +125,12 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
     loadOrders();
-  }, [userId]);
+  }, [userId, loadOrders]);
 
   const getStatusColor = (status: string) => {
     switch((status || "").toUpperCase()) {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Skeleton, Badge } from "@medsync/ui";
 import { Avatar } from "@medsync/ui/components/avatar";
 import {
@@ -67,6 +67,59 @@ export default function SettingsPage() {
       if (data.user) setUserId(data.user.id);
     });
   }, []);
+
+  const handleApplyAvatarUrl = useCallback(async (targetUrl: string) => {
+    if (!targetUrl || !userId) return;
+    setSavingAvatar(true);
+    try {
+      // 1. Update backend DB
+      try {
+        await api.put("/api/v1/users/me/avatar", { avatar_url: targetUrl });
+      } catch (backendErr) {
+        console.warn("Backend avatar sync notice:", backendErr);
+      }
+
+      // 2. Update Supabase tables
+      await supabase
+        .from("patients")
+        .update({ profile_picture_url: targetUrl })
+        .eq("user_id", userId);
+
+      await supabase
+        .from("users")
+        .update({ profile_image_url: targetUrl })
+        .eq("id", userId);
+
+      // 3. Update Supabase Auth user metadata
+      try {
+        await supabase.auth.updateUser({
+          data: { avatar_url: targetUrl, picture: targetUrl }
+        });
+      } catch (authErr) {
+        console.warn("Auth user metadata update notice:", authErr);
+      }
+
+      setAvatarUrl(targetUrl);
+      setSelectedPreset(null);
+      if (filePreview) {
+        URL.revokeObjectURL(filePreview);
+        setFilePreview(null);
+      }
+      setSelectedFile(null);
+
+      // Notify header and layout components
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("medsync:avatar-updated", { detail: { url: targetUrl } }));
+      }
+
+      toast.success("Avatar updated successfully!");
+    } catch (err: any) {
+      console.error("Failed to update avatar:", err);
+      toast.error(err.message || "Failed to update avatar");
+    } finally {
+      setSavingAvatar(false);
+    }
+  }, [userId, filePreview]);
 
   useEffect(() => {
     if (!userId) return;
@@ -135,7 +188,7 @@ export default function SettingsPage() {
     }
 
     loadSettings();
-  }, [userId]);
+  }, [userId, handleApplyAvatarUrl]);
 
   const handleSelectPreset = (url: string) => {
     setSelectedPreset(url);
@@ -161,58 +214,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleApplyAvatarUrl = async (targetUrl: string) => {
-    if (!targetUrl || !userId) return;
-    setSavingAvatar(true);
-    try {
-      // 1. Update backend DB
-      try {
-        await api.put("/api/v1/users/me/avatar", { avatar_url: targetUrl });
-      } catch (backendErr) {
-        console.warn("Backend avatar sync notice:", backendErr);
-      }
 
-      // 2. Update Supabase tables
-      await supabase
-        .from("patients")
-        .update({ profile_picture_url: targetUrl })
-        .eq("user_id", userId);
-
-      await supabase
-        .from("users")
-        .update({ profile_image_url: targetUrl })
-        .eq("id", userId);
-
-      // 3. Update Supabase Auth user metadata
-      try {
-        await supabase.auth.updateUser({
-          data: { avatar_url: targetUrl, picture: targetUrl }
-        });
-      } catch (authErr) {
-        console.warn("Auth user metadata update notice:", authErr);
-      }
-
-      setAvatarUrl(targetUrl);
-      setSelectedPreset(null);
-      if (filePreview) {
-        URL.revokeObjectURL(filePreview);
-        setFilePreview(null);
-      }
-      setSelectedFile(null);
-
-      // Notify header and layout components
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("medsync:avatar-updated", { detail: { url: targetUrl } }));
-      }
-
-      toast.success("Avatar updated successfully!");
-    } catch (err: any) {
-      console.error("Failed to update avatar:", err);
-      toast.error(err.message || "Failed to update avatar");
-    } finally {
-      setSavingAvatar(false);
-    }
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
