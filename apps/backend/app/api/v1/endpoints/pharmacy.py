@@ -264,8 +264,14 @@ async def get_inventory_stub():
 
 @router.get("/orders")
 async def get_orders(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_pharmacy)):
-    # Fetch orders for this pharmacy
-    stmt = select(MedicineOrder, Patient).outerjoin(Patient, MedicineOrder.patient_id == Patient.user_id).where(MedicineOrder.pharmacy_id == current_user.id).order_by(MedicineOrder.created_at.desc())
+    # Fetch orders for this pharmacy (matching by user_id or pharmacy record id)
+    pharm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == current_user.id))
+    pharm_row = pharm_res.scalar_one_or_none()
+    pharmacy_ids = [current_user.id]
+    if pharm_row and pharm_row.id != current_user.id:
+        pharmacy_ids.append(pharm_row.id)
+
+    stmt = select(MedicineOrder, Patient).outerjoin(Patient, MedicineOrder.patient_id == Patient.user_id).where(MedicineOrder.pharmacy_id.in_(pharmacy_ids)).order_by(MedicineOrder.created_at.desc())
     result = await db.execute(stmt)
     rows = result.all()
     
@@ -312,7 +318,12 @@ async def get_analytics(db: AsyncSession = Depends(get_db), current_user: User =
     inv_count = await db.scalar(inv_count_stmt)
     
     # Query all orders for financial and operational metrics
-    orders_stmt = select(MedicineOrder).where(MedicineOrder.pharmacy_id == current_user.id)
+    pharm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == current_user.id))
+    pharm_row = pharm_res.scalar_one_or_none()
+    pharmacy_ids = [current_user.id]
+    if pharm_row and pharm_row.id != current_user.id:
+        pharmacy_ids.append(pharm_row.id)
+    orders_stmt = select(MedicineOrder).where(MedicineOrder.pharmacy_id.in_(pharmacy_ids))
     orders_res = await db.execute(orders_stmt)
     all_orders = orders_res.scalars().all()
     

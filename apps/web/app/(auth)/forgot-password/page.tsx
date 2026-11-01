@@ -47,6 +47,7 @@ function ForgotPasswordContent() {
   // Step state: "EMAIL" | "OTP_AND_PASSWORD" | "SUCCESS"
   const [step, setStep] = useState<"EMAIL" | "OTP_AND_PASSWORD" | "SUCCESS">("EMAIL");
   const [submittedEmail, setSubmittedEmail] = useState("");
+  const [userRole, setUserRole] = useState<string>("PATIENT");
   const [redirectingProvider, setRedirectingProvider] = useState<string | null>(null);
 
   // Form errors and loading
@@ -98,7 +99,7 @@ function ForgotPasswordContent() {
         email: cleanEmail,
       });
 
-      // Role check: Doctor / Pharmacy / Admin redirects directly to provider reset page
+      // Role check: Admin / Hospital redirects directly to provider reset page
       if (response.data?.action === "REDIRECT" && response.data?.redirectUrl) {
         setRedirectingProvider(response.data.role || "Healthcare Staff");
         setTimeout(() => {
@@ -107,10 +108,15 @@ function ForgotPasswordContent() {
         return;
       }
 
-      // Patient: 6-digit OTP code dispatched via Brevo
       setSubmittedEmail(cleanEmail);
-      if (response.data?.previewUrl) {
+      const roleUpper = String(response.data?.role || "PATIENT").toUpperCase();
+      setUserRole(roleUpper);
+
+      // Dev OTP preview is ONLY shown for Doctor and Pharmacy accounts
+      if (["DOCTOR", "PHARMACY"].includes(roleUpper) && response.data?.previewUrl) {
         setDevOtpPreview(response.data.previewUrl);
+      } else {
+        setDevOtpPreview(null);
       }
       setStep("OTP_AND_PASSWORD");
       setResendCountdown(60);
@@ -234,8 +240,10 @@ function ForgotPasswordContent() {
       setCanResend(false);
       setOtpDigits(["", "", "", "", "", ""]);
       otpRefs.current[0]?.focus();
-      if (res?.data?.preview_code) {
+      if (["DOCTOR", "PHARMACY"].includes(userRole) && res?.data?.preview_code) {
         setDevOtpPreview(res.data.preview_code);
+      } else {
+        setDevOtpPreview(null);
       }
     } catch (err: any) {
       const detail = err.response?.data?.detail || err.response?.data?.error || err.message;
@@ -351,13 +359,18 @@ function ForgotPasswordContent() {
                   </h1>
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     We sent a 6-digit OTP code to <strong className="text-foreground">{submittedEmail}</strong>.
+                    {!devOtpPreview && (
+                      <span className="block mt-1 text-muted-foreground/80">
+                        Please check your Gmail inbox (and Spam folder) for the verification code.
+                      </span>
+                    )}
                   </p>
                 </div>
 
                 {devOtpPreview && (
                   <Alert className="py-2 bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs">
                     <AlertDescription>
-                      <strong>Dev OTP:</strong> {devOtpPreview} (Brevo preview mode)
+                      <strong>Dev OTP:</strong> {devOtpPreview} (Doctor / Pharmacy dev preview mode)
                     </AlertDescription>
                   </Alert>
                 )}

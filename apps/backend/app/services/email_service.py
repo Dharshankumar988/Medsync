@@ -99,35 +99,13 @@ class EmailService:
         message.attach(part1)
         message.attach(part2)
 
-        # Attempt sending via SMTP if configured
-        smtp_user = settings.SMTP_USER
-        smtp_password = settings.SMTP_PASSWORD
-        smtp_host = settings.SMTP_HOST
-        smtp_port = settings.SMTP_PORT
-        
-        if smtp_host and smtp_user and smtp_password:
-            try:
-                logger.info(f"Connecting to SMTP server {smtp_host}:{smtp_port} for {to_email}...")
-                if settings.SMTP_SSL:
-                    server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10)
-                else:
-                    server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
-                    if settings.SMTP_TLS:
-                        server.starttls()
-                        
-                server.login(smtp_user, smtp_password)
-                envelope_from = email.utils.parseaddr(settings.SMTP_FROM)[1] or settings.SMTP_FROM
-                server.sendmail(envelope_from, [to_email], message.as_string())
-                server.quit()
-                logger.info(f"Password reset email sent via SMTP to {to_email}")
-                return {
-                    "success": True,
-                    "method": "smtp",
-                    "recipient": to_email,
-                    "preview_link": reset_link
-                }
-            except Exception as e:
-                logger.warning(f"SMTP delivery failed: {e}. Falling back to developer preview mode.")
+        if cls._dispatch_smtp(message, to_email, "Patient password reset link"):
+            return {
+                "success": True,
+                "method": "smtp",
+                "recipient": to_email,
+                "preview_link": reset_link
+            }
         
         # Dev / fallback mode (when local environment doesn't have live SMTP credentials)
         print("=" * 60)
@@ -141,6 +119,53 @@ class EmailService:
             "recipient": to_email,
             "preview_link": reset_link
         }
+
+    @classmethod
+    def _dispatch_smtp(cls, message: MIMEMultipart, to_email: str, log_label: str) -> bool:
+        """
+        Attempts SMTP delivery with a generous 35s timeout and automatic fallback
+        between STARTTLS (587) and SSL (465) to handle relay latency and ISP filtering.
+        """
+        smtp_user = settings.SMTP_USER
+        smtp_password = settings.SMTP_PASSWORD
+        smtp_host = settings.SMTP_HOST
+        smtp_port = settings.SMTP_PORT
+        
+        if not (smtp_host and smtp_user and smtp_password):
+            return False
+
+        configs_to_try = [
+            (smtp_port, settings.SMTP_SSL, settings.SMTP_TLS)
+        ]
+        if smtp_port == 587 or not settings.SMTP_SSL:
+            configs_to_try.append((465, True, False))
+        else:
+            configs_to_try.append((587, False, True))
+
+        envelope_from = email.utils.parseaddr(settings.SMTP_FROM)[1] or settings.SMTP_FROM
+
+        last_error = None
+        for port, use_ssl, use_tls in configs_to_try:
+            try:
+                logger.info(f"Connecting to SMTP {smtp_host}:{port} (ssl={use_ssl}, tls={use_tls}) for {to_email}...")
+                if use_ssl:
+                    server = smtplib.SMTP_SSL(smtp_host, port, timeout=35)
+                else:
+                    server = smtplib.SMTP(smtp_host, port, timeout=35)
+                    if use_tls:
+                        server.starttls()
+                        
+                server.login(smtp_user, smtp_password)
+                server.sendmail(envelope_from, [to_email], message.as_string())
+                server.quit()
+                logger.info(f"{log_label} successfully sent via SMTP ({smtp_host}:{port}) to {to_email}")
+                return True
+            except Exception as e:
+                last_error = e
+                logger.warning(f"SMTP delivery attempt via {smtp_host}:{port} failed: {e}")
+
+        logger.warning(f"All SMTP delivery attempts failed: {last_error}. Falling back to developer preview mode.")
+        return False
 
     @classmethod
     def _send_mime_message(
@@ -162,33 +187,12 @@ class EmailService:
         message.attach(part1)
         message.attach(part2)
 
-        smtp_user = settings.SMTP_USER
-        smtp_password = settings.SMTP_PASSWORD
-        smtp_host = settings.SMTP_HOST
-        smtp_port = settings.SMTP_PORT
-        
-        if smtp_host and smtp_user and smtp_password:
-            try:
-                logger.info(f"Connecting to SMTP server {smtp_host}:{smtp_port} for {to_email}...")
-                if settings.SMTP_SSL:
-                    server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10)
-                else:
-                    server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
-                    if settings.SMTP_TLS:
-                        server.starttls()
-                        
-                server.login(smtp_user, smtp_password)
-                envelope_from = email.utils.parseaddr(settings.SMTP_FROM)[1] or settings.SMTP_FROM
-                server.sendmail(envelope_from, [to_email], message.as_string())
-                server.quit()
-                logger.info(f"{log_label} sent via SMTP to {to_email}")
-                return {
-                    "success": True,
-                    "method": "smtp",
-                    "recipient": to_email,
-                }
-            except Exception as e:
-                logger.warning(f"SMTP delivery failed: {e}. Falling back to developer preview mode.")
+        if cls._dispatch_smtp(message, to_email, log_label):
+            return {
+                "success": True,
+                "method": "smtp",
+                "recipient": to_email,
+            }
         
         print("=" * 60)
         print(f"[MedSync Python SMTP Service] {log_label} for: {to_email}")

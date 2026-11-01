@@ -514,18 +514,7 @@ export default function SettingsPage() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  disabled={savingAvatar}
-                  onClick={handleRandomizeAvatar}
-                  className="h-7 text-xs px-2.5 rounded-lg border-border/70 hover:bg-muted gap-1.5"
-                  title="Randomly allot avatar by gender"
-                >
-                  <Shuffle className="w-3 h-3 text-muted-foreground" />
-                  <span>Randomize</span>
-                </Button>
+
 
 
                 <Button
@@ -545,14 +534,14 @@ export default function SettingsPage() {
             <div className="pt-2 border-t border-border/40">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-medium text-muted-foreground">
-                  6 Curated Avatars (3 Male • 3 Female)
+                  Standard Gender Avatars (Male • Female)
                 </span>
                 <span className="text-[10px] text-muted-foreground">
                   Click to select
                 </span>
               </div>
 
-              <div className="grid grid-cols-6 gap-2">
+              <div className="grid grid-cols-2 max-w-sm gap-3">
                 {PRESET_AVATARS.map((preset) => {
                   const isSelected = (selectedPreset || (!filePreview && avatarUrl)) === preset.url;
                   return (

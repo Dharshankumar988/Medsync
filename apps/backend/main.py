@@ -68,6 +68,13 @@ async def lifespan(app: FastAPI):
     # ── Startup ──
     logger.info("═══ MedSync Backend Starting ═══")
     
+    # In test environment, skip background worker loops, DB connections, HF pinging, and AI model downloads
+    import sys, os
+    if "pytest" in sys.modules or os.getenv("ENVIRONMENT") == "test" or os.getenv("TESTING") == "true":
+        logger.info("Test environment detected: skipping blockchain scheduler, QR cleanup, and AI warmup.")
+        yield
+        return
+
     # 0. Ensure all defined models exist in database
     from app.database.session import engine, db_url
     try:
@@ -77,13 +84,6 @@ async def lifespan(app: FastAPI):
         logger.info("Database schema synchronized (Base.metadata.create_all)")
     except Exception as e:
         logger.warning(f"Database schema sync notice: {e}")
-    
-    # In test environment, skip background worker loops, HF pinging, and AI model downloads
-    import sys, os
-    if "pytest" in sys.modules or os.getenv("ENVIRONMENT") == "test" or os.getenv("TESTING") == "true":
-        logger.info("Test environment detected: skipping blockchain scheduler, QR cleanup, and AI warmup.")
-        yield
-        return
 
     # Ensure critical database columns exist idempotently
     try:

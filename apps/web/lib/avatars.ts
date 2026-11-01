@@ -6,62 +6,36 @@ export interface PresetAvatar {
   url: string;
 }
 
-export const MALE_AVATARS: PresetAvatar[] = [
-  {
-    id: "felix",
-    name: "Felix",
-    gender: "male",
-    style: "Casual Guy",
-    url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4",
-  },
-  {
-    id: "oliver",
-    name: "Oliver",
-    gender: "male",
-    style: "Modern Vibe",
-    url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver&backgroundColor=ccfbf1",
-  },
-  {
-    id: "liam",
-    name: "Liam",
-    gender: "male",
-    style: "Clean Look",
-    url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Liam&backgroundColor=e0f2fe",
-  },
-];
+export const MALE_AVATAR: PresetAvatar = {
+  id: "male",
+  name: "Male Profile",
+  gender: "male",
+  style: "Standard Male",
+  url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4",
+};
 
-export const FEMALE_AVATARS: PresetAvatar[] = [
-  {
-    id: "jocelyn",
-    name: "Jocelyn",
-    gender: "female",
-    style: "Warm Smile",
-    url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Jocelyn&backgroundColor=ffdfbf",
-  },
-  {
-    id: "aneka",
-    name: "Aneka",
-    gender: "female",
-    style: "Professional",
-    url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9",
-  },
-  {
-    id: "sophia",
-    name: "Sophia",
-    gender: "female",
-    style: "Vibrant",
-    url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia&backgroundColor=fef3c7",
-  },
-];
+export const FEMALE_AVATAR: PresetAvatar = {
+  id: "female",
+  name: "Female Profile",
+  gender: "female",
+  style: "Standard Female",
+  url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9",
+};
 
-export const PRESET_AVATARS: PresetAvatar[] = [...MALE_AVATARS, ...FEMALE_AVATARS];
+export const MALE_AVATARS: PresetAvatar[] = [MALE_AVATAR];
+export const FEMALE_AVATARS: PresetAvatar[] = [FEMALE_AVATAR];
+export const PRESET_AVATARS: PresetAvatar[] = [MALE_AVATAR, FEMALE_AVATAR];
 
 /**
- * Randomly picks one of the 3 male or 3 female avatars based on gender.
+ * Returns the exact default avatar based on gender selection:
+ * Male -> Male Avatar
+ * Female -> Female Avatar
  */
-export function getRandomAvatarByGender(gender?: string | null): string {
+export function getAvatarByGender(gender?: string | null): string {
   const isFemale = gender ? gender.trim().toLowerCase() === "female" : false;
-  const pool = isFemale ? FEMALE_AVATARS : MALE_AVATARS;
-  const idx = Math.floor(Math.random() * pool.length);
-  return pool[idx].url;
+  return isFemale ? FEMALE_AVATAR.url : MALE_AVATAR.url;
+}
+
+export function getRandomAvatarByGender(gender?: string | null): string {
+  return getAvatarByGender(gender);
 }

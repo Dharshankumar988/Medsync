@@ -32,10 +32,11 @@ interface DeliveryMapProps {
   deliveryLng?: number;
   updatedAt?: string;
   onClose: () => void;
+  hideCardContainer?: boolean;
 }
 
 export const DeliveryMap = memo(function DeliveryMap({ 
-  orderId, patientAddress, patientName, pharmacyAddress, pharmacyId, deliveryLat, deliveryLng, updatedAt, onClose 
+  orderId, patientAddress, patientName, pharmacyAddress, pharmacyId, deliveryLat, deliveryLng, updatedAt, onClose, hideCardContainer = false 
 }: DeliveryMapProps) {
   const [status, setStatus] = useState<"PREPARING" | "IN_TRANSIT" | "DELIVERED">("PREPARING");
   const [progress, setProgress] = useState(0);
@@ -151,8 +152,50 @@ export const DeliveryMap = memo(function DeliveryMap({
     };
   }, [updatedAt, routePath, pharmacyPos, patientPos, getPositionAlongPath]);
 
-  // Map Bounds
-  const mapCenter: [number, number] = currentPos || pharmacyPos;
+  // Safe Coordinates
+  const safePharmacyPos: [number, number] =
+    Array.isArray(pharmacyPos) && Number.isFinite(pharmacyPos[0]) && Number.isFinite(pharmacyPos[1])
+      ? pharmacyPos
+      : [12.9716, 77.5946];
+
+  const safePatientPos: [number, number] =
+    Array.isArray(patientPos) && Number.isFinite(patientPos[0]) && Number.isFinite(patientPos[1])
+      ? patientPos
+      : [12.9229, 77.6175];
+
+  const isCurrentPosValid = currentPos && Number.isFinite(currentPos[0]) && Number.isFinite(currentPos[1]);
+  const mapCenter: [number, number] = isCurrentPosValid ? (currentPos as [number, number]) : safePharmacyPos;
+
+  if (hideCardContainer) {
+    return (
+      <div className="w-full h-full relative z-0 min-h-[300px]">
+        {typeof window !== 'undefined' && (
+          <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+            <TileLayer
+              attribution='&copy; OpenStreetMap contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <Marker position={safePharmacyPos} icon={icon}>
+              <Popup>Pharmacy</Popup>
+            </Marker>
+            <Marker position={safePatientPos} icon={icon}>
+              <Popup>{patientName}&apos;s Address</Popup>
+            </Marker>
+            
+            {routePath.length > 0 && (
+              <Polyline positions={routePath} color="#3b82f6" weight={5} opacity={0.6} />
+            )}
+            
+            {status === "IN_TRANSIT" && isCurrentPosValid && (
+              <Marker position={currentPos as [number, number]} icon={riderIcon} zIndexOffset={1000}>
+                <Popup>Delivery Rider</Popup>
+              </Marker>
+            )}
+          </MapContainer>
+        )}
+      </div>
+    );
+  }
 
   return (
     <Card className="border-amber-500/20 shadow-xl relative overflow-hidden bg-background h-full flex flex-col">
@@ -173,10 +216,10 @@ export const DeliveryMap = memo(function DeliveryMap({
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              <Marker position={pharmacyPos} icon={icon}>
+              <Marker position={safePharmacyPos} icon={icon}>
                 <Popup>Pharmacy</Popup>
               </Marker>
-              <Marker position={patientPos} icon={icon}>
+              <Marker position={safePatientPos} icon={icon}>
                 <Popup>{patientName}&apos;s Address</Popup>
               </Marker>
               
@@ -184,8 +227,8 @@ export const DeliveryMap = memo(function DeliveryMap({
                 <Polyline positions={routePath} color="#3b82f6" weight={5} opacity={0.6} />
               )}
               
-              {status === "IN_TRANSIT" && currentPos && (
-                <Marker position={currentPos} icon={riderIcon} zIndexOffset={1000}>
+              {status === "IN_TRANSIT" && isCurrentPosValid && (
+                <Marker position={currentPos as [number, number]} icon={riderIcon} zIndexOffset={1000}>
                   <Popup>Delivery Rider</Popup>
                 </Marker>
               )}

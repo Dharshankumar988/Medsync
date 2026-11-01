@@ -1,12 +1,13 @@
+import { getAvatarByGender } from "@/lib/avatars";
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Skeleton } from "@medsync/ui";
 import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
 import { profileService } from "@/services/profile.service";
-import { Loader2, Save, Heart, Activity, PhoneCall, UserCheck, Lock, Eye, EyeOff, KeyRound, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { Loader2, Save, Heart, Camera, Upload, Activity, PhoneCall, UserCheck, Lock, Eye, EyeOff, KeyRound, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -15,6 +16,9 @@ function MyHealthContent() {
   const [userId, setUserId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string>("");
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Password setup for Google OAuth / general accounts
   const [isGoogleUser, setIsGoogleUser] = useState(false);
@@ -81,6 +85,7 @@ function MyHealthContent() {
         }
           
         if (data) {
+          setAvatarUrl(data.profile_picture_url || getAvatarByGender(data.gender));
           setFormData({
             full_name: data.full_name || "",
             date_of_birth: data.date_of_birth || "",
@@ -116,7 +121,88 @@ function MyHealthContent() {
   }, [userId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+
+    if (name === "gender") {
+      const isDefault = !avatarUrl || avatarUrl.includes("dicebear.com");
+      if (isDefault) {
+        const newAvatar = getAvatarByGender(value);
+        setAvatarUrl(newAvatar);
+        if (userId) {
+          supabase.from("patients").update({ profile_picture_url: newAvatar }).eq("user_id", userId).then();
+          supabase.from("users").update({ profile_image_url: newAvatar }).eq("id", userId).then();
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("medsync:avatar-updated", { detail: { url: newAvatar } }));
+          }
+        }
+      }
+    }
+  };
+
+  const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload a valid image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image file exceeds 5MB limit.");
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      let uploadedUrl: string | null = null;
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await api.post("/api/v1/users/me/profile-image", fd);
+        uploadedUrl = res.data?.data?.profile_image_url;
+      } catch (e) {
+        console.warn("Backend image upload fallback:", e);
+      }
+
+      if (!uploadedUrl) {
+        uploadedUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              const max = 400;
+              let w = img.width, h = img.height;
+              if (w > h) { if (w > max) { h *= max/w; w = max; } }
+              else { if (h > max) { w *= max/h; h = max; } }
+              canvas.width = w; canvas.height = h;
+              canvas.getContext("2d")?.drawImage(img, 0, 0, w, h);
+              resolve(canvas.toDataURL("image/jpeg", 0.85));
+            };
+            img.src = ev.target?.result as string;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (uploadedUrl) {
+        setAvatarUrl(uploadedUrl);
+        await supabase.from("patients").update({ profile_picture_url: uploadedUrl }).eq("user_id", userId);
+        await supabase.from("users").update({ profile_image_url: uploadedUrl }).eq("id", userId);
+        try {
+          await supabase.auth.updateUser({ data: { avatar_url: uploadedUrl, picture: uploadedUrl } });
+        } catch {}
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("medsync:avatar-updated", { detail: { url: uploadedUrl } }));
+        }
+        toast.success("Profile photo updated successfully!");
+      }
+    } catch (err: any) {
+      toast.error("Failed to upload image: " + (err.message || ""));
+    } finally {
+      setIsUploadingPhoto(false);
+    }
   };
 
   const handleSetPassword = async () => {
@@ -219,11 +305,16 @@ function MyHealthContent() {
           weight_kg: payload.weight_kg,
           emergency_contact_name: formData.emergency_contact_name,
           emergency_contact_number: formData.emergency_contact_number,
+          profile_picture_url: avatarUrl || undefined,
         })
         .eq("user_id", userId);
 
       if (supaErr) {
         throw supaErr;
+      }
+
+      if (avatarUrl) {
+        await supabase.from("users").update({ profile_image_url: avatarUrl }).eq("id", userId);
       }
 
       if (formData.date_of_birth && formData.gender && formData.blood_group) {
@@ -375,6 +466,53 @@ function MyHealthContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
+              {/* Profile Photo Display & Upload */}
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/20 border border-border/50">
+                <div className="relative group shrink-0">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary/30 bg-primary/10 shadow-sm flex items-center justify-center">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <UserCheck className="w-8 h-8 text-primary" />
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 bg-black/40 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Change Photo"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">Profile Picture</p>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically syncs with selected gender, or upload your own custom photo.
+                  </p>
+                  <div className="pt-1">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUploadPhoto}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploadingPhoto}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="rounded-xl h-8 text-xs gap-1.5"
+                    >
+                      {isUploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-primary" />}
+                      {isUploadingPhoto ? "Uploading..." : "Upload Custom Photo"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Full Name</label>
@@ -436,6 +574,53 @@ function MyHealthContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
+              {/* Profile Photo Display & Upload */}
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/20 border border-border/50">
+                <div className="relative group shrink-0">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary/30 bg-primary/10 shadow-sm flex items-center justify-center">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <UserCheck className="w-8 h-8 text-primary" />
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 bg-black/40 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Change Photo"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">Profile Picture</p>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically syncs with selected gender, or upload your own custom photo.
+                  </p>
+                  <div className="pt-1">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUploadPhoto}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploadingPhoto}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="rounded-xl h-8 text-xs gap-1.5"
+                    >
+                      {isUploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-primary" />}
+                      {isUploadingPhoto ? "Uploading..." : "Upload Custom Photo"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Medical Alerts</label>

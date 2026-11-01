@@ -5,6 +5,13 @@ import os
 import pytest
 import certifi
 
+if sys.platform == "win32":
+    import asyncio
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
+
 # Set required environment variables for tests
 os.environ['ENVIRONMENT'] = 'test'
 os.environ['TESTING'] = 'true'
@@ -161,5 +168,3 @@ def pytest_unconfigure(config):
         sys.stderr.flush()
         code = getattr(config, "_exitstatus", 0)
         os._exit(code)
-
-

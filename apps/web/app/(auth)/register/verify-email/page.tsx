@@ -149,14 +149,12 @@ function VerifyEmailContent() {
     setError("");
 
     try {
-      const res = await authService.sendVerificationOtp(email);
+      await authService.sendVerificationOtp(email);
       setCountdown(60);
       setCanResend(false);
       setOtpDigits(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
-      if (res?.data?.preview_code) {
-        setDevCode(res.data.preview_code);
-      }
+      setDevCode(null);
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       if (typeof detail === "string" && detail.trim() && detail.trim() !== "{}" && detail.trim() !== "[object Object]") {

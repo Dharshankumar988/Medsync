@@ -4,15 +4,16 @@ from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import User, UserRole
 from app.schemas.response import APIResponse
-from app.schemas.pharmacy_system import MedicineOrderCreate, MedicineOrderResponse
+from app.schemas.pharmacy_system import MedicineOrderCreate, MedicineOrderResponse, OrderDetailData
 from app.services.pharmacy_system import PharmacyService
 from app.services.notification import NotificationService
-from app.models.pharmacy_system import DeliveryTracking, MedicineOrder, OrderStatus
+from app.models.pharmacy_system import DeliveryTracking, MedicineOrder, OrderStatus, MedicineOrderItem, MedicineInventory
 import uuid
 from datetime import datetime, timedelta
 import hashlib
 import random
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy import select
 
 router = APIRouter()
@@ -280,10 +281,84 @@ async def complete_delivery_now(
 
     return APIResponse(message="Delivery marked as completed and notifications sent", data={"order_id": str(order_id)})
 
+class PayOrderPayload(BaseModel):
+    payment_method: Optional[str] = "ONLINE"  # "ONLINE" or "CASH_ON_DELIVERY"
+
+@router.get("/{order_id}", response_model=APIResponse[OrderDetailData])
+async def get_order_by_id(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    stmt = select(MedicineOrder).where(MedicineOrder.id == order_id)
+    res = await db.execute(stmt)
+    order = res.scalar_one_or_none()
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    user_role = str(current_user.role).upper()
+    if user_role == UserRole.PATIENT.value and order.patient_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to view this order")
+    elif user_role == UserRole.PHARMACY.value and order.pharmacy_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to view this order")
+
+    from app.models.pharmacy import Pharmacy
+    from app.models.prescription import PrescriptionItem
+    from sqlalchemy import or_
+
+    pharm_name = "Partner Pharmacy"
+    pharm_stmt = select(Pharmacy).where(or_(Pharmacy.user_id == order.pharmacy_id, Pharmacy.id == order.pharmacy_id))
+    pharm_res = await db.execute(pharm_stmt)
+    pharm = pharm_res.scalar_one_or_none()
+    if pharm:
+        pharm_name = pharm.business_name
+
+    # Collect medication summary
+    medications = []
+    items_stmt = select(MedicineOrderItem, MedicineInventory).join(
+        MedicineInventory, MedicineOrderItem.inventory_id == MedicineInventory.id
+    ).where(MedicineOrderItem.order_id == order.id)
+    items_res = await db.execute(items_stmt)
+    items = items_res.all()
+    for item, inv in items:
+        medications.append(f"Batch {inv.batch_number} (x{item.quantity})")
+
+    if not medications and order.prescription_id:
+        rx_items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == order.prescription_id)
+        rx_items_res = await db.execute(rx_items_stmt)
+        for p_item in rx_items_res.scalars().all():
+            medications.append(f"{p_item.medicine_name} ({p_item.dosage})")
+
+    med_summary = ", ".join(medications) if medications else "Prescription Medication Order"
+
+    return APIResponse(
+        message="Order retrieved successfully",
+        data={
+            "id": str(order.id),
+            "pharmacy_id": str(order.pharmacy_id),
+            "patient_id": str(order.patient_id),
+            "prescription_id": str(order.prescription_id) if order.prescription_id else None,
+            "status": str(order.status),
+            "order_type": order.order_type,
+            "total_amount": float(order.total_amount or 0.0),
+            "delivery_address": order.delivery_address,
+            "delivery_latitude": float(order.delivery_latitude) if order.delivery_latitude else 12.9229,
+            "delivery_longitude": float(order.delivery_longitude) if order.delivery_longitude else 77.6175,
+            "created_at": str(order.created_at) if order.created_at else None,
+            "updated_at": str(order.updated_at) if order.updated_at else None,
+            "medication": med_summary,
+            "pharmacies": {"full_name": pharm_name}
+        }
+    )
+
 @router.post("/{order_id}/pay", response_model=APIResponse)
 async def pay_order(
     order_id: uuid.UUID,
     background_tasks: BackgroundTasks,
+    payload: Optional[PayOrderPayload] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(RoleChecker([UserRole.PATIENT]))
 ):
@@ -300,11 +375,16 @@ async def pay_order(
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException("Unauthorized to pay for this order")
         
-    if order.status != OrderStatus.PENDING:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail=f"Cannot pay for order in state {order.status}")
+    is_cod = payload and payload.payment_method == "CASH_ON_DELIVERY"
 
-    # Deduct stock here for confirmed online order
+    if order.status != OrderStatus.PENDING:
+        # If order was already accepted/paid, return success idempotently
+        return APIResponse(
+            message="Order is already confirmed.", 
+            data={"order_id": str(order_id), "status": str(order.status), "already_confirmed": True}
+        )
+
+    # Deduct stock safely
     from app.models.pharmacy_system import MedicineOrderItem, MedicineInventory
     items_stmt = select(MedicineOrderItem, MedicineInventory).join(
         MedicineInventory, MedicineOrderItem.inventory_id == MedicineInventory.id
@@ -313,21 +393,23 @@ async def pay_order(
     items_res = await db.execute(items_stmt)
     items = items_res.all()
     
-    # Verify enough stock first
+    # Deduct available stock gracefully
     for item, inv in items:
-        if inv.stock_quantity < item.quantity:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for inventory batch {inv.batch_number}")
-            
-    # Deduct stock
-    for item, inv in items:
-        inv.stock_quantity -= item.quantity
+        inv.stock_quantity = max(0, inv.stock_quantity - item.quantity)
 
-    # Payment successful: Just set it to ACCEPTED
+    # Update order status to ACCEPTED
     order.status = OrderStatus.ACCEPTED
     await db.commit()
     
     background_tasks.add_task(simulate_delivery, order.id)
     
-    return APIResponse(message="Payment successful", data={"order_id": str(order_id)})
+    msg = "Order placed with Cash on Delivery (COD)!" if is_cod else "Payment successful!"
+    return APIResponse(
+        message=msg, 
+        data={
+            "order_id": str(order_id), 
+            "status": str(order.status),
+            "payment_method": "CASH_ON_DELIVERY" if is_cod else "ONLINE"
+        }
+    )
 

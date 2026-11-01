@@ -215,7 +215,19 @@ async def update_profile_completion(
         profile = profile.scalar_one_or_none()
         if profile:
             profile.date_of_birth = payload.date_of_birth or profile.date_of_birth
-            profile.gender = payload.gender or profile.gender
+            new_gender = payload.gender or profile.gender
+            if new_gender and new_gender != profile.gender:
+                profile.gender = new_gender
+                # Update avatar based on gender if currently using default avatar or none
+                male_url = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4"
+                female_url = "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9"
+                is_using_default = not user.profile_image_url or "dicebear.com" in (user.profile_image_url or "")
+                if is_using_default:
+                    chosen_avatar = female_url if str(new_gender).strip().upper() == "FEMALE" else male_url
+                    user.profile_image_url = chosen_avatar
+                    profile.profile_picture_url = chosen_avatar
+            else:
+                profile.gender = new_gender
             profile.blood_group = payload.blood_group or profile.blood_group
             profile.phone_number = payload.phone_number or profile.phone_number
             profile.address = payload.address or profile.address

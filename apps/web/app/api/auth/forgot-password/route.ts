@@ -24,14 +24,18 @@ export async function POST(req: NextRequest) {
       const backendRes = await axios.post(`${apiUrl}/auth/forgot-password`, { email });
       if (backendRes.data && backendRes.data.data) {
         const payload = backendRes.data.data;
+        const roleUpper = String(payload.role || '').toUpperCase();
+        const isProviderDevRole = ['DOCTOR', 'PHARMACY'].includes(roleUpper);
+
         return NextResponse.json({
           success: true,
           action: payload.action,
           role: payload.role,
           redirectUrl: payload.redirect_url,
           message: payload.message,
-          previewUrl: payload.preview_url || null,
-          devResetLink: payload.preview_url || undefined,
+          // Dev OTP preview is provided exclusively for Doctor & Pharmacy, never for Patient
+          previewUrl: isProviderDevRole ? (payload.preview_url || null) : null,
+          devResetLink: isProviderDevRole ? (payload.preview_url || undefined) : undefined,
         });
       }
     } catch (backendErr: any) {

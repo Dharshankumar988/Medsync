@@ -175,10 +175,8 @@ function LoginContent() {
 
         // Auto trigger sending of verification OTP
         try {
-          const res = await authService.sendVerificationOtp(data.email);
-          if (res?.data?.preview_code) {
-            setDevOtpPreview(res.data.preview_code);
-          }
+          await authService.sendVerificationOtp(data.email);
+          setDevOtpPreview(null);
         } catch {
           // ignore error if already dispatched
         }
@@ -298,14 +296,12 @@ function LoginContent() {
     setOtpError("");
 
     try {
-      const res = await authService.sendVerificationOtp(unverifiedEmail);
+      await authService.sendVerificationOtp(unverifiedEmail);
       setResendCountdown(60);
       setCanResendOtp(false);
       setOtpDigits(["", "", "", "", "", ""]);
       otpInputRefs.current[0]?.focus();
-      if (res?.data?.preview_code) {
-        setDevOtpPreview(res.data.preview_code);
-      }
+      setDevOtpPreview(null);
     } catch (err: any) {
       setOtpError(err.response?.data?.detail || "Failed to resend code.");
     } finally {

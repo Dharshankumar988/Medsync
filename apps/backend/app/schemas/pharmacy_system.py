@@ -186,3 +186,26 @@ class RestockOrderItemResponse(BaseModel):
     expected_delivery: str
     created_at: str
 
+
+
+class OrderPharmacyDetail(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    full_name: str
+
+class OrderDetailData(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: str
+    pharmacy_id: str
+    patient_id: str
+    prescription_id: Optional[str] = None
+    status: str
+    order_type: Optional[str] = None
+    total_amount: float
+    delivery_address: Optional[str] = None
+    delivery_latitude: Optional[float] = None
+    delivery_longitude: Optional[float] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    medication: str
+    pharmacies: OrderPharmacyDetail

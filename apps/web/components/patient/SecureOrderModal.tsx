@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@medsync/ui';
 import { Button } from '@medsync/ui';
 import { Input } from '@medsync/ui';
-import { Store, Lock, KeyRound, Loader2, UserSquare2, CheckCircle2, MapPin, Navigation } from 'lucide-react';
+import { Store, Lock, KeyRound, Loader2, UserSquare2, CheckCircle2, MapPin, Navigation, X } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { supabase } from '@/lib/supabase';
@@ -182,9 +182,10 @@ export default function SecureOrderModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[92vh] overflow-y-auto bg-card border border-border/80 rounded-2xl shadow-2xl p-6">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-foreground">
+      <DialogContent className="sm:max-w-xl max-h-[88vh] flex flex-col min-h-0 bg-card border border-border/80 rounded-2xl shadow-2xl p-0 overflow-hidden">
+        {/* Header */}
+        <div className="p-5 pb-3 border-b border-border/60 shrink-0 flex items-center justify-between">
+          <DialogTitle className="flex items-center gap-2 text-foreground text-lg">
             {isForgotPin ? (
               <>
                 <UserSquare2 className="w-5 h-5 text-primary" /> Reset Authorization PIN
@@ -195,61 +196,72 @@ export default function SecureOrderModal({
               </>
             )}
           </DialogTitle>
-        </DialogHeader>
+        </div>
 
         {isForgotPin ? (
-          <form onSubmit={handleForgotPinSubmit} className="space-y-5 py-2">
-            <p className="text-sm text-muted-foreground">
-              Verify your identity using your account password to create a new 6-digit authorization PIN.
-            </p>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Current Account Password</label>
-                <Input
-                  type="password"
-                  placeholder="Enter your password"
-                  className="h-11 rounded-xl bg-background border-border/80"
-                  value={currentPassword}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+          <form onSubmit={handleForgotPinSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="p-5 overflow-y-auto flex-1 min-h-0 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Verify your identity using your account password to create a new 6-digit authorization PIN.
+              </p>
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">New PIN</label>
+                  <label className="text-sm font-medium text-foreground">Current Account Password</label>
                   <Input
                     type="password"
-                    placeholder="••••••"
-                    className="tracking-widest font-mono text-center text-lg h-11 rounded-xl bg-background border-border/80"
-                    maxLength={6}
-                    value={newPin}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setNewPin(e.target.value.replace(/\D/g, ''))
-                    }
+                    placeholder="Enter your password"
+                    className="h-11 rounded-xl bg-background border-border/80"
+                    value={currentPassword}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentPassword(e.target.value)}
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Confirm PIN</label>
-                  <Input
-                    type="password"
-                    placeholder="••••••"
-                    className="tracking-widest font-mono text-center text-lg h-11 rounded-xl bg-background border-border/80"
-                    maxLength={6}
-                    value={confirmNewPin}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setConfirmNewPin(e.target.value.replace(/\D/g, ''))
-                    }
-                    required
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">New PIN</label>
+                    <Input
+                      type="password"
+                      placeholder="••••••"
+                      className="tracking-widest font-mono text-center text-lg h-11 rounded-xl bg-background border-border/80"
+                      maxLength={6}
+                      value={newPin}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setNewPin(e.target.value.replace(/\D/g, ''))
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Confirm PIN</label>
+                    <Input
+                      type="password"
+                      placeholder="••••••"
+                      className="tracking-widest font-mono text-center text-lg h-11 rounded-xl bg-background border-border/80"
+                      maxLength={6}
+                      value={confirmNewPin}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setConfirmNewPin(e.target.value.replace(/\D/g, ''))
+                      }
+                      required
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="pt-2 space-y-2">
+            <div className="p-4 px-5 border-t border-border/60 bg-muted/20 shrink-0 flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 h-11 rounded-xl border-border/80"
+                onClick={() => setIsForgotPin(false)}
+                disabled={isResetting}
+              >
+                Cancel
+              </Button>
               <Button
                 type="submit"
-                className="w-full h-11 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                className="flex-1 h-11 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
                 disabled={
                   isResetting ||
                   newPin.length !== 6 ||
@@ -264,125 +276,132 @@ export default function SecureOrderModal({
                 )}
                 Reset PIN
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full h-11 rounded-xl border-border/80"
-                onClick={() => setIsForgotPin(false)}
-                disabled={isResetting}
-              >
-                Cancel Reset
-              </Button>
             </div>
           </form>
         ) : (
-          <form onSubmit={handleOrderSubmit} className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Select Network Pharmacy</label>
-              <select
-                required
-                className="flex h-11 w-full rounded-xl border border-border/80 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all shadow-sm"
-                value={pharmacyId}
-                onChange={(e) => setPharmacyId(e.target.value)}
-              >
-                <option value="" disabled>
-                  -- Select a network pharmacy --
-                </option>
-                {pharmacies.map((p) => {
-                  const val = p.user_id || p.pharmacy_id || p.id;
-                  const cityName = p.city ? ` (${p.city})` : (p.address ? ` • ${p.address.slice(0, 25)}` : "");
-                  return (
-                    <option key={p.id || val} value={val}>
-                      {p.business_name || p.full_name || "Pharmacy"}{cityName}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-primary" /> Delivery Point on Map
-                </label>
-                <button
-                  type="button"
-                  onClick={handleDetectLocation}
-                  disabled={isLocating}
-                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium disabled:opacity-50"
+          <form onSubmit={handleOrderSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="p-5 py-4 overflow-y-auto flex-1 min-h-0 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Select Network Pharmacy</label>
+                <select
+                  required
+                  className="flex h-11 w-full rounded-xl border border-border/80 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all shadow-sm"
+                  value={pharmacyId}
+                  onChange={(e) => setPharmacyId(e.target.value)}
                 >
-                  {isLocating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
-                  {isLocating ? "Locating..." : "Use Current Location"}
-                </button>
+                  <option value="" disabled>
+                    -- Select a network pharmacy --
+                  </option>
+                  {pharmacies.map((p) => {
+                    const val = p.user_id || p.pharmacy_id || p.id;
+                    const cityName = p.city ? ` (${p.city})` : (p.address ? ` • ${p.address.slice(0, 25)}` : "");
+                    return (
+                      <option key={p.id || val} value={val}>
+                        {p.business_name || p.full_name || "Pharmacy"}{cityName}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
-              <div className="rounded-xl overflow-hidden border border-border/80 h-[220px]">
-                <LocationPickerMap
-                  initialLocation={latitude && longitude ? { lat: latitude, lng: longitude } : null}
-                  onLocationSelect={(lat, lng) => {
-                    setLatitude(lat);
-                    setLongitude(lng);
-                  }}
-                  onAddressFound={(addr) => {
-                    setAddress(addr);
-                  }}
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-primary" /> Delivery Point on Map
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleDetectLocation}
+                    disabled={isLocating}
+                    className="text-xs text-primary hover:underline flex items-center gap-1 font-medium disabled:opacity-50"
+                  >
+                    {isLocating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
+                    {isLocating ? "Locating..." : "Use Current Location"}
+                  </button>
+                </div>
+                <div className="rounded-xl overflow-hidden border border-border/80 h-[160px]">
+                  <LocationPickerMap
+                    initialLocation={latitude && longitude ? { lat: latitude, lng: longitude } : null}
+                    onLocationSelect={(lat, lng) => {
+                      setLatitude(lat);
+                      setLongitude(lng);
+                    }}
+                    onAddressFound={(addr) => {
+                      setAddress(addr);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Delivery Address Details</label>
+                <textarea
+                  required
+                  rows={2}
+                  className="flex min-h-[64px] w-full rounded-xl border border-border/80 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all shadow-sm resize-none"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Door number, apartment, street, landmark instructions..."
                 />
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Delivery Address Details</label>
-              <textarea
-                required
-                className="flex min-h-[75px] w-full rounded-xl border border-border/80 bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary transition-all shadow-sm resize-none"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Door number, apartment, floor, landmark instructions..."
-              />
-            </div>
-
-            <div className="space-y-2 pt-1 border-t border-border/60">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
-                  <Lock className="w-4 h-4 text-primary" /> Authorization PIN
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsForgotPin(true)}
-                  className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
-                >
-                  <KeyRound className="w-3 h-3" /> Forgot PIN?
-                </button>
+              <div className="rounded-xl p-3.5 bg-muted/30 border border-border/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+                    <Lock className="w-4 h-4 text-primary" /> Patient Authorization PIN
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsForgotPin(true)}
+                    className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+                  >
+                    <KeyRound className="w-3 h-3" /> Forgot PIN?
+                  </button>
+                </div>
+                <Input
+                  required
+                  type="password"
+                  placeholder="••••••"
+                  className="tracking-widest font-mono text-center text-lg h-11 rounded-xl bg-background border border-border/80 focus-visible:ring-1 focus-visible:ring-primary"
+                  maxLength={6}
+                  value={pin}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setPin(e.target.value.replace(/\D/g, ''))
+                  }
+                />
+                <p className="text-[11px] text-muted-foreground">Enter your 6-digit MedSync Patient Authorization PIN to securely submit this order.</p>
               </div>
-              <Input
-                required
-                type="password"
-                placeholder="••••••"
-                className="tracking-widest font-mono text-center text-xl h-12 rounded-xl bg-background border border-border/80 focus-visible:ring-1 focus-visible:ring-primary"
-                maxLength={6}
-                value={pin}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setPin(e.target.value.replace(/\D/g, ''))
-                }
-              />
             </div>
 
-            <Button
-              type="submit"
-              className="w-full h-11 rounded-xl text-sm font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm mt-3"
-              disabled={
-                isSubmitting ||
-                !pharmacyId ||
-                !address.trim() ||
-                pin.length !== 6
-              }
-            >
-              {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Lock className="w-4 h-4 mr-2" />
-              )}
-              Authorize & Place Order
-            </Button>
+            {/* Sticky Actions Footer */}
+            <div className="p-4 px-5 border-t border-border/60 bg-muted/20 shrink-0 flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 h-11 rounded-xl border-border/80"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 h-11 rounded-xl text-sm font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                disabled={
+                  isSubmitting ||
+                  !pharmacyId ||
+                  !address.trim() ||
+                  pin.length !== 6
+                }
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Lock className="w-4 h-4 mr-2" />
+                )}
+                Authorize & Place Order
+              </Button>
+            </div>
           </form>
         )}
       </DialogContent>

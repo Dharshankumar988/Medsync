@@ -259,7 +259,7 @@ export default function PharmacyInventoryPage() {
   }
 
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-8 pb-36">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">Inventory & Medicines</h1>
@@ -315,16 +315,16 @@ export default function PharmacyInventoryPage() {
 
       <Card className="rounded-2xl border-border/60 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left whitespace-nowrap">
+          <table className="w-full min-w-[850px] text-sm text-left">
             <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-bold tracking-wider border-b border-border/50">
               <tr>
-                <th className="px-6 py-4">Medicine</th>
-                <th className="px-6 py-4">Dosage / Brand</th>
-                <th className="px-6 py-4 text-right">Stock Level</th>
-                <th className="px-6 py-4 text-right">Unit Price</th>
-                <th className="px-6 py-4">Expiry Date</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
+                <th className="px-5 py-4 min-w-[170px]">Medicine</th>
+                <th className="px-5 py-4 min-w-[150px]">Dosage / Brand</th>
+                <th className="px-5 py-4 text-right min-w-[110px]">Stock Level</th>
+                <th className="px-5 py-4 text-right min-w-[110px]">Unit Price</th>
+                <th className="px-5 py-4 min-w-[120px]">Expiry Date</th>
+                <th className="px-5 py-4 min-w-[120px]">Status</th>
+                <th className="px-6 py-4 text-right min-w-[130px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
@@ -347,22 +347,22 @@ export default function PharmacyInventoryPage() {
                   
                   return (
                     <tr key={item.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-6 py-4 font-semibold text-foreground">{item.medication_name}</td>
-                      <td className="px-6 py-4 text-muted-foreground">{item.dosage}</td>
-                      <td className="px-6 py-4 text-right">
-                        <span className={`font-medium ${isLowStock || item.stock === 0 ? "text-red-500" : "text-foreground"}`}>
+                      <td className="px-5 py-4 font-semibold text-foreground whitespace-nowrap">{item.medication_name}</td>
+                      <td className="px-5 py-4 text-muted-foreground whitespace-nowrap">{item.dosage}</td>
+                      <td className="px-5 py-4 text-right whitespace-nowrap">
+                        <span className={`font-semibold font-mono ${isLowStock || item.stock === 0 ? "text-red-500" : "text-foreground"}`}>
                           {item.stock}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right font-mono text-muted-foreground">
-                        ${item.unit_price.toFixed(2)}
+                      <td className="px-5 py-4 text-right font-mono text-muted-foreground whitespace-nowrap">
+                        ${Number(item.unit_price || 0).toFixed(2)}
                       </td>
-                      <td className="px-6 py-4">
-                        <span className={isExpired ? "text-red-500 font-bold" : isExpiring ? "text-purple-500 font-medium" : "text-muted-foreground"}>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span className={isExpired ? "text-red-500 font-bold font-mono" : isExpiring ? "text-purple-500 font-medium font-mono" : "text-muted-foreground font-mono"}>
                           {item.expiry_date}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-5 py-4 whitespace-nowrap">
                         <div className="flex gap-2">
                           {isExpired && (
                             <Badge variant="outline" className="border-red-500/30 text-red-500 bg-red-500/10">Expired</Badge>
@@ -378,11 +378,13 @@ export default function PharmacyInventoryPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        {isExpired && item.stock > 0 && (
-                          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600 hover:bg-red-500/10" onClick={() => handleDiscard(item.id)}>
-                            <Trash2 className="w-4 h-4 mr-2" /> Discard
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        {isExpired && item.stock > 0 ? (
+                          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600 hover:bg-red-500/10 h-8 px-2.5 font-medium" onClick={() => handleDiscard(item.id)}>
+                            <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Discard
                           </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/30 font-mono pr-2">—</span>
                         )}
                       </td>
                     </tr>

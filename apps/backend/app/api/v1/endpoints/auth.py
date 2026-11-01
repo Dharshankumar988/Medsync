@@ -14,17 +14,11 @@ from app.models.hospital import Hospital
 from app.models.doctor_location import DoctorLocation
 from app.models.verification import VerificationRequest, VerificationStatus, RoleType
 
-MALE_PATIENT_AVATARS = [
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver&backgroundColor=ccfbf1",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Liam&backgroundColor=e0f2fe",
-]
+DEFAULT_MALE_AVATAR = "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4"
+DEFAULT_FEMALE_AVATAR = "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9"
 
-FEMALE_PATIENT_AVATARS = [
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Jocelyn&backgroundColor=ffdfbf",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka&backgroundColor=d1d4f9",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Sophia&backgroundColor=fef3c7",
-]
+MALE_PATIENT_AVATARS = [DEFAULT_MALE_AVATAR]
+FEMALE_PATIENT_AVATARS = [DEFAULT_FEMALE_AVATAR]
 
 router = APIRouter()
 
@@ -176,8 +170,8 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
             detail="No account registered with this email address."
         )
         
-    # 1. Admin, Doctor, Pharmacy, Hospital -> Direct instant password reset
-    if user.role in [UserRole.ADMIN, UserRole.DOCTOR, UserRole.PHARMACY, UserRole.HOSPITAL]:
+    # 1. Admin and Hospital -> Direct instant password reset portal
+    if user.role in [UserRole.ADMIN, UserRole.HOSPITAL]:
         redirect_url = f"/provider-reset-password?email={target_email}"
         role_label = user.role.value.capitalize()
         return APIResponse(
@@ -190,8 +184,30 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
                 message=f"Redirecting {role_label} to instant password reset portal."
             )
         )
+
+    # 2. Doctor and Pharmacy -> OTP with Dev OTP preview mode provided on screen
+    if user.role in [UserRole.DOCTOR, UserRole.PHARMACY]:
+        otp_code, expires_in_seconds = await create_and_store_otp(db, target_email, "PASSWORD_RESET")
+        role_label = user.role.value.capitalize()
+        # Attempt sending email in background / best-effort
+        email_service.send_patient_reset_otp_email(
+            to_email=target_email,
+            patient_name=role_label,
+            otp_code=otp_code
+        )
+        return APIResponse(
+            message=f"A 6-digit verification code has been generated for {role_label}.",
+            data=ForgotPasswordResponseData(
+                action="EMAIL_SENT",
+                role=user.role.value,
+                redirect_url=None,
+                email=target_email,
+                message=f"A 6-digit verification code has been generated for {role_label}.",
+                preview_url=otp_code  # Dev OTP is provided exclusively for Doctor & Pharmacy
+            )
+        )
         
-    # 2. Patient Role -> Send 6-digit OTP code via Brevo SMTP (valid for 5 minutes)
+    # 3. Patient Role -> Send 6-digit OTP code via Brevo SMTP to patient's real Gmail (strictly no Dev OTP on screen)
     if user.role == UserRole.PATIENT:
         patient_stmt = select(Patient).where(Patient.user_id == user.id)
         pat_res = await db.execute(patient_stmt)
@@ -199,7 +215,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
         patient_name = patient.full_name if (patient and patient.full_name) else "Patient"
 
         otp_code, expires_in_seconds = await create_and_store_otp(db, target_email, "PASSWORD_RESET")
-        email_result = email_service.send_patient_reset_otp_email(
+        email_service.send_patient_reset_otp_email(
             to_email=target_email,
             patient_name=patient_name,
             otp_code=otp_code
@@ -213,7 +229,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
                 redirect_url=None,
                 email=target_email,
                 message="A 6-digit verification code valid for 5 minutes has been sent to your email.",
-                preview_url=otp_code if email_result.get("method") == "preview_mode" else None
+                preview_url=None  # Patient OTP is delivered strictly to their Gmail; no Dev OTP preview
             )
         )
         
@@ -869,7 +885,7 @@ async def send_verification_otp(payload: SendOTPRequest, db: AsyncSession = Depe
             purpose="EMAIL_VERIFY",
             expires_in_seconds=expires_in_seconds,
             message="A 6-digit verification code valid for 5 minutes has been sent to your email.",
-            preview_code=otp_code if email_res.get("method") == "preview_mode" else None
+            preview_code=None  # Patient email verification strictly delivers via email; no dev preview code
         )
     )
 
@@ -926,7 +942,9 @@ async def verify_email_otp(payload: VerifyOTPRequest, db: AsyncSession = Depends
 @router.post("/send-reset-otp", response_model=APIResponse[SendOTPResponseData])
 async def send_reset_otp(payload: SendOTPRequest, db: AsyncSession = Depends(get_db)):
     """
-    Sends a 6-digit password reset OTP to a Patient's registered email via Brevo.
+    Sends a 6-digit password reset OTP.
+    - Patient: Dispatched to registered Gmail via Brevo SMTP (no Dev OTP preview).
+    - Doctor & Pharmacy: Dev OTP preview provided on screen.
     Valid for 5 minutes.
     """
     target_email = payload.email.strip().lower()
@@ -939,22 +957,30 @@ async def send_reset_otp(payload: SendOTPRequest, db: AsyncSession = Depends(get
             detail="No account registered with this email address."
         )
 
-    if user.role != UserRole.PATIENT:
+    if user.role not in [UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{user.role.value.capitalize()} accounts must use direct password reset."
+            detail=f"{user.role.value.capitalize()} accounts must use direct password reset portal."
         )
 
-    pat_res = await db.execute(select(Patient).where(Patient.user_id == user.id))
-    pat = pat_res.scalar_one_or_none()
-    patient_name = pat.full_name if (pat and pat.full_name) else "Patient"
+    is_patient = (user.role == UserRole.PATIENT)
+    recipient_name = user.role.value.capitalize()
+
+    if is_patient:
+        pat_res = await db.execute(select(Patient).where(Patient.user_id == user.id))
+        pat = pat_res.scalar_one_or_none()
+        if pat and pat.full_name:
+            recipient_name = pat.full_name
 
     otp_code, expires_in_seconds = await create_and_store_otp(db, target_email, "PASSWORD_RESET")
-    email_res = email_service.send_patient_reset_otp_email(
+    email_service.send_patient_reset_otp_email(
         to_email=target_email,
-        patient_name=patient_name,
+        patient_name=recipient_name,
         otp_code=otp_code
     )
+
+    # Dev OTP preview code is provided strictly for Doctor and Pharmacy accounts, never Patient
+    preview_code = otp_code if not is_patient else None
 
     return APIResponse(
         message=f"Password reset code sent to {target_email}.",
@@ -963,7 +989,7 @@ async def send_reset_otp(payload: SendOTPRequest, db: AsyncSession = Depends(get
             purpose="PASSWORD_RESET",
             expires_in_seconds=expires_in_seconds,
             message="A 6-digit password reset code valid for 5 minutes has been sent to your email.",
-            preview_code=otp_code if email_res.get("method") == "preview_mode" else None
+            preview_code=preview_code
         )
     )
 
@@ -971,7 +997,8 @@ async def send_reset_otp(payload: SendOTPRequest, db: AsyncSession = Depends(get
 @router.post("/verify-reset-otp", response_model=APIResponse[ResetPasswordSuccessResponseData])
 async def verify_reset_otp(payload: ResetPasswordWithOTPRequest, db: AsyncSession = Depends(get_db)):
     """
-    Verifies the 6-digit password reset OTP and immediately updates the patient password.
+    Verifies the 6-digit password reset OTP and immediately updates the account password.
+    Supports Patient, Doctor, and Pharmacy accounts.
     Requires password and confirm_password to match (minimum 6 characters).
     """
     target_email = payload.email.strip().lower()
@@ -983,10 +1010,10 @@ async def verify_reset_otp(payload: ResetPasswordWithOTPRequest, db: AsyncSessio
 
     user_res = await db.execute(select(User).where(func.lower(User.email) == target_email))
     user = user_res.scalar_one_or_none()
-    if not user or user.role != UserRole.PATIENT:
+    if not user or user.role not in [UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Password reset via email OTP is exclusively for Patient accounts."
+            detail="Password reset via OTP is supported for Patient, Doctor, and Pharmacy accounts."
         )
 
     success, msg = await verify_and_consume_otp(db, target_email, payload.otp_code, "PASSWORD_RESET")
@@ -1007,7 +1034,7 @@ async def verify_reset_otp(payload: ResetPasswordWithOTPRequest, db: AsyncSessio
             message="Password reset successfully.",
             data=ResetPasswordSuccessResponseData(
                 email=target_email,
-                role="PATIENT",
+                role=user.role.value,
                 message="Password reset successfully. You can now log in with your new password."
             )
         )

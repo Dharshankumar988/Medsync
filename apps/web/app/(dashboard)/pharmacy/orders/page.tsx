@@ -1,5 +1,7 @@
 "use client";
 
+import api from "@/lib/api";
+
 import { useEffect, useState, useMemo } from "react";
 import { pharmacyService, PharmacyOrder } from "@/services/pharmacy.service";
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Input } from "@medsync/ui";
@@ -45,48 +47,35 @@ export default function PharmacyOrdersPage() {
 
   const [dispensingRxId, setDispensingRxId] = useState<string | null>(null);
   const [dispensingOrder, setDispensingOrder] = useState<string | null>(null);
-  const [pinInput, setPinInput] = useState("");
   const [authPinInput, setAuthPinInput] = useState("");
   const [isDispensing, setIsDispensing] = useState(false);
 
   const handleDispenseWithPin = async () => {
-    if (!dispensingRxId || pinInput.length !== 4) return;
+    if (!dispensingRxId) return;
     if (authPinInput.length !== 6) {
-      alert("Please enter a valid 6-digit Pharmacy Authorization PIN");
+      toast.error("Please enter your 6-digit Pharmacy Authorization PIN");
       return;
     }
     setIsDispensing(true);
     try {
-      const baseUrl = getBackendBaseUrl();
-      const formData = new FormData();
-      formData.append("pin", pinInput);
-      formData.append("auth_pin", authPinInput);
+      const res = await pharmacyService.dispensePrescription(
+        dispensingRxId,
+        authPinInput,
+        undefined,
+        "DISPENSED_AND_DELIVERED"
+      );
       
-      const { supabase } = await import("@/lib/supabase");
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
-      
-      const res = await fetch(`${baseUrl}/prescriptions/${dispensingRxId}/dispense`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        body: formData
-      });
-      
-      if (res.ok) {
-        alert("Prescription dispensed successfully!");
+      if (res.success) {
+        toast.success("Prescription dispensed and fulfilled successfully!");
         setOrders(prev => prev.map(o => o.id === dispensingOrder ? { ...o, status: "DISPENSED" } : o));
         setDispensingRxId(null);
         setDispensingOrder(null);
         setAuthPinInput("");
-        setPinInput("");
       } else {
-        const errorData = await res.json();
-        alert(`Failed to dispense: ${errorData.detail || "Invalid PIN"}`);
+        toast.error(`Failed to dispense: ${res.error || "Invalid PIN"}`);
       }
-    } catch (e) {
-      alert("Error dispensing prescription.");
+    } catch (e: any) {
+      toast.error("Error dispensing prescription: " + (e.message || ""));
     } finally {
       setIsDispensing(false);
     }
@@ -94,19 +83,13 @@ export default function PharmacyOrdersPage() {
 
   const handleDispatch = async (orderId: string) => {
     try {
-      const baseUrl = getBackendBaseUrl();
-      const res = await fetch(`${baseUrl}/orders/${orderId}/dispatch`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        alert(`Order dispatched! Simulation started.`);
+      const res = await api.post(`/api/v1/orders/${orderId}/dispatch`);
+      if (res.data) {
+        toast.success("Order dispatched! Simulation started.");
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "OUT_FOR_DELIVERY" } : o));
-      } else {
-        alert("Failed to dispatch order.");
       }
-    } catch (e) {
-      alert("Error dispatching order.");
+    } catch (e: any) {
+      toast.error("Failed to dispatch order: " + (e.response?.data?.detail || e.message || ""));
     }
   };
 
@@ -263,8 +246,7 @@ export default function PharmacyOrdersPage() {
                           if (order.prescription_id) {
                             setDispensingRxId(order.prescription_id);
                             setDispensingOrder(order.id);
-                            setPinInput("");
-                          } else {
+                                                      } else {
                             alert("This order has no prescription ID associated with it.");
                           }
                         }}
@@ -304,36 +286,27 @@ export default function PharmacyOrdersPage() {
 
       {dispensingRxId && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-sm shadow-xl">
+          <Card className="w-full max-w-sm shadow-xl rounded-2xl border border-border/80">
             <CardHeader>
-              <CardTitle>Verify Dispense PIN</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">Enter the 4-character PIN from the patient&apos;s prescription QR code to dispense.</p>
+              <CardTitle>Authorize Dispense</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Enter your 6-digit Pharmacy Authorization PIN to complete dispensing.</p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Input 
-                placeholder="e.g. A9B2" 
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value.toUpperCase())}
-                maxLength={4}
-                className="text-center text-2xl tracking-[0.5em] font-mono h-14 uppercase"
-              />
-              <div className="space-y-2 border-t border-border/40 pt-4 mt-2">
-                <p className="text-sm font-medium">Pharmacy Authorization PIN</p>
-                <p className="text-xs text-muted-foreground">Enter your 6-digit Pharmacy PIN to authorize dispensing.</p>
+              <div className="space-y-2">
                 <Input 
                   type="password"
                   placeholder="• • • • • •" 
                   value={authPinInput}
                   onChange={(e) => setAuthPinInput(e.target.value)}
                   maxLength={6}
-                  className="text-center text-xl tracking-[0.5em] font-mono h-12"
+                  className="text-center text-xl tracking-[0.5em] font-mono h-12 rounded-xl"
                 />
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setDispensingRxId(null)}>Cancel</Button>
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setDispensingRxId(null)}>Cancel</Button>
                 <Button 
-                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-black" 
-                  disabled={pinInput.length !== 4 || authPinInput.length !== 6 || isDispensing}
+                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-xl" 
+                  disabled={authPinInput.length !== 6 || isDispensing}
                   onClick={handleDispenseWithPin}
                 >
                   {isDispensing ? "Dispensing..." : "Confirm Dispense"}
