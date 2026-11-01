@@ -36,6 +36,9 @@ jobs:
       - name: 📥 Install Dependencies
         run: pnpm install --frozen-lockfile=false
 
+      - name: 🏗 Build Core Package
+        run: pnpm --filter @medsync/core build
+
       - name: 🔍 TypeScript Validation
         working-directory: apps/mobile
         run: npx tsc --noEmit

@@ -9,6 +9,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
+      "@medsync/core/*": ["../../packages/core/src/*"],
+      "@medsync/core": ["../../packages/core/src/index.ts"],
       "@medsync/theme/*": ["../../packages/theme/*"],
       "@medsync/theme": ["../../packages/theme/index.ts"]
     },
