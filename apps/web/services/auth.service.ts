@@ -1,5 +1,6 @@
 import { supabase, getUserProfile, normalizeRole } from '@/lib/supabase';
 import { getRandomAvatarByGender } from '@/lib/avatars';
+import { clearAllPulseChats } from '@/lib/storage/pulse-chat-storage';
 
 export const authService = {
   login: async (credentials: { email: string; password: string }) => {
@@ -62,6 +63,13 @@ export const authService = {
         ? 'ACCOUNT_SUSPENDED'
         : 'LOGIN_BLOCKED';
       throw err;
+    }
+
+    // Clear previous user's chat sessions on new login
+    try {
+      await clearAllPulseChats();
+    } catch (e) {
+      console.warn('Failed to clear Pulse chats on login:', e);
     }
 
     const userProfile = {
@@ -307,6 +315,11 @@ export const authService = {
   },
 
   logout: async () => {
+    try {
+      await clearAllPulseChats();
+    } catch (e) {
+      console.warn('Failed to clear Pulse chats on logout:', e);
+    }
     await supabase.auth.signOut();
   },
 

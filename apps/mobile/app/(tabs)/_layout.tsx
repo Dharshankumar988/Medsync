@@ -9,10 +9,12 @@ import {
   User,
 } from 'lucide-react-native';
 import { useRole } from '../../providers/role-provider';
+import { useTheme } from '../../context/ThemeContext';
 import { LoadingScreen } from '../../components/layout/LoadingScreen';
 
 export default function TabLayout() {
   const { role, isLoading, isAuthenticated } = useRole();
+  const { theme, isDark } = useTheme();
   const router = useRouter();
 
   useEffect(() => {
@@ -31,19 +33,15 @@ export default function TabLayout() {
 
   const screenOptions = {
     headerShown: false,
-    tabBarActiveTintColor: '#2563EB',
-    tabBarInactiveTintColor: '#94A3B8',
+    tabBarActiveTintColor: isDark ? '#FAFAFA' : '#09090B',
+    tabBarInactiveTintColor: isDark ? '#71717A' : '#A1A1AA',
     tabBarStyle: {
-      backgroundColor: '#FFFFFF',
-      borderTopWidth: 1.5,
-      borderTopColor: 'rgba(37, 99, 235, 0.1)',
+      backgroundColor: theme.tabBar,
+      borderTopWidth: 1,
+      borderTopColor: theme.tabBarBorder,
       height: Platform.OS === 'ios' ? 88 : 66,
       paddingBottom: Platform.OS === 'ios' ? 26 : 10,
       paddingTop: 8,
-      shadowColor: '#2563EB',
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.06,
-      shadowRadius: 14,
       elevation: 8,
     },
     tabBarLabelStyle: {
@@ -55,7 +53,7 @@ export default function TabLayout() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Tabs screenOptions={screenOptions}>
         {/* ── 1. PATIENT HOME / DASHBOARD ── */}
         <Tabs.Screen
@@ -102,7 +100,7 @@ export default function TabLayout() {
           }}
         />
 
-        {/* ── 4. PULSE AI CLINICAL ASSISTANT ── */}
+        {/* ── 4. PULSE AI CLINICAL COPILOT ── */}
         <Tabs.Screen
           name="patient/pulse-ai"
           options={{
@@ -117,7 +115,7 @@ export default function TabLayout() {
           }}
         />
 
-        {/* ── 5. PATIENT HEALTH & PROFILE ── */}
+        {/* ── 5. PATIENT PROFILE & VAULT SETTINGS ── */}
         <Tabs.Screen
           name="patient/profile"
           options={{
@@ -132,27 +130,11 @@ export default function TabLayout() {
           }}
         />
 
-        {/* ── LEGACY NON-PATIENT SCREENS: STRICTLY HIDDEN FROM TABS ── */}
-        <Tabs.Screen name="doctor/dashboard" options={{ href: null }} />
-        <Tabs.Screen name="doctor/patients" options={{ href: null }} />
-        <Tabs.Screen name="doctor/appointments" options={{ href: null }} />
-        <Tabs.Screen name="doctor/pulse-ai" options={{ href: null }} />
-        <Tabs.Screen name="doctor/profile" options={{ href: null }} />
-        <Tabs.Screen name="hospital/dashboard" options={{ href: null }} />
-        <Tabs.Screen name="hospital/doctors" options={{ href: null }} />
-        <Tabs.Screen name="hospital/appointments" options={{ href: null }} />
-        <Tabs.Screen name="hospital/profile" options={{ href: null }} />
-        <Tabs.Screen name="pharmacy/dashboard" options={{ href: null }} />
-        <Tabs.Screen name="pharmacy/inventory" options={{ href: null }} />
-        <Tabs.Screen name="pharmacy/orders" options={{ href: null }} />
-        <Tabs.Screen name="pharmacy/pulse-ai" options={{ href: null }} />
-        <Tabs.Screen name="pharmacy/profile" options={{ href: null }} />
-        <Tabs.Screen name="admin/dashboard" options={{ href: null }} />
-        <Tabs.Screen name="admin/users" options={{ href: null }} />
-        <Tabs.Screen name="admin/security" options={{ href: null }} />
-        <Tabs.Screen name="admin/system" options={{ href: null }} />
-        <Tabs.Screen name="admin/blockchain" options={{ href: null }} />
-        <Tabs.Screen name="admin/profile" options={{ href: null }} />
+        {/* ── Non-Patient role tabs hidden from patient app ── */}
+        <Tabs.Screen name="doctor" options={{ href: null }} />
+        <Tabs.Screen name="pharmacy" options={{ href: null }} />
+        <Tabs.Screen name="hospital" options={{ href: null }} />
+        <Tabs.Screen name="admin" options={{ href: null }} />
       </Tabs>
     </View>
   );
@@ -161,6 +143,5 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
 });

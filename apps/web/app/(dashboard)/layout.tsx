@@ -67,7 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </main>
       </div>
-      <PulseAIFloating role={displayRole as any} />
+      {!pathname.includes('/pulse-ai') && <PulseAIFloating role={displayRole as any} />}
       <SecurityEnrollmentModal />
     </div>
   )

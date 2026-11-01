@@ -8,11 +8,11 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Image,
   Linking,
   Modal,
 } from 'react-native';
 import {
-  HeartPulse,
   Mail,
   Lock,
   Eye,
@@ -23,18 +23,21 @@ import {
   Laptop,
   ExternalLink,
   ShieldCheck,
-  Sparkles,
+  Sun,
+  Moon,
   LogOut,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth.service';
 import { biometricsService } from '../../lib/biometrics';
-import { Colors } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 import { formatErrorMessage } from '../../lib/api';
 import { MedicalLoadingIndicator } from '../../components/common/MedicalLoadingIndicator';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { theme, isDark, toggleTheme } = useTheme();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -115,10 +118,29 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Background ambient lighting */}
-      <View style={styles.ambientTop} />
-      <View style={styles.ambientBottom} />
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Top Bar with Theme Toggle */}
+      <View style={styles.topBar}>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          onPress={toggleTheme}
+          style={[
+            styles.themeToggleBtn,
+            { backgroundColor: theme.card, borderColor: theme.border },
+          ]}
+          activeOpacity={0.8}
+          accessibilityLabel="Toggle Dark/Light Mode"
+        >
+          {isDark ? (
+            <Sun size={18} color="#FAFAFA" strokeWidth={2} />
+          ) : (
+            <Moon size={18} color="#09090B" strokeWidth={2} />
+          )}
+          <Text style={[styles.themeToggleText, { color: theme.textSecondary }]}>
+            {isDark ? 'Dark' : 'Light'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
@@ -129,42 +151,89 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header Brand Badge */}
+          {/* Header Brand Badge with Small Custom Icon on Top */}
           <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <View style={styles.logoCircle}>
-                <HeartPulse size={36} color="#FFFFFF" strokeWidth={2.5} />
-              </View>
-              <View style={styles.sparkleBadge}>
-                <Sparkles size={12} color="#2563EB" />
-              </View>
+            <View
+              style={[
+                styles.logoWrapper,
+                {
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Image
+                source={require('../../assets/images/app-logo.png')}
+                style={styles.logoImage}
+                resizeMode="cover"
+              />
             </View>
-            <Text style={styles.brandTitle}>MedSync</Text>
-            <Text style={styles.brandTagline}>Patient Health & Clinical Vault</Text>
+            <Text style={[styles.brandTitle, { color: theme.text }]}>MedSync</Text>
+            <Text style={[styles.brandTagline, { color: theme.textMuted }]}>
+              Patient Health & Clinical Vault
+            </Text>
           </View>
 
-          {/* Glassmorphic Auth Card */}
-          <View style={styles.glassCard}>
+          {/* Shadcn UI Card */}
+          <View
+            style={[
+              styles.shadcnCard,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              },
+            ]}
+          >
             {/* Tab Switcher */}
-            <View style={styles.tabContainer}>
+            <View
+              style={[
+                styles.tabContainer,
+                { backgroundColor: theme.surface, borderColor: theme.border },
+              ]}
+            >
               <TouchableOpacity
-                style={[styles.tabButton, styles.tabActive]}
+                style={[
+                  styles.tabButton,
+                  { backgroundColor: theme.primaryButton },
+                ]}
                 activeOpacity={0.9}
               >
-                <Text style={styles.tabTextActive}>Sign In</Text>
+                <Text
+                  style={[
+                    styles.tabTextActive,
+                    { color: theme.primaryButtonText },
+                  ]}
+                >
+                  Sign In
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.tabButton}
                 onPress={() => router.replace('/(auth)/register')}
                 activeOpacity={0.8}
               >
-                <Text style={styles.tabTextInactive}>Create Account</Text>
+                <Text
+                  style={[
+                    styles.tabTextInactive,
+                    { color: theme.textMuted },
+                  ]}
+                >
+                  Create Account
+                </Text>
               </TouchableOpacity>
             </View>
 
             {/* Error Message */}
             {error ? (
-              <View style={styles.errorBox}>
+              <View
+                style={[
+                  styles.errorBox,
+                  {
+                    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                    borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+                  },
+                ]}
+              >
                 <AlertCircle size={16} color="#EF4444" style={styles.errorIcon} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
@@ -172,13 +241,23 @@ export default function LoginScreen() {
 
             {/* Input: Email */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email Address</Text>
-              <View style={styles.inputWrapper}>
-                <Mail size={18} color="#2563EB" style={styles.inputIcon} />
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                Email Address
+              </Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: theme.inputBg,
+                    borderColor: theme.inputBorder,
+                  },
+                ]}
+              >
+                <Mail size={18} color={theme.textMuted} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.textInput}
+                  style={[styles.textInput, { color: theme.text }]}
                   placeholder="name@example.com"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={theme.inputPlaceholder}
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -190,14 +269,24 @@ export default function LoginScreen() {
             {/* Input: Password */}
             <View style={styles.inputGroup}>
               <View style={styles.passwordHeaderRow}>
-                <Text style={styles.inputLabel}>Password</Text>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                  Password
+                </Text>
               </View>
-              <View style={styles.inputWrapper}>
-                <Lock size={18} color="#2563EB" style={styles.inputIcon} />
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: theme.inputBg,
+                    borderColor: theme.inputBorder,
+                  },
+                ]}
+              >
+                <Lock size={18} color={theme.textMuted} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.textInput}
+                  style={[styles.textInput, { color: theme.text }]}
                   placeholder="Enter your account password"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={theme.inputPlaceholder}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -208,9 +297,9 @@ export default function LoginScreen() {
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   {showPassword ? (
-                    <EyeOff size={18} color="#64748B" />
+                    <EyeOff size={18} color={theme.textMuted} />
                   ) : (
-                    <Eye size={18} color="#64748B" />
+                    <Eye size={18} color={theme.textMuted} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -221,94 +310,170 @@ export default function LoginScreen() {
               <View style={styles.loadingContainer}>
                 <MedicalLoadingIndicator
                   message="Securing Session..."
-                  subMessage="Verifying cryptographic credentials"
-                  color="#2563EB"
+                  subMessage="Verifying credentials"
+                  color={theme.accent}
                 />
               </View>
             ) : (
               <TouchableOpacity
-                style={styles.primaryButton}
+                style={[
+                  styles.primaryButton,
+                  { backgroundColor: theme.primaryButton },
+                ]}
                 onPress={handleLogin}
                 activeOpacity={0.88}
               >
-                <Text style={styles.primaryButtonText}>Sign In</Text>
-                <ChevronRight size={18} color="#FFFFFF" strokeWidth={2.5} />
+                <Text
+                  style={[
+                    styles.primaryButtonText,
+                    { color: theme.primaryButtonText },
+                  ]}
+                >
+                  Sign In
+                </Text>
+                <ChevronRight
+                  size={18}
+                  color={theme.primaryButtonText}
+                  strokeWidth={2.5}
+                />
               </TouchableOpacity>
             )}
 
-            {/* Biometric Quick Sign-In (if phone already has Face ID / Fingerprint) */}
+            {/* Biometric Quick Sign-In */}
             {biometricsAvailable && (
               <TouchableOpacity
-                style={styles.biometricButton}
+                style={[
+                  styles.biometricButton,
+                  {
+                    backgroundColor: theme.secondaryButton,
+                    borderColor: theme.border,
+                  },
+                ]}
                 onPress={handleBiometricAuth}
                 activeOpacity={0.8}
               >
-                <Fingerprint size={20} color="#2563EB" />
-                <Text style={styles.biometricText}>
+                <Fingerprint size={20} color={theme.accent} />
+                <Text
+                  style={[
+                    styles.biometricText,
+                    { color: theme.secondaryButtonText },
+                  ]}
+                >
                   Quick Sign-In with {biometricsLabel}
                 </Text>
               </TouchableOpacity>
             )}
 
-            {/* Link to Register */}
+            {/* Footer Prompt */}
             <View style={styles.footerPrompt}>
-              <Text style={styles.footerPromptText}>New to MedSync?</Text>
-              <TouchableOpacity onPress={() => router.replace('/(auth)/register')}>
-                <Text style={styles.footerPromptLink}> Create a Patient Account</Text>
+              <Text style={[styles.footerPromptText, { color: theme.textMuted }]}>
+                New to MedSync?{' '}
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.replace('/(auth)/register')}
+              >
+                <Text style={[styles.createAccountLink, { color: theme.text }]}>
+                  Create a Patient Account
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Security Notice */}
-          <View style={styles.securityBadge}>
-            <ShieldCheck size={15} color="#2563EB" />
-            <Text style={styles.securityText}>
+          {/* Trust & Compliance Badge */}
+          <View style={styles.complianceRow}>
+            <ShieldCheck size={14} color={theme.textMuted} />
+            <Text style={[styles.complianceText, { color: theme.textMuted }]}>
               256-Bit Encrypted & Polygon Health Verification
             </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Provider Desktop Notice Modal */}
+      {/* ── Non-Patient Provider Notice Modal ── */}
       <Modal
         visible={!!providerRole}
         transparent
         animationType="fade"
+        onRequestClose={() => setProviderRole(null)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.providerCard}>
-            <View style={styles.providerIconCircle}>
-              <Laptop size={32} color="#2563EB" />
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.providerModal,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.providerModalIcon,
+                { backgroundColor: theme.surface, borderColor: theme.border },
+              ]}
+            >
+              <Laptop size={32} color={theme.accent} />
             </View>
-            <Text style={styles.providerTitle}>Provider Portal Access</Text>
-            <Text style={styles.providerSub}>
-              Signed in as{' '}
-              <Text style={{ fontWeight: '700', textTransform: 'capitalize', color: '#2563EB' }}>
-                {providerRole}
-              </Text>
+
+            <Text style={[styles.providerModalTitle, { color: theme.text }]}>
+              {providerRole?.toUpperCase()} PORTAL
             </Text>
-            <Text style={styles.providerDescription}>
-              The MedSync Mobile app is tailored exclusively for Patients. Clinical management, pharmacy inventory, and diagnostic tools are hosted on our desktop web portal.
+
+            <Text
+              style={[
+                styles.providerModalDescription,
+                { color: theme.textSecondary },
+              ]}
+            >
+              The MedSync Mobile App is exclusively dedicated to Patients. Clinical, Pharmacy, and Hospital administration workflows require the full desktop portal.
             </Text>
 
             <TouchableOpacity
-              style={styles.webPortalButton}
-              onPress={() => Linking.openURL('https://medsync-web.vercel.app')}
+              style={[
+                styles.providerPrimaryButton,
+                { backgroundColor: theme.primaryButton },
+              ]}
+              onPress={() => {
+                Linking.openURL('https://medsync-web.vercel.app').catch(() => {});
+                setProviderRole(null);
+                authService.logout();
+              }}
               activeOpacity={0.88}
             >
-              <ExternalLink size={18} color="#FFFFFF" />
-              <Text style={styles.webPortalButtonText}>Open Desktop Web Portal</Text>
+              <ExternalLink size={18} color={theme.primaryButtonText} />
+              <Text
+                style={[
+                  styles.providerPrimaryText,
+                  { color: theme.primaryButtonText },
+                ]}
+              >
+                Open Desktop Web Portal
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.modalCancelButton}
-              onPress={async () => {
-                await authService.logout();
+              style={[
+                styles.providerSecondaryButton,
+                {
+                  backgroundColor: theme.secondaryButton,
+                  borderColor: theme.border,
+                },
+              ]}
+              onPress={() => {
                 setProviderRole(null);
+                authService.logout();
               }}
+              activeOpacity={0.8}
             >
-              <LogOut size={16} color="#64748B" />
-              <Text style={styles.modalCancelText}>Sign Out & Switch Account</Text>
+              <LogOut size={16} color={theme.textMuted} />
+              <Text
+                style={[
+                  styles.providerSecondaryText,
+                  { color: theme.secondaryButtonText },
+                ]}
+              >
+                Sign In With Patient Account
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -320,322 +485,272 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
-  ambientTop: {
-    position: 'absolute',
-    top: -100,
-    left: -50,
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+  topBar: {
+    paddingTop: Platform.OS === 'ios' ? 54 : 36,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    zIndex: 10,
   },
-  ambientBottom: {
-    position: 'absolute',
-    bottom: -80,
-    right: -40,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+  themeToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 6,
+  },
+  themeToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   keyboardView: {
     flex: 1,
   },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: 22,
-    paddingTop: Platform.OS === 'ios' ? 65 : 45,
-    paddingBottom: 36,
     justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 10,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 26,
+    marginBottom: 28,
   },
-  logoContainer: {
-    position: 'relative',
-    marginBottom: 14,
-  },
-  logoCircle: {
+  logoWrapper: {
     width: 68,
     height: 68,
-    borderRadius: 24,
-    backgroundColor: '#2563EB',
+    borderRadius: 20,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 8,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  sparkleBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.2)',
+  logoImage: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
   },
   brandTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
+    marginBottom: 4,
   },
   brandTagline: {
-    fontSize: 13.5,
-    color: '#64748B',
+    fontSize: 13,
     fontWeight: '500',
-    marginTop: 4,
   },
-  glassCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    borderRadius: 24,
-    padding: 22,
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.15)',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 10 },
+  shadcnCard: {
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
     shadowRadius: 24,
     elevation: 6,
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 4,
-    marginBottom: 22,
+    marginBottom: 20,
+    borderWidth: 1,
   },
   tabButton: {
     flex: 1,
     paddingVertical: 10,
+    borderRadius: 8,
     alignItems: 'center',
-    borderRadius: 10,
-  },
-  tabActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    justifyContent: 'center',
   },
   tabTextActive: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#2563EB',
   },
   tabTextInactive: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '500',
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 12,
     marginBottom: 16,
+    borderWidth: 1,
   },
   errorIcon: {
     marginRight: 8,
   },
   errorText: {
-    fontSize: 13,
-    color: '#EF4444',
     flex: 1,
+    fontSize: 12,
+    color: '#EF4444',
     fontWeight: '500',
   },
   inputGroup: {
     marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+    letterSpacing: 0.2,
   },
   passwordHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  inputLabel: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#334155',
-    marginBottom: 7,
-    letterSpacing: 0.2,
-  },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 14,
+    borderRadius: 12,
+    borderWidth: 1,
     paddingHorizontal: 14,
-    height: 50,
+    height: 48,
   },
   inputIcon: {
     marginRight: 10,
   },
   textInput: {
     flex: 1,
-    fontSize: 14.5,
-    color: '#0F172A',
-    fontWeight: '500',
+    fontSize: 14,
+    height: '100%',
   },
   eyeButton: {
     padding: 6,
   },
   loadingContainer: {
-    paddingVertical: 14,
-    alignItems: 'center',
+    marginVertical: 14,
   },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2563EB',
-    height: 52,
-    borderRadius: 16,
+    borderRadius: 12,
+    height: 48,
     marginTop: 6,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 14,
-    elevation: 4,
+    gap: 8,
   },
   primaryButtonText: {
-    fontSize: 15.5,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
-    marginRight: 6,
   },
   biometricButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(37, 99, 235, 0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.2)',
+    borderRadius: 12,
+    borderWidth: 1,
     height: 48,
-    borderRadius: 14,
     marginTop: 12,
+    gap: 10,
   },
   biometricText: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#2563EB',
-    marginLeft: 8,
   },
   footerPrompt: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
+    flexWrap: 'wrap',
   },
   footerPromptText: {
-    fontSize: 13.5,
-    color: '#64748B',
+    fontSize: 12,
   },
-  footerPromptLink: {
-    fontSize: 13.5,
+  createAccountLink: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#2563EB',
   },
-  securityBadge: {
+  complianceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 24,
+    gap: 6,
   },
-  securityText: {
-    fontSize: 12,
-    color: '#64748B',
+  complianceText: {
+    fontSize: 11,
     fontWeight: '500',
-    marginLeft: 6,
   },
-  modalBackdrop: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
-  providerCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 24,
+  providerModal: {
     width: '100%',
     maxWidth: 380,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 26,
     alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.15,
-    shadowRadius: 30,
-    elevation: 10,
   },
-  providerIconCircle: {
-    width: 60,
-    height: 60,
+  providerModalIcon: {
+    width: 64,
+    height: 64,
     borderRadius: 20,
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
-  providerTitle: {
-    fontSize: 20,
+  providerModalTitle: {
+    fontSize: 16,
     fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 4,
-  },
-  providerSub: {
-    fontSize: 13.5,
-    color: '#64748B',
-    marginBottom: 12,
-  },
-  providerDescription: {
-    fontSize: 13.5,
-    color: '#475569',
+    letterSpacing: 0.5,
+    marginBottom: 10,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
   },
-  webPortalButton: {
+  providerModalDescription: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  providerPrimaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2563EB',
+    borderRadius: 12,
     width: '100%',
     height: 48,
-    borderRadius: 14,
-    marginBottom: 10,
+    gap: 8,
+    marginBottom: 12,
   },
-  webPortalButtonText: {
-    fontSize: 14.5,
+  providerPrimaryText: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
-    marginLeft: 8,
   },
-  modalCancelButton: {
+  providerSecondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    width: '100%',
+    height: 46,
+    gap: 8,
   },
-  modalCancelText: {
+  providerSecondaryText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
-    marginLeft: 6,
   },
 });

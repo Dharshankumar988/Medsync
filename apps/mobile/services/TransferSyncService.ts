@@ -1,12 +1,12 @@
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system';
+import * as Crypto from 'expo-crypto';
 import NetInfo from '@react-native-community/netinfo';
-import crypto from 'react-native-quick-crypto';
+import CryptoJS from 'crypto-js';
 import { api } from '../lib/api';
 
 const QUEUE_FILE_PATH = FileSystem.documentDirectory + 'transfer_sync_queue.enc';
 const QUEUE_KEY_STORE = 'transfer_sync_queue_key';
-const ALGORITHM = 'aes-256-cbc';
 
 export interface TransferRequest {
   action: 'CREATE' | 'AUTHORIZE' | 'COMPLETE';
@@ -23,14 +23,14 @@ export class TransferSyncService {
   /**
    * Retrieves or generates the symmetric encryption key for the queue.
    */
-  private static async getEncryptionKey(): Promise<Buffer> {
+  private static async getEncryptionKey(): Promise<string> {
     let keyHex = await SecureStore.getItemAsync(QUEUE_KEY_STORE);
     if (!keyHex) {
-      const newKey = crypto.randomBytes(32);
-      keyHex = newKey.toString('hex');
+      const bytes = await Crypto.getRandomBytesAsync(32);
+      keyHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
       await SecureStore.setItemAsync(QUEUE_KEY_STORE, keyHex);
     }
-    return Buffer.from(keyHex, 'hex');
+    return keyHex;
   }
 
   /**
@@ -100,20 +100,13 @@ export class TransferSyncService {
     try {
       const fileInfo = await FileSystem.getInfoAsync(QUEUE_FILE_PATH);
       if (fileInfo.exists) {
-        const encryptedContentBase64 = await FileSystem.readAsStringAsync(QUEUE_FILE_PATH);
-        const encryptedBuffer = Buffer.from(encryptedContentBase64, 'base64');
-        
-        // Extract IV and ciphertext
-        const iv = encryptedBuffer.subarray(0, 16);
-        const ciphertext = encryptedBuffer.subarray(16);
-        
+        const encryptedContent = await FileSystem.readAsStringAsync(QUEUE_FILE_PATH);
         const key = await this.getEncryptionKey();
-        const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-        
-        let decrypted = decipher.update(ciphertext).toString('utf8');
-        decrypted += decipher.final().toString('utf8');
-        
-        return JSON.parse(decrypted) as TransferRequest[];
+        const decryptedBytes = CryptoJS.AES.decrypt(encryptedContent, key);
+        const decrypted = decryptedBytes.toString(CryptoJS.enc.Utf8);
+        if (decrypted) {
+          return JSON.parse(decrypted) as TransferRequest[];
+        }
       }
     } catch (error) {
       console.error('Failed to read and decrypt queue:', error);
@@ -128,19 +121,25 @@ export class TransferSyncService {
     try {
       const plaintext = JSON.stringify(queue);
       const key = await this.getEncryptionKey();
-      const iv = crypto.randomBytes(16);
-      
-      const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-      const part1 = cipher.update(plaintext, 'utf8');
-      const part2 = cipher.final();
-      const ciphertext = Buffer.concat([part1, part2]);
-      
-      const encryptedBuffer = Buffer.concat([iv, ciphertext]);
-      const encryptedBase64 = encryptedBuffer.toString('base64');
-      
-      await FileSystem.writeAsStringAsync(QUEUE_FILE_PATH, encryptedBase64);
+      const encrypted = CryptoJS.AES.encrypt(plaintext, key).toString();
+      await FileSystem.writeAsStringAsync(QUEUE_FILE_PATH, encrypted);
     } catch (error) {
-      console.error('Failed to write and encrypt queue:', error);
+      console.error('Failed to encrypt and save queue:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear the local transfer queue.
+   */
+  static async clearQueue(): Promise<void> {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(QUEUE_FILE_PATH);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(QUEUE_FILE_PATH);
+      }
+    } catch (error) {
+      console.error('Failed to clear transfer queue:', error);
     }
   }
 }

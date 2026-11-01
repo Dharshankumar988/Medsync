@@ -16,6 +16,23 @@ export function PulseAIFloating({ role }: PulseAIFloatingProps) {
   const [size, setSize] = useState({ width: 400, height: 600 });
   const [isResizing, setIsResizing] = useState(false);
 
+  // Restore open state across reloads during the session
+  useEffect(() => {
+    try {
+      const savedOpen = sessionStorage.getItem("pulse-floating-open");
+      if (savedOpen === "true") {
+        setIsOpen(true);
+      }
+    } catch {}
+  }, []);
+
+  const handleToggle = (open: boolean) => {
+    setIsOpen(open);
+    try {
+      sessionStorage.setItem("pulse-floating-open", open ? "true" : "false");
+    } catch {}
+  };
+
   useEffect(() => {
     if (!isResizing) return;
     
@@ -71,7 +88,7 @@ export function PulseAIFloating({ role }: PulseAIFloatingProps) {
 
             <div className="relative w-full h-full">
               <button 
-                onClick={() => setIsOpen(false)}
+                onClick={() => handleToggle(false)}
                 className="absolute right-4 top-4 z-10 p-1 bg-background/50 backdrop-blur rounded-full hover:bg-background transition-colors border border-border"
               >
                 <X size={16} className="text-muted-foreground" />
@@ -87,7 +104,7 @@ export function PulseAIFloating({ role }: PulseAIFloatingProps) {
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => handleToggle(!isOpen)}
         className={cn(
           "flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-colors border",
           isOpen ? "bg-muted border-border" : "bg-primary border-primary hover:bg-primary/90"

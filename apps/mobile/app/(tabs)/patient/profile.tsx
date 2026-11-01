@@ -32,6 +32,8 @@ import {
   Stethoscope,
   ChevronRight,
   ExternalLink,
+  Sun,
+  Moon,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
@@ -39,6 +41,7 @@ import { ScreenHeader } from '../../../components/layout/ScreenHeader';
 import { Card, CardContent } from '../../../components/common/Card';
 import { Button } from '../../../components/common/Button';
 import { useRole } from '../../../providers/role-provider';
+import { useTheme } from '../../../context/ThemeContext';
 import { patientService, SecurityStatusInfo } from '../../../services/patient.service';
 import { biometricsService } from '../../../lib/biometrics';
 import { PaymentStyleQRScanner } from '../../../components/patient/PaymentStyleQRScanner';
@@ -49,6 +52,7 @@ import api from '../../../lib/api';
 export default function PatientProfileScreen() {
   const router = useRouter();
   const { user, logout } = useRole();
+  const { theme, isDark, toggleTheme } = useTheme();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -324,6 +328,39 @@ export default function PatientProfileScreen() {
                     </TouchableOpacity>
                   </View>
                 ) : null}
+              </View>
+            </CardContent>
+          </Card>
+
+          {/* App Appearance Setting (Remembered Dark/White Theme) */}
+          <Text style={styles.sectionTitle}>App Appearance</Text>
+          <Card style={styles.card}>
+            <CardContent>
+              <View style={styles.biometricRow}>
+                <View
+                  style={[
+                    styles.biometricIconBox,
+                    { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F4F4F5' },
+                  ]}
+                >
+                  {isDark ? (
+                    <Moon size={22} color="#FAFAFA" />
+                  ) : (
+                    <Sun size={22} color="#09090B" />
+                  )}
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.biometricTitle}>Dark Mode</Text>
+                  <Text style={styles.biometricSub}>
+                    {isDark ? 'Shadcn Dark Mode is active' : 'Shadcn Light Mode is active'}
+                  </Text>
+                </View>
+                <Switch
+                  value={isDark}
+                  onValueChange={toggleTheme}
+                  trackColor={{ false: '#E2E8F0', true: '#27272A' }}
+                  thumbColor={isDark ? '#FAFAFA' : '#09090B'}
+                />
               </View>
             </CardContent>
           </Card>

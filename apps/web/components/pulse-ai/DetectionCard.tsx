@@ -33,6 +33,8 @@ export function DetectionCard({
 }: DetectionCardProps) {
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   const activeBoxes = detection.boxes || [];
   const topPredictions = detection.top_predictions || [];
@@ -143,78 +145,117 @@ export function DetectionCard({
         {/* Annotated Image Preview & Controls */}
         {imageUrl && (
           <div className="relative rounded-xl overflow-hidden border border-border/80 bg-zinc-950 group">
-            {/* Image Canvas */}
-            <div className="relative max-h-72 w-full flex items-center justify-center bg-black/60 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imageUrl}
-                alt="Analyzed Scan"
-                className="max-h-72 w-auto object-contain cursor-pointer transition-transform duration-200 group-hover:scale-[1.01]"
+            {imgError ? (
+              /* Fallback view when image binary cannot be rendered */
+              <div 
                 onClick={onInspectImage}
-              />
-
-              {/* Bounding Box Overlay */}
-              {showAnnotations && activeBoxes.length > 0 && (
-                <svg
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="none"
-                >
-                  {activeBoxes.map((rawBox, i) => {
-                    const box = Array.isArray(rawBox) 
-                      ? rawBox 
-                      : (rawBox?.coordinates || rawBox?.bbox || [0, 0, 0, 0]);
-                    
-                    const isNormalized = box[0] <= 1.05 && box[2] <= 1.05;
-                    const x = isNormalized ? box[0] * 100 : box[0];
-                    const y = isNormalized ? box[1] * 100 : box[1];
-                    const width = isNormalized ? (box[2] - box[0]) * 100 : box[2] - box[0];
-                    const height = isNormalized ? (box[3] - box[1]) * 100 : box[3] - box[1];
-
-                    return (
-                      <g key={i}>
-                        <rect
-                          x={`${Math.max(0, x)}%`}
-                          y={`${Math.max(0, y)}%`}
-                          width={`${Math.max(2, width)}%`}
-                          height={`${Math.max(2, height)}%`}
-                          fill="rgba(239, 68, 68, 0.15)"
-                          stroke="#ef4444"
-                          strokeWidth="2.5"
-                          strokeDasharray="4"
-                          className="drop-shadow-md"
-                        />
-                      </g>
-                    );
-                  })}
-                </svg>
-              )}
-
-              {/* Overlay Action Bar on Hover */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-[2px]">
-                <button
-                  type="button"
-                  onClick={onInspectImage}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-lg hover:bg-primary/90 transition-transform active:scale-95"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
+                className="p-4 bg-zinc-900/80 hover:bg-zinc-900 transition-colors cursor-pointer flex items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary shrink-0">
+                    {scanMeta.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-zinc-200 truncate">
+                      {scanMeta.label} Diagnostic Scan
+                    </p>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {activeBoxes.length > 0 ? `${activeBoxes.length} region(s) detected` : "Diagnostic findings verified"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-700/60 shrink-0">
+                  <Maximize2 className="w-3.5 h-3.5 text-primary" />
                   <span>Inspect Scan</span>
-                </button>
-                {activeBoxes.length > 0 && (
+                </div>
+              </div>
+            ) : (
+              /* High-Resolution Scan Canvas */
+              <div className="relative max-h-72 w-full flex items-center justify-center bg-black/60 overflow-hidden">
+                {!imgLoaded && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs text-zinc-400">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 animate-spin text-primary" />
+                      <span>Loading scan preview...</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="relative inline-flex items-center justify-center max-h-72">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageUrl}
+                    alt={scanMeta.label}
+                    onLoad={() => setImgLoaded(true)}
+                    onError={() => setImgError(true)}
+                    className="max-h-72 w-auto object-contain cursor-pointer transition-transform duration-200 group-hover:scale-[1.01]"
+                    onClick={onInspectImage}
+                  />
+
+                  {/* Bounding Box Overlay tightly fitted to image */}
+                  {showAnnotations && activeBoxes.length > 0 && imgLoaded && (
+                    <svg
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                    >
+                      {activeBoxes.map((rawBox, i) => {
+                        const box = Array.isArray(rawBox) 
+                          ? rawBox 
+                          : (rawBox?.coordinates || rawBox?.bbox || [0, 0, 0, 0]);
+                        
+                        const isNormalized = box[0] <= 1.05 && box[2] <= 1.05;
+                        const x = isNormalized ? box[0] * 100 : box[0];
+                        const y = isNormalized ? box[1] * 100 : box[1];
+                        const width = isNormalized ? (box[2] - box[0]) * 100 : box[2] - box[0];
+                        const height = isNormalized ? (box[3] - box[1]) * 100 : box[3] - box[1];
+
+                        return (
+                          <g key={i}>
+                            <rect
+                              x={`${Math.max(0, x)}%`}
+                              y={`${Math.max(0, y)}%`}
+                              width={`${Math.max(2, width)}%`}
+                              height={`${Math.max(2, height)}%`}
+                              fill="rgba(239, 68, 68, 0.15)"
+                              stroke="#ef4444"
+                              strokeWidth="2.5"
+                              strokeDasharray="4"
+                              className="drop-shadow-md"
+                            />
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  )}
+                </div>
+
+                {/* Overlay Action Bar on Hover */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-[2px]">
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowAnnotations(!showAnnotations);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900/90 text-zinc-200 border border-zinc-700 text-xs font-medium hover:bg-zinc-800 transition-colors"
+                    onClick={onInspectImage}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-lg hover:bg-primary/90 transition-transform active:scale-95"
                   >
-                    {showAnnotations ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    <span>{showAnnotations ? "Hide Boxes" : "Show Boxes"}</span>
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>Inspect Scan</span>
                   </button>
-                )}
+                  {activeBoxes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowAnnotations(!showAnnotations);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900/90 text-zinc-200 border border-zinc-700 text-xs font-medium hover:bg-zinc-800 transition-colors"
+                    >
+                      {showAnnotations ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      <span>{showAnnotations ? "Hide Boxes" : "Show Boxes"}</span>
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Quick Caption Bar */}
             <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 text-[11px] text-zinc-400 border-t border-zinc-800">

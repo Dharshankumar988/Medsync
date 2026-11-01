@@ -13,13 +13,23 @@
       "android": {
         "buildType": "apk"
       },
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://abkxpvizmyowhkjjvjlx.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3hwdml6bXlvd2hramp2amx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0Mjk0NjYsImV4cCI6MjA5OTAwNTQ2Nn0.6WQhC3k6iA0au2IsEhmIhBDZKshIGEMcm-c8YZW6k6w",
+        "EXPO_PUBLIC_API_URL": "https://medsync-backend-rktc.onrender.com"
+      }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
       },
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://abkxpvizmyowhkjjvjlx.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3hwdml6bXlvd2hramp2amx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0Mjk0NjYsImV4cCI6MjA5OTAwNTQ2Nn0.6WQhC3k6iA0au2IsEhmIhBDZKshIGEMcm-c8YZW6k6w",
+        "EXPO_PUBLIC_API_URL": "https://medsync-backend-rktc.onrender.com"
+      }
     }
   }
 }

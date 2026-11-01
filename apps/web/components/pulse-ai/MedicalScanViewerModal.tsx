@@ -54,16 +54,20 @@ export function MedicalScanViewerModal({
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const startPanRef = useRef({ x: 0, y: 0 });
 
-  // Reset zoom on open
+  // Reset zoom and image state on open or image change
   useEffect(() => {
     if (isOpen) {
       setZoom(1);
       setPan({ x: 0, y: 0 });
       setShowAnnotations(true);
+      setImageLoaded(false);
+      setImageError(false);
     }
-  }, [isOpen]);
+  }, [isOpen, imageUrl]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -220,73 +224,108 @@ export function MedicalScanViewerModal({
               <div 
                 className={cn(
                   "relative flex-1 h-full flex items-center justify-center p-6 overflow-hidden select-none",
-                  zoom > 1 ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
+                  zoom > 1 && !imageError ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
                 )}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
               >
-                <div 
-                  className="relative max-h-full max-w-full transition-transform duration-75 flex items-center justify-center"
-                  style={{
-                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageUrl}
-                    alt={imageName}
-                    draggable={false}
-                    className="max-h-[75vh] max-w-[75vw] object-contain rounded-lg shadow-2xl border border-zinc-800/80"
-                  />
+                {/* Fallback Card if image fails to load */}
+                {imageError ? (
+                  <div className="flex flex-col items-center justify-center p-8 text-center max-w-md rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-4 shadow-2xl backdrop-blur-sm">
+                    <div className="p-4 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <Scan className="w-10 h-10" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-zinc-100">
+                        Medical Scan View Unavailable
+                      </h3>
+                      <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+                        The visual scan data for <span className="font-mono text-zinc-200 font-medium break-all">{imageName}</span> could not be loaded into the viewport. All model detection findings, statistical confidence, and clinical impressions remain accessible in the right panel.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {!imageLoaded && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300 backdrop-blur-sm shadow-xl">
+                          <Activity className="w-4 h-4 animate-spin text-primary" />
+                          <span>Loading scan view...</span>
+                        </div>
+                      </div>
+                    )}
 
-                  {/* SVG Bounding Boxes Overlay */}
-                  {showAnnotations && activeBoxes.length > 0 && (
-                    <svg
-                      className="absolute inset-0 w-full h-full pointer-events-none"
-                      viewBox="0 0 100 100"
-                      preserveAspectRatio="none"
+                    <div 
+                      className="relative max-h-full max-w-full transition-transform duration-75 flex items-center justify-center"
+                      style={{
+                        transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                      }}
                     >
-                      {activeBoxes.map((rawBox, i) => {
-                        const box = Array.isArray(rawBox) 
-                          ? rawBox 
-                          : (rawBox?.coordinates || rawBox?.bbox || [0, 0, 0, 0]);
-                        
-                        const isNormalized = box[0] <= 1.05 && box[2] <= 1.05;
-                        const x = isNormalized ? box[0] * 100 : box[0];
-                        const y = isNormalized ? box[1] * 100 : box[1];
-                        const width = isNormalized ? (box[2] - box[0]) * 100 : box[2] - box[0];
-                        const height = isNormalized ? (box[3] - box[1]) * 100 : box[3] - box[1];
+                      <div className="relative inline-flex items-center justify-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={imageUrl}
+                          alt={imageName}
+                          draggable={false}
+                          onLoad={() => setImageLoaded(true)}
+                          onError={() => setImageError(true)}
+                          className={cn(
+                            "max-h-[75vh] max-w-[75vw] object-contain rounded-lg shadow-2xl border border-zinc-800/80 transition-opacity duration-200",
+                            imageLoaded ? "opacity-100" : "opacity-0"
+                          )}
+                        />
 
-                        return (
-                          <g key={i}>
-                            <rect
-                              x={`${Math.max(0, x)}%`}
-                              y={`${Math.max(0, y)}%`}
-                              width={`${Math.max(2, width)}%`}
-                              height={`${Math.max(2, height)}%`}
-                              fill="rgba(239, 68, 68, 0.15)"
-                              stroke="#ef4444"
-                              strokeWidth="2.5"
-                              strokeDasharray="4"
-                              className="animate-pulse"
-                            />
-                            <text
-                              x={`${Math.max(0, x)}%`}
-                              y={`${Math.max(3, y - 1)}%`}
-                              fill="#ffffff"
-                              fontSize="3.5"
-                              fontWeight="bold"
-                              className="drop-shadow-md select-none"
-                            >
-                              ROI #{i + 1}
-                            </text>
-                          </g>
-                        );
-                      })}
-                    </svg>
-                  )}
-                </div>
+                        {/* SVG Bounding Boxes Overlay aligned directly over the image */}
+                        {showAnnotations && activeBoxes.length > 0 && imageLoaded && (
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            viewBox="0 0 100 100"
+                            preserveAspectRatio="none"
+                          >
+                            {activeBoxes.map((rawBox, i) => {
+                              const box = Array.isArray(rawBox) 
+                                ? rawBox 
+                                : (rawBox?.coordinates || rawBox?.bbox || [0, 0, 0, 0]);
+                              
+                              const isNormalized = box[0] <= 1.05 && box[2] <= 1.05;
+                              const x = isNormalized ? box[0] * 100 : box[0];
+                              const y = isNormalized ? box[1] * 100 : box[1];
+                              const width = isNormalized ? (box[2] - box[0]) * 100 : box[2] - box[0];
+                              const height = isNormalized ? (box[3] - box[1]) * 100 : box[3] - box[1];
+
+                              return (
+                                <g key={i}>
+                                  <rect
+                                    x={`${Math.max(0, x)}%`}
+                                    y={`${Math.max(0, y)}%`}
+                                    width={`${Math.max(2, width)}%`}
+                                    height={`${Math.max(2, height)}%`}
+                                    fill="rgba(239, 68, 68, 0.15)"
+                                    stroke="#ef4444"
+                                    strokeWidth="2.5"
+                                    strokeDasharray="4"
+                                    className="animate-pulse"
+                                  />
+                                  <text
+                                    x={`${Math.max(0, x)}%`}
+                                    y={`${Math.max(3, y - 1)}%`}
+                                    fill="#ffffff"
+                                    fontSize="3.5"
+                                    fontWeight="bold"
+                                    className="drop-shadow-md select-none"
+                                  >
+                                    ROI #{i + 1}
+                                  </text>
+                                </g>
+                              );
+                            })}
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* Bottom Overlay Hint */}
                 <div className="absolute bottom-4 left-6 pointer-events-none text-[11px] text-zinc-500 bg-zinc-900/80 backdrop-blur-sm px-3 py-1 rounded-full border border-zinc-800">

@@ -18,7 +18,8 @@ import {
   Scan,
   FileImage,
   Sparkles,
-  Loader2
+  Loader2,
+  RotateCcw
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ import { aiService } from "@/services/ai.service";
 import { PulseAIIcon } from "./PulseAIIcon";
 import { MedicalScanViewerModal, DetectionFinding } from "./MedicalScanViewerModal";
 import { DetectionCard } from "./DetectionCard";
+import { savePulseChat, loadPulseChat, clearPulseChat } from "@/lib/storage/pulse-chat-storage";
 
 export interface Message {
   id: string;
@@ -53,6 +55,89 @@ const SCAN_TYPES = [
   { id: "kidney", label: "Kidney CT", icon: Crosshair, color: "text-emerald-500", activeBg: "bg-emerald-500 text-white" },
   { id: "skin", label: "Skin Lesion", icon: Scan, color: "text-purple-500", activeBg: "bg-purple-500 text-white" },
 ];
+
+const ImageThumbnail = memo(function ImageThumbnail({
+  imageUrl,
+  imageName,
+  scanType,
+  isUser,
+  onInspect,
+}: {
+  imageUrl: string;
+  imageName?: string;
+  scanType?: string;
+  isUser: boolean;
+  onInspect: () => void;
+}) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return (
+      <div 
+        onClick={onInspect}
+        className={cn(
+          "mb-2.5 p-3 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-colors",
+          isUser 
+            ? "border-white/20 bg-black/30 hover:bg-black/40 text-white" 
+            : "border-border/60 bg-muted/60 hover:bg-muted text-foreground"
+        )}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={cn("p-2 rounded-lg shrink-0", isUser ? "bg-white/10" : "bg-primary/10 text-primary")}>
+            <FileImage size={18} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium truncate max-w-[200px]">
+              {imageName || "Diagnostic Scan"}
+            </p>
+            {scanType && (
+              <span className="uppercase text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/20 text-xs">
+                {scanType}
+              </span>
+            )}
+          </div>
+        </div>
+        <Maximize2 size={13} className="shrink-0 opacity-70" />
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(
+      "overflow-hidden rounded-xl border relative group/img",
+      isUser ? "mb-2.5 border-white/20 bg-black/20" : "mt-2 mb-3 border-border/60 bg-black/5"
+    )}>
+      <div className="relative max-h-48 sm:max-h-56 w-full overflow-hidden flex items-center justify-center bg-black/40">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img 
+          src={imageUrl} 
+          alt={imageName || "Uploaded Scan"} 
+          onError={() => setHasError(true)}
+          className="max-h-48 sm:max-h-56 w-auto object-contain block cursor-pointer transition-transform duration-200 hover:scale-105"
+          onClick={onInspect}
+        />
+        <button
+          type="button"
+          onClick={onInspect}
+          className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-sm shadow-md"
+          title="Inspect image in full view"
+        >
+          <Maximize2 size={13} />
+        </button>
+      </div>
+      {(imageName || scanType) && (
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-black/40 text-[11px] text-white/90">
+          <span className="truncate max-w-[200px]">{imageName || "Medical scan"}</span>
+          {scanType && (
+            <span className="uppercase text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/20">
+              {scanType}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
 
 const ChatMessage = memo(function ChatMessage({ 
   message, 
@@ -83,35 +168,13 @@ const ChatMessage = memo(function ChatMessage({
       >
         {/* User uploaded scan thumbnail */}
         {isUser && message.imageUrl && (
-          <div className="mb-2.5 overflow-hidden rounded-xl border border-white/20 bg-black/20 group/img relative">
-            <div className="relative max-h-48 w-full overflow-hidden flex items-center justify-center bg-black/40">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={message.imageUrl} 
-                alt={message.imageName || "Uploaded Scan"} 
-                className="max-h-48 w-auto object-contain block cursor-pointer transition-transform duration-200 hover:scale-105"
-                onClick={() => onInspectImage(message.imageUrl!, message.imageName, undefined, message.boxes)}
-              />
-              <button
-                type="button"
-                onClick={() => onInspectImage(message.imageUrl!, message.imageName, undefined, message.boxes)}
-                className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-sm"
-                title="Inspect image in full view"
-              >
-                <Maximize2 size={13} />
-              </button>
-            </div>
-            {(message.imageName || message.scanType) && (
-              <div className="flex items-center justify-between px-2.5 py-1.5 bg-black/40 text-[11px] text-white/90">
-                <span className="truncate max-w-[200px]">{message.imageName || "Medical scan"}</span>
-                {message.scanType && (
-                  <span className="uppercase text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/20">
-                    {message.scanType}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          <ImageThumbnail
+            imageUrl={message.imageUrl}
+            imageName={message.imageName}
+            scanType={message.scanType}
+            isUser={true}
+            onInspect={() => onInspectImage(message.imageUrl!, message.imageName, undefined, message.boxes)}
+          />
         )}
 
         {/* Assistant Detection Card if detection finding exists */}
@@ -124,23 +187,13 @@ const ChatMessage = memo(function ChatMessage({
         ) : (
           /* Standard assistant image preview fallback if detection finding is not full structure */
           !isUser && message.imageUrl && (
-            <div className="relative mt-2 mb-3 max-w-full overflow-hidden rounded-xl border border-border/60 bg-black/5 group/scan">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src={message.imageUrl} 
-                alt="Medical Scan" 
-                className="w-full max-h-64 object-contain block cursor-pointer"
-                onClick={() => onInspectImage(message.imageUrl!, "Diagnostic Scan", undefined, message.boxes)}
-              />
-              <button
-                type="button"
-                onClick={() => onInspectImage(message.imageUrl!, "Diagnostic Scan", undefined, message.boxes)}
-                className="absolute top-2 right-2 p-1.5 rounded-lg bg-zinc-900/80 hover:bg-zinc-900 text-white opacity-0 group-hover/scan:opacity-100 transition-opacity backdrop-blur-sm shadow-md"
-                title="Inspect image in full resolution"
-              >
-                <Maximize2 size={13} />
-              </button>
-            </div>
+            <ImageThumbnail
+              imageUrl={message.imageUrl}
+              imageName={message.imageName || "Diagnostic Scan"}
+              scanType={message.scanType}
+              isUser={false}
+              onInspect={() => onInspectImage(message.imageUrl!, "Diagnostic Scan", undefined, message.boxes)}
+            />
           )
         )}
 
@@ -200,35 +253,48 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
 
   const storageKey = `pulse-chat-${role}-${patientId || "global"}`;
 
-  // Load from session storage on mount
+  // Load from IndexedDB on mount
   useEffect(() => {
-    try {
-      const stored = sessionStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.messages && Array.isArray(parsed.messages)) {
-          setMessages(parsed.messages);
+    let isMounted = true;
+    loadPulseChat(storageKey)
+      .then((saved) => {
+        if (!isMounted) return;
+        if (saved) {
+          if (saved.messages && Array.isArray(saved.messages)) {
+            setMessages(saved.messages);
+          }
+          if (saved.sessionId) {
+            setSessionId(saved.sessionId);
+          }
+          if (saved.scanType) {
+            setScanType(saved.scanType);
+          }
         }
-        if (parsed.sessionId) {
-          setSessionId(parsed.sessionId);
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to load chat history", e);
-    }
-    setIsLoaded(true);
+        setIsLoaded(true);
+      })
+      .catch((e) => {
+        console.warn("Failed to load chat history from IndexedDB", e);
+        if (isMounted) setIsLoaded(true);
+      });
+
+    const handleStorageCleared = () => {
+      setMessages([]);
+      setSessionId(null);
+    };
+
+    window.addEventListener("medsync:pulse-chat-cleared", handleStorageCleared);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("medsync:pulse-chat-cleared", handleStorageCleared);
+    };
   }, [storageKey]);
 
-  // Save to session storage whenever messages or sessionId changes
+  // Save to IndexedDB whenever messages, sessionId, or scanType changes
   useEffect(() => {
     if (isLoaded) {
-      try {
-        sessionStorage.setItem(storageKey, JSON.stringify({ messages, sessionId }));
-      } catch (e) {
-        console.warn("Failed to save chat history", e);
-      }
+      savePulseChat(storageKey, { messages, sessionId, scanType });
     }
-  }, [messages, sessionId, storageKey, isLoaded]);
+  }, [messages, sessionId, scanType, storageKey, isLoaded]);
 
   // Cleanup pending requests on unmount or controller change
   useEffect(() => {
@@ -340,7 +406,12 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
     // If a scan image is staged, trigger image analysis pipeline
     if (stagedFile) {
       const fileToAnalyze = stagedFile;
-      const persistentImageUrl = stagedPreviewUrl || URL.createObjectURL(fileToAnalyze);
+      let persistentImageUrl = stagedPreviewUrl || "";
+      try {
+        persistentImageUrl = await fileToBase64(fileToAnalyze);
+      } catch (err) {
+        console.warn("Base64 conversion failed, falling back to preview URL", err);
+      }
       const userText = input.trim();
       const currentScanType = scanType;
 
@@ -481,6 +552,16 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
     });
   }, []);
 
+  const handleClearChat = useCallback(async () => {
+    if (messages.length === 0) return;
+    if (window.confirm("Start a new consultation? This will clear the active scan and chat findings.")) {
+      await clearPulseChat(storageKey);
+      setMessages([]);
+      setSessionId(null);
+      toast.success("Started new consultation session");
+    }
+  }, [messages.length, storageKey]);
+
   return (
     <div 
       className={cn(
@@ -548,32 +629,47 @@ export function PulseAIChat({ role, fullPage = false, patientId }: PulseAIChatPr
           </div>
         </div>
 
-        {/* Scan Type selector pills in header for doctor */}
-        {role === "doctor" && (
-          <div className="hidden sm:flex items-center gap-1 bg-background/60 p-1 rounded-xl border border-border/80">
-            {SCAN_TYPES.map((type) => {
-              const Icon = type.icon;
-              const isActive = scanType === type.id;
-              return (
-                <button
-                  key={type.id}
-                  type="button"
-                  onClick={() => setScanType(type.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-all",
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                  title={`Switch diagnostic target to ${type.label}`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{type.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Scan Type selector pills in header for doctor */}
+          {role === "doctor" && (
+            <div className="hidden sm:flex items-center gap-1 bg-background/60 p-1 rounded-xl border border-border/80">
+              {SCAN_TYPES.map((type) => {
+                const Icon = type.icon;
+                const isActive = scanType === type.id;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => setScanType(type.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-all",
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                    title={`Switch diagnostic target to ${type.label}`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{type.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* New consultation button */}
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearChat}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted border border-border/60 transition-colors"
+              title="Start new consultation (clears current chat)"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">New Session</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Messages Scroll View */}

@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, ShieldCheck, Activity, LogOut, ChevronLeft, ChevronRight, Settings, Moon, Sun, Building2, ShoppingBag, Package, AlertTriangle, Bell, Users, LineChart, Server, UserPlus, RefreshCw, QrCode, ScanLine, Truck } from "lucide-react";
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase";
+import { authService } from "@/services/auth.service";
 import {
   Tooltip,
   TooltipContent,
@@ -310,7 +311,7 @@ export const Sidebar = memo(function Sidebar({ role }: { role: string }) {
 
         <button
           onClick={async () => {
-            await supabase.auth.signOut();
+            await authService.logout();
             if (typeof window !== "undefined") {
               window.location.href = '/login';
             }

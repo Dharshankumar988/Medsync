@@ -13,6 +13,7 @@ import {
   Button
 } from "@medsync/ui";
 import { supabase } from "@/lib/supabase";
+import { authService } from "@/services/auth.service";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 export const Header = memo(function Header({ role }: { role: string }) {
@@ -94,7 +95,7 @@ export const Header = memo(function Header({ role }: { role: string }) {
   const getOrdersPath = () => `/${role.toLowerCase()}/orders`;
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await authService.logout();
     router.push("/login");
   };
   

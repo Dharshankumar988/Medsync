@@ -26,6 +26,9 @@
         "./*"
       ]
     },
+    "types": [
+      "node"
+    ],
     "target": "ES2017"
   },
   "include": [
