@@ -58,18 +58,26 @@ export default function AuthCallbackScreen() {
           targetUrl = initialUrl || '';
         }
 
+        let code = (searchParams.code as string) || null;
         let accessToken = (searchParams.access_token as string) || null;
         let refreshToken = (searchParams.refresh_token as string) || null;
 
         if (targetUrl) {
+          const codeMatch = targetUrl.match(/[?&]code=([^&#]+)/);
           const accessMatch = targetUrl.match(/[#?&]access_token=([^&#]+)/);
           const refreshMatch = targetUrl.match(/[#?&]refresh_token=([^&#]+)/);
+          if (codeMatch) code = decodeURIComponent(codeMatch[1]);
           if (accessMatch) accessToken = decodeURIComponent(accessMatch[1]);
           if (refreshMatch) refreshToken = decodeURIComponent(refreshMatch[1]);
         }
 
-        // Set session if tokens present
-        if (accessToken && refreshToken) {
+        // Exchange code for session if PKCE code returned
+        if (code) {
+          setStatus('Exchanging authentication code...');
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        } else if (accessToken && refreshToken) {
+          // Set session if tokens present (implicit flow)
           setStatus('Establishing secure session...');
           const { error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
@@ -177,6 +185,15 @@ export default function AuthCallbackScreen() {
 
       if (error) throw error;
       if (!data.user) throw new Error('Could not update user password.');
+
+      try {
+        await api.post('/auth/set-oauth-password', {
+          password: newPassword,
+          confirm_password: confirmPassword,
+        });
+      } catch (backendErr) {
+        console.warn('Backend set-oauth-password notice:', backendErr);
+      }
 
       await completeUserSetup(data.user);
     } catch (err: any) {

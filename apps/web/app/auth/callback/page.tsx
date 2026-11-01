@@ -161,6 +161,10 @@ function CallbackHandler() {
           if (isMounted) {
             setMobileDeepLink(appDeepLink);
           }
+          try {
+            window.location.href = appDeepLink;
+            return;
+          } catch {}
         }
 
         // Check if user has already configured an account password

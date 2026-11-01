@@ -204,9 +204,10 @@ export const authService = {
       if (authResult.type === 'success' && authResult.url) {
         return { url: authResult.url };
       }
+      return { url: null, cancelled: true };
     }
 
-    return data;
+    return { url: null };
   },
 
   me: async () => {

@@ -23,7 +23,10 @@ function NavigationStack() {
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => {
       if (url && (url.includes('auth/callback') || url.includes('callback'))) {
-        router.replace('/(auth)/callback');
+        router.replace({
+          pathname: '/(auth)/callback',
+          params: { rawUrl: url },
+        });
       }
     });
     return () => subscription.remove();
