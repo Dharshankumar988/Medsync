@@ -43,10 +43,12 @@ import {
 } from '../../../services/patient.service';
 import { Colors } from '../../../constants/theme';
 import { formatErrorMessage } from '../../../lib/api';
+import { useTheme } from '../../../context/ThemeContext';
 
 type ViewTab = 'RECORDS' | 'PRESCRIPTIONS' | 'ORDERS';
 
 export default function PatientRecordsScreen() {
+  const { theme, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<ViewTab>('RECORDS');
   const [records, setRecords] = useState<MedicalRecordItem[]>([]);
   const [prescriptions, setPrescriptions] = useState<PrescriptionItem[]>([]);

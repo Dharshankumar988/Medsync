@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, ViewStyle, StyleSheet, StyleProp } from 'react-native';
-import { Colors, Radius, Shadows } from '../../constants/theme';
+import { Radius, Shadows } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 interface CardProps {
   children: React.ReactNode;
@@ -20,11 +21,17 @@ export const Card: React.FC<CardProps> = ({
   noPadding = false,
   flat = false,
 }) => {
+  const { theme, isDark } = useTheme();
+
   return (
     <View
       style={[
         styles.card,
-        !flat ? Shadows.card : undefined,
+        {
+          backgroundColor: theme.card,
+          borderColor: theme.border,
+        },
+        !flat && isDark ? { shadowOpacity: 0 } : !flat ? Shadows.card : undefined,
         accentColor ? { borderLeftColor: accentColor, borderLeftWidth: 2 } : undefined,
         noPadding ? { padding: 0 } : undefined,
         style,
@@ -38,7 +45,14 @@ export const Card: React.FC<CardProps> = ({
 export const CardHeader: React.FC<{ children: React.ReactNode; style?: StyleProp<ViewStyle> }> = ({
   children,
   style,
-}) => <View style={[styles.cardHeader, style]}>{children}</View>;
+}) => {
+  const { theme } = useTheme();
+  return (
+    <View style={[styles.cardHeader, { borderBottomColor: theme.border }, style]}>
+      {children}
+    </View>
+  );
+};
 
 export const CardContent: React.FC<{ children: React.ReactNode; style?: StyleProp<ViewStyle> }> = ({
   children,
@@ -48,14 +62,19 @@ export const CardContent: React.FC<{ children: React.ReactNode; style?: StylePro
 export const CardFooter: React.FC<{ children: React.ReactNode; style?: StyleProp<ViewStyle> }> = ({
   children,
   style,
-}) => <View style={[styles.cardFooter, style]}>{children}</View>;
+}) => {
+  const { theme } = useTheme();
+  return (
+    <View style={[styles.cardFooter, { borderTopColor: theme.border }, style]}>
+      {children}
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.card,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
     overflow: 'hidden',
     padding: 16,
   },
@@ -63,16 +82,14 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     marginBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
   },
   cardContent: {
-    // no extra padding — used to wrap card body sections
+    // no extra padding
   },
   cardFooter: {
     paddingTop: 12,
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.divider,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

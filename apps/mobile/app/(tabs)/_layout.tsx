@@ -129,12 +129,6 @@ export default function TabLayout() {
             ),
           }}
         />
-
-        {/* ── Non-Patient role tabs hidden from patient app ── */}
-        <Tabs.Screen name="doctor" options={{ href: null }} />
-        <Tabs.Screen name="pharmacy" options={{ href: null }} />
-        <Tabs.Screen name="hospital" options={{ href: null }} />
-        <Tabs.Screen name="admin" options={{ href: null }} />
       </Tabs>
     </View>
   );

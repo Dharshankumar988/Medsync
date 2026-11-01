@@ -19,8 +19,10 @@ import { Button } from '../../../components/common/Button';
 import { patientService, AppointmentItem } from '../../../services/patient.service';
 import { Colors } from '../../../constants/theme';
 import { formatErrorMessage } from '../../../lib/api';
+import { useTheme } from '../../../context/ThemeContext';
 
 export default function PatientAppointmentsScreen() {
+  const { theme, isDark } = useTheme();
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -216,7 +218,7 @@ export default function PatientAppointmentsScreen() {
 
   return (
     <RoleGuard allowedRole="patient">
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ScreenHeader
           title="Appointments"
           subtitle="Clinic visits & schedule"

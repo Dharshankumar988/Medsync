@@ -229,7 +229,7 @@ export default function PatientProfileScreen() {
 
   return (
     <RoleGuard allowedRole="patient">
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ScreenHeader
           title="Patient Vault"
           subtitle="Account credentials, PIN security & vitals"

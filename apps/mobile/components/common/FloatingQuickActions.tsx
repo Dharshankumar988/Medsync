@@ -35,11 +35,7 @@ export function FloatingQuickActions() {
   }
 
   const handleOpenAi = () => {
-    if (role === 'patient') {
-      router.push('/(tabs)/patient/pulse-ai');
-    } else if (role === 'doctor') {
-      router.push('/(tabs)/doctor/pulse-ai');
-    }
+    router.push('/(tabs)/patient/pulse-ai');
   };
 
   return (

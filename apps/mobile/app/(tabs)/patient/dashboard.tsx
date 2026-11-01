@@ -7,43 +7,43 @@ import {
   RefreshControl,
   TouchableOpacity,
   Platform,
-  Alert,
-  Linking,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  Activity,
   Heart,
-  Droplets,
-  Scale,
   Calendar,
   FileText,
   Pill,
-  ShieldCheck,
   ChevronRight,
   AlertCircle,
   Scan,
   Bell,
   Sparkles,
-  Bot,
+  QrCode,
   Truck,
-  AlertTriangle,
-  UploadCloud,
-  CheckCircle2,
-  Clock,
-  ExternalLink,
+  Sun,
+  Moon,
+  ShieldCheck,
+  Stethoscope,
+  Activity,
+  Plus,
+  ArrowUpRight,
 } from 'lucide-react-native';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { patientService, PatientDashboardSummary } from '../../../services/patient.service';
 import { useRole } from '../../../providers/role-provider';
+import { useTheme } from '../../../context/ThemeContext';
 import { PaymentStyleQRScanner } from '../../../components/patient/PaymentStyleQRScanner';
 import { CompleteHealthProfileModal } from '../../../components/patient/CompleteHealthProfileModal';
 import { UploadRecordModal } from '../../../components/patient/UploadRecordModal';
 import { OrderMedicinesModal } from '../../../components/patient/OrderMedicinesModal';
+import { PrescriptionQRModal } from '../../../components/patient/PrescriptionQRModal';
 
 export default function PatientDashboard() {
   const router = useRouter();
   const { user } = useRole();
+  const { theme, isDark, toggleTheme } = useTheme();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -57,6 +57,7 @@ export default function PatientDashboard() {
   const [qrScannerVisible, setQrScannerVisible] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
+  const [passportQrVisible, setPassportQrVisible] = useState(false);
 
   // Notifications
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
@@ -101,7 +102,7 @@ export default function PatientDashboard() {
       setProfile(profData);
       setUnreadNotifCount(Array.isArray(notifs) ? notifs.length : 0);
 
-      // Check if profile needs completion (DOB or blood_group missing)
+      // Prompt to complete profile if DOB or blood group is missing
       if (profData && (!profData.date_of_birth || !profData.blood_group)) {
         setShowProfileModal(true);
       }
@@ -123,67 +124,76 @@ export default function PatientDashboard() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  const handleEmergencySos = () => {
-    Alert.alert(
-      '🚨 EMERGENCY SOS ALERT',
-      'This will broadcast your GPS location and emergency medical passport to your emergency contacts and nearest hospitals.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'CONFIRM EMERGENCY',
-          style: 'destructive',
-          onPress: () => {
-            const emergencyPhone = profile?.emergency_contact_number || '911';
-            Linking.openURL(`tel:${emergencyPhone}`);
-          },
-        },
-      ]
-    );
-  };
-
   const nextAppt = summary.nextAppointment;
-  const activeOrder = summary.recentOrders && summary.recentOrders.length > 0 ? summary.recentOrders[0] : null;
 
   return (
     <RoleGuard allowedRole="patient">
-      <View style={styles.container}>
-        {/* Top Header Bar */}
-        <View style={styles.headerBar}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* ── Top Header Bar (Payment App Style) ── */}
+        <View
+          style={[
+            styles.headerBar,
+            { backgroundColor: theme.background, borderColor: theme.border },
+          ]}
+        >
           <TouchableOpacity
-            style={styles.profilePill}
+            style={styles.profileRow}
             onPress={() => router.push('/(tabs)/patient/profile')}
             activeOpacity={0.8}
           >
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>
-                {patientDisplayName.substring(0, 2).toUpperCase()}
-              </Text>
+            <View
+              style={[
+                styles.avatarCircle,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <Image
+                source={require('../../../assets/images/app-logo.png')}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
             </View>
-            <View style={{ marginLeft: 10 }}>
-              <Text style={styles.greetingText}>{greeting},</Text>
-              <Text style={styles.patientNameText} numberOfLines={1}>
+            <View style={{ marginLeft: 12 }}>
+              <Text style={[styles.greetingText, { color: theme.textMuted }]}>
+                {greeting},
+              </Text>
+              <Text
+                style={[styles.patientNameText, { color: theme.text }]}
+                numberOfLines={1}
+              >
                 {patientDisplayName}
               </Text>
             </View>
           </TouchableOpacity>
 
           <View style={styles.headerRightActions}>
-            {/* Quick QR Scanner Shortcut */}
+            {/* Theme Switcher Button */}
             <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => setQrScannerVisible(true)}
+              style={[
+                styles.iconButton,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={toggleTheme}
               activeOpacity={0.8}
+              accessibilityLabel="Toggle Theme"
             >
-              <Scan size={20} color="#2563EB" />
+              {isDark ? (
+                <Sun size={18} color="#FAFAFA" />
+              ) : (
+                <Moon size={18} color="#09090B" />
+              )}
             </TouchableOpacity>
 
             {/* Notification Bell */}
             <TouchableOpacity
-              style={styles.iconButton}
+              style={[
+                styles.iconButton,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
               onPress={() => router.push('/(tabs)/patient/profile')}
               activeOpacity={0.8}
             >
-              <Bell size={20} color="#334155" />
+              <Bell size={18} color={theme.text} />
               {unreadNotifCount > 0 && (
                 <View style={styles.unreadBadge}>
                   <Text style={styles.unreadBadgeText}>
@@ -203,41 +213,252 @@ export default function PatientDashboard() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#2563EB']}
-              tintColor="#2563EB"
+              colors={[theme.accent]}
+              tintColor={theme.accent}
             />
           }
         >
           {error && (
-            <View style={styles.errorBox}>
+            <View
+              style={[
+                styles.errorBox,
+                {
+                  backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                  borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+                },
+              ]}
+            >
               <AlertCircle size={16} color="#EF4444" style={{ marginRight: 8 }} />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
 
-          {/* Emergency SOS Banner */}
-          <TouchableOpacity
-            style={styles.sosButton}
-            onPress={handleEmergencySos}
-            activeOpacity={0.88}
+          {/* ── 1. Digital Health Card (Hero Card - Apple/GPay Wallet Style) ── */}
+          <View
+            style={[
+              styles.healthCard,
+              {
+                backgroundColor: isDark ? '#141418' : '#09090B',
+                borderColor: isDark ? '#27272A' : '#18181B',
+              },
+            ]}
           >
-            <View style={styles.sosIconContainer}>
-              <AlertTriangle size={20} color="#FFFFFF" strokeWidth={2.5} />
+            {/* Card Top Row */}
+            <View style={styles.healthCardHeader}>
+              <View style={styles.cardBrandBadge}>
+                <Image
+                  source={require('../../../assets/images/app-logo.png')}
+                  style={styles.cardLogoIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.cardBrandText}>MEDSYNC HEALTH PASS</Text>
+              </View>
+              <View style={styles.verifiedBadge}>
+                <ShieldCheck size={13} color="#38BDF8" />
+                <Text style={styles.verifiedText}>Polygon Verified</Text>
+              </View>
             </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.sosTitle}>Emergency SOS Broadcast</Text>
-              <Text style={styles.sosSubtitle}>
-                Instant alert to contacts & hospital ambulance
-              </Text>
-            </View>
-            <ChevronRight size={18} color="#FFFFFF" />
-          </TouchableOpacity>
 
-          {/* Live Clinical Health Vitals Strip */}
+            {/* Card Middle: Patient Info */}
+            <View style={styles.cardBody}>
+              <Text style={styles.cardPatientName}>
+                {patientDisplayName.toUpperCase()}
+              </Text>
+              <View style={styles.cardMetaRow}>
+                <View style={styles.metaPill}>
+                  <Text style={styles.metaPillLabel}>Blood:</Text>
+                  <Text style={styles.metaPillValue}>
+                    {profile?.blood_group || 'O+'}
+                  </Text>
+                </View>
+                <View style={styles.metaPill}>
+                  <Text style={styles.metaPillLabel}>Gender:</Text>
+                  <Text style={styles.metaPillValue}>
+                    {profile?.gender ? profile.gender.toUpperCase() : 'MALE'}
+                  </Text>
+                </View>
+                <View style={styles.metaPill}>
+                  <Text style={styles.metaPillLabel}>ABHA:</Text>
+                  <Text style={styles.metaPillValue}>
+                    {profile?.id ? `91-${profile.id.substring(0, 8)}` : '91-8842-9912'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Card Actions: 2 Quick Touch Buttons */}
+            <View style={styles.cardActionRow}>
+              <TouchableOpacity
+                style={styles.cardPrimaryBtn}
+                onPress={() => setQrScannerVisible(true)}
+                activeOpacity={0.88}
+              >
+                <Scan size={16} color="#09090B" strokeWidth={2.5} />
+                <Text style={styles.cardPrimaryBtnText}>Scan Hospital / Rx</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cardSecondaryBtn}
+                onPress={() => setPassportQrVisible(true)}
+                activeOpacity={0.8}
+              >
+                <QrCode size={16} color="#FAFAFA" />
+                <Text style={styles.cardSecondaryBtnText}>My Health QR</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* ── 2. Primary Quick Actions Grid (Payment App 4-Key Services) ── */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>My Health Vitals</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              Quick Services
+            </Text>
+          </View>
+
+          <View style={styles.servicesGrid}>
+            {/* Action 1: Book Doctor Visit */}
+            <TouchableOpacity
+              style={[
+                styles.serviceTile,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={() => router.push('/(tabs)/patient/appointments')}
+              activeOpacity={0.85}
+            >
+              <View
+                style={[
+                  styles.serviceIconBox,
+                  { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#F0F9FF' },
+                ]}
+              >
+                <Calendar size={22} color={isDark ? '#38BDF8' : '#0284C7'} />
+              </View>
+              <Text style={[styles.serviceTitle, { color: theme.text }]}>
+                Book Visit
+              </Text>
+              <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
+                Doctors & Clinics
+              </Text>
+            </TouchableOpacity>
+
+            {/* Action 2: Order Medicines */}
+            <TouchableOpacity
+              style={[
+                styles.serviceTile,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={() => setOrderModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <View
+                style={[
+                  styles.serviceIconBox,
+                  { backgroundColor: isDark ? 'rgba(52, 211, 153, 0.12)' : '#ECFDF5' },
+                ]}
+              >
+                <Pill size={22} color={isDark ? '#34D399' : '#059669'} />
+              </View>
+              <Text style={[styles.serviceTitle, { color: theme.text }]}>
+                Order Meds
+              </Text>
+              <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
+                Pharmacy Delivery
+              </Text>
+            </TouchableOpacity>
+
+            {/* Action 3: Pulse AI Copilot */}
+            <TouchableOpacity
+              style={[
+                styles.serviceTile,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={() => router.push('/(tabs)/patient/pulse-ai')}
+              activeOpacity={0.85}
+            >
+              <View
+                style={[
+                  styles.serviceIconBox,
+                  { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.12)' : '#FAF5FF' },
+                ]}
+              >
+                <Sparkles size={22} color={isDark ? '#C084FC' : '#7C3AED'} />
+              </View>
+              <Text style={[styles.serviceTitle, { color: theme.text }]}>
+                Pulse AI
+              </Text>
+              <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
+                Symptom Triage
+              </Text>
+            </TouchableOpacity>
+
+            {/* Action 4: Upload EHR Records */}
+            <TouchableOpacity
+              style={[
+                styles.serviceTile,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={() => setUploadModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <View
+                style={[
+                  styles.serviceIconBox,
+                  { backgroundColor: isDark ? 'rgba(251, 146, 60, 0.12)' : '#FFF7ED' },
+                ]}
+              >
+                <FileText size={22} color={isDark ? '#FB923C' : '#EA580C'} />
+              </View>
+              <Text style={[styles.serviceTitle, { color: theme.text }]}>
+                Upload EHR
+              </Text>
+              <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
+                Encrypt to Vault
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── 3. Next Appointment Banner (if scheduled) ── */}
+          {nextAppt && (
+            <TouchableOpacity
+              style={[
+                styles.upcomingApptCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={() => router.push('/(tabs)/patient/appointments')}
+              activeOpacity={0.85}
+            >
+              <View style={styles.apptIconBox}>
+                <Stethoscope size={20} color="#2563EB" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.apptLabel, { color: theme.textMuted }]}>
+                  UPCOMING APPOINTMENT
+                </Text>
+                <Text style={[styles.apptDoctorName, { color: theme.text }]}>
+                  {nextAppt.doctor_name || 'Medical Specialist'}
+                </Text>
+                <Text style={[styles.apptTime, { color: theme.textSecondary }]}>
+                  {new Date(nextAppt.appointment_date).toLocaleDateString(undefined, {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  })}{' '}
+                  at {nextAppt.time_slot}
+                </Text>
+              </View>
+              <ChevronRight size={18} color={theme.textMuted} />
+            </TouchableOpacity>
+          )}
+
+          {/* ── 4. My Health Vitals (Clean Ergonomic Carousel) ── */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              Health Metrics
+            </Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/patient/profile')}>
-              <Text style={styles.sectionLink}>View Profile</Text>
+              <Text style={[styles.sectionLink, { color: theme.textMuted }]}>
+                Manage
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -247,268 +468,142 @@ export default function PatientDashboard() {
             contentContainerStyle={styles.vitalsScroll}
           >
             {/* Heart Rate */}
-            <View style={[styles.vitalCard, { borderColor: 'rgba(239, 68, 68, 0.2)' }]}>
-              <View style={[styles.vitalIconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
-                <Heart size={18} color="#EF4444" />
+            <View
+              style={[
+                styles.vitalCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <View style={styles.vitalHeader}>
+                <View
+                  style={[
+                    styles.vitalIconBadge,
+                    { backgroundColor: 'rgba(239, 68, 68, 0.12)' },
+                  ]}
+                >
+                  <Heart size={16} color="#EF4444" />
+                </View>
+                <Text style={[styles.vitalStatusBadge, { color: '#10B981' }]}>
+                  Normal
+                </Text>
               </View>
-              <Text style={styles.vitalLabel}>Heart Rate</Text>
-              <Text style={styles.vitalValue}>74 <Text style={styles.vitalUnit}>bpm</Text></Text>
-              <View style={styles.vitalBadgeNormal}>
-                <Text style={styles.vitalBadgeTextNormal}>Resting Normal</Text>
-              </View>
+              <Text style={[styles.vitalLabel, { color: theme.textMuted }]}>
+                Heart Rate
+              </Text>
+              <Text style={[styles.vitalValue, { color: theme.text }]}>
+                74 <Text style={styles.vitalUnit}>bpm</Text>
+              </Text>
             </View>
 
             {/* Blood Pressure */}
-            <View style={[styles.vitalCard, { borderColor: 'rgba(37, 99, 235, 0.2)' }]}>
-              <View style={[styles.vitalIconCircle, { backgroundColor: 'rgba(37, 99, 235, 0.1)' }]}>
-                <Activity size={18} color="#2563EB" />
+            <View
+              style={[
+                styles.vitalCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <View style={styles.vitalHeader}>
+                <View
+                  style={[
+                    styles.vitalIconBadge,
+                    { backgroundColor: 'rgba(56, 189, 248, 0.12)' },
+                  ]}
+                >
+                  <Activity size={16} color="#38BDF8" />
+                </View>
+                <Text style={[styles.vitalStatusBadge, { color: '#10B981' }]}>
+                  Optimal
+                </Text>
               </View>
-              <Text style={styles.vitalLabel}>Blood Pressure</Text>
-              <Text style={styles.vitalValue}>120/80 <Text style={styles.vitalUnit}>mmHg</Text></Text>
-              <View style={styles.vitalBadgeNormal}>
-                <Text style={styles.vitalBadgeTextNormal}>Optimal</Text>
-              </View>
-            </View>
-
-            {/* Blood Sugar */}
-            <View style={[styles.vitalCard, { borderColor: 'rgba(16, 185, 129, 0.2)' }]}>
-              <View style={[styles.vitalIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                <Droplets size={18} color="#10B981" />
-              </View>
-              <Text style={styles.vitalLabel}>Blood Sugar</Text>
-              <Text style={styles.vitalValue}>96 <Text style={styles.vitalUnit}>mg/dL</Text></Text>
-              <View style={styles.vitalBadgeNormal}>
-                <Text style={styles.vitalBadgeTextNormal}>Fasting Normal</Text>
-              </View>
-            </View>
-
-            {/* Blood Group */}
-            <View style={[styles.vitalCard, { borderColor: 'rgba(139, 92, 246, 0.2)' }]}>
-              <View style={[styles.vitalIconCircle, { backgroundColor: 'rgba(139, 92, 246, 0.1)' }]}>
-                <ShieldCheck size={18} color="#8B5CF6" />
-              </View>
-              <Text style={styles.vitalLabel}>Blood Group</Text>
-              <Text style={[styles.vitalValue, { color: '#8B5CF6' }]}>
-                {profile?.blood_group || 'O+'}
+              <Text style={[styles.vitalLabel, { color: theme.textMuted }]}>
+                Blood Pressure
               </Text>
-              <View style={[styles.vitalBadgeNormal, { backgroundColor: 'rgba(139, 92, 246, 0.1)' }]}>
-                <Text style={[styles.vitalBadgeTextNormal, { color: '#8B5CF6' }]}>Verified Type</Text>
+              <Text style={[styles.vitalValue, { color: theme.text }]}>
+                120/80 <Text style={styles.vitalUnit}>mmHg</Text>
+              </Text>
+            </View>
+
+            {/* Vault Records Count */}
+            <View
+              style={[
+                styles.vitalCard,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <View style={styles.vitalHeader}>
+                <View
+                  style={[
+                    styles.vitalIconBadge,
+                    { backgroundColor: 'rgba(168, 85, 247, 0.12)' },
+                  ]}
+                >
+                  <ShieldCheck size={16} color="#C084FC" />
+                </View>
+                <Text style={[styles.vitalStatusBadge, { color: '#38BDF8' }]}>
+                  Encrypted
+                </Text>
               </View>
+              <Text style={[styles.vitalLabel, { color: theme.textMuted }]}>
+                EHR Vault
+              </Text>
+              <Text style={[styles.vitalValue, { color: theme.text }]}>
+                {summary.totalRecordsCount || 0}{' '}
+                <Text style={styles.vitalUnit}>Files</Text>
+              </Text>
             </View>
           </ScrollView>
 
-          {/* Quick Actions Grid */}
+          {/* ── 5. Quick Access to Records & Prescriptions Hub ── */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Quick Clinical Actions</Text>
-          </View>
-
-          <View style={styles.quickGrid}>
-            <TouchableOpacity
-              style={styles.quickCard}
-              onPress={() => router.push('/(tabs)/patient/appointments')}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.quickIconCircle, { backgroundColor: 'rgba(37, 99, 235, 0.1)' }]}>
-                <Calendar size={20} color="#2563EB" />
-              </View>
-              <Text style={styles.quickTitle}>Book Visit</Text>
-              <Text style={styles.quickSub}>Doctors & Clinics</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickCard}
-              onPress={() => router.push('/(tabs)/patient/pulse-ai')}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.quickIconCircle, { backgroundColor: 'rgba(139, 92, 246, 0.1)' }]}>
-                <Bot size={20} color="#8B5CF6" />
-              </View>
-              <Text style={styles.quickTitle}>Pulse AI</Text>
-              <Text style={styles.quickSub}>Symptom Triage</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickCard}
-              onPress={() => setQrScannerVisible(true)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.quickIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                <Scan size={20} color="#10B981" />
-              </View>
-              <Text style={styles.quickTitle}>Scan QR</Text>
-              <Text style={styles.quickSub}>Pharmacy & Ledger</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickCard}
-              onPress={() => setUploadModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.quickIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.1)' }]}>
-                <UploadCloud size={20} color="#F59E0B" />
-              </View>
-              <Text style={styles.quickTitle}>Upload EHR</Text>
-              <Text style={styles.quickSub}>Encrypted PIN</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Next Upcoming Appointment Card */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Upcoming Consultation</Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/patient/appointments')}>
-              <Text style={styles.sectionLink}>All Visits ({summary.upcomingAppointmentsCount})</Text>
-            </TouchableOpacity>
-          </View>
-
-          {nextAppt ? (
-            <View style={styles.appointmentCard}>
-              <View style={styles.appointmentHeader}>
-                <View style={styles.doctorAvatar}>
-                  <Text style={styles.doctorAvatarText}>
-                    {nextAppt.doctor_name ? nextAppt.doctor_name.substring(0, 2).toUpperCase() : 'DR'}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.doctorName}>
-                    {nextAppt.doctor_name || 'Dr. Specialist'}
-                  </Text>
-                  <Text style={styles.doctorSpecialty}>
-                    {nextAppt.doctor_specialty || nextAppt.hospital_name || 'General Medicine'}
-                  </Text>
-                </View>
-                <View style={styles.statusBadgeConfirmed}>
-                  <Text style={styles.statusBadgeTextConfirmed}>
-                    {nextAppt.status || 'CONFIRMED'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.appointmentFooter}>
-                <View style={styles.dateTimeRow}>
-                  <Calendar size={15} color="#2563EB" />
-                  <Text style={styles.dateTimeText}>{nextAppt.appointment_date}</Text>
-                  <Clock size={15} color="#2563EB" style={{ marginLeft: 12 }} />
-                  <Text style={styles.dateTimeText}>{nextAppt.start_time || '10:00 AM'}</Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.viewApptButton}
-                  onPress={() => router.push('/(tabs)/patient/appointments')}
-                >
-                  <Text style={styles.viewApptButtonText}>Manage</Text>
-                  <ChevronRight size={15} color="#2563EB" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.emptyCard}>
-              <Calendar size={28} color="#94A3B8" />
-              <Text style={styles.emptyTitle}>No Upcoming Appointments</Text>
-              <Text style={styles.emptySub}>Schedule a consultation with a certified doctor</Text>
-              <TouchableOpacity
-                style={styles.emptyButton}
-                onPress={() => router.push('/(tabs)/patient/appointments')}
-              >
-                <Text style={styles.emptyButtonText}>Book an Appointment</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Active Medicine Delivery Banner (if any) */}
-          {activeOrder && (
-            <View style={styles.deliveryCard}>
-              <View style={styles.deliveryHeader}>
-                <View style={styles.truckIconCircle}>
-                  <Truck size={20} color="#2563EB" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.deliveryTitle}>Medicine Order In Progress</Text>
-                  <Text style={styles.deliverySub}>
-                    Tracking #{activeOrder.tracking_number || activeOrder.id?.substring(0, 8)}
-                  </Text>
-                </View>
-                <View style={styles.deliveryStatusBadge}>
-                  <Text style={styles.deliveryStatusText}>
-                    {activeOrder.status || 'PROCESSING'}
-                  </Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={styles.trackButton}
-                onPress={() => router.push('/(tabs)/patient/records')}
-                activeOpacity={0.88}
-              >
-                <Text style={styles.trackButtonText}>View Order Details & Status</Text>
-                <ChevronRight size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Recent Records & Prescriptions Summary Grid */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Medical Records & Vault</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              Clinical Hub
+            </Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/patient/records')}>
-              <Text style={styles.sectionLink}>See All ({summary.totalRecordsCount})</Text>
+              <Text style={[styles.sectionLink, { color: theme.text }]}>
+                View All <ArrowUpRight size={13} color={theme.text} />
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.vaultStatsRow}>
-            <TouchableOpacity
-              style={styles.vaultCard}
-              onPress={() => router.push('/(tabs)/patient/records')}
-              activeOpacity={0.8}
-            >
-              <FileText size={22} color="#10B981" />
-              <Text style={styles.vaultCount}>{summary.totalRecordsCount}</Text>
-              <Text style={styles.vaultLabel}>EHR Documents</Text>
-              <View style={styles.polygonBadge}>
-                <CheckCircle2 size={11} color="#10B981" />
-                <Text style={styles.polygonBadgeText}>Polygon Proof</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.vaultCard}
-              onPress={() => router.push('/(tabs)/patient/records')}
-              activeOpacity={0.8}
-            >
-              <Pill size={22} color="#2563EB" />
-              <Text style={styles.vaultCount}>{summary.activePrescriptionsCount}</Text>
-              <Text style={styles.vaultLabel}>Prescriptions</Text>
-              <View style={[styles.polygonBadge, { backgroundColor: 'rgba(37, 99, 235, 0.08)' }]}>
-                <Text style={[styles.polygonBadgeText, { color: '#2563EB' }]}>Active QR</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[
+              styles.hubActionCard,
+              { backgroundColor: theme.card, borderColor: theme.border },
+            ]}
+            onPress={() => router.push('/(tabs)/patient/records')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.hubIconBox}>
+              <FileText size={22} color={theme.text} />
+            </View>
+            <View style={{ flex: 1, marginLeft: 14 }}>
+              <Text style={[styles.hubTitle, { color: theme.text }]}>
+                Prescriptions & Documents
+              </Text>
+              <Text style={[styles.hubDesc, { color: theme.textMuted }]}>
+                {summary.activePrescriptionsCount} Active Rx • PIN-Protected Vault
+              </Text>
+            </View>
+            <ChevronRight size={18} color={theme.textMuted} />
+          </TouchableOpacity>
         </ScrollView>
 
-        {/* ── EMBEDDED PAYMENT-STYLE QR SCANNER MODAL ── */}
+        {/* ── Modals ── */}
         <PaymentStyleQRScanner
           visible={qrScannerVisible}
           onClose={() => setQrScannerVisible(false)}
-          userProfile={{
-            id: user?.id || '',
-            full_name: patientDisplayName,
-            email: user?.email,
-            blood_group: profile?.blood_group || 'O+',
+        />
+
+        <CompleteHealthProfileModal
+          visible={showProfileModal}
+          userId={user?.id || ''}
+          onClose={() => setShowProfileModal(false)}
+          onCompleted={() => {
+            setShowProfileModal(false);
+            loadDashboardData();
           }}
         />
 
-        {/* ── COMPLETE HEALTH PROFILE MODAL ── */}
-        {user?.id && (
-          <CompleteHealthProfileModal
-            visible={showProfileModal}
-            userId={user.id}
-            onClose={() => setShowProfileModal(false)}
-            onCompleted={() => {
-              setShowProfileModal(false);
-              loadDashboardData();
-            }}
-          />
-        )}
-
-        {/* ── UPLOAD RECORD MODAL ── */}
         <UploadRecordModal
           visible={uploadModalVisible}
           onClose={() => setUploadModalVisible(false)}
@@ -518,13 +613,25 @@ export default function PatientDashboard() {
           }}
         />
 
-        {/* ── ORDER MEDICINES MODAL ── */}
         <OrderMedicinesModal
           visible={orderModalVisible}
           onClose={() => setOrderModalVisible(false)}
           onSuccess={() => {
             setOrderModalVisible(false);
             loadDashboardData();
+          }}
+        />
+
+        <PrescriptionQRModal
+          visible={passportQrVisible}
+          onClose={() => setPassportQrVisible(false)}
+          prescription={{
+            id: profile?.id || 'MEDSYNC-PASS',
+            diagnosis: 'MedSync Verified Health Passport',
+            patient_id: profile?.id,
+            doctor_name: 'MedSync Sovereign Protocol',
+            created_at: new Date().toISOString(),
+            medications: [],
           }}
         />
       </View>
@@ -535,25 +642,17 @@ export default function PatientDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   headerBar: {
+    paddingTop: Platform.OS === 'ios' ? 56 : 38,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 56 : 38,
-    paddingBottom: 14,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(37, 99, 235, 0.08)',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 3,
   },
-  profilePill: {
+  profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
@@ -561,31 +660,25 @@ const styles = StyleSheet.create({
   avatarCircle: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: '#2563EB',
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
   },
   greetingText: {
-    fontSize: 12.5,
-    color: '#64748B',
+    fontSize: 12,
     fontWeight: '500',
   },
   patientNameText: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-    maxWidth: 180,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   headerRightActions: {
     flexDirection: 'row',
@@ -595,28 +688,27 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
   },
   unreadBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: -2,
+    right: -2,
     backgroundColor: '#EF4444',
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
     minWidth: 16,
-    height: 16,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
   },
   unreadBadgeText: {
     color: '#FFFFFF',
-    fontSize: 9.5,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '700',
   },
   scroll: {
     flex: 1,
@@ -629,380 +721,291 @@ const styles = StyleSheet.create({
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 16,
+    borderWidth: 1,
   },
   errorText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#EF4444',
-    flex: 1,
     fontWeight: '500',
+    flex: 1,
   },
-  sosButton: {
+
+  /* ── Digital Health Card ── */
+  healthCard: {
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 6,
+    marginBottom: 24,
+  },
+  healthCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardBrandBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DC2626',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: '#DC2626',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 6,
+    gap: 8,
   },
-  sosIconContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  cardLogoIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+  },
+  cardBrandText: {
+    color: '#A1A1AA',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+  },
+  verifiedText: {
+    color: '#38BDF8',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  cardBody: {
+    marginBottom: 20,
+  },
+  cardPatientName: {
+    color: '#FAFAFA',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    marginBottom: 10,
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  metaPillLabel: {
+    color: '#A1A1AA',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  metaPillValue: {
+    color: '#FAFAFA',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  cardActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cardPrimaryBtn: {
+    flex: 1.2,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FAFAFA',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
   },
-  sosTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
+  cardPrimaryBtnText: {
+    color: '#09090B',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  sosSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.88)',
-    marginTop: 2,
+  cardSecondaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
   },
+  cardSecondaryBtnText: {
+    color: '#FAFAFA',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  /* ── Section Header ── */
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    marginTop: 6,
+    marginBottom: 14,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.2,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   sectionLink: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#2563EB',
-  },
-  vitalsScroll: {
-    gap: 12,
-    paddingBottom: 4,
-    marginBottom: 18,
-  },
-  vitalCard: {
-    width: 140,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    padding: 14,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  vitalIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  vitalLabel: {
-    fontSize: 12,
-    color: '#64748B',
     fontWeight: '600',
-    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  vitalValue: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 8,
-  },
-  vitalUnit: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontWeight: '500',
-  },
-  vitalBadgeNormal: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  vitalBadgeTextNormal: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: '#10B981',
-  },
-  quickGrid: {
+
+  /* ── Services Grid ── */
+  servicesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  quickCard: {
+  serviceTile: {
     width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    padding: 14,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  quickIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  quickTitle: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  quickSub: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  appointmentCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.18)',
     padding: 16,
-    marginBottom: 20,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 3,
+    borderRadius: 18,
+    borderWidth: 1,
   },
-  appointmentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  doctorAvatar: {
+  serviceIconBox: {
     width: 44,
     height: 44,
-    borderRadius: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  serviceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  serviceDesc: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+
+  /* ── Upcoming Appt Card ── */
+  upcomingApptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  apptIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     backgroundColor: 'rgba(37, 99, 235, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  doctorAvatarText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#2563EB',
-  },
-  doctorName: {
-    fontSize: 15.5,
+  apptLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    color: '#0F172A',
+    letterSpacing: 0.8,
+    marginBottom: 2,
   },
-  doctorSpecialty: {
-    fontSize: 12.5,
-    color: '#64748B',
+  apptDoctorName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  apptTime: {
+    fontSize: 12,
+    fontWeight: '500',
     marginTop: 2,
   },
-  statusBadgeConfirmed: {
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+
+  /* ── Vitals Scroll ── */
+  vitalsScroll: {
+    gap: 12,
+    paddingRight: 10,
+    marginBottom: 24,
   },
-  statusBadgeTextConfirmed: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#2563EB',
+  vitalCard: {
+    width: 145,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
   },
-  appointmentFooter: {
+  vitalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 12,
-  },
-  dateTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateTimeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-    marginLeft: 6,
-  },
-  viewApptButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  viewApptButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#2563EB',
-    marginRight: 2,
-  },
-  emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#334155',
-    marginTop: 10,
-  },
-  emptySub: {
-    fontSize: 12.5,
-    color: '#94A3B8',
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  emptyButton: {
-    backgroundColor: 'rgba(37, 99, 235, 0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.25)',
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: 12,
-  },
-  emptyButtonText: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: '#2563EB',
-  },
-  deliveryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.15)',
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  deliveryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  truckIconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deliveryTitle: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  deliverySub: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  deliveryStatusBadge: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  deliveryStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#F59E0B',
-  },
-  trackButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2563EB',
-    height: 42,
-    borderRadius: 12,
-  },
-  trackButtonText: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginRight: 6,
-  },
-  vaultStatsRow: {
-    flexDirection: 'row',
-    gap: 12,
     marginBottom: 10,
   },
-  vaultCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    padding: 16,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
+  vitalIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  vaultCount: {
-    fontSize: 22,
+  vitalStatusBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  vitalLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  vitalValue: {
+    fontSize: 18,
     fontWeight: '800',
-    color: '#0F172A',
-    marginTop: 8,
+    letterSpacing: -0.5,
   },
-  vaultLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#475569',
-    marginTop: 2,
+  vitalUnit: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#A1A1AA',
   },
-  polygonBadge: {
+
+  /* ── Hub Card ── */
+  hubActionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 8,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    marginBottom: 10,
   },
-  polygonBadgeText: {
-    fontSize: 10.5,
+  hubIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hubTitle: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#10B981',
-    marginLeft: 4,
+    marginBottom: 2,
+  },
+  hubDesc: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
