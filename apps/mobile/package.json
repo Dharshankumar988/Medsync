@@ -50,13 +50,23 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0",
+    "@babel/core": "^7.24.0",
+    "@babel/plugin-transform-react-jsx": "^7.24.7",
+    "@babel/preset-react": "^7.24.7",
     "@react-native-community/cli-platform-android": "^13.6.8",
     "@react-native/gradle-plugin": "0.74.87",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^20",
     "@types/react": "~18.2.45",
+    "babel-preset-expo": "~11.0.15",
     "typescript": "~5.3.3"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "enabled": false
+      }
+    }
   },
   "private": true
 }
