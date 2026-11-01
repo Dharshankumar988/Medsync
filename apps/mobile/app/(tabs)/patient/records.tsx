@@ -190,15 +190,28 @@ export default function PatientRecordsScreen() {
     const formattedDate = item.created_at ? new Date(item.created_at).toLocaleDateString() : '—';
 
     return (
-      <Card style={styles.cardItem}>
+      <Card style={[styles.cardItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <CardContent>
           <View style={styles.cardHeaderRow}>
-            <View style={styles.iconBoxBlue}>
-              <FileText size={20} color={Colors.roles.patient.primary} />
+            <View
+              style={[
+                styles.iconBoxBlue,
+                {
+                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#F0F9FF',
+                  borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <FileText size={20} color={isDark ? '#38BDF8' : '#0284C7'} />
             </View>
             <View style={styles.titleColumn}>
-              <Text style={styles.itemTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.itemSubtitle}>Uploaded: {formattedDate}</Text>
+              <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={[styles.itemSubtitle, { color: theme.textMuted }]}>
+                Uploaded: {formattedDate}
+              </Text>
             </View>
             <View style={[styles.badge, isPublic ? styles.publicBadge : styles.privateBadge]}>
               {isPublic ? <Globe size={12} color="#10B981" /> : <Lock size={12} color="#64748B" />}
@@ -209,16 +222,18 @@ export default function PatientRecordsScreen() {
           </View>
 
           {cleanDescription ? (
-            <Text style={styles.itemDesc}>{cleanDescription}</Text>
+            <Text style={[styles.itemDesc, { color: theme.textSecondary }]}>
+              {cleanDescription}
+            </Text>
           ) : null}
 
           <View style={styles.actionsRow}>
             <Button
               title="Download"
               size="sm"
-              iconLeft={<Download size={14} color="#FFFFFF" />}
+              iconLeft={<Download size={14} color={theme.primaryButtonText} />}
               onPress={() => handleDownloadRecordPress(item.id)}
-              style={styles.actionBtn}
+              style={[styles.actionBtn, { backgroundColor: theme.primaryButton }]}
             />
             <TouchableOpacity
               style={[
@@ -251,15 +266,28 @@ export default function PatientRecordsScreen() {
   const renderPrescriptionItem = ({ item }: { item: PrescriptionItem }) => {
     const formattedDate = item.created_at ? new Date(item.created_at).toLocaleDateString() : '—';
     return (
-      <Card style={styles.cardItem}>
+      <Card style={[styles.cardItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <CardContent>
           <View style={styles.cardHeaderRow}>
-            <View style={styles.iconBoxAmber}>
+            <View
+              style={[
+                styles.iconBoxAmber,
+                {
+                  backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : '#FEF3C7',
+                  borderColor: isDark ? 'rgba(245, 158, 11, 0.25)' : '#FDE68A',
+                  borderWidth: 1,
+                },
+              ]}
+            >
               <Pill size={20} color="#D97706" />
             </View>
             <View style={styles.titleColumn}>
-              <Text style={styles.itemTitle} numberOfLines={1}>{item.diagnosis || 'Clinical Prescription'}</Text>
-              <Text style={styles.itemSubtitle}>Issued: {formattedDate}</Text>
+              <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={1}>
+                {item.diagnosis || 'Clinical Prescription'}
+              </Text>
+              <Text style={[styles.itemSubtitle, { color: theme.textMuted }]}>
+                Issued: {formattedDate}
+              </Text>
             </View>
             <View style={[styles.badge, item.is_dispensed ? styles.publicBadge : styles.pendingBadge]}>
               <Text style={[styles.badgeText, item.is_dispensed ? styles.publicText : styles.pendingText]}>
@@ -269,10 +297,18 @@ export default function PatientRecordsScreen() {
           </View>
 
           {Array.isArray(item.medications) && item.medications.length > 0 && (
-            <View style={styles.medsBox}>
-              <Text style={styles.medsLabel}>Medications:</Text>
+            <View
+              style={[
+                styles.medsBox,
+                {
+                  backgroundColor: isDark ? '#18181B' : '#F8FAFC',
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Text style={[styles.medsLabel, { color: theme.textSecondary }]}>Medications:</Text>
               {item.medications.map((m: any, idx: number) => (
-                <Text key={idx} style={styles.medItem}>
+                <Text key={idx} style={[styles.medItem, { color: theme.text }]}>
                   • {m.name || m.medicine_name || 'Medication'} {m.dosage ? `(${m.dosage})` : ''} — {m.frequency || m.instructions || ''}
                 </Text>
               ))}
@@ -280,24 +316,30 @@ export default function PatientRecordsScreen() {
           )}
 
           {item.notes ? (
-            <Text style={styles.itemDesc}>{item.notes}</Text>
+            <Text style={[styles.itemDesc, { color: theme.textSecondary }]}>{item.notes}</Text>
           ) : null}
 
           <View style={styles.actionsRow}>
             <Button
               title="PDF"
               size="sm"
-              iconLeft={<Download size={14} color="#FFFFFF" />}
+              iconLeft={<Download size={14} color={theme.primaryButtonText} />}
               onPress={() => handleDownloadPrescriptionPress(item.id)}
-              style={styles.actionBtn}
+              style={[styles.actionBtn, { backgroundColor: theme.primaryButton }]}
             />
             <TouchableOpacity
-              style={styles.showQrBtn}
+              style={[
+                styles.showQrBtn,
+                {
+                  backgroundColor: isDark ? '#27272A' : '#F4F4F5',
+                  borderColor: theme.border,
+                },
+              ]}
               onPress={() => setSelectedPrescriptionForQr(item)}
               activeOpacity={0.8}
             >
-              <ScanLine size={14} color="#2563EB" />
-              <Text style={styles.showQrBtnText}>Show QR</Text>
+              <ScanLine size={14} color={isDark ? '#FAFAFA' : '#09090B'} />
+              <Text style={[styles.showQrBtnText, { color: theme.text }]}>Show QR</Text>
             </TouchableOpacity>
             {!item.is_dispensed && (
               <TouchableOpacity
@@ -321,15 +363,24 @@ export default function PatientRecordsScreen() {
   const renderOrderItem = ({ item }: { item: MedicineOrderItem }) => {
     const formattedDate = item.created_at ? new Date(item.created_at).toLocaleDateString() : '—';
     return (
-      <Card style={styles.cardItem}>
+      <Card style={[styles.cardItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <CardContent>
           <View style={styles.cardHeaderRow}>
-            <View style={styles.iconBoxIndigo}>
+            <View
+              style={[
+                styles.iconBoxIndigo,
+                {
+                  backgroundColor: isDark ? 'rgba(99, 102, 241, 0.12)' : '#EEF2FF',
+                  borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : '#C7D2FE',
+                  borderWidth: 1,
+                },
+              ]}
+            >
               <Package size={20} color="#6366F1" />
             </View>
             <View style={styles.titleColumn}>
-              <Text style={styles.itemTitle}>Order #{item.id.slice(0, 8)}</Text>
-              <Text style={styles.itemSubtitle}>Ordered: {formattedDate}</Text>
+              <Text style={[styles.itemTitle, { color: theme.text }]}>Order #{item.id.slice(0, 8)}</Text>
+              <Text style={[styles.itemSubtitle, { color: theme.textMuted }]}>Ordered: {formattedDate}</Text>
             </View>
             <View style={[styles.badge, styles.pendingBadge]}>
               <Text style={[styles.badgeText, styles.pendingText]}>{item.status}</Text>
@@ -337,17 +388,23 @@ export default function PatientRecordsScreen() {
           </View>
 
           {item.delivery_address && (
-            <Text style={styles.itemDesc}>
+            <Text style={[styles.itemDesc, { color: theme.textSecondary }]}>
               Delivery to: {item.delivery_address}
             </Text>
           )}
 
           {item.tracking_number && (
             <View style={styles.trackingRow}>
-              <Truck size={14} color="#64748B" />
-              <Text style={styles.trackingText}>Tracking: {item.tracking_number}</Text>
+              <Truck size={14} color={theme.textMuted} />
+              <Text style={[styles.trackingText, { color: theme.textSecondary }]}>
+                Tracking: {item.tracking_number}
+              </Text>
             </View>
           )}
+        </CardContent>
+      </Card>
+    );
+  };
 
           <View style={styles.actionsRow}>
             <TouchableOpacity
@@ -386,33 +443,149 @@ export default function PatientRecordsScreen() {
         />
 
         {/* Tab Segment Controls */}
-        <View style={styles.segmentContainer}>
+        <View
+          style={[
+            styles.segmentContainer,
+            { backgroundColor: theme.background, borderBottomColor: theme.border },
+          ]}
+        >
           <TouchableOpacity
-            style={[styles.segmentBtn, activeTab === 'RECORDS' && styles.segmentBtnActive]}
+            style={[
+              styles.segmentBtn,
+              {
+                backgroundColor:
+                  activeTab === 'RECORDS'
+                    ? isDark
+                      ? '#FAFAFA'
+                      : '#09090B'
+                    : theme.card,
+                borderColor:
+                  activeTab === 'RECORDS'
+                    ? isDark
+                      ? '#FAFAFA'
+                      : '#09090B'
+                    : theme.border,
+              },
+            ]}
             onPress={() => setActiveTab('RECORDS')}
           >
-            <FileText size={14} color={activeTab === 'RECORDS' ? Colors.roles.patient.primary : '#64748B'} />
-            <Text style={[styles.segmentText, activeTab === 'RECORDS' && styles.segmentTextActive]}>
+            <FileText
+              size={14}
+              color={
+                activeTab === 'RECORDS'
+                  ? isDark
+                    ? '#09090B'
+                    : '#FFFFFF'
+                  : theme.textMuted
+              }
+            />
+            <Text
+              style={[
+                styles.segmentText,
+                {
+                  color:
+                    activeTab === 'RECORDS'
+                      ? isDark
+                        ? '#09090B'
+                        : '#FFFFFF'
+                      : theme.textMuted,
+                },
+              ]}
+            >
               Records
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.segmentBtn, activeTab === 'PRESCRIPTIONS' && styles.segmentBtnActive]}
+            style={[
+              styles.segmentBtn,
+              {
+                backgroundColor:
+                  activeTab === 'PRESCRIPTIONS'
+                    ? isDark
+                      ? '#FAFAFA'
+                      : '#09090B'
+                    : theme.card,
+                borderColor:
+                  activeTab === 'PRESCRIPTIONS'
+                    ? isDark
+                      ? '#FAFAFA'
+                      : '#09090B'
+                    : theme.border,
+              },
+            ]}
             onPress={() => setActiveTab('PRESCRIPTIONS')}
           >
-            <Pill size={14} color={activeTab === 'PRESCRIPTIONS' ? Colors.roles.patient.primary : '#64748B'} />
-            <Text style={[styles.segmentText, activeTab === 'PRESCRIPTIONS' && styles.segmentTextActive]}>
+            <Pill
+              size={14}
+              color={
+                activeTab === 'PRESCRIPTIONS'
+                  ? isDark
+                    ? '#09090B'
+                    : '#FFFFFF'
+                  : theme.textMuted
+              }
+            />
+            <Text
+              style={[
+                styles.segmentText,
+                {
+                  color:
+                    activeTab === 'PRESCRIPTIONS'
+                      ? isDark
+                        ? '#09090B'
+                        : '#FFFFFF'
+                      : theme.textMuted,
+                },
+              ]}
+            >
               Prescriptions
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.segmentBtn, activeTab === 'ORDERS' && styles.segmentBtnActive]}
+            style={[
+              styles.segmentBtn,
+              {
+                backgroundColor:
+                  activeTab === 'ORDERS'
+                    ? isDark
+                      ? '#FAFAFA'
+                      : '#09090B'
+                    : theme.card,
+                borderColor:
+                  activeTab === 'ORDERS'
+                    ? isDark
+                      ? '#FAFAFA'
+                      : '#09090B'
+                    : theme.border,
+              },
+            ]}
             onPress={() => setActiveTab('ORDERS')}
           >
-            <ShoppingBag size={14} color={activeTab === 'ORDERS' ? Colors.roles.patient.primary : '#64748B'} />
-            <Text style={[styles.segmentText, activeTab === 'ORDERS' && styles.segmentTextActive]}>
+            <ShoppingBag
+              size={14}
+              color={
+                activeTab === 'ORDERS'
+                  ? isDark
+                    ? '#09090B'
+                    : '#FFFFFF'
+                  : theme.textMuted
+              }
+            />
+            <Text
+              style={[
+                styles.segmentText,
+                {
+                  color:
+                    activeTab === 'ORDERS'
+                      ? isDark
+                        ? '#09090B'
+                        : '#FFFFFF'
+                      : theme.textMuted,
+                },
+              ]}
+            >
               Orders
             </Text>
           </TouchableOpacity>

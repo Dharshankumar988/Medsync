@@ -12,6 +12,8 @@ import {
   Switch,
   Linking,
   Platform,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import {
   User,
@@ -34,7 +36,11 @@ import {
   ExternalLink,
   Sun,
   Moon,
+  Camera,
+  MapPin,
+  Scale,
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { ScreenHeader } from '../../../components/layout/ScreenHeader';
@@ -44,8 +50,7 @@ import { useRole } from '../../../providers/role-provider';
 import { useTheme } from '../../../context/ThemeContext';
 import { patientService, SecurityStatusInfo } from '../../../services/patient.service';
 import { biometricsService } from '../../../lib/biometrics';
-import { PaymentStyleQRScanner } from '../../../components/patient/PaymentStyleQRScanner';
-import { Colors } from '../../../constants/theme';
+import { CompleteHealthProfileModal } from '../../../components/patient/CompleteHealthProfileModal';
 import { formatErrorMessage } from '../../../lib/api';
 import api from '../../../lib/api';
 
@@ -65,15 +70,11 @@ export default function PatientProfileScreen() {
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
 
-  // Modals
-  const [qrModalVisible, setQrModalVisible] = useState(false);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editPhone, setEditPhone] = useState('');
-  const [editEmergencyName, setEditEmergencyName] = useState('');
-  const [editEmergencyPhone, setEditEmergencyPhone] = useState('');
-  const [editBloodGroup, setEditBloodGroup] = useState('');
-  const [editAllergies, setEditAllergies] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
+  // Profile Picture Upload
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Health Profile Modal (Comprehensive)
+  const [healthModalVisible, setHealthModalVisible] = useState(false);
 
   // PIN modal
   const [pinModalVisible, setPinModalVisible] = useState(false);
@@ -99,14 +100,6 @@ export default function PatientProfileScreen() {
       setNotifications(Array.isArray(notifData) ? notifData : []);
       setBiometricsAvailable(bioAvail.available);
       setBiometricsEnabled(bioEnab);
-
-      if (profData) {
-        setEditPhone(profData.phone_number || profData.contact_number || '');
-        setEditEmergencyName(profData.emergency_contact_name || '');
-        setEditEmergencyPhone(profData.emergency_contact_number || '');
-        setEditBloodGroup(profData.blood_group || '');
-        setEditAllergies(profData.allergies || '');
-      }
 
       // Fetch Referrals
       try {
@@ -136,7 +129,9 @@ export default function PatientProfileScreen() {
 
   const handleToggleBiometrics = async (value: boolean) => {
     if (value) {
-      const auth = await biometricsService.authenticate('Confirm Face ID / Fingerprint to enable biometric sign-in');
+      const auth = await biometricsService.authenticate(
+        'Confirm Face ID / Fingerprint to enable biometric sign-in'
+      );
       if (auth.success) {
         await biometricsService.setEnabled(true);
         setBiometricsEnabled(true);
@@ -148,35 +143,89 @@ export default function PatientProfileScreen() {
     }
   };
 
-  const handleSaveProfile = async () => {
-    if (!user?.id) return;
-    setEditSaving(true);
+  // Profile Picture Upload Handler
+  const handlePhotoUploadPress = () => {
+    Alert.alert(
+      'Profile Photo',
+      'Choose a picture for your MedSync clinical profile',
+      [
+        {
+          text: 'Choose from Gallery',
+          onPress: () => pickImage(false),
+        },
+        {
+          text: 'Take Photo',
+          onPress: () => pickImage(true),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const pickImage = async (useCamera: boolean) => {
     try {
-      await patientService.updateProfile(user.id, {
-        phone_number: editPhone.trim(),
-        emergency_contact_name: editEmergencyName.trim(),
-        emergency_contact_number: editEmergencyPhone.trim(),
-        blood_group: editBloodGroup.trim(),
-        allergies: editAllergies.trim(),
-      });
-      setEditModalVisible(false);
-      Alert.alert('Profile Saved', 'Your medical profile has been updated.');
-      loadProfileData();
+      let result;
+      if (useCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Camera permission is required to take a photo.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.85,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Photo library permission is required.');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.85,
+        });
+      }
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setUploadingPhoto(true);
+        const asset = result.assets[0];
+        const res = await patientService.uploadProfileImage(
+          asset.uri,
+          asset.fileName || 'avatar.jpg',
+          asset.mimeType || 'image/jpeg'
+        );
+
+        if (res?.profile_image_url) {
+          setProfile((prev: any) => ({
+            ...prev,
+            profile_picture_url: res.profile_image_url,
+          }));
+        }
+        Alert.alert('Success', 'Profile photo updated successfully!');
+        loadProfileData();
+      }
     } catch (err: any) {
-      Alert.alert('Save Failed', formatErrorMessage(err));
+      console.warn('Photo upload failed:', err);
+      Alert.alert('Upload Failed', err?.message || 'Could not upload photo.');
     } finally {
-      setEditSaving(false);
+      setUploadingPhoto(false);
     }
   };
 
   const handleSavePin = async () => {
-    if (newPin.length !== 6 || !/^\d+$/.test(newPin)) {
-      setPinError('PIN must be exactly 6 numeric digits.');
+    if (newPin.length !== 6) {
+      setPinError('PIN must be exactly 6 digits');
       return;
     }
-
     if (isResetMode && !currentPassword) {
-      setPinError('Current account password is required to reset PIN.');
+      setPinError('Password is required to reset your PIN');
       return;
     }
 
@@ -185,15 +234,23 @@ export default function PatientProfileScreen() {
 
     try {
       if (isResetMode) {
-        await patientService.resetPinWithPassword(currentPassword, newPin);
-        Alert.alert('PIN Reset', 'Your 6-digit Authorization PIN has been updated.');
+        await patientService.resetPin({
+          password: currentPassword,
+          new_pin: newPin,
+        });
       } else {
-        await patientService.enrollPin(newPin);
-        Alert.alert('PIN Enrolled', 'Your 6-digit Authorization PIN has been activated.');
+        await patientService.setPin({ pin: newPin });
       }
+
       setPinModalVisible(false);
       setNewPin('');
       setCurrentPassword('');
+      Alert.alert(
+        'PIN Saved',
+        isResetMode
+          ? 'Your Authorization PIN has been reset successfully.'
+          : 'Your Authorization PIN has been configured.'
+      );
       loadProfileData();
     } catch (err: any) {
       setPinError(formatErrorMessage(err));
@@ -227,22 +284,18 @@ export default function PatientProfileScreen() {
     ]);
   };
 
+  const avatarUrl =
+    profile?.profile_picture_url ||
+    user?.profile_image_url ||
+    (user?.user_metadata as any)?.avatar_url;
+  const userInitials = (profile?.full_name || user?.full_name || 'PT').substring(0, 2).toUpperCase();
+
   return (
     <RoleGuard allowedRole="patient">
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ScreenHeader
           title="Patient Vault"
           subtitle="Account credentials, PIN security & vitals"
-          rightElement={
-            <TouchableOpacity
-              style={styles.headerQrBtn}
-              onPress={() => setQrModalVisible(true)}
-              activeOpacity={0.85}
-            >
-              <ScanLine size={16} color="#FFFFFF" />
-              <Text style={styles.headerQrText}>My QR</Text>
-            </TouchableOpacity>
-          }
         />
 
         <ScrollView
@@ -252,345 +305,495 @@ export default function PatientProfileScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#2563EB']}
-              tintColor="#2563EB"
+              colors={[theme.accent]}
+              tintColor={theme.accent}
             />
           }
         >
-          {/* Identity Card */}
-          <Card style={styles.card}>
-            <CardContent>
-              <View style={styles.identityHeader}>
-                <View style={styles.avatarCircle}>
-                  <Text style={styles.avatarInitials}>
-                    {(profile?.full_name || user?.full_name || 'PT').substring(0, 2).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.identityText}>
-                  <Text style={styles.fullName}>
-                    {profile?.full_name || user?.full_name || 'MedSync Patient'}
-                  </Text>
-                  <Text style={styles.emailText}>{user?.email}</Text>
-                  <View style={styles.statusBadge}>
-                    <CheckCircle2 size={11} color="#10B981" />
-                    <Text style={styles.statusBadgeText}>VERIFIED PATIENT VAULT</Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={styles.editBtn}
-                  onPress={() => setEditModalVisible(true)}
-                  accessibilityLabel="Edit Profile"
-                >
-                  <Edit2 size={16} color="#2563EB" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.infoGrid}>
-                <View style={styles.infoRow}>
-                  <Phone size={15} color="#64748B" />
-                  <Text style={styles.infoLabel}>Contact:</Text>
-                  <Text style={styles.infoValue}>
-                    {profile?.phone_number || profile?.contact_number || 'Not provided'}
-                  </Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <Heart size={15} color="#EF4444" />
-                  <Text style={styles.infoLabel}>Blood Group:</Text>
-                  <Text style={[styles.infoValue, { fontWeight: '700', color: '#2563EB' }]}>
-                    {profile?.blood_group || 'O+'}
-                  </Text>
-                </View>
-
-                <View style={styles.infoRow}>
-                  <AlertCircle size={15} color="#F59E0B" />
-                  <Text style={styles.infoLabel}>Allergies:</Text>
-                  <Text style={styles.infoValue}>
-                    {profile?.allergies || 'None documented'}
-                  </Text>
-                </View>
-
-                {profile?.emergency_contact_number ? (
-                  <View style={styles.emergencyContactCard}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.emergencyLabel}>Emergency Contact</Text>
-                      <Text style={styles.emergencyName}>
-                        {profile?.emergency_contact_name || 'Designated Contact'}
-                      </Text>
-                      <Text style={styles.emergencyPhone}>{profile.emergency_contact_number}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.callEmergencyBtn}
-                      onPress={() => Linking.openURL(`tel:${profile.emergency_contact_number}`)}
-                    >
-                      <PhoneCall size={14} color="#FFFFFF" />
-                      <Text style={styles.callEmergencyText}>Call</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-              </View>
-            </CardContent>
-          </Card>
-
-          {/* App Appearance Setting (Remembered Dark/White Theme) */}
-          <Text style={styles.sectionTitle}>App Appearance</Text>
-          <Card style={styles.card}>
-            <CardContent>
-              <View style={styles.biometricRow}>
-                <View
-                  style={[
-                    styles.biometricIconBox,
-                    { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F4F4F5' },
-                  ]}
-                >
-                  {isDark ? (
-                    <Moon size={22} color="#FAFAFA" />
-                  ) : (
-                    <Sun size={22} color="#09090B" />
-                  )}
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.biometricTitle}>Dark Mode</Text>
-                  <Text style={styles.biometricSub}>
-                    {isDark ? 'Shadcn Dark Mode is active' : 'Shadcn Light Mode is active'}
-                  </Text>
-                </View>
-                <Switch
-                  value={isDark}
-                  onValueChange={toggleTheme}
-                  trackColor={{ false: '#E2E8F0', true: '#27272A' }}
-                  thumbColor={isDark ? '#FAFAFA' : '#09090B'}
-                />
-              </View>
-            </CardContent>
-          </Card>
-
-          {/* Device Biometrics Setting */}
-          {biometricsAvailable && (
-            <>
-              <Text style={styles.sectionTitle}>Biometric Authentication</Text>
-              <Card style={styles.card}>
-                <CardContent>
-                  <View style={styles.biometricRow}>
-                    <View style={styles.biometricIconBox}>
-                      <Fingerprint size={22} color="#2563EB" />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.biometricTitle}>Device Biometrics</Text>
-                      <Text style={styles.biometricSub}>
-                        Sign in instantly with your phone&apos;s Face ID or Fingerprint
-                      </Text>
-                    </View>
-                    <Switch
-                      value={biometricsEnabled}
-                      onValueChange={handleToggleBiometrics}
-                      trackColor={{ false: '#E2E8F0', true: '#2563EB' }}
-                      thumbColor="#FFFFFF"
-                    />
-                  </View>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {/* Security & PIN Card */}
-          <Text style={styles.sectionTitle}>Security & Access Protection</Text>
-          <Card style={styles.card}>
-            <CardContent>
-              <View style={styles.securityHeader}>
-                <View style={styles.securityIconBox}>
-                  <Shield size={22} color="#10B981" />
-                </View>
-                <View style={styles.securityDetails}>
-                  <Text style={styles.securityTitle}>6-Digit Authorization PIN</Text>
-                  <Text style={styles.securitySubtitle}>
-                    {securityStatus?.has_pin
-                      ? 'Your PIN is active and protects record downloads & bookings.'
-                      : 'You have not enrolled an Authorization PIN yet.'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.pinActionsRow}>
-                {securityStatus?.has_pin ? (
-                  <Button
-                    title="Change Authorization PIN"
-                    variant="outline"
-                    size="sm"
-                    iconLeft={<Key size={14} color="#2563EB" />}
-                    onPress={() => {
-                      setIsResetMode(true);
-                      setPinError('');
-                      setNewPin('');
-                      setCurrentPassword('');
-                      setPinModalVisible(true);
-                    }}
-                    style={styles.pinBtn}
+          {/* ── 1. IDENTITY & HEALTH BADGE CARD ── */}
+          <View
+            style={[
+              styles.cardBox,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <View style={styles.identityHeader}>
+              {/* Avatar with Camera Overlay */}
+              <TouchableOpacity
+                style={styles.avatarWrapper}
+                onPress={handlePhotoUploadPress}
+                activeOpacity={0.8}
+                disabled={uploadingPhoto}
+              >
+                {avatarUrl ? (
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
                   />
                 ) : (
-                  <Button
-                    title="Enroll Authorization PIN"
-                    size="sm"
-                    iconLeft={<Key size={14} color="#FFFFFF" />}
-                    onPress={() => {
-                      setIsResetMode(false);
-                      setPinError('');
-                      setNewPin('');
-                      setCurrentPassword('');
-                      setPinModalVisible(true);
-                    }}
-                    style={styles.pinBtn}
-                  />
+                  <View
+                    style={[
+                      styles.avatarFallback,
+                      { backgroundColor: isDark ? '#27272A' : '#E4E4E7' },
+                    ]}
+                  >
+                    <Text style={[styles.avatarInitials, { color: theme.text }]}>
+                      {userInitials}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Camera upload badge */}
+                <View
+                  style={[
+                    styles.cameraBadge,
+                    {
+                      backgroundColor: theme.primaryButton,
+                      borderColor: theme.card,
+                    },
+                  ]}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator size="small" color={theme.primaryButtonText} />
+                  ) : (
+                    <Camera size={13} color={theme.primaryButtonText} />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.identityText}>
+                <Text style={[styles.fullName, { color: theme.text }]} numberOfLines={1}>
+                  {profile?.full_name || user?.full_name || 'MedSync Patient'}
+                </Text>
+                <Text style={[styles.emailText, { color: theme.textMuted }]} numberOfLines={1}>
+                  {user?.email}
+                </Text>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(16, 185, 129, 0.15)'
+                        : '#ECFDF5',
+                      borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#A7F3D0',
+                    },
+                  ]}
+                >
+                  <CheckCircle2 size={11} color="#10B981" />
+                  <Text style={styles.statusBadgeText}>VERIFIED PATIENT VAULT</Text>
+                </View>
+              </View>
+
+              {/* Edit Health Profile Button */}
+              <TouchableOpacity
+                style={[
+                  styles.editBtn,
+                  {
+                    backgroundColor: isDark ? '#27272A' : '#F4F4F5',
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => setHealthModalVisible(true)}
+                accessibilityLabel="Edit Profile"
+              >
+                <Edit2 size={16} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Clinical Info Row */}
+            <View style={[styles.infoGrid, { borderTopColor: theme.border }]}>
+              <View style={styles.infoRow}>
+                <Phone size={15} color={theme.textMuted} />
+                <Text style={[styles.infoLabel, { color: theme.textMuted }]}>Contact:</Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>
+                  {profile?.phone_number || profile?.contact_number || 'Not provided'}
+                </Text>
+              </View>
+
+              <View style={styles.infoRow}>
+                <Heart size={15} color="#EF4444" />
+                <Text style={[styles.infoLabel, { color: theme.textMuted }]}>Blood Group:</Text>
+                <Text
+                  style={[
+                    styles.infoValue,
+                    { fontWeight: '700', color: isDark ? '#38BDF8' : '#0284C7' },
+                  ]}
+                >
+                  {profile?.blood_group || 'O+'}
+                </Text>
+              </View>
+
+              <View style={styles.infoRow}>
+                <AlertCircle size={15} color="#F59E0B" />
+                <Text style={[styles.infoLabel, { color: theme.textMuted }]}>Allergies:</Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>
+                  {profile?.allergies || 'None documented'}
+                </Text>
+              </View>
+
+              {profile?.chronic_diseases ? (
+                <View style={styles.infoRow}>
+                  <Shield size={15} color="#10B981" />
+                  <Text style={[styles.infoLabel, { color: theme.textMuted }]}>Conditions:</Text>
+                  <Text style={[styles.infoValue, { color: theme.text }]}>
+                    {profile.chronic_diseases}
+                  </Text>
+                </View>
+              ) : null}
+
+              {profile?.emergency_contact_number ? (
+                <View
+                  style={[
+                    styles.emergencyContactCard,
+                    {
+                      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2',
+                      borderColor: isDark ? 'rgba(239, 68, 68, 0.25)' : '#FECACA',
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.emergencyLabel}>Emergency Contact</Text>
+                    <Text style={[styles.emergencyName, { color: theme.text }]}>
+                      {profile?.emergency_contact_name || 'Designated Contact'}
+                    </Text>
+                    <Text style={[styles.emergencyPhone, { color: theme.textMuted }]}>
+                      {profile.emergency_contact_number}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.callEmergencyBtn}
+                    onPress={() => Linking.openURL(`tel:${profile.emergency_contact_number}`)}
+                  >
+                    <PhoneCall size={14} color="#FFFFFF" />
+                    <Text style={styles.callEmergencyText}>Call</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          {/* ── 2. APP APPEARANCE SETTING ── */}
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>App Appearance</Text>
+          <View
+            style={[
+              styles.cardBox,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <View style={styles.biometricRow}>
+              <View
+                style={[
+                  styles.iconBoxSquare,
+                  {
+                    backgroundColor: isDark ? '#27272A' : '#F4F4F5',
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                {isDark ? (
+                  <Moon size={20} color="#FAFAFA" />
+                ) : (
+                  <Sun size={20} color="#09090B" />
                 )}
               </View>
-            </CardContent>
-          </Card>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.cardRowTitle, { color: theme.text }]}>Dark Mode</Text>
+                <Text style={[styles.cardRowSub, { color: theme.textMuted }]}>
+                  {isDark ? 'Shadcn Dark zinc mode active' : 'Shadcn Light clean mode active'}
+                </Text>
+              </View>
+              <Switch
+                value={isDark}
+                onValueChange={toggleTheme}
+                trackColor={{ false: '#E2E8F0', true: '#27272A' }}
+                thumbColor={isDark ? '#FAFAFA' : '#09090B'}
+              />
+            </View>
+          </View>
 
-          {/* Doctor Referrals (if any) */}
-          {referrals.length > 0 && (
+          {/* ── 3. DEVICE BIOMETRICS ── */}
+          {biometricsAvailable && (
             <>
-              <Text style={styles.sectionTitle}>Doctor Referrals</Text>
-              <Card style={styles.card}>
-                <CardContent>
-                  {referrals.map((ref, i) => (
-                    <View key={ref.id || i} style={styles.referralItem}>
-                      <Stethoscope size={18} color="#2563EB" />
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={styles.referralDoc}>
-                          {ref.referred_to_doctor_name || 'Specialist Referral'}
-                        </Text>
-                        <Text style={styles.referralSub}>
-                          From: {ref.referring_doctor_name || 'Primary Physician'} • {ref.specialization || 'Clinical Consult'}
-                        </Text>
-                      </View>
-                      <View style={styles.referralBadge}>
-                        <Text style={styles.referralBadgeText}>{ref.status || 'ACTIVE'}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </CardContent>
-              </Card>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Biometric Authentication
+              </Text>
+              <View
+                style={[
+                  styles.cardBox,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <View style={styles.biometricRow}>
+                  <View
+                    style={[
+                      styles.iconBoxSquare,
+                      {
+                        backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#F0F9FF',
+                        borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
+                      },
+                    ]}
+                  >
+                    <Fingerprint size={20} color={isDark ? '#38BDF8' : '#0284C7'} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={[styles.cardRowTitle, { color: theme.text }]}>
+                      Device Biometrics
+                    </Text>
+                    <Text style={[styles.cardRowSub, { color: theme.textMuted }]}>
+                      Sign in instantly with your phone&apos;s Face ID or Fingerprint
+                    </Text>
+                  </View>
+                  <Switch
+                    value={biometricsEnabled}
+                    onValueChange={handleToggleBiometrics}
+                    trackColor={{ false: '#E2E8F0', true: isDark ? '#38BDF8' : '#0284C7' }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+              </View>
             </>
           )}
 
-          {/* In-App Notifications Section */}
-          <Text style={styles.sectionTitle}>Notifications Center</Text>
-          <Card style={styles.card}>
-            <CardContent>
-              {notifications.length > 0 ? (
-                notifications.slice(0, 5).map((notif, idx) => (
-                  <TouchableOpacity
-                    key={notif.id || idx}
+          {/* ── 4. SECURITY & PIN ── */}
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            Security & Access Protection
+          </Text>
+          <View
+            style={[
+              styles.cardBox,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <View style={styles.securityHeader}>
+              <View
+                style={[
+                  styles.iconBoxSquare,
+                  {
+                    backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ECFDF5',
+                    borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#A7F3D0',
+                  },
+                ]}
+              >
+                <Shield size={20} color="#10B981" />
+              </View>
+              <View style={styles.securityDetails}>
+                <Text style={[styles.cardRowTitle, { color: theme.text }]}>
+                  6-Digit Authorization PIN
+                </Text>
+                <Text style={[styles.cardRowSub, { color: theme.textMuted }]}>
+                  {securityStatus?.has_pin
+                    ? 'Your PIN is active and protects record downloads & bookings.'
+                    : 'You have not enrolled an Authorization PIN yet.'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.pinActionsRow}>
+              {securityStatus?.has_pin ? (
+                <TouchableOpacity
+                  style={[
+                    styles.outlineButton,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: isDark ? '#27272A' : '#F4F4F5',
+                    },
+                  ]}
+                  onPress={() => {
+                    setIsResetMode(true);
+                    setPinError('');
+                    setNewPin('');
+                    setCurrentPassword('');
+                    setPinModalVisible(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Key size={14} color={theme.text} style={{ marginRight: 6 }} />
+                  <Text style={[styles.outlineButtonText, { color: theme.text }]}>
+                    Change Authorization PIN
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    { backgroundColor: theme.primaryButton },
+                  ]}
+                  onPress={() => {
+                    setIsResetMode(false);
+                    setPinError('');
+                    setNewPin('');
+                    setCurrentPassword('');
+                    setPinModalVisible(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Key size={14} color={theme.primaryButtonText} style={{ marginRight: 6 }} />
+                  <Text
                     style={[
-                      styles.notifRow,
-                      idx === Math.min(notifications.length, 5) - 1 && styles.notifRowLast,
+                      styles.primaryButtonText,
+                      { color: theme.primaryButtonText },
                     ]}
-                    onPress={() => !notif.is_read && handleMarkNotificationRead(notif.id)}
                   >
-                    <View style={[styles.notifDot, notif.is_read && styles.notifDotRead]} />
-                    <View style={styles.notifTextContainer}>
-                      <Text style={styles.notifTitle}>{notif.title}</Text>
-                      <Text style={styles.notifBody}>{notif.body || notif.message}</Text>
-                      <Text style={styles.notifTime}>
-                        {notif.created_at ? new Date(notif.created_at).toLocaleDateString() : ''}
+                    Enroll Authorization PIN
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* ── 5. DOCTOR REFERRALS ── */}
+          {referrals.length > 0 && (
+            <>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Doctor Referrals</Text>
+              <View
+                style={[
+                  styles.cardBox,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                {referrals.map((ref, i) => (
+                  <View
+                    key={ref.id || i}
+                    style={[
+                      styles.referralItem,
+                      { borderBottomColor: theme.border },
+                      i === referrals.length - 1 && { borderBottomWidth: 0 },
+                    ]}
+                  >
+                    <Stethoscope size={18} color="#38BDF8" />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={[styles.referralDoc, { color: theme.text }]}>
+                        {ref.referred_to_doctor_name || 'Specialist Referral'}
+                      </Text>
+                      <Text style={[styles.referralSub, { color: theme.textMuted }]}>
+                        From: {ref.referring_doctor_name || 'Primary Physician'} •{' '}
+                        {ref.specialization || 'Clinical Consult'}
                       </Text>
                     </View>
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <View style={styles.emptyNotifications}>
-                  <Bell size={24} color="#94A3B8" />
-                  <Text style={styles.emptyNotifTitle}>No New Notifications</Text>
-                  <Text style={styles.emptyNotifSub}>System alerts and clinic updates will appear here.</Text>
-                </View>
-              )}
-            </CardContent>
-          </Card>
+                    <View
+                      style={[
+                        styles.referralBadge,
+                        {
+                          backgroundColor: isDark
+                            ? 'rgba(56, 189, 248, 0.15)'
+                            : '#F0F9FF',
+                        },
+                      ]}
+                    >
+                      <Text style={styles.referralBadgeText}>{ref.status || 'ACTIVE'}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
 
-          {/* Sign Out Button */}
+          {/* ── 6. NOTIFICATIONS CENTER ── */}
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Notifications Center</Text>
+          <View
+            style={[
+              styles.cardBox,
+              {
+                backgroundColor: theme.card,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            {notifications.length > 0 ? (
+              notifications.slice(0, 5).map((notif, idx) => (
+                <TouchableOpacity
+                  key={notif.id || idx}
+                  style={[
+                    styles.notifRow,
+                    { borderBottomColor: theme.border },
+                    idx === Math.min(notifications.length, 5) - 1 && styles.notifRowLast,
+                  ]}
+                  onPress={() => !notif.is_read && handleMarkNotificationRead(notif.id)}
+                >
+                  <View
+                    style={[
+                      styles.notifDot,
+                      {
+                        backgroundColor: notif.is_read
+                          ? isDark
+                            ? '#3F3F46'
+                            : '#CBD5E1'
+                          : '#38BDF8',
+                      },
+                    ]}
+                  />
+                  <View style={styles.notifTextContainer}>
+                    <Text style={[styles.notifTitle, { color: theme.text }]}>{notif.title}</Text>
+                    <Text style={[styles.notifBody, { color: theme.textMuted }]}>
+                      {notif.body || notif.message}
+                    </Text>
+                    <Text style={[styles.notifTime, { color: theme.textMuted }]}>
+                      {notif.created_at ? new Date(notif.created_at).toLocaleDateString() : ''}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View style={styles.emptyNotifications}>
+                <Bell size={24} color={theme.textMuted} />
+                <Text style={[styles.emptyNotifTitle, { color: theme.text }]}>
+                  No New Notifications
+                </Text>
+                <Text style={[styles.emptyNotifSub, { color: theme.textMuted }]}>
+                  System alerts and clinic updates will appear here.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* ── 7. SIGN OUT ── */}
           <TouchableOpacity
-            style={styles.signOutButton}
+            style={[
+              styles.signOutButton,
+              {
+                backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2',
+                borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+              },
+            ]}
             onPress={handleLogout}
             activeOpacity={0.88}
           >
-            <LogOut size={18} color="#EF4444" />
+            <LogOut size={16} color="#EF4444" style={{ marginRight: 8 }} />
             <Text style={styles.signOutButtonText}>Sign Out of MedSync</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
         </ScrollView>
 
-        {/* ── EDIT PROFILE MODAL ── */}
-        <Modal
-          visible={editModalVisible}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setEditModalVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalHeaderTitle}>Edit Health Profile</Text>
-              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                <X size={22} color="#64748B" />
-              </TouchableOpacity>
-            </View>
+        {/* ── COMPREHENSIVE HEALTH PROFILE MODAL ── */}
+        <CompleteHealthProfileModal
+          visible={healthModalVisible}
+          userId={user?.id || ''}
+          initialData={profile}
+          onClose={() => setHealthModalVisible(false)}
+          onCompleted={(updated) => {
+            if (updated) setProfile(updated);
+            loadProfileData();
+          }}
+        />
 
-            <ScrollView contentContainerStyle={styles.modalBody}>
-              <Text style={styles.label}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                value={editPhone}
-                onChangeText={setEditPhone}
-                placeholder="+1 555-0199"
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.label}>Blood Group</Text>
-              <TextInput
-                style={styles.input}
-                value={editBloodGroup}
-                onChangeText={setEditBloodGroup}
-                placeholder="O+, A-, B+, AB+"
-                autoCapitalize="characters"
-              />
-
-              <Text style={styles.label}>Emergency Contact Name</Text>
-              <TextInput
-                style={styles.input}
-                value={editEmergencyName}
-                onChangeText={setEditEmergencyName}
-                placeholder="Jane Doe"
-              />
-
-              <Text style={styles.label}>Emergency Contact Phone</Text>
-              <TextInput
-                style={styles.input}
-                value={editEmergencyPhone}
-                onChangeText={setEditEmergencyPhone}
-                placeholder="+1 555-0198"
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.label}>Known Allergies</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={editAllergies}
-                onChangeText={setEditAllergies}
-                placeholder="e.g. Penicillin, Peanuts, Latex"
-                multiline
-              />
-
-              <Button
-                title="Save Changes"
-                loading={editSaving}
-                onPress={handleSaveProfile}
-                style={styles.saveBtn}
-              />
-            </ScrollView>
-          </View>
-        </Modal>
-
-        {/* ── PIN MODAL ── */}
+        {/* ── PIN CONFIGURATION MODAL ── */}
         <Modal
           visible={pinModalVisible}
           animationType="fade"
@@ -598,22 +801,38 @@ export default function PatientProfileScreen() {
           onRequestClose={() => setPinModalVisible(false)}
         >
           <View style={styles.pinModalOverlay}>
-            <View style={styles.pinModalDialog}>
+            <View
+              style={[
+                styles.pinModalDialog,
+                {
+                  backgroundColor: isDark ? '#141418' : '#FFFFFF',
+                  borderColor: theme.border,
+                },
+              ]}
+            >
               <TouchableOpacity
-                style={styles.pinCloseBtn}
+                style={[styles.pinCloseBtn, { borderColor: theme.border }]}
                 onPress={() => setPinModalVisible(false)}
               >
-                <X size={20} color="#64748B" />
+                <X size={18} color={theme.textMuted} />
               </TouchableOpacity>
 
-              <View style={styles.pinIconBox}>
-                <Lock size={24} color="#2563EB" />
+              <View
+                style={[
+                  styles.pinIconBox,
+                  {
+                    backgroundColor: isDark ? 'rgba(56, 189, 248, 0.15)' : '#F0F9FF',
+                    borderColor: isDark ? 'rgba(56, 189, 248, 0.3)' : '#BAE6FD',
+                  },
+                ]}
+              >
+                <Lock size={22} color="#38BDF8" />
               </View>
 
-              <Text style={styles.pinDialogTitle}>
+              <Text style={[styles.pinDialogTitle, { color: theme.text }]}>
                 {isResetMode ? 'Reset Authorization PIN' : 'Enroll 6-Digit PIN'}
               </Text>
-              <Text style={styles.pinDialogSubtitle}>
+              <Text style={[styles.pinDialogSubtitle, { color: theme.textMuted }]}>
                 {isResetMode
                   ? 'Verify your account password to configure a new Authorization PIN.'
                   : 'Configure a secure 6-digit PIN used to authorize downloads and appointments.'}
@@ -627,55 +846,74 @@ export default function PatientProfileScreen() {
               ) : null}
 
               {isResetMode && (
-                <>
-                  <Text style={styles.pinInputLabel}>Account Password</Text>
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[styles.pinInputLabel, { color: theme.textSecondary }]}>
+                    Account Password
+                  </Text>
                   <TextInput
-                    style={styles.modalTextInput}
+                    style={[
+                      styles.modalTextInput,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                        color: theme.text,
+                      },
+                    ]}
                     value={currentPassword}
                     onChangeText={setCurrentPassword}
                     secureTextEntry
                     placeholder="Enter current password"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={theme.inputPlaceholder}
                   />
-                </>
+                </View>
               )}
 
-              <Text style={styles.pinInputLabel}>
+              <Text style={[styles.pinInputLabel, { color: theme.textSecondary }]}>
                 {isResetMode ? 'New 6-Digit PIN' : 'Enter 6-Digit PIN'}
               </Text>
               <TextInput
-                style={[styles.modalTextInput, styles.pinCodeInput]}
+                style={[
+                  styles.modalTextInput,
+                  styles.pinCodeInput,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={newPin}
                 onChangeText={(t) => setNewPin(t.replace(/[^0-9]/g, '').slice(0, 6))}
                 keyboardType="numeric"
                 maxLength={6}
                 secureTextEntry
                 placeholder="••••••"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.inputPlaceholder}
               />
 
-              <Button
-                title={isResetMode ? 'Verify & Reset PIN' : 'Enroll PIN'}
-                loading={pinSaving}
+              <TouchableOpacity
+                style={[
+                  styles.primaryButton,
+                  {
+                    backgroundColor: theme.primaryButton,
+                    marginTop: 14,
+                    height: 48,
+                  },
+                ]}
                 onPress={handleSavePin}
-                disabled={newPin.length !== 6 || (isResetMode && !currentPassword)}
-                style={styles.pinSubmitBtn}
-              />
+                disabled={pinSaving || newPin.length !== 6 || (isResetMode && !currentPassword)}
+              >
+                <Text
+                  style={[
+                    styles.primaryButtonText,
+                    { color: theme.primaryButtonText },
+                  ]}
+                >
+                  {pinSaving ? 'Saving...' : isResetMode ? 'Verify & Reset PIN' : 'Enroll PIN'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
-
-        {/* ── PAYMENT-STYLE QR SCANNER ── */}
-        <PaymentStyleQRScanner
-          visible={qrModalVisible}
-          onClose={() => setQrModalVisible(false)}
-          userProfile={{
-            id: user?.id || '',
-            full_name: profile?.full_name || user?.full_name || 'Patient',
-            email: user?.email,
-            blood_group: profile?.blood_group || 'O+',
-          }}
-        />
       </View>
     </RoleGuard>
   );
@@ -684,41 +922,15 @@ export default function PatientProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  headerQrBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#2563EB',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  headerQrText: {
-    color: '#FFFFFF',
-    fontSize: 12.5,
-    fontWeight: '700',
   },
   scrollContent: {
     padding: 16,
     gap: 14,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
+  cardBox: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
   },
   identityHeader: {
     flexDirection: 'row',
@@ -726,23 +938,35 @@ const styles = StyleSheet.create({
     gap: 14,
     marginBottom: 16,
   },
-  avatarCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#2563EB',
+  avatarWrapper: {
+    position: 'relative',
+  },
+  avatarImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  avatarFallback: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
   },
   avatarInitials: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#FFFFFF',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   identityText: {
     flex: 1,
@@ -750,18 +974,17 @@ const styles = StyleSheet.create({
   fullName: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#0F172A',
+    letterSpacing: -0.2,
   },
   emailText: {
-    fontSize: 13,
-    color: '#64748B',
+    fontSize: 12.5,
     marginTop: 2,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -776,8 +999,8 @@ const styles = StyleSheet.create({
   editBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -785,7 +1008,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
   },
   infoRow: {
     flexDirection: 'row',
@@ -793,41 +1015,35 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   infoLabel: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '600',
-    color: '#64748B',
     minWidth: 85,
   },
   infoValue: {
     fontSize: 13,
-    color: '#0F172A',
     flex: 1,
   },
   emergencyContactCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.18)',
     borderRadius: 14,
     padding: 12,
     marginTop: 4,
   },
   emergencyLabel: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10.5,
+    fontWeight: '800',
     color: '#EF4444',
     textTransform: 'uppercase',
   },
   emergencyName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
     marginTop: 2,
   },
   emergencyPhone: {
     fontSize: 12,
-    color: '#64748B',
   },
   callEmergencyBtn: {
     flexDirection: 'row',
@@ -844,87 +1060,84 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    color: '#0F172A',
     marginTop: 6,
     paddingHorizontal: 2,
+    letterSpacing: 0.2,
   },
   biometricRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  biometricIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+  iconBoxSquare: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  biometricTitle: {
-    fontSize: 14.5,
+  cardRowTitle: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
   },
-  biometricSub: {
+  cardRowSub: {
     fontSize: 12,
-    color: '#64748B',
     marginTop: 2,
   },
   securityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 14,
-  },
-  securityIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 12,
   },
   securityDetails: {
     flex: 1,
   },
-  securityTitle: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  securitySubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-    lineHeight: 16,
-  },
   pinActionsRow: {
-    marginTop: 4,
+    marginTop: 2,
   },
-  pinBtn: {
-    width: '100%',
+  primaryButton: {
+    height: 42,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  primaryButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  outlineButton: {
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  outlineButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   referralItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   referralDoc: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
   },
   referralSub: {
     fontSize: 12,
-    color: '#64748B',
     marginTop: 2,
   },
   referralBadge: {
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
@@ -932,7 +1145,7 @@ const styles = StyleSheet.create({
   referralBadgeText: {
     fontSize: 10.5,
     fontWeight: '700',
-    color: '#2563EB',
+    color: '#38BDF8',
   },
   notifRow: {
     flexDirection: 'row',
@@ -940,7 +1153,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   notifRowLast: {
     borderBottomWidth: 0,
@@ -950,11 +1162,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#2563EB',
     marginTop: 6,
-  },
-  notifDotRead: {
-    backgroundColor: '#CBD5E1',
   },
   notifTextContainer: {
     flex: 1,
@@ -962,17 +1170,14 @@ const styles = StyleSheet.create({
   notifTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#0F172A',
   },
   notifBody: {
     fontSize: 12,
-    color: '#475569',
     marginTop: 2,
     lineHeight: 16,
   },
   notifTime: {
     fontSize: 11,
-    color: '#94A3B8',
     marginTop: 4,
   },
   emptyNotifications: {
@@ -982,164 +1187,109 @@ const styles = StyleSheet.create({
   },
   emptyNotifTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
+    fontWeight: '700',
     marginTop: 8,
   },
   emptyNotifSub: {
     fontSize: 12,
-    color: '#94A3B8',
     marginTop: 2,
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
-    height: 50,
-    borderRadius: 16,
-    marginTop: 10,
-    gap: 8,
+    borderWidth: 1,
+    borderRadius: 14,
+    height: 48,
+    marginTop: 4,
   },
   signOutButtonText: {
-    fontSize: 14.5,
+    fontSize: 13.5,
     fontWeight: '700',
     color: '#EF4444',
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  modalBody: {
-    padding: 20,
-    gap: 10,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-    marginTop: 6,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-  },
-  textArea: {
-    height: 72,
-    paddingTop: 12,
-    textAlignVertical: 'top',
-  },
-  saveBtn: {
-    marginTop: 20,
-  },
   pinModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
   },
   pinModalDialog: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 22,
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
     alignItems: 'center',
   },
   pinCloseBtn: {
     position: 'absolute',
     top: 16,
     right: 16,
-    padding: 4,
-  },
-  pinIconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+  },
+  pinIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   pinDialogTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontSize: 17,
+    fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   pinDialogSubtitle: {
-    fontSize: 13,
-    color: '#64748B',
+    fontSize: 12.5,
     textAlign: 'center',
+    lineHeight: 17,
     marginBottom: 16,
-    lineHeight: 18,
   },
   pinErrorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
     borderRadius: 8,
-    padding: 10,
+    padding: 8,
+    gap: 6,
     marginBottom: 12,
-    gap: 8,
     width: '100%',
   },
   pinErrorText: {
-    color: '#EF4444',
     fontSize: 12,
+    color: '#EF4444',
     flex: 1,
   },
   pinInputLabel: {
-    alignSelf: 'flex-start',
     fontSize: 12,
     fontWeight: '600',
-    color: '#475569',
+    alignSelf: 'flex-start',
     marginBottom: 6,
-    marginTop: 6,
   },
   modalTextInput: {
     width: '100%',
-    height: 48,
+    height: 46,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 14,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-    marginBottom: 10,
   },
   pinCodeInput: {
-    textAlign: 'center',
-    fontSize: 24,
     letterSpacing: 10,
-    fontWeight: '700',
-  },
-  pinSubmitBtn: {
-    width: '100%',
-    marginTop: 14,
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
   },
 });

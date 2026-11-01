@@ -1,5 +1,6 @@
 import { supabase, getUserProfile, normalizeRole } from '../lib/supabase';
 import api from '../lib/api';
+import * as Linking from 'expo-linking';
 
 export const authService = {
   login: async (credentials: { email: string; password: string }) => {
@@ -62,15 +63,19 @@ export const authService = {
       },
     };
   },
+
   register: async (payload: {
     email: string;
     password: string;
     full_name: string;
-    role: 'patient' | 'doctor';
+    role?: 'patient' | 'doctor';
     phone_number?: string;
+    blood_group?: string;
+    gender?: string;
+    date_of_birth?: string;
   }) => {
     const cleanEmail = payload.email.trim().toLowerCase();
-    const roleUpper = payload.role.toUpperCase();
+    const roleUpper = (payload.role || 'patient').toUpperCase();
 
     const { data: authData, error } = await supabase.auth.signUp({
       email: cleanEmail,
@@ -80,6 +85,9 @@ export const authService = {
           full_name: payload.full_name.trim(),
           role: roleUpper,
           contact_number: payload.phone_number?.trim() || '',
+          blood_group: payload.blood_group || '',
+          gender: payload.gender || '',
+          date_of_birth: payload.date_of_birth || '',
         },
       },
     });
@@ -104,26 +112,110 @@ export const authService = {
         full_name: payload.full_name.trim(),
         contact_number: payload.phone_number?.trim() || '',
         phone_number: payload.phone_number?.trim() || '',
+        blood_group: payload.blood_group || '',
+        gender: payload.gender || '',
+        date_of_birth: payload.date_of_birth || '',
       });
     } catch (syncErr) {
       console.warn('Backend sync notice during registration:', syncErr);
     }
 
+    // Dispatch 6-digit OTP verification email via Brevo
+    try {
+      await api.post('/auth/send-verification-otp', {
+        email: cleanEmail,
+        purpose: 'EMAIL_VERIFY',
+      });
+    } catch (otpErr) {
+      console.warn('Initial verification OTP dispatch note:', otpErr);
+    }
+
     return authData;
   },
+
+  sendVerificationOtp: async (email: string) => {
+    const res = await api.post('/auth/send-verification-otp', {
+      email: email.trim().toLowerCase(),
+      purpose: 'EMAIL_VERIFY',
+    });
+    return res.data;
+  },
+
+  verifyEmailOtp: async (email: string, otpCode: string) => {
+    const res = await api.post('/auth/verify-email-otp', {
+      email: email.trim().toLowerCase(),
+      otp_code: otpCode.trim(),
+      purpose: 'EMAIL_VERIFY',
+    });
+    return res.data;
+  },
+
+  sendResetOtp: async (email: string) => {
+    const res = await api.post('/auth/send-reset-otp', {
+      email: email.trim().toLowerCase(),
+      purpose: 'PASSWORD_RESET',
+    });
+    return res.data;
+  },
+
+  verifyResetOtp: async (payload: {
+    email: string;
+    otp_code: string;
+    new_password: string;
+    confirm_password: string;
+  }) => {
+    const res = await api.post('/auth/verify-reset-otp', {
+      email: payload.email.trim().toLowerCase(),
+      otp_code: payload.otp_code.trim(),
+      new_password: payload.new_password,
+      confirm_password: payload.confirm_password,
+    });
+    return res.data;
+  },
+
+  signInWithGoogle: async () => {
+    const redirectUrl = Linking.createURL('auth/callback');
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+        skipBrowserRedirect: true,
+      },
+    });
+
+    if (error) {
+      if (
+        error.message?.includes('provider is not enabled') ||
+        error.message?.includes('Unsupported provider')
+      ) {
+        throw new Error(
+          'Google Sign-In is not enabled on this Supabase project yet. Please sign in with your email & password, or enable Google Provider in your Supabase dashboard.'
+        );
+      }
+      throw error;
+    }
+
+    if (data?.url) {
+      const canOpen = await Linking.canOpenURL(data.url).catch(() => true);
+      if (canOpen) {
+        await Linking.openURL(data.url);
+      }
+    }
+
+    return data;
+  },
+
   me: async () => {
     const { data, error } = await supabase.auth.getUser();
     if (error) throw error;
     if (!data.user) throw new Error('Not authenticated');
     return getUserProfile(data.user);
   },
+
   logout: async () => {
     await supabase.auth.signOut();
   },
-  resetPassword: async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-    if (error) throw error;
-  },
+
   refreshSession: async () => {
     const { data, error } = await supabase.auth.refreshSession();
     if (error) throw error;

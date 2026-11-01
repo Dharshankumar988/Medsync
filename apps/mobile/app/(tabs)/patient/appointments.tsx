@@ -175,28 +175,41 @@ export default function PatientAppointmentsScreen() {
     const canCancel = item.status === 'PENDING' || item.status === 'CONFIRMED';
 
     return (
-      <Card style={styles.apptCard}>
+      <Card style={[styles.apptCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <CardContent>
           <View style={styles.cardHeaderRow}>
-            <View style={styles.doctorIconBox}>
-              <User size={20} color={Colors.roles.patient.primary} />
+            <View
+              style={[
+                styles.doctorIconBox,
+                {
+                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#F0F9FF',
+                  borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <User size={20} color={isDark ? '#38BDF8' : '#0284C7'} />
             </View>
             <View style={styles.headerInfo}>
-              <Text style={styles.reasonTitle} numberOfLines={1}>
+              <Text style={[styles.reasonTitle, { color: theme.text }]} numberOfLines={1}>
                 {item.reason || 'Medical Consultation'}
               </Text>
-              <Text style={styles.doctorName}>
+              <Text style={[styles.doctorName, { color: theme.textMuted }]}>
                 {item.doctor_name ? `Dr. ${item.doctor_name}` : 'Practitioner Consultation'}
               </Text>
             </View>
             {renderStatusBadge(item.status)}
           </View>
 
-          <View style={styles.timeRow}>
-            <Calendar size={14} color="#64748B" />
-            <Text style={styles.timeText}>{item.appointment_date}</Text>
-            <Clock size={14} color="#64748B" style={{ marginLeft: 8 }} />
-            <Text style={styles.timeText}>{item.start_time}</Text>
+          <View style={[styles.timeRow, { borderTopColor: theme.border }]}>
+            <Calendar size={14} color={theme.textMuted} />
+            <Text style={[styles.timeText, { color: theme.textSecondary }]}>
+              {item.appointment_date}
+            </Text>
+            <Clock size={14} color={theme.textMuted} style={{ marginLeft: 8 }} />
+            <Text style={[styles.timeText, { color: theme.textSecondary }]}>
+              {item.start_time}
+            </Text>
           </View>
 
           {canCancel && (
@@ -224,28 +237,60 @@ export default function PatientAppointmentsScreen() {
           subtitle="Clinic visits & schedule"
           rightElement={
             <TouchableOpacity
-              style={styles.headerBookBtn}
+              style={[styles.headerBookBtn, { backgroundColor: theme.primaryButton }]}
               onPress={openBookingModal}
               activeOpacity={0.85}
             >
-              <Plus size={15} color="#FFFFFF" />
-              <Text style={styles.headerBookBtnText}>Book</Text>
+              <Plus size={15} color={theme.primaryButtonText} />
+              <Text style={[styles.headerBookBtnText, { color: theme.primaryButtonText }]}>
+                Book
+              </Text>
             </TouchableOpacity>
           }
         />
 
         {/* Filter bar */}
-        <View style={styles.filterRow}>
+        <View
+          style={[
+            styles.filterRow,
+            { backgroundColor: theme.background, borderBottomColor: theme.border },
+          ]}
+        >
           {['ALL', 'CONFIRMED', 'PENDING', 'CANCELLED'].map((tab) => {
             const isSelected = (tab === 'ALL' && !statusFilter) || statusFilter === tab;
             return (
               <TouchableOpacity
                 key={tab}
-                style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: isSelected
+                      ? isDark
+                        ? '#FAFAFA'
+                        : '#09090B'
+                      : theme.card,
+                    borderColor: isSelected
+                      ? isDark
+                        ? '#FAFAFA'
+                        : '#09090B'
+                      : theme.border,
+                  },
+                ]}
                 onPress={() => setStatusFilter(tab === 'ALL' ? undefined : tab)}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    {
+                      color: isSelected
+                        ? isDark
+                          ? '#09090B'
+                          : '#FFFFFF'
+                        : theme.textMuted,
+                    },
+                  ]}
+                >
                   {tab}
                 </Text>
               </TouchableOpacity>
@@ -302,11 +347,11 @@ export default function PatientAppointmentsScreen() {
           presentationStyle="pageSheet"
           onRequestClose={() => setBookingModalVisible(false)}
         >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Book Consultation</Text>
+          <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Book Consultation</Text>
               <TouchableOpacity onPress={() => setBookingModalVisible(false)}>
-                <X size={22} color="#64748B" />
+                <X size={22} color={theme.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -318,7 +363,7 @@ export default function PatientAppointmentsScreen() {
                 </View>
               ) : null}
 
-              <Text style={styles.inputLabel}>Select Doctor</Text>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Select Doctor</Text>
               {doctors.length > 0 ? (
                 <View style={styles.doctorsList}>
                   {doctors.map((doc) => {
@@ -328,62 +373,114 @@ export default function PatientAppointmentsScreen() {
                     return (
                       <TouchableOpacity
                         key={doc.id}
-                        style={[styles.doctorOption, isSelected && styles.doctorOptionSelected]}
+                        style={[
+                          styles.doctorOption,
+                          {
+                            backgroundColor: isSelected
+                              ? isDark
+                                ? '#27272A'
+                                : 'rgba(56, 189, 248, 0.1)'
+                              : theme.card,
+                            borderColor: isSelected ? '#38BDF8' : theme.border,
+                          },
+                        ]}
                         onPress={() => setSelectedDoctorId(doc.id)}
                       >
                         <View style={styles.doctorOptionInfo}>
-                          <Text style={[styles.doctorOptionName, isSelected && styles.doctorOptionTextActive]}>
+                          <Text
+                            style={[
+                              styles.doctorOptionName,
+                              { color: isSelected ? (isDark ? '#FAFAFA' : '#09090B') : theme.text },
+                            ]}
+                          >
                             Dr. {docName}
                           </Text>
-                          <Text style={styles.doctorOptionSub}>
+                          <Text style={[styles.doctorOptionSub, { color: theme.textMuted }]}>
                             {doc.clinic_name || doc.specialization || 'Clinical Care'} • {doc.clinic_phone || 'Available'}
                           </Text>
                         </View>
-                        {isSelected && <Check size={18} color={Colors.roles.patient.primary} />}
+                        {isSelected && <Check size={18} color="#38BDF8" />}
                       </TouchableOpacity>
                     );
                   })}
                 </View>
               ) : (
-                <Text style={styles.noDoctorsText}>No practitioners currently available for online booking.</Text>
+                <Text style={{ color: theme.textMuted, fontSize: 13, marginBottom: 16 }}>
+                  No practitioners currently available for online booking.
+                </Text>
               )}
 
-              <Text style={styles.inputLabel}>Appointment Date (YYYY-MM-DD)</Text>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                Appointment Date (YYYY-MM-DD)
+              </Text>
               <TextInput
-                style={styles.textInput}
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={appointmentDate}
                 onChangeText={setAppointmentDate}
                 placeholder="2026-10-25"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.inputPlaceholder}
               />
 
-              <Text style={styles.inputLabel}>Preferred Time</Text>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Preferred Time</Text>
               <TextInput
-                style={styles.textInput}
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={startTime}
                 onChangeText={setStartTime}
                 placeholder="10:00:00"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.inputPlaceholder}
               />
 
-              <Text style={styles.inputLabel}>Reason for Consultation</Text>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                Reason for Consultation
+              </Text>
               <TextInput
-                style={[styles.textInput, styles.textArea]}
+                style={[
+                  styles.textInput,
+                  styles.textArea,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={reason}
                 onChangeText={setReason}
                 placeholder="Describe your symptoms or consultation reason"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.inputPlaceholder}
                 multiline
                 numberOfLines={3}
               />
 
-              <Text style={styles.inputLabel}>6-Digit Authorization PIN</Text>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                6-Digit Authorization PIN
+              </Text>
               <TextInput
-                style={styles.textInput}
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
                 value={pin}
                 onChangeText={(text) => setPin(text.replace(/[^0-9]/g, '').slice(0, 6))}
                 placeholder="••••••"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.inputPlaceholder}
                 keyboardType="numeric"
                 secureTextEntry
                 maxLength={6}
@@ -393,7 +490,7 @@ export default function PatientAppointmentsScreen() {
                 title="Confirm Appointment"
                 loading={bookingLoading}
                 onPress={handleBookSubmit}
-                style={styles.confirmBookingBtn}
+                style={[styles.confirmBookingBtn, { backgroundColor: theme.primaryButton }]}
               />
             </ScrollView>
           </View>

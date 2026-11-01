@@ -25,6 +25,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { aiService } from '../../services/ai.service';
 import { PulseAIIcon } from './PulseAIIcon';
+import { useTheme } from '../../context/ThemeContext';
 
 interface Message {
   id: string;
@@ -44,16 +45,9 @@ const QUICK_PROMPTS = [
   '🥗 What foods should I avoid with antibiotics?',
 ];
 
-const MARKDOWN_STYLES = {
-  body: { fontSize: 14.5, lineHeight: 21 },
-  code_block: { backgroundColor: '#1E293B', color: '#F8FAFC', padding: 10, borderRadius: 10 },
-  code_inline: { backgroundColor: 'rgba(37, 99, 235, 0.08)', borderRadius: 4, paddingHorizontal: 4 },
-  heading1: { fontSize: 18, fontWeight: '800' as const, marginVertical: 6 },
-  heading2: { fontSize: 16, fontWeight: '700' as const, marginVertical: 4 },
-  bullet_list: { marginVertical: 4 },
-};
-
 export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
+  const { theme, isDark } = useTheme();
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -98,31 +92,6 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
         },
         () => setIsLoading(false),
         async () => {
-          if (!receivedChunks) {
-            try {
-              const data = await aiService.chat(role, userMessage.content, null);
-              if (data?.reply) {
-                setMessages((prev) =>
-                  prev.map((m) => (m.id === aiMsgId ? { ...m, content: data.reply } : m))
-                );
-                setIsLoading(false);
-                return;
-              }
-            } catch (chatErr) {
-              console.warn('Fallback direct AI chat failed:', chatErr);
-            }
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMsgId
-                  ? {
-                      ...m,
-                      content:
-                        '⚠️ Unable to reach Pulse AI server. Please verify your internet connection or backend status.',
-                    }
-                  : m
-              )
-            );
-          }
           setIsLoading(false);
         }
       );
@@ -130,77 +99,8 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
     [input, isLoading, role]
   );
 
-  const handleAttachImage = useCallback(async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]?.uri) {
-        const imageUri = result.assets[0].uri;
-        const userMsg: Message = {
-          id: Date.now().toString(),
-          role: 'user',
-          content: '📎 [Medical Scan Attached for Analysis]',
-          imageUri,
-        };
-
-        setMessages((prev) => [...prev, userMsg]);
-        setAnalyzingImage(true);
-
-        const aiMsgId = (Date.now() + 1).toString();
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: aiMsgId,
-            role: 'assistant',
-            content: '🔬 *Analyzing scan against medical vision model...*',
-          },
-        ]);
-
-        try {
-          const analysisResult = await aiService.analyzeImage(imageUri, 'scan');
-          const summary =
-            analysisResult?.findings ||
-            analysisResult?.summary ||
-            analysisResult?.analysis ||
-            JSON.stringify(analysisResult, null, 2);
-
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMsgId
-                ? {
-                    ...m,
-                    content: `### 🩺 Vision Scan Analysis Report\n\n${summary}\n\n*Note: Image analysis is for patient guidance only. Always review results with your consulting physician.*`,
-                  }
-                : m
-            )
-          );
-        } catch (e: any) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMsgId
-                ? {
-                    ...m,
-                    content:
-                      '⚠️ Image analysis service is currently unavailable. Please verify connection to `/ai/analyze-image`.',
-                  }
-                : m
-            )
-          );
-        } finally {
-          setAnalyzingImage(false);
-        }
-      }
-    } catch (e) {
-      console.warn('Scan attachment error:', e);
-    }
-  }, []);
-
   const handleResetChat = () => {
-    Alert.alert('Clear Chat History', 'Do you want to reset your Pulse AI consultation session?', [
+    Alert.alert('Clear Chat', 'Start a fresh conversation with Pulse AI?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Clear',
@@ -211,7 +111,7 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
               id: 'welcome',
               role: 'assistant',
               content:
-                'Chat cleared. How can I assist you with your health today?',
+                'Hello! I am **Pulse AI**, your dedicated MedSync clinical health assistant.\n\nAsk me about your symptoms, prescriptions, or tap the paperclip to upload a medical scan for analysis.',
             },
           ]);
         },
@@ -219,23 +119,117 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
     ]);
   };
 
+  const handleAttachImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setAnalyzingImage(true);
+        const imageUri = result.assets[0].uri;
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: 'user',
+            content: 'Please analyze this medical scan/document.',
+            imageUri,
+          },
+        ]);
+
+        const analysis = await aiService.analyzeMedicalImage(imageUri, 'Analyze this medical document or diagnostic image.');
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: analysis.analysis || 'Image analyzed successfully.',
+          },
+        ]);
+      }
+    } catch (err: any) {
+      Alert.alert('Analysis Failed', err?.message || 'Could not analyze image.');
+    } finally {
+      setAnalyzingImage(false);
+    }
+  };
+
+  const markdownStyles = {
+    body: {
+      fontSize: 14.5,
+      lineHeight: 21,
+      color: theme.text,
+    },
+    code_block: {
+      backgroundColor: isDark ? '#121215' : '#1E293B',
+      color: '#FAFAFA',
+      padding: 10,
+      borderRadius: 10,
+    },
+    code_inline: {
+      backgroundColor: isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(37, 99, 235, 0.08)',
+      color: isDark ? '#38BDF8' : '#0284C7',
+      borderRadius: 4,
+      paddingHorizontal: 4,
+    },
+    heading1: {
+      fontSize: 17,
+      fontWeight: '800' as const,
+      marginVertical: 6,
+      color: theme.text,
+    },
+    heading2: {
+      fontSize: 15,
+      fontWeight: '700' as const,
+      marginVertical: 4,
+      color: theme.text,
+    },
+    bullet_list: { marginVertical: 4 },
+  };
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Header Disclaimer & Clear Button */}
-      <View style={styles.topBar}>
-        <View style={styles.disclaimerBox}>
-          <ShieldAlert size={14} color="#2563EB" />
-          <Text style={styles.disclaimerText}>
-            Informational assistant only. For urgent emergencies, use SOS on Home.
+      {/* Top Disclaimer Bar */}
+      <View
+        style={[
+          styles.topBar,
+          {
+            backgroundColor: theme.background,
+            borderBottomColor: theme.border,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.disclaimerBox,
+            {
+              backgroundColor: isDark ? 'rgba(56, 189, 248, 0.1)' : '#F0F9FF',
+              borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <ShieldAlert size={14} color="#38BDF8" />
+          <Text
+            style={[
+              styles.disclaimerText,
+              { color: isDark ? '#38BDF8' : '#0284C7' },
+            ]}
+          >
+            Informational assistant only. For urgent emergencies, contact clinic or 911.
           </Text>
         </View>
 
         <TouchableOpacity style={styles.resetBtn} onPress={handleResetChat}>
-          <RotateCcw size={16} color="#64748B" />
+          <RotateCcw size={16} color={theme.textMuted} />
         </TouchableOpacity>
       </View>
 
@@ -250,20 +244,56 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
         renderItem={({ item }) => {
           const isUser = item.role === 'user';
           return (
-            <View style={[styles.messageRow, isUser ? styles.messageRowUser : styles.messageRowAi]}>
+            <View
+              style={[
+                styles.messageRow,
+                isUser ? styles.messageRowUser : styles.messageRowAi,
+              ]}
+            >
               {!isUser && (
-                <View style={styles.aiAvatar}>
-                  <Sparkles size={16} color="#FFFFFF" />
+                <View
+                  style={[
+                    styles.aiAvatar,
+                    {
+                      backgroundColor: isDark ? '#27272A' : '#09090B',
+                      borderColor: theme.border,
+                      borderWidth: 1,
+                    },
+                  ]}
+                >
+                  <Sparkles size={16} color="#38BDF8" />
                 </View>
               )}
 
-              <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAi]}>
+              <View
+                style={[
+                  styles.bubble,
+                  isUser
+                    ? [
+                        styles.bubbleUser,
+                        {
+                          backgroundColor: isDark ? '#FAFAFA' : '#09090B',
+                        },
+                      ]
+                    : [
+                        styles.bubbleAi,
+                        {
+                          backgroundColor: theme.card,
+                          borderColor: theme.border,
+                        },
+                      ],
+                ]}
+              >
                 <Markdown
                   style={{
-                    ...MARKDOWN_STYLES,
+                    ...markdownStyles,
                     body: {
-                      ...MARKDOWN_STYLES.body,
-                      color: isUser ? '#FFFFFF' : '#0F172A',
+                      ...markdownStyles.body,
+                      color: isUser
+                        ? isDark
+                          ? '#09090B'
+                          : '#FFFFFF'
+                        : theme.text,
                     },
                   }}
                 >
@@ -276,8 +306,8 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
         ListFooterComponent={() =>
           isLoading || analyzingImage ? (
             <View style={styles.typingIndicator}>
-              <ActivityIndicator size="small" color="#2563EB" />
-              <Text style={styles.typingText}>
+              <ActivityIndicator size="small" color="#38BDF8" />
+              <Text style={[styles.typingText, { color: theme.textMuted }]}>
                 {analyzingImage ? 'Reviewing medical image...' : 'Pulse AI is analyzing...'}
               </Text>
             </View>
@@ -287,16 +317,38 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
 
       {/* Suggested Quick Prompts */}
       {messages.length <= 2 && (
-        <View style={styles.promptContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.promptScroll}>
+        <View
+          style={[
+            styles.promptContainer,
+            { backgroundColor: theme.background, borderTopColor: theme.border },
+          ]}
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.promptScroll}
+          >
             {QUICK_PROMPTS.map((prompt, index) => (
               <TouchableOpacity
                 key={index}
-                style={styles.promptChip}
+                style={[
+                  styles.promptChip,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  },
+                ]}
                 onPress={() => sendMessage(prompt)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.promptChipText}>{prompt}</Text>
+                <Text
+                  style={[
+                    styles.promptChipText,
+                    { color: theme.textSecondary },
+                  ]}
+                >
+                  {prompt}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -304,30 +356,60 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
       )}
 
       {/* Input Bar */}
-      <View style={styles.inputBar}>
+      <View
+        style={[
+          styles.inputBar,
+          {
+            backgroundColor: theme.background,
+            borderTopColor: theme.border,
+          },
+        ]}
+      >
         <TouchableOpacity
           onPress={handleAttachImage}
-          style={styles.attachBtn}
+          style={[
+            styles.attachBtn,
+            { backgroundColor: theme.card, borderColor: theme.border },
+          ]}
           accessibilityLabel="Attach Medical Image"
         >
-          <ImageIcon size={20} color="#2563EB" />
+          <ImageIcon size={19} color={theme.textMuted} />
         </TouchableOpacity>
 
         <TextInput
           value={input}
           onChangeText={setInput}
           placeholder="Ask Pulse AI about your health..."
-          placeholderTextColor="#94A3B8"
-          style={styles.textInput}
+          placeholderTextColor={theme.inputPlaceholder}
+          style={[
+            styles.textInput,
+            {
+              backgroundColor: theme.card,
+              borderColor: theme.border,
+              color: theme.text,
+            },
+          ]}
           multiline
         />
 
         <TouchableOpacity
           onPress={() => sendMessage()}
           disabled={!input.trim() || isLoading}
-          style={[styles.sendBtn, input.trim() && !isLoading ? styles.sendBtnActive : styles.sendBtnDisabled]}
+          style={[
+            styles.sendBtn,
+            input.trim() && !isLoading
+              ? { backgroundColor: theme.primaryButton }
+              : { backgroundColor: isDark ? '#27272A' : '#E4E4E7' },
+          ]}
         >
-          <Send size={18} color="#FFFFFF" />
+          <Send
+            size={17}
+            color={
+              input.trim() && !isLoading
+                ? theme.primaryButtonText
+                : theme.textMuted
+            }
+          />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -337,32 +419,27 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   disclaimerBox: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    backgroundColor: 'rgba(37, 99, 235, 0.08)',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
   },
   disclaimerText: {
     fontSize: 11.5,
-    color: '#2563EB',
     marginLeft: 6,
     flex: 1,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   resetBtn: {
     padding: 8,
@@ -388,7 +465,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
@@ -398,27 +474,14 @@ const styles = StyleSheet.create({
     maxWidth: '82%',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 20,
+    borderRadius: 18,
   },
   bubbleUser: {
-    backgroundColor: '#2563EB',
     borderBottomRightRadius: 4,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
   },
   bubbleAi: {
-    backgroundColor: '#FFFFFF',
     borderBottomLeftRadius: 4,
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.12)',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
   },
   typingIndicator: {
     flexDirection: 'row',
@@ -428,80 +491,57 @@ const styles = StyleSheet.create({
   },
   typingText: {
     fontSize: 12.5,
-    color: '#64748B',
     marginLeft: 8,
     fontWeight: '500',
   },
   promptContainer: {
-    backgroundColor: '#FFFFFF',
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
   },
   promptScroll: {
     paddingHorizontal: 16,
     gap: 8,
   },
   promptChip: {
-    backgroundColor: 'rgba(37, 99, 235, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(37, 99, 235, 0.2)',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 14,
   },
   promptChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#2563EB',
   },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    gap: 8,
   },
   attachBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
   textInput: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 20,
+    borderWidth: 1,
+    borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
-    maxHeight: 90,
+    paddingVertical: 9,
     fontSize: 14,
-    color: '#0F172A',
+    maxHeight: 100,
   },
   sendBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 10,
-  },
-  sendBtnActive: {
-    backgroundColor: '#2563EB',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  sendBtnDisabled: {
-    backgroundColor: '#CBD5E1',
   },
 });

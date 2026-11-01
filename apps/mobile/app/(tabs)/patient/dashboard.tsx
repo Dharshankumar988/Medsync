@@ -167,6 +167,32 @@ export default function PatientDashboard() {
           </TouchableOpacity>
 
           <View style={styles.headerRightActions}>
+            {/* Quick QR Scanner */}
+            <TouchableOpacity
+              style={[
+                styles.iconButton,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={() => setQrScannerVisible(true)}
+              activeOpacity={0.8}
+              accessibilityLabel="Quick QR Scanner"
+            >
+              <Scan size={18} color={theme.text} />
+            </TouchableOpacity>
+
+            {/* Quick Pulse AI */}
+            <TouchableOpacity
+              style={[
+                styles.iconButton,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+              onPress={() => router.push('/(tabs)/patient/pulse-ai')}
+              activeOpacity={0.8}
+              accessibilityLabel="Quick Pulse AI"
+            >
+              <Sparkles size={18} color="#38BDF8" />
+            </TouchableOpacity>
+
             {/* Theme Switcher Button */}
             <TouchableOpacity
               style={[

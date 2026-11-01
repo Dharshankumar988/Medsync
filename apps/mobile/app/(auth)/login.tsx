@@ -11,6 +11,8 @@ import {
   Image,
   Linking,
   Modal,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Mail,
@@ -33,6 +35,7 @@ import { biometricsService } from '../../lib/biometrics';
 import { useTheme } from '../../context/ThemeContext';
 import { formatErrorMessage } from '../../lib/api';
 import { MedicalLoadingIndicator } from '../../components/common/MedicalLoadingIndicator';
+import { GoogleIcon } from '../../components/common/GoogleIcon';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -42,6 +45,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Biometrics
@@ -69,7 +73,9 @@ export default function LoginScreen() {
 
   const handleBiometricAuth = async () => {
     setError('');
-    const result = await biometricsService.authenticate('Sign in to MedSync with your device biometrics');
+    const result = await biometricsService.authenticate(
+      'Sign in to MedSync with your device biometrics'
+    );
     if (result.success) {
       try {
         const user = await authService.me();
@@ -85,6 +91,18 @@ export default function LoginScreen() {
       }
     } else if (result.error && result.error !== 'Authentication cancelled') {
       setError(result.error);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    setError('');
+    try {
+      await authService.signInWithGoogle();
+    } catch (err: any) {
+      setError(formatErrorMessage(err));
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -111,6 +129,31 @@ export default function LoginScreen() {
         setProviderRole(role);
       }
     } catch (err: any) {
+      const errCode = (err as any).code;
+      const detail = err.response?.data?.detail || err.message || '';
+
+      if (errCode === 'EMAIL_NOT_VERIFIED' || detail.includes('EMAIL_NOT_VERIFIED')) {
+        // Auto-dispatch verification code and prompt user to enter it
+        try {
+          await authService.sendVerificationOtp(email.trim());
+        } catch {
+          // ignore if already dispatched
+        }
+
+        Alert.alert(
+          'Email Verification Required',
+          'Your email has not been verified yet. We have sent a 6-digit verification code to your email.',
+          [
+            {
+              text: 'Enter Code',
+              onPress: () =>
+                router.push(`/(auth)/verify-email?email=${encodeURIComponent(email.trim())}`),
+            },
+          ]
+        );
+        return;
+      }
+
       setError(formatErrorMessage(err));
     } finally {
       setIsLoading(false);
@@ -132,9 +175,9 @@ export default function LoginScreen() {
           accessibilityLabel="Toggle Dark/Light Mode"
         >
           {isDark ? (
-            <Sun size={18} color="#FAFAFA" strokeWidth={2} />
+            <Sun size={17} color="#FAFAFA" strokeWidth={2} />
           ) : (
-            <Moon size={18} color="#09090B" strokeWidth={2} />
+            <Moon size={17} color="#09090B" strokeWidth={2} />
           )}
           <Text style={[styles.themeToggleText, { color: theme.textSecondary }]}>
             {isDark ? 'Dark' : 'Light'}
@@ -272,6 +315,14 @@ export default function LoginScreen() {
                 <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
                   Password
                 </Text>
+                <TouchableOpacity
+                  onPress={() => router.push('/(auth)/forgot-password')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.forgotPasswordLink, { color: isDark ? '#38BDF8' : '#0284C7' }]}>
+                    Forgot Password?
+                  </Text>
+                </TouchableOpacity>
               </View>
               <View
                 style={[
@@ -305,7 +356,7 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            {/* Actions: Sign In or Loading */}
+            {/* Primary Action: Sign In */}
             {isLoading ? (
               <View style={styles.loadingContainer}>
                 <MedicalLoadingIndicator
@@ -339,6 +390,38 @@ export default function LoginScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Divider */}
+            <View style={styles.dividerRow}>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+              <Text style={[styles.dividerText, { color: theme.textMuted }]}>or continue with</Text>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+            </View>
+
+            {/* Google Sign-In Button */}
+            <TouchableOpacity
+              style={[
+                styles.googleButton,
+                {
+                  backgroundColor: isDark ? '#141417' : '#F8FAFC',
+                  borderColor: theme.border,
+                },
+              ]}
+              onPress={handleGoogleSignIn}
+              disabled={isGoogleLoading}
+              activeOpacity={0.82}
+            >
+              {isGoogleLoading ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <>
+                  <GoogleIcon size={18} />
+                  <Text style={[styles.googleButtonText, { color: theme.text }]}>
+                    Continue with Google
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
             {/* Biometric Quick Sign-In */}
             {biometricsAvailable && (
               <TouchableOpacity
@@ -352,7 +435,7 @@ export default function LoginScreen() {
                 onPress={handleBiometricAuth}
                 activeOpacity={0.8}
               >
-                <Fingerprint size={20} color={theme.accent} />
+                <Fingerprint size={19} color={theme.accent} />
                 <Text
                   style={[
                     styles.biometricText,
@@ -513,22 +596,22 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-    paddingTop: 10,
+    paddingHorizontal: 22,
+    paddingBottom: 36,
+    paddingTop: 8,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
   },
   logoWrapper: {
-    width: 68,
-    height: 68,
+    width: 64,
+    height: 64,
     borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -537,12 +620,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   logoImage: {
-    width: 68,
-    height: 68,
+    width: 64,
+    height: 64,
     borderRadius: 20,
   },
   brandTitle: {
-    fontSize: 28,
+    fontSize: 27,
     fontWeight: '800',
     letterSpacing: -0.6,
     marginBottom: 4,
@@ -552,8 +635,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   shadcnCard: {
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 22,
+    padding: 22,
     borderWidth: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
@@ -570,7 +653,7 @@ const styles = StyleSheet.create({
   },
   tabButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -601,18 +684,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 15,
   },
   inputLabel: {
     fontSize: 12,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 7,
     letterSpacing: 0.2,
   },
   passwordHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 7,
+  },
+  forgotPasswordLink: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -649,14 +737,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  biometricButton: {
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 18,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
     borderWidth: 1,
     height: 48,
-    marginTop: 12,
+    gap: 10,
+  },
+  googleButtonText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 46,
+    marginTop: 10,
     gap: 10,
   },
   biometricText: {
@@ -681,7 +798,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    marginTop: 22,
     gap: 6,
   },
   complianceText: {

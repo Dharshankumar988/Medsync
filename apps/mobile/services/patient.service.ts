@@ -456,6 +456,27 @@ export const patientService = {
     return res.data?.data ?? res.data;
   },
 
+  uploadProfileImage: async (imageUri: string, filename = 'profile.jpg', mimeType = 'image/jpeg') => {
+    const formData = new FormData();
+    formData.append('file', {
+      uri: imageUri,
+      name: filename,
+      type: mimeType,
+    } as any);
+
+    const res = await api.post('/users/me/profile-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data?.data;
+  },
+
+  updateAvatarUrl: async (avatarUrl: string) => {
+    const res = await api.put('/users/me/avatar', { avatar_url: avatarUrl });
+    return res.data?.data;
+  },
+
   // ── Notifications ──
   getNotifications: async (unreadOnly = false) => {
     const res = await api.get('/notifications', { params: { unread_only: unreadOnly } });

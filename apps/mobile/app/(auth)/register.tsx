@@ -10,6 +10,7 @@ import {
   TextInput,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import {
   User,
@@ -24,32 +25,58 @@ import {
   CheckCircle2,
   Sun,
   Moon,
+  Calendar,
+  Heart,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth.service';
 import { MedicalLoadingIndicator } from '../../components/common/MedicalLoadingIndicator';
+import { GoogleIcon } from '../../components/common/GoogleIcon';
 import { formatErrorMessage } from '../../lib/api';
 import { useTheme } from '../../context/ThemeContext';
+
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+const GENDERS = [
+  { label: 'Male', value: 'male' },
+  { label: 'Female', value: 'female' },
+  { label: 'Other', value: 'other' },
+];
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { theme, isDark, toggleTheme } = useTheme();
 
-  // Pure Patient Registration Form
+  // Patient Registration Fields
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Status
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleGoogleSignUp = async () => {
+    setIsGoogleLoading(true);
+    setError('');
+    try {
+      await authService.signInWithGoogle();
+    } catch (err: any) {
+      setError(formatErrorMessage(err));
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
   const handleRegister = async () => {
     if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
-      setError('Please fill in all required fields.');
+      setError('Please fill in your name, email, and password.');
       return;
     }
 
@@ -66,25 +93,32 @@ export default function RegisterScreen() {
     setIsLoading(true);
     setError('');
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
-      const response = await authService.register({
-        email: email.trim(),
+      await authService.register({
+        email: cleanEmail,
         password,
         full_name: fullName.trim(),
         role: 'patient',
         phone_number: phoneNumber.trim(),
+        blood_group: bloodGroup || undefined,
+        gender: gender || undefined,
+        date_of_birth: dateOfBirth.trim() || undefined,
       });
 
-      // If user session returned, redirect directly to dashboard
-      if (response?.session) {
-        router.replace('/(tabs)/patient/dashboard');
-      } else {
-        Alert.alert(
-          'Account Created',
-          'Your MedSync Patient account is ready! Please sign in.',
-          [{ text: 'Sign In Now', onPress: () => router.replace('/(auth)/login') }]
-        );
-      }
+      // Show alert and redirect directly to 6-digit OTP verification screen
+      Alert.alert(
+        'Verification Code Sent',
+        `A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter it to activate your Patient Vault.`,
+        [
+          {
+            text: 'Verify Email Now',
+            onPress: () =>
+              router.replace(`/(auth)/verify-email?email=${encodeURIComponent(cleanEmail)}`),
+          },
+        ]
+      );
     } catch (err: any) {
       setError(formatErrorMessage(err));
     } finally {
@@ -106,9 +140,9 @@ export default function RegisterScreen() {
           activeOpacity={0.8}
         >
           {isDark ? (
-            <Sun size={18} color="#FAFAFA" strokeWidth={2} />
+            <Sun size={17} color="#FAFAFA" strokeWidth={2} />
           ) : (
-            <Moon size={18} color="#09090B" strokeWidth={2} />
+            <Moon size={17} color="#09090B" strokeWidth={2} />
           )}
           <Text style={[styles.themeToggleText, { color: theme.textSecondary }]}>
             {isDark ? 'Dark' : 'Light'}
@@ -188,6 +222,7 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Error Message */}
             {error ? (
               <View
                 style={[
@@ -203,10 +238,42 @@ export default function RegisterScreen() {
               </View>
             ) : null}
 
+            {/* Google Sign-Up Quick Button */}
+            <TouchableOpacity
+              style={[
+                styles.googleButton,
+                {
+                  backgroundColor: isDark ? '#141417' : '#F8FAFC',
+                  borderColor: theme.border,
+                },
+              ]}
+              onPress={handleGoogleSignUp}
+              disabled={isGoogleLoading}
+              activeOpacity={0.82}
+            >
+              {isGoogleLoading ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <>
+                  <GoogleIcon size={18} />
+                  <Text style={[styles.googleButtonText, { color: theme.text }]}>
+                    Continue with Google
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.dividerRow}>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+              <Text style={[styles.dividerText, { color: theme.textMuted }]}>or register with email</Text>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+            </View>
+
             {/* Full Name */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
-                Full Name
+                Full Name *
               </Text>
               <View
                 style={[
@@ -228,7 +295,7 @@ export default function RegisterScreen() {
             {/* Email */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
-                Email Address
+                Email Address *
               </Text>
               <View
                 style={[
@@ -263,7 +330,7 @@ export default function RegisterScreen() {
                 <Phone size={18} color={theme.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.textInput, { color: theme.text }]}
-                  placeholder="+1 (555) 000-0000"
+                  placeholder="+91 98765 43210"
                   placeholderTextColor={theme.inputPlaceholder}
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
@@ -272,10 +339,108 @@ export default function RegisterScreen() {
               </View>
             </View>
 
+            {/* Date of Birth */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                Date of Birth (Optional)
+              </Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  { backgroundColor: theme.inputBg, borderColor: theme.inputBorder },
+                ]}
+              >
+                <Calendar size={18} color={theme.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.textInput, { color: theme.text }]}
+                  placeholder="YYYY-MM-DD (e.g. 1995-08-24)"
+                  placeholderTextColor={theme.inputPlaceholder}
+                  value={dateOfBirth}
+                  onChangeText={setDateOfBirth}
+                />
+              </View>
+            </View>
+
+            {/* Gender Chips */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                Gender (Optional)
+              </Text>
+              <View style={styles.chipsRow}>
+                {GENDERS.map((item) => {
+                  const isSelected = gender === item.value;
+                  return (
+                    <TouchableOpacity
+                      key={item.value}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: isSelected ? theme.primaryButton : theme.surface,
+                          borderColor: isSelected ? theme.primaryButton : theme.border,
+                        },
+                      ]}
+                      onPress={() => setGender(isSelected ? '' : item.value)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          {
+                            color: isSelected ? theme.primaryButtonText : theme.textSecondary,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Blood Group Chips */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                Blood Group (Optional)
+              </Text>
+              <View style={styles.chipsRow}>
+                {BLOOD_GROUPS.map((bg) => {
+                  const isSelected = bloodGroup === bg;
+                  return (
+                    <TouchableOpacity
+                      key={bg}
+                      style={[
+                        styles.bloodChip,
+                        {
+                          backgroundColor: isSelected ? theme.primaryButton : theme.surface,
+                          borderColor: isSelected ? theme.primaryButton : theme.border,
+                        },
+                      ]}
+                      onPress={() => setBloodGroup(isSelected ? '' : bg)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.bloodChipText,
+                          {
+                            color: isSelected ? theme.primaryButtonText : theme.textSecondary,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {bg}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             {/* Password */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
-                Password
+                Password *
               </Text>
               <View
                 style={[
@@ -309,7 +474,7 @@ export default function RegisterScreen() {
             {/* Confirm Password */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
-                Confirm Password
+                Confirm Password *
               </Text>
               <View
                 style={[
@@ -423,22 +588,22 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-    paddingTop: 10,
+    paddingHorizontal: 22,
+    paddingBottom: 36,
+    paddingTop: 8,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   logoWrapper: {
-    width: 68,
-    height: 68,
+    width: 64,
+    height: 64,
     borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -447,12 +612,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   logoImage: {
-    width: 68,
-    height: 68,
+    width: 64,
+    height: 64,
     borderRadius: 20,
   },
   brandTitle: {
-    fontSize: 28,
+    fontSize: 27,
     fontWeight: '800',
     letterSpacing: -0.6,
     marginBottom: 4,
@@ -462,8 +627,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   shadcnCard: {
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 22,
+    padding: 22,
     borderWidth: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
@@ -475,12 +640,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 12,
     padding: 4,
-    marginBottom: 20,
+    marginBottom: 18,
     borderWidth: 1,
   },
   tabButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -510,6 +675,36 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontWeight: '500',
   },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 48,
+    gap: 10,
+    marginBottom: 4,
+  },
+  googleButtonText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   inputGroup: {
     marginBottom: 14,
   },
@@ -537,6 +732,31 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 6,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 12.5,
+  },
+  bloodChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 44,
+    alignItems: 'center',
+  },
+  bloodChipText: {
+    fontSize: 12,
   },
   loadingContainer: {
     marginVertical: 14,
@@ -572,7 +792,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    marginTop: 22,
     gap: 6,
   },
   complianceText: {

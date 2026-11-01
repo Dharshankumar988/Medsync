@@ -123,8 +123,8 @@ class EmailService:
     @classmethod
     def _dispatch_smtp(cls, message: MIMEMultipart, to_email: str, log_label: str) -> bool:
         """
-        Attempts SMTP delivery with a generous 35s timeout and automatic fallback
-        between STARTTLS (587) and SSL (465) to handle relay latency and ISP filtering.
+        Attempts SMTP delivery with automatic fallback across port 2525 (ISP bypass),
+        587 (STARTTLS), and 465 (SSL) to defeat ISP port blocking.
         """
         smtp_user = settings.SMTP_USER
         smtp_password = settings.SMTP_PASSWORD
@@ -134,13 +134,19 @@ class EmailService:
         if not (smtp_host and smtp_user and smtp_password):
             return False
 
-        configs_to_try = [
-            (smtp_port, settings.SMTP_SSL, settings.SMTP_TLS)
+        # Order of attempts: configured port, then port 2525 (Brevo ISP-bypass), 587, and 465
+        candidate_configs = [
+            (smtp_port, settings.SMTP_SSL, settings.SMTP_TLS),
+            (2525, False, True),
+            (587, False, True),
+            (465, True, False),
         ]
-        if smtp_port == 587 or not settings.SMTP_SSL:
-            configs_to_try.append((465, True, False))
-        else:
-            configs_to_try.append((587, False, True))
+        seen_ports = set()
+        configs_to_try = []
+        for port, ssl_mode, tls_mode in candidate_configs:
+            if port not in seen_ports:
+                seen_ports.add(port)
+                configs_to_try.append((port, ssl_mode, tls_mode))
 
         envelope_from = email.utils.parseaddr(settings.SMTP_FROM)[1] or settings.SMTP_FROM
 
@@ -149,9 +155,9 @@ class EmailService:
             try:
                 logger.info(f"Connecting to SMTP {smtp_host}:{port} (ssl={use_ssl}, tls={use_tls}) for {to_email}...")
                 if use_ssl:
-                    server = smtplib.SMTP_SSL(smtp_host, port, timeout=35)
+                    server = smtplib.SMTP_SSL(smtp_host, port, timeout=12)
                 else:
-                    server = smtplib.SMTP(smtp_host, port, timeout=35)
+                    server = smtplib.SMTP(smtp_host, port, timeout=12)
                     if use_tls:
                         server.starttls()
                         
