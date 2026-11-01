@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Animated,
+  Easing,
 } from 'react-native';
 import {
   ShoppingBag,
@@ -20,17 +22,20 @@ import {
   Truck,
   ShieldCheck,
   ChevronRight,
-  Package,
   CreditCard,
   Wallet,
   ArrowLeft,
+  Banknote,
+  Compass,
+  Check,
+  Pill,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
 import { patientService, PrescriptionItem } from '../../services/patient.service';
-import { Colors } from '../../constants/theme';
-import { Button } from '../common/Button';
-import { MedicalLoadingIndicator } from '../common/MedicalLoadingIndicator';
+import { useTheme } from '../../context/ThemeContext';
+import { DeliveryLocationPickerModal } from './DeliveryLocationPickerModal';
 import { formatErrorMessage } from '../../lib/api';
 
 interface OrderMedicinesModalProps {
@@ -52,7 +57,7 @@ interface OrderMedicinesModalProps {
   onSuccess?: (order?: any) => void;
 }
 
-type OrderStep = 'order_details' | 'payment' | 'success';
+type OrderStep = 'order_details' | 'payment' | 'animating_payment' | 'success';
 
 export function OrderMedicinesModal({
   visible,
@@ -64,17 +69,30 @@ export function OrderMedicinesModal({
   onSuccess,
 }: OrderMedicinesModalProps) {
   const router = useRouter();
+  const { theme, isDark } = useTheme();
+
   const [step, setStep] = useState<OrderStep>('order_details');
   const [prescriptions, setPrescriptions] = useState<PrescriptionItem[]>([]);
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
-  const [selectedPrescriptionId, setSelectedPrescriptionId] = useState<string | null>(initialPrescriptionId || null);
-  const [orderMode, setOrderMode] = useState<'prescription' | 'custom'>('prescription');
-  const [customMedicineList, setCustomMedicineList] = useState('');
+  const [selectedPrescriptionId, setSelectedPrescriptionId] = useState<string | null>(
+    initialPrescriptionId || null
+  );
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
   const [defaultPharmacy, setDefaultPharmacy] = useState<any | null>(null);
+
+  // Map & Pin location modal
+  const [mapPickerVisible, setMapPickerVisible] = useState(false);
+
+  // Selected Payment Method for Animation
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'UPI' | 'CARD' | 'COD'>('UPI');
+
+  // Animation values
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0.8)).current;
+  const textOpacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
@@ -82,12 +100,10 @@ export function OrderMedicinesModal({
       setCreatedOrder(null);
       if (initialPrescriptionId) {
         setSelectedPrescriptionId(initialPrescriptionId);
-        setOrderMode('prescription');
       }
       loadInitialData();
     } else {
       setSelectedPrescriptionId(null);
-      setCustomMedicineList('');
       setNotes('');
     }
   }, [visible, initialPrescriptionId]);
@@ -99,7 +115,9 @@ export function OrderMedicinesModal({
         patientService.getPrescriptions().catch(() => []),
         (async () => {
           try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
             if (user?.id) {
               return await patientService.getProfile(user.id);
             }
@@ -108,7 +126,11 @@ export function OrderMedicinesModal({
           }
         })(),
         (async () => {
-          if (!pharmacyData?.pharmacy_id && !pharmacyData?.pharmacy_user_id && !pharmacyData?.resource_id) {
+          if (
+            !pharmacyData?.pharmacy_id &&
+            !pharmacyData?.pharmacy_user_id &&
+            !pharmacyData?.resource_id
+          ) {
             try {
               const { data: pharm } = await supabase
                 .from('pharmacies')
@@ -136,11 +158,8 @@ export function OrderMedicinesModal({
       setPrescriptions(rxs);
       if (initialPrescriptionId) {
         setSelectedPrescriptionId(initialPrescriptionId);
-        setOrderMode('prescription');
       } else if (rxs.length > 0) {
         setSelectedPrescriptionId(rxs[0].id);
-      } else {
-        setOrderMode('custom');
       }
 
       if (profile?.address) {
@@ -161,9 +180,14 @@ export function OrderMedicinesModal({
     activePharm?.pharmacy_id ||
     activePharm?.resource_id ||
     activePharm?.data?.pharmacy_id;
-  const pharmacyName = activePharm?.business_name || activePharm?.data?.business_name || 'Verified Dispensary';
-  const pharmacyAddress = activePharm?.address || activePharm?.data?.address || 'Licensed MedSync Center';
-  const pharmacyPhone = activePharm?.phone || activePharm?.contact_number || activePharm?.data?.phone || '';
+  const pharmacyName =
+    activePharm?.business_name || activePharm?.data?.business_name || 'Verified Dispensary';
+  const pharmacyAddress =
+    activePharm?.address || activePharm?.data?.address || 'Licensed MedSync Center';
+  const pharmacyPhone =
+    activePharm?.phone || activePharm?.contact_number || activePharm?.data?.phone || '';
+
+  const selectedPrescription = prescriptions.find((rx) => rx.id === selectedPrescriptionId);
 
   const handleProceedToPayment = () => {
     if (!pharmacyId) {
@@ -171,52 +195,100 @@ export function OrderMedicinesModal({
       return;
     }
 
+    if (!selectedPrescriptionId) {
+      Alert.alert(
+        'Select Prescription',
+        'Please select an active verified prescription to order your medicines.'
+      );
+      return;
+    }
+
     if (!deliveryAddress.trim()) {
-      Alert.alert('Delivery Address Required', 'Please enter your delivery address.');
-      return;
-    }
-
-    if (orderMode === 'prescription' && !selectedPrescriptionId) {
-      Alert.alert('Select Prescription', 'Please choose a prescription or switch to custom medicines.');
-      return;
-    }
-
-    if (orderMode === 'custom' && !customMedicineList.trim()) {
-      Alert.alert('Medicine List Required', 'Please type the medicines you need from this pharmacy.');
+      Alert.alert(
+        'Delivery Address Required',
+        'Please enter or pin your delivery address on the map.'
+      );
       return;
     }
 
     setStep('payment');
   };
 
-  const handleExecutePayment = async (method: 'CARD' | 'PAYPAL') => {
+  // Trigger payment animation first, then place order
+  const handleSelectPaymentMethod = (method: 'UPI' | 'CARD' | 'COD') => {
+    setSelectedPaymentMethod(method);
+    setStep('animating_payment');
+
+    // Haptic feedback
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+    // Start sleek payment animations
+    scaleAnim.setValue(0);
+    pulseAnim.setValue(0.8);
+    textOpacityAnim.setValue(0);
+
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 5,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(textOpacityAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: 200,
+        useNativeDriver: true,
+      }),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.15,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.95,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ),
+    ]).start();
+
+    // After animation displays clearly (1.6s), execute backend order placement
+    setTimeout(() => {
+      executeOrderPlacement(method);
+    }, 1600);
+  };
+
+  const executeOrderPlacement = async (method: 'UPI' | 'CARD' | 'COD') => {
     setIsSubmitting(true);
     try {
-      // 1. Place the order
+      // 1. Place the order with backend
       const order = await patientService.placeOrder({
         pharmacy_id: pharmacyId!,
-        prescription_id: orderMode === 'prescription' ? selectedPrescriptionId : undefined,
+        prescription_id: selectedPrescriptionId!,
         delivery_address: deliveryAddress.trim(),
-        notes: notes.trim() || (orderMode === 'custom' ? `Medicines: ${customMedicineList}` : undefined),
+        notes: notes.trim() || undefined,
       });
 
-      // 2. Process the simulated payment walkthrough
+      // 2. Process the payment record (UPI / CARD / COD)
       const orderId = order.id || order.order_id;
       if (orderId) {
-        await patientService.processPayment(orderId, 45.0, method);
+        await patientService.processPayment(orderId, 399.0, method);
       }
 
       setCreatedOrder(order);
       setStep('success');
 
-      if (onOrderSuccess) {
-        onOrderSuccess(order);
-      }
-      if (onSuccess) {
-        onSuccess(order);
-      }
+      if (onOrderSuccess) onOrderSuccess(order);
+      if (onSuccess) onSuccess(order);
     } catch (err: any) {
-      Alert.alert('Payment & Order Failed', formatErrorMessage(err));
+      Alert.alert('Order Placement Notice', formatErrorMessage(err));
+      setStep('payment');
     } finally {
       setIsSubmitting(false);
     }
@@ -228,228 +300,413 @@ export function OrderMedicinesModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.sheetContainer}>
-          {/* Header */}
-          <View style={styles.headerRow}>
-            <View style={styles.headerTitleBox}>
-              {step === 'payment' ? (
-                <TouchableOpacity onPress={() => setStep('order_details')} style={styles.backBtn}>
-                  <ArrowLeft size={20} color="#0F172A" />
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.iconCircle}>
-                  <ShoppingBag size={20} color={Colors.roles.patient.primary} />
-                </View>
-              )}
-              <View>
-                <Text style={styles.headerTitle}>
-                  {step === 'payment' ? 'Complete Payment' : 'Order Prescription'}
-                </Text>
-                <Text style={styles.headerSubtitle}>
-                  {step === 'payment'
-                    ? 'Simulated Payment Walkthrough'
-                    : 'Verified Pharmacy Delivery'}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color="#64748B" />
-            </TouchableOpacity>
-          </View>
-
-          {isSubmitting ? (
-            <View style={styles.loadingContainer}>
-              <MedicalLoadingIndicator
-                message="Processing Simulated Payment..."
-                subMessage="Routing encrypted payment authorization to pharmacy"
-                color={Colors.roles.patient.primary}
-              />
-            </View>
-          ) : step === 'success' ? (
-            /* ── STEP 3: SUCCESS ── */
-            <View style={styles.successContainer}>
-              <View style={styles.successIconCircle}>
-                <CheckCircle2 size={44} color="#10B981" />
-              </View>
-              <Text style={styles.successTitle}>Order Placed & Paid!</Text>
-              <Text style={styles.successSubtitle}>
-                Payment of $45.00 has been verified. Your prescription order has been sent to{' '}
-                <Text style={{ fontWeight: '700', color: '#0F172A' }}>{pharmacyName}</Text> for packing and dispatch.
-              </Text>
-
-              {createdOrder?.tracking_number && (
-                <View style={styles.trackingPill}>
-                  <Truck size={16} color="#10B981" />
-                  <Text style={styles.trackingPillText}>
-                    Tracking: {createdOrder.tracking_number}
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.successBtnRow}>
-                <Button
-                  title="Track in Orders"
-                  onPress={handleGoToOrders}
-                  style={styles.trackBtn}
-                />
-                <Button
-                  title="Done"
-                  variant="outline"
-                  onPress={onClose}
-                  style={styles.closeSuccessBtn}
-                />
-              </View>
-            </View>
-          ) : step === 'payment' ? (
-            /* ── STEP 2: PAYMENT SPOOF / SIMULATED CHECKOUT ── */
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-              <View style={styles.pricingCard}>
-                <Text style={styles.pricingCardTitle}>Order Cost Breakdown</Text>
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Prescription Medications Total</Text>
-                  <Text style={styles.priceVal}>$35.00</Text>
-                </View>
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Priority Doorstep Delivery</Text>
-                  <Text style={styles.priceVal}>$10.00</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Total Due (USD)</Text>
-                  <Text style={styles.totalVal}>$45.00</Text>
-                </View>
-              </View>
-
-              <View style={styles.spoofNotice}>
-                <ShieldCheck size={16} color="#059669" />
-                <Text style={styles.spoofNoticeText}>
-                  Test Environment: Simulated Payment Walkthrough. No real funds will be charged.
-                </Text>
-              </View>
-
-              {/* Payment Methods */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Select Simulated Payment Method</Text>
-
-                <TouchableOpacity
-                  style={styles.paymentMethodBtn}
-                  onPress={() => handleExecutePayment('CARD')}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.payIconBoxBlue}>
-                    <CreditCard size={20} color="#2563EB" />
-                  </View>
-                  <View style={styles.payTextBox}>
-                    <Text style={styles.payTitle}>Credit / Debit Card</Text>
-                    <Text style={styles.paySub}>Instant verification via simulated gateway</Text>
-                  </View>
-                  <ChevronRight size={18} color="#94A3B8" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.paymentMethodBtn, styles.payMethodPaypal]}
-                  onPress={() => handleExecutePayment('PAYPAL')}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.payIconBoxAmber}>
-                    <Wallet size={20} color="#D97706" />
-                  </View>
-                  <View style={styles.payTextBox}>
-                    <Text style={styles.payTitle}>PayPal / UPI Digital Wallet</Text>
-                    <Text style={styles.paySub}>Simulate seamless 1-tap checkout</Text>
-                  </View>
-                  <ChevronRight size={18} color="#94A3B8" />
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          ) : (
-            /* ── STEP 1: ORDER DETAILS ── */
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-              {/* Pharmacy Context Banner */}
-              <View style={styles.pharmacyCard}>
-                <View style={styles.pharmacyHeader}>
-                  <Building2 size={18} color="#059669" />
-                  <Text style={styles.pharmacyName}>{pharmacyName}</Text>
-                  <View style={styles.verifiedTag}>
-                    <ShieldCheck size={12} color="#059669" />
-                    <Text style={styles.verifiedTagText}>VERIFIED</Text>
-                  </View>
-                </View>
-                <View style={styles.metaRow}>
-                  <MapPin size={13} color="#64748B" />
-                  <Text style={styles.pharmacyMeta}>{pharmacyAddress}</Text>
-                </View>
-                {pharmacyPhone ? (
-                  <View style={styles.metaRow}>
-                    <Phone size={13} color="#64748B" />
-                    <Text style={styles.pharmacyMeta}>{pharmacyPhone}</Text>
-                  </View>
-                ) : null}
-              </View>
-
-              {/* Order Mode Switcher */}
-              <View style={styles.segmentedControl}>
-                <TouchableOpacity
-                  style={[
-                    styles.segmentBtn,
-                    orderMode === 'prescription' && styles.segmentBtnActive,
-                  ]}
-                  onPress={() => setOrderMode('prescription')}
-                >
-                  <FileText
-                    size={15}
-                    color={orderMode === 'prescription' ? Colors.roles.patient.primary : '#64748B'}
-                  />
-                  <Text
+    <>
+      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+        <View style={styles.overlay}>
+          <View
+            style={[
+              styles.sheetContainer,
+              { backgroundColor: isDark ? '#0D0F14' : '#FFFFFF' },
+            ]}
+          >
+            {/* Header Row */}
+            <View
+              style={[
+                styles.headerRow,
+                { borderBottomColor: isDark ? '#1F2430' : '#F1F5F9' },
+              ]}
+            >
+              <View style={styles.headerTitleBox}>
+                {step === 'payment' ? (
+                  <TouchableOpacity
+                    onPress={() => setStep('order_details')}
                     style={[
-                      styles.segmentText,
-                      orderMode === 'prescription' && styles.segmentTextActive,
+                      styles.backBtn,
+                      { backgroundColor: isDark ? '#181B22' : '#F1F5F9' },
                     ]}
                   >
-                    From Prescription
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.segmentBtn,
-                    orderMode === 'custom' && styles.segmentBtnActive,
-                  ]}
-                  onPress={() => setOrderMode('custom')}
-                >
-                  <Package
-                    size={15}
-                    color={orderMode === 'custom' ? Colors.roles.patient.primary : '#64748B'}
-                  />
-                  <Text
+                    <ArrowLeft size={18} color={theme.text} />
+                  </TouchableOpacity>
+                ) : (
+                  <View
                     style={[
-                      styles.segmentText,
-                      orderMode === 'custom' && styles.segmentTextActive,
+                      styles.iconCircle,
+                      { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ECFDF5' },
                     ]}
                   >
-                    Custom Medicine
+                    <ShoppingBag size={20} color="#10B981" />
+                  </View>
+                )}
+                <View>
+                  <Text style={[styles.headerTitle, { color: theme.text }]}>
+                    {step === 'payment'
+                      ? 'Complete Payment'
+                      : step === 'animating_payment'
+                      ? 'Processing Order'
+                      : 'Order Prescription'}
                   </Text>
-                </TouchableOpacity>
+                  <Text style={[styles.headerSubtitle, { color: theme.textMuted }]}>
+                    {step === 'payment'
+                      ? 'Select Payment Method'
+                      : step === 'animating_payment'
+                      ? 'Authorizing payment'
+                      : 'Verified Pharmacy Delivery'}
+                  </Text>
+                </View>
               </View>
+              {step !== 'animating_payment' && (
+                <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                  <X size={20} color={theme.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
 
-              {/* Prescription Picker */}
-              {orderMode === 'prescription' ? (
+            {/* ── STEP: ANIMATING PAYMENT ("PAID" ANIMATION) ── */}
+            {step === 'animating_payment' ? (
+              <View style={styles.animatingContainer}>
+                {/* Expanding Pulse Ring */}
+                <Animated.View
+                  style={[
+                    styles.animationPulseRing,
+                    {
+                      borderColor:
+                        selectedPaymentMethod === 'COD' ? '#F59E0B' : '#10B981',
+                      transform: [{ scale: pulseAnim }],
+                    },
+                  ]}
+                />
+
+                {/* Main Checkmark / Currency Badge */}
+                <Animated.View
+                  style={[
+                    styles.animationCircle,
+                    {
+                      backgroundColor:
+                        selectedPaymentMethod === 'COD'
+                          ? isDark
+                            ? 'rgba(245, 158, 11, 0.2)'
+                            : '#FEF3C7'
+                          : isDark
+                          ? 'rgba(16, 185, 129, 0.2)'
+                          : '#D1FAE5',
+                      borderColor:
+                        selectedPaymentMethod === 'COD' ? '#F59E0B' : '#10B981',
+                      transform: [{ scale: scaleAnim }],
+                    },
+                  ]}
+                >
+                  <Check
+                    size={46}
+                    color={selectedPaymentMethod === 'COD' ? '#D97706' : '#059669'}
+                    strokeWidth={3.5}
+                  />
+                </Animated.View>
+
+                {/* Animated Text: "PAID" */}
+                <Animated.View style={{ opacity: textOpacityAnim, alignItems: 'center' }}>
+                  <Text
+                    style={[
+                      styles.paidTitle,
+                      {
+                        color:
+                          selectedPaymentMethod === 'COD' ? '#D97706' : '#10B981',
+                      },
+                    ]}
+                  >
+                    {selectedPaymentMethod === 'COD' ? 'ORDER CONFIRMED' : 'PAID'}
+                  </Text>
+
+                  <View
+                    style={[
+                      styles.paidAmountBadge,
+                      {
+                        backgroundColor: isDark ? '#181B22' : '#F1F5F9',
+                        borderColor: isDark ? '#272B36' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.paidAmountText, { color: theme.text }]}>
+                      ₹399.00 •{' '}
+                      {selectedPaymentMethod === 'COD'
+                        ? 'Cash on Delivery'
+                        : selectedPaymentMethod === 'UPI'
+                        ? 'UPI Instant'
+                        : 'Card Payment'}
+                    </Text>
+                  </View>
+
+                  <Text style={[styles.paidSubtext, { color: theme.textMuted }]}>
+                    Routing encrypted order to {pharmacyName}...
+                  </Text>
+                </Animated.View>
+              </View>
+            ) : step === 'success' ? (
+              /* ── STEP: SUCCESS CONFIRMATION ── */
+              <View style={styles.successContainer}>
+                <View
+                  style={[
+                    styles.successIconCircle,
+                    {
+                      backgroundColor: isDark ? 'rgba(16, 185, 129, 0.18)' : '#D1FAE5',
+                    },
+                  ]}
+                >
+                  <CheckCircle2 size={46} color="#10B981" />
+                </View>
+                <Text style={[styles.successTitle, { color: theme.text }]}>
+                  {selectedPaymentMethod === 'COD'
+                    ? 'Order Placed (COD)!'
+                    : 'Order Placed & Paid!'}
+                </Text>
+                <Text style={[styles.successSubtitle, { color: theme.textSecondary }]}>
+                  {selectedPaymentMethod === 'COD'
+                    ? 'Your order of ₹399.00 has been confirmed. Please pay in cash upon doorstep delivery from '
+                    : 'Payment of ₹399.00 has been verified. Your prescription order has been dispatched to '}
+                  <Text style={{ fontWeight: '700', color: theme.text }}>
+                    {pharmacyName}
+                  </Text>{' '}
+                  for immediate packaging.
+                </Text>
+
+                {createdOrder?.tracking_number && (
+                  <View
+                    style={[
+                      styles.trackingPill,
+                      {
+                        backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5',
+                        borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#A7F3D0',
+                      },
+                    ]}
+                  >
+                    <Truck size={16} color="#10B981" />
+                    <Text style={styles.trackingPillText}>
+                      Tracking: {createdOrder.tracking_number}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.successBtnRow}>
+                  <TouchableOpacity
+                    style={styles.trackBtn}
+                    onPress={handleGoToOrders}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={styles.trackBtnText}>Track Order in Records</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.closeSuccessBtn,
+                      {
+                        backgroundColor: isDark ? '#181B22' : '#F1F5F9',
+                        borderColor: isDark ? '#272B36' : '#E2E8F0',
+                      },
+                    ]}
+                    onPress={onClose}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.closeSuccessBtnText, { color: theme.text }]}>
+                      Done
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : step === 'payment' ? (
+              /* ── STEP 2: PAYMENT METHOD SELECTION ── */
+              <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Cost Breakdown in Rupees */}
+                <View
+                  style={[
+                    styles.pricingCard,
+                    {
+                      backgroundColor: isDark ? '#12141A' : '#F8FAFC',
+                      borderColor: isDark ? '#1F2430' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.pricingCardTitle, { color: theme.text }]}>
+                    Order Cost Breakdown
+                  </Text>
+                  <View style={styles.priceRow}>
+                    <Text style={[styles.priceLabel, { color: theme.textMuted }]}>
+                      Prescription Medications Total
+                    </Text>
+                    <Text style={[styles.priceVal, { color: theme.text }]}>₹350.00</Text>
+                  </View>
+                  <View style={styles.priceRow}>
+                    <Text style={[styles.priceLabel, { color: theme.textMuted }]}>
+                      Priority Doorstep Delivery
+                    </Text>
+                    <Text style={[styles.priceVal, { color: theme.text }]}>₹49.00</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.divider,
+                      { backgroundColor: isDark ? '#1F2430' : '#E2E8F0' },
+                    ]}
+                  />
+                  <View style={styles.totalRow}>
+                    <Text style={[styles.totalLabel, { color: theme.text }]}>
+                      Total Due (INR)
+                    </Text>
+                    <Text style={styles.totalVal}>₹399.00</Text>
+                  </View>
+                </View>
+
+                {/* Payment Methods */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Select Active Prescription</Text>
-                  {loadingPrescriptions ? (
-                    <Text style={styles.hintText}>Loading your prescriptions...</Text>
-                  ) : prescriptions.length === 0 ? (
-                    <View style={styles.emptyBox}>
-                      <Text style={styles.emptyText}>
-                        No active digital prescriptions found on your account.
+                  <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+                    Select Payment Method
+                  </Text>
+
+                  {/* 1. UPI / QR Digital Wallet */}
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentMethodBtn,
+                      {
+                        backgroundColor: isDark ? '#12141A' : '#FFFFFF',
+                        borderColor: isDark ? '#272B36' : '#E2E8F0',
+                      },
+                    ]}
+                    onPress={() => handleSelectPaymentMethod('UPI')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.payIconBoxEmerald}>
+                      <Wallet size={20} color="#10B981" />
+                    </View>
+                    <View style={styles.payTextBox}>
+                      <Text style={[styles.payTitle, { color: theme.text }]}>
+                        UPI / QR Digital Wallet
                       </Text>
-                      <TouchableOpacity onPress={() => setOrderMode('custom')}>
-                        <Text style={styles.switchLink}>
-                          Switch to typing custom medicine names →
-                        </Text>
-                      </TouchableOpacity>
+                      <Text style={[styles.paySub, { color: theme.textMuted }]}>
+                        Google Pay, PhonePe, Paytm, BHIM UPI
+                      </Text>
+                    </View>
+                    <ChevronRight size={18} color={theme.textMuted} />
+                  </TouchableOpacity>
+
+                  {/* 2. Credit / Debit Card */}
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentMethodBtn,
+                      {
+                        backgroundColor: isDark ? '#12141A' : '#FFFFFF',
+                        borderColor: isDark ? '#272B36' : '#E2E8F0',
+                      },
+                    ]}
+                    onPress={() => handleSelectPaymentMethod('CARD')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.payIconBoxBlue}>
+                      <CreditCard size={20} color="#3B82F6" />
+                    </View>
+                    <View style={styles.payTextBox}>
+                      <Text style={[styles.payTitle, { color: theme.text }]}>
+                        Credit / Debit Card
+                      </Text>
+                      <Text style={[styles.paySub, { color: theme.textMuted }]}>
+                        Visa, Mastercard, RuPay Cards
+                      </Text>
+                    </View>
+                    <ChevronRight size={18} color={theme.textMuted} />
+                  </TouchableOpacity>
+
+                  {/* 3. Cash on Delivery (COD) */}
+                  <TouchableOpacity
+                    style={[
+                      styles.paymentMethodBtn,
+                      styles.payMethodCod,
+                      {
+                        backgroundColor: isDark ? '#17140B' : '#FFFBEB',
+                        borderColor: isDark ? '#78350F' : '#FDE68A',
+                      },
+                    ]}
+                    onPress={() => handleSelectPaymentMethod('COD')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.payIconBoxAmber}>
+                      <Banknote size={20} color="#D97706" />
+                    </View>
+                    <View style={styles.payTextBox}>
+                      <Text style={[styles.payTitle, { color: theme.text }]}>
+                        Cash on Delivery (COD)
+                      </Text>
+                      <Text style={[styles.paySub, { color: isDark ? '#F59E0B' : '#B45309' }]}>
+                        Pay with cash upon medicine delivery at your doorstep
+                      </Text>
+                    </View>
+                    <ChevronRight size={18} color={theme.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            ) : (
+              /* ── STEP 1: ORDER PRESCRIPTION DETAILS ── */
+              <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Pharmacy Context Banner */}
+                <View
+                  style={[
+                    styles.pharmacyCard,
+                    {
+                      backgroundColor: isDark ? '#0A1A14' : '#ECFDF5',
+                      borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#A7F3D0',
+                    },
+                  ]}
+                >
+                  <View style={styles.pharmacyHeader}>
+                    <Building2 size={18} color="#10B981" />
+                    <Text style={[styles.pharmacyName, { color: isDark ? '#34D399' : '#065F46' }]}>
+                      {pharmacyName}
+                    </Text>
+                    <View style={styles.verifiedTag}>
+                      <ShieldCheck size={12} color="#059669" />
+                      <Text style={styles.verifiedTagText}>VERIFIED</Text>
+                    </View>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <MapPin size={13} color={isDark ? '#6EE7B7' : '#64748B'} />
+                    <Text style={[styles.pharmacyMeta, { color: isDark ? '#A7F3D0' : '#475569' }]}>
+                      {pharmacyAddress}
+                    </Text>
+                  </View>
+                  {pharmacyPhone ? (
+                    <View style={styles.metaRow}>
+                      <Phone size={13} color={isDark ? '#6EE7B7' : '#64748B'} />
+                      <Text style={[styles.pharmacyMeta, { color: isDark ? '#A7F3D0' : '#475569' }]}>
+                        {pharmacyPhone}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Prescription Selector (Strictly from verified prescriptions) */}
+                <View style={styles.section}>
+                  <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+                    Select Active Digital Prescription
+                  </Text>
+                  {loadingPrescriptions ? (
+                    <Text style={[styles.hintText, { color: theme.textMuted }]}>
+                      Loading your prescriptions...
+                    </Text>
+                  ) : prescriptions.length === 0 ? (
+                    <View
+                      style={[
+                        styles.emptyBox,
+                        {
+                          backgroundColor: isDark ? '#12141A' : '#F8FAFC',
+                          borderColor: isDark ? '#1F2430' : '#E2E8F0',
+                        },
+                      ]}
+                    >
+                      <Pill size={24} color={theme.textMuted} />
+                      <Text style={[styles.emptyText, { color: theme.textMuted }]}>
+                        No active digital prescriptions found on your account. Please consult your doctor to receive an encrypted digital prescription.
+                      </Text>
                     </View>
                   ) : (
                     prescriptions.map((rx) => {
@@ -457,13 +714,33 @@ export function OrderMedicinesModal({
                       return (
                         <TouchableOpacity
                           key={rx.id}
-                          style={[styles.rxCard, isSelected && styles.rxCardSelected]}
+                          style={[
+                            styles.rxCard,
+                            {
+                              backgroundColor: isSelected
+                                ? isDark
+                                  ? 'rgba(16, 185, 129, 0.12)'
+                                  : '#F0FDF4'
+                                : isDark
+                                ? '#12141A'
+                                : '#F8FAFC',
+                              borderColor: isSelected
+                                ? '#10B981'
+                                : isDark
+                                ? '#1F2430'
+                                : '#E2E8F0',
+                            },
+                          ]}
                           onPress={() => setSelectedPrescriptionId(rx.id)}
+                          activeOpacity={0.8}
                         >
                           <View style={styles.rxHeader}>
                             <View style={styles.rxTitleBox}>
-                              <Text style={styles.rxDiagnosis}>{rx.diagnosis}</Text>
-                              <Text style={styles.rxDate}>
+                              <Text style={[styles.rxDiagnosis, { color: theme.text }]}>
+                                {rx.diagnosis || 'Clinical Prescription'}
+                              </Text>
+                              <Text style={[styles.rxDate, { color: theme.textMuted }]}>
+                                Issued:{' '}
                                 {rx.created_at
                                   ? new Date(rx.created_at).toLocaleDateString()
                                   : 'Active'}
@@ -478,86 +755,128 @@ export function OrderMedicinesModal({
                               {isSelected && <View style={styles.radioInner} />}
                             </View>
                           </View>
+
                           {rx.doctor?.full_name ? (
-                            <Text style={styles.rxDoctor}>Prescribed by: Dr. {rx.doctor.full_name}</Text>
+                            <Text style={[styles.rxDoctor, { color: theme.textSecondary }]}>
+                              Prescribing Physician: Dr. {rx.doctor.full_name}
+                            </Text>
                           ) : null}
                         </TouchableOpacity>
                       );
                     })
                   )}
                 </View>
-              ) : (
-                /* Custom Medicine Entry */
+
+                {/* Delivery Address with Interactive Map & Pin Selector */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Medicines / Required Items</Text>
+                  <View style={styles.addressLabelRow}>
+                    <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+                      Delivery Address *
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.mapPinButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(59, 130, 246, 0.16)' : '#EFF6FF',
+                          borderColor: isDark ? 'rgba(59, 130, 246, 0.35)' : '#BFDBFE',
+                        },
+                      ]}
+                      onPress={() => setMapPickerVisible(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Compass size={13} color="#3B82F6" style={{ marginRight: 4 }} />
+                      <Text style={styles.mapPinButtonText}>Pin on Map</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <TextInput
-                    style={styles.textArea}
-                    placeholder="e.g. Paracetamol 650mg (1 strip), Cetirizine 10mg (10 tabs)"
-                    placeholderTextColor="#94A3B8"
-                    value={customMedicineList}
-                    onChangeText={setCustomMedicineList}
-                    multiline
-                    numberOfLines={3}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: isDark ? '#12141A' : '#F8FAFC',
+                        borderColor: isDark ? '#1F2430' : '#E2E8F0',
+                        color: theme.text,
+                      },
+                    ]}
+                    placeholder="Enter complete street address, door no, or pin on map"
+                    placeholderTextColor={theme.inputPlaceholder}
+                    value={deliveryAddress}
+                    onChangeText={setDeliveryAddress}
                   />
                 </View>
-              )}
 
-              {/* Delivery Address */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Delivery Address *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter complete delivery street address"
-                  placeholderTextColor="#94A3B8"
-                  value={deliveryAddress}
-                  onChangeText={setDeliveryAddress}
-                />
-              </View>
+                {/* Delivery Notes */}
+                <View style={styles.section}>
+                  <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+                    Delivery Notes / Instructions (Optional)
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: isDark ? '#12141A' : '#F8FAFC',
+                        borderColor: isDark ? '#1F2430' : '#E2E8F0',
+                        color: theme.text,
+                      },
+                    ]}
+                    placeholder="e.g. Leave with security / Call on arrival"
+                    placeholderTextColor={theme.inputPlaceholder}
+                    value={notes}
+                    onChangeText={setNotes}
+                  />
+                </View>
 
-              {/* Delivery Notes */}
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Delivery Notes / Instructions (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Deliver between 2 PM - 5 PM, call on arrival"
-                  placeholderTextColor="#94A3B8"
-                  value={notes}
-                  onChangeText={setNotes}
-                />
-              </View>
-
-              {/* Proceed CTA */}
-              <Button
-                title="Proceed to Payment ($45.00)"
-                onPress={handleProceedToPayment}
-                iconRight={<ChevronRight size={18} color="#FFFFFF" />}
-                style={styles.submitBtn}
-              />
-            </ScrollView>
-          )}
+                {/* Proceed CTA in Rupees */}
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    {
+                      opacity: !selectedPrescriptionId || !deliveryAddress.trim() ? 0.6 : 1,
+                    },
+                  ]}
+                  onPress={handleProceedToPayment}
+                  disabled={!selectedPrescriptionId || !deliveryAddress.trim()}
+                  activeOpacity={0.88}
+                >
+                  <Text style={styles.submitBtnText}>Proceed to Payment (₹399.00)</Text>
+                  <ChevronRight size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+
+      {/* ── Map & Pin Location Picker Modal ── */}
+      <DeliveryLocationPickerModal
+        visible={mapPickerVisible}
+        initialAddress={deliveryAddress}
+        onClose={() => setMapPickerVisible(false)}
+        onLocationSelected={(address) => {
+          setDeliveryAddress(address);
+        }}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '92%',
     paddingBottom: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
     elevation: 20,
+    overflow: 'hidden',
   },
   headerRow: {
     flexDirection: 'row',
@@ -567,7 +886,6 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   headerTitleBox: {
     flexDirection: 'row',
@@ -575,45 +893,43 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   backBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconCircle: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
+    fontSize: 11.5,
+    fontWeight: '500',
+  },
+  hintText: {
+    fontSize: 13,
+    fontStyle: 'italic',
   },
   closeBtn: {
     padding: 6,
     borderRadius: 8,
-    backgroundColor: '#F8FAFC',
   },
   scrollContent: {
     padding: 20,
     gap: 16,
   },
-  loadingContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-  },
   pharmacyCard: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
     padding: 14,
     gap: 6,
   },
@@ -625,14 +941,13 @@ const styles = StyleSheet.create({
   pharmacyName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#065F46',
     flex: 1,
   },
   verifiedTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -640,7 +955,7 @@ const styles = StyleSheet.create({
   verifiedTagText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#059669',
+    color: '#10B981',
   },
   metaRow: {
     flexDirection: 'row',
@@ -649,60 +964,39 @@ const styles = StyleSheet.create({
   },
   pharmacyMeta: {
     fontSize: 12,
-    color: '#475569',
-  },
-  segmentedControl: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
-    padding: 4,
-    gap: 6,
-  },
-  segmentBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  segmentBtnActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  segmentText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  segmentTextActive: {
-    color: '#059669',
   },
   section: {
-    gap: 10,
+    gap: 8,
   },
   sectionLabel: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
-    color: '#334155',
+    letterSpacing: 0.2,
+  },
+  addressLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  mapPinButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  mapPinButtonText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3B82F6',
   },
   rxCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    padding: 12,
-    gap: 4,
+    padding: 14,
+    gap: 6,
     marginBottom: 4,
-  },
-  rxCardSelected: {
-    borderColor: '#10B981',
-    backgroundColor: '#F0FDF4',
   },
   rxHeader: {
     flexDirection: 'row',
@@ -715,24 +1009,20 @@ const styles = StyleSheet.create({
   rxDiagnosis: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
   },
   rxDate: {
     fontSize: 11,
-    color: '#64748B',
     marginTop: 2,
   },
   rxDoctor: {
     fontSize: 12,
-    color: '#475569',
-    marginTop: 2,
   },
   radioCircle: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#CBD5E1',
+    borderColor: '#94A3B8',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -746,66 +1036,53 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   emptyBox: {
-    padding: 16,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
+    padding: 20,
+    borderRadius: 14,
+    borderWidth: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 10,
   },
   emptyText: {
-    fontSize: 13,
-    color: '#64748B',
+    fontSize: 12.5,
     textAlign: 'center',
-  },
-  switchLink: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#10B981',
-    marginTop: 4,
+    lineHeight: 18,
   },
   input: {
-    height: 46,
-    borderRadius: 10,
+    height: 48,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
     paddingHorizontal: 14,
-    fontSize: 14,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-  },
-  textArea: {
-    height: 76,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-    textAlignVertical: 'top',
-  },
-  hintText: {
-    fontSize: 13,
-    color: '#64748B',
-    fontStyle: 'italic',
+    fontSize: 13.5,
   },
   submitBtn: {
-    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#10B981',
+    height: 50,
+    borderRadius: 14,
+    marginTop: 8,
+    gap: 8,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  submitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14.5,
+    fontWeight: '700',
   },
   pricingCard: {
-    backgroundColor: '#F8FAFC',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
     padding: 16,
     gap: 10,
   },
   pricingCardTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
     marginBottom: 2,
   },
   priceRow: {
@@ -815,16 +1092,13 @@ const styles = StyleSheet.create({
   },
   priceLabel: {
     fontSize: 13,
-    color: '#64748B',
   },
   priceVal: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1E293B',
   },
   divider: {
     height: 1,
-    backgroundColor: '#E2E8F0',
     marginVertical: 4,
   },
   totalRow: {
@@ -835,56 +1109,44 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#0F172A',
   },
   totalVal: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '800',
-    color: '#059669',
-  },
-  spoofNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    padding: 12,
-    borderRadius: 12,
-  },
-  spoofNoticeText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#065F46',
-    lineHeight: 16,
+    color: '#10B981',
   },
   paymentMethodBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
   },
-  payMethodPaypal: {
-    borderColor: '#FDE68A',
-    backgroundColor: '#FFFBEB',
+  payMethodCod: {
+    borderWidth: 1.5,
+  },
+  payIconBoxEmerald: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   payIconBoxBlue: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#EFF6FF',
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   payIconBoxAmber: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FEF3C7',
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -894,23 +1156,67 @@ const styles = StyleSheet.create({
   payTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
   },
   paySub: {
-    fontSize: 11,
-    color: '#64748B',
+    fontSize: 11.5,
     marginTop: 2,
   },
+  animatingContainer: {
+    paddingVertical: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  animationPulseRing: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 2,
+  },
+  animationCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  paidTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  paidAmountBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  paidAmountText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  paidSubtext: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   successContainer: {
-    padding: 28,
+    padding: 26,
     alignItems: 'center',
     gap: 12,
   },
   successIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#D1FAE5',
+    width: 74,
+    height: 74,
+    borderRadius: 37,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
@@ -918,12 +1224,10 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#065F46',
     textAlign: 'center',
   },
   successSubtitle: {
     fontSize: 13,
-    color: '#475569',
     textAlign: 'center',
     lineHeight: 19,
   },
@@ -931,18 +1235,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#ECFDF5',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
     marginTop: 4,
   },
   trackingPillText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#065F46',
+    color: '#10B981',
   },
   successBtnRow: {
     width: '100%',
@@ -951,8 +1253,25 @@ const styles = StyleSheet.create({
   },
   trackBtn: {
     backgroundColor: '#10B981',
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   closeSuccessBtn: {
-    borderColor: '#CBD5E1',
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeSuccessBtnText: {
+    fontSize: 13.5,
+    fontWeight: '600',
   },
 });

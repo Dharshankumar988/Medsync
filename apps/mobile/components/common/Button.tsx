@@ -9,7 +9,8 @@ import {
   TextStyle,
   StyleProp,
 } from 'react-native';
-import { Colors, Radius, Shadows, Typography } from '../../constants/theme';
+import { Colors, Radius, Shadows } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
 type ButtonSize    = 'sm' | 'md' | 'lg';
@@ -40,22 +41,25 @@ export const Button = React.memo(function Button({
   disabled,
   ...props
 }: ButtonProps) {
+  const { theme, isDark } = useTheme();
+
   const containerStyle: ViewStyle = {
     ...styles.base,
     ...sizeStyles[size].container,
-    ...(variant === 'primary'     ? { backgroundColor: color ?? Colors.roles.patient.primary, ...Shadows.button } : {}),
-    ...(variant === 'secondary'   ? styles.secondary : {}),
-    ...(variant === 'outline'     ? styles.outline   : {}),
-    ...(variant === 'ghost'       ? styles.ghost     : {}),
-    ...(variant === 'destructive' ? styles.destructive : {}),
+    ...(variant === 'primary'     ? { backgroundColor: color ?? theme.primaryButton, ...(!isDark ? Shadows.button : {}) } : {}),
+    ...(variant === 'secondary'   ? { backgroundColor: theme.secondaryButton, borderWidth: 1, borderColor: theme.border } : {}),
+    ...(variant === 'outline'     ? { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.border } : {}),
+    ...(variant === 'ghost'       ? { backgroundColor: 'transparent' } : {}),
+    ...(variant === 'destructive' ? { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', borderWidth: 1, borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5' } : {}),
     ...(disabled || loading       ? styles.disabled  : {}),
   };
 
   const textColor =
-    variant === 'primary'     ? '#FFFFFF' :
-    variant === 'destructive' ? Colors.red.text :
-    variant === 'ghost'       ? Colors.textMuted :
-                                Colors.text;
+    variant === 'primary'     ? theme.primaryButtonText :
+    variant === 'destructive' ? '#EF4444' :
+    variant === 'ghost'       ? theme.textMuted :
+    variant === 'secondary'   ? theme.secondaryButtonText :
+                                theme.text;
 
   return (
     <TouchableOpacity
@@ -66,7 +70,7 @@ export const Button = React.memo(function Button({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === 'primary' ? '#FFF' : Colors.roles.patient.primary}
+          color={textColor}
           size="small"
         />
       ) : (
@@ -99,24 +103,6 @@ const styles = StyleSheet.create({
   },
   text: {
     fontWeight: '600',
-  },
-  secondary: {
-    backgroundColor: Colors.cardElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: Colors.borderStrong,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-  },
-  destructive: {
-    backgroundColor: Colors.red.bg,
-    borderWidth: 1,
-    borderColor: Colors.red.border,
   },
   disabled: {
     opacity: 0.45,

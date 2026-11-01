@@ -1,6 +1,9 @@
 import { supabase, getUserProfile, normalizeRole } from '../lib/supabase';
 import api from '../lib/api';
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export const authService = {
   login: async (credentials: { email: string; password: string }) => {
@@ -196,9 +199,10 @@ export const authService = {
     }
 
     if (data?.url) {
-      const canOpen = await Linking.canOpenURL(data.url).catch(() => true);
-      if (canOpen) {
-        await Linking.openURL(data.url);
+      // In-app authentication sheet (Custom Tab) - stays completely inside MedSync
+      const authResult = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      if (authResult.type === 'success' && authResult.url) {
+        return { url: authResult.url };
       }
     }
 

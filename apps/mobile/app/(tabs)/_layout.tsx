@@ -11,6 +11,7 @@ import {
 import { useRole } from '../../providers/role-provider';
 import { useTheme } from '../../context/ThemeContext';
 import { LoadingScreen } from '../../components/layout/LoadingScreen';
+import { FloatingQuickActions } from '../../components/common/FloatingQuickActions';
 
 export default function TabLayout() {
   const { role, isLoading, isAuthenticated } = useRole();
@@ -130,6 +131,9 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
+
+      {/* Floating Action Buttons above bottom menu: Bottom-Left Scan QR & Bottom-Right Pulse AI */}
+      <FloatingQuickActions />
     </View>
   );
 }

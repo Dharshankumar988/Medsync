@@ -18,7 +18,12 @@ let _tokenExpiry: number = 0;
 // Performance Optimization: Deduplication and Caching for GET requests
 const pendingRequests = new Map<string, Promise<AxiosResponse>>();
 const responseCache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_TTL = 30000; // 30 seconds cache for identical GET requests
+const CACHE_TTL = 3000; // 3 seconds deduplication for rapid re-renders
+
+export const clearApiCache = () => {
+  responseCache.clear();
+  pendingRequests.clear();
+};
 
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   // Always use the latest active backend URL (Render or Portable Runner)
@@ -52,11 +57,14 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
 
 api.interceptors.response.use(
   (response: AxiosResponse) => {
-    // Cache the successful GET response
-    if (response.config.method?.toLowerCase() === 'get' && response.config.url) {
+    const method = response.config.method?.toLowerCase();
+    if (method === 'get' && response.config.url) {
       const cacheKey = `${response.config.url}?${new URLSearchParams(response.config.params || {}).toString()}`;
       responseCache.set(cacheKey, { data: response.data, timestamp: Date.now() });
       pendingRequests.delete(cacheKey);
+    } else if (method && ['post', 'put', 'patch', 'delete'].includes(method)) {
+      responseCache.clear();
+      pendingRequests.clear();
     }
     return response;
   },
@@ -102,11 +110,12 @@ const originalGet = api.get;
 // @ts-ignore
 api.get = async function(url: string, config?: any) {
   const cacheKey = `${url}?${new URLSearchParams(config?.params || {}).toString()}`;
-  
+  const shouldSkipCache = config?.noCache || config?.headers?.['Cache-Control'] === 'no-cache';
+
   // 1. Check Cache
   const now = Date.now();
   const cached = responseCache.get(cacheKey);
-  if (cached && now - cached.timestamp < CACHE_TTL) {
+  if (!shouldSkipCache && cached && now - cached.timestamp < CACHE_TTL) {
     return Promise.resolve({
       data: cached.data,
       status: 200,

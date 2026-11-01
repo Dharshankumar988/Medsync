@@ -197,39 +197,21 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Top Disclaimer Bar */}
+      {/* Top Controls Bar */}
       <View
         style={[
           styles.topBar,
           {
             backgroundColor: theme.background,
             borderBottomColor: theme.border,
+            justifyContent: 'flex-end',
+            paddingVertical: 8,
           },
         ]}
       >
-        <View
-          style={[
-            styles.disclaimerBox,
-            {
-              backgroundColor: isDark ? 'rgba(56, 189, 248, 0.1)' : '#F0F9FF',
-              borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
-              borderWidth: 1,
-            },
-          ]}
-        >
-          <ShieldAlert size={14} color="#38BDF8" />
-          <Text
-            style={[
-              styles.disclaimerText,
-              { color: isDark ? '#38BDF8' : '#0284C7' },
-            ]}
-          >
-            Informational assistant only. For urgent emergencies, contact clinic or 911.
-          </Text>
-        </View>
-
-        <TouchableOpacity style={styles.resetBtn} onPress={handleResetChat}>
-          <RotateCcw size={16} color={theme.textMuted} />
+        <TouchableOpacity style={styles.resetBtn} onPress={handleResetChat} activeOpacity={0.75}>
+          <RotateCcw size={15} color={theme.textMuted} style={{ marginRight: 6 }} />
+          <Text style={{ fontSize: 12, color: theme.textMuted, fontWeight: '600' }}>New Consultation</Text>
         </TouchableOpacity>
       </View>
 

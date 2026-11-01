@@ -32,6 +32,7 @@ export default function DeliveryTracking() {
   const [expandedDelivery, setExpandedDelivery] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<Record<string, number>>({});
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmedIds, setConfirmedIds] = useState<Set<string>>(new Set());
 
 
   // Live dynamic random speed progression simulation
@@ -89,14 +90,15 @@ export default function DeliveryTracking() {
 
       toast.success("Package receipt confirmed! Order marked as Delivered.");
       
-      // Update local state immediately
+      // Mark as confirmed in persistent local state
+      setConfirmedIds(prev => new Set(prev).add(logId));
       setLiveProgress(prev => ({ ...prev, [logId]: 100 }));
       setDeliveries(prev => prev.map(d => d.dispensing_log_id === logId ? { ...d, delivery_status: 'DELIVERED', progress: 100 } : d));
 
-      // Refresh list after 2s
+      // Refresh list after 1.5s
       setTimeout(() => {
         fetchDeliveries();
-      }, 2000);
+      }, 1500);
     } catch (err: any) {
       toast.error("Could not confirm receipt: " + (err.response?.data?.detail || err.message || "Please try again"));
     } finally {
@@ -106,9 +108,11 @@ export default function DeliveryTracking() {
 
   const fetchDeliveries = async () => {
     try {
-      const response = await api.get('/api/v1/delivery/tracking/active');
+      const response = await (api as any).get('/api/v1/delivery/tracking/active', { noCache: true });
       const rawDeliveries = response.data?.data ?? response.data;
-      setDeliveries(Array.isArray(rawDeliveries) ? rawDeliveries : []);
+      const list = Array.isArray(rawDeliveries) ? rawDeliveries : [];
+      // Respect already confirmed deliveries so they never revert to pending
+      setDeliveries(list.map((d: any) => confirmedIds.has(d.dispensing_log_id) ? { ...d, delivery_status: 'DELIVERED', progress: 100 } : d));
     } catch (error) {
       console.error('Failed to fetch deliveries:', error);
       setDeliveries([]);
@@ -265,7 +269,20 @@ export default function DeliveryTracking() {
               })()}
 
               {/* Patient Received Package Action */}
-              {delivery.delivery_status !== 'DELIVERED' && (
+              {delivery.delivery_status === 'DELIVERED' || confirmedIds.has(delivery.dispensing_log_id) ? (
+                <div className="p-3.5 bg-emerald-500/10 rounded-xl border border-emerald-500/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle className="w-5 h-5 text-emerald-500" />
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Package Delivered & Received</p>
+                      <p className="text-xs text-muted-foreground">Package receipt confirmed. Delivery is complete.</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                    Delivered
+                  </span>
+                </div>
+              ) : (
                 <div className="p-3 bg-muted/40 rounded-xl border border-border/60 space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium text-foreground">Package Arrival Confirmation</span>

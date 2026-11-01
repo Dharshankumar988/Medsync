@@ -8,6 +8,7 @@ from app.schemas.pharmacy_system import MedicineOrderCreate, MedicineOrderRespon
 from app.services.pharmacy_system import PharmacyService
 from app.services.notification import NotificationService
 from app.models.pharmacy_system import DeliveryTracking, MedicineOrder, OrderStatus, MedicineOrderItem, MedicineInventory
+from app.models.pharmacy import Pharmacy
 import uuid
 from datetime import datetime, timedelta
 import hashlib
@@ -29,7 +30,12 @@ async def list_orders(
     if user_role == UserRole.PATIENT.value:
         stmt = select(MedicineOrder).where(MedicineOrder.patient_id == current_user.id).order_by(MedicineOrder.created_at.desc())
     elif user_role == UserRole.PHARMACY.value:
-        stmt = select(MedicineOrder).where(MedicineOrder.pharmacy_id == current_user.id).order_by(MedicineOrder.created_at.desc())
+        pharm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == current_user.id))
+        pharm_row = pharm_res.scalar_one_or_none()
+        valid_pharm_ids = [current_user.id]
+        if pharm_row and pharm_row.id != current_user.id:
+            valid_pharm_ids.append(pharm_row.id)
+        stmt = select(MedicineOrder).where(MedicineOrder.pharmacy_id.in_(valid_pharm_ids)).order_by(MedicineOrder.created_at.desc())
     else:
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException("Unauthorized to view orders")
@@ -66,7 +72,12 @@ async def dispatch_order(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Order not found")
         
-    if order.pharmacy_id != current_user.id:
+    pharm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == current_user.id))
+    pharm_row = pharm_res.scalar_one_or_none()
+    valid_pharm_ids = {current_user.id}
+    if pharm_row:
+        valid_pharm_ids.add(pharm_row.id)
+    if order.pharmacy_id not in valid_pharm_ids:
         from app.core.exceptions import ForbiddenException
         raise ForbiddenException("Unauthorized to dispatch this order")
         

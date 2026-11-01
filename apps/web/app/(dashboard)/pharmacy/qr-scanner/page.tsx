@@ -7,7 +7,7 @@ import {
   QrCode, ScanLine, Key, Loader2, CheckCircle2, ShieldCheck, FileText, 
   AlertTriangle, Camera, Link as LinkIcon, FileJson, Activity, Copy,
   CreditCard, Receipt, FileSignature, Truck, UserCheck, ArrowRight, Store,
-  DollarSign, PackageCheck
+  IndianRupee, PackageCheck
 } from "lucide-react";
 import { pharmacyService } from "@/services/pharmacy.service";
 import { blockchainService, BlockchainVerifyResult } from "@/services/blockchain.service";
@@ -354,19 +354,19 @@ export default function PharmacyQRScannerPage() {
                       <div className="space-y-3">
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Prescription Items (Est.)</span>
-                          <span className="font-medium">$124.50</span>
+                          <span className="font-medium">₹124.50</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Insurance Coverage</span>
-                          <span className="font-medium text-emerald-600">-$95.00</span>
+                          <span className="font-medium text-emerald-600">-₹95.00</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Taxes & Fees</span>
-                          <span className="font-medium">$4.50</span>
+                          <span className="font-medium">₹4.50</span>
                         </div>
                         <div className="flex justify-between font-bold text-lg pt-4 border-t border-dashed">
                           <span>Total Co-Pay</span>
-                          <span className="text-amber-600">$34.00</span>
+                          <span className="text-amber-600">₹34.00</span>
                         </div>
                       </div>
 
@@ -543,7 +543,7 @@ export default function PharmacyQRScannerPage() {
                     <div className="bg-card p-5 rounded-2xl border border-border/60 shadow-xs space-y-3">
                       <div className="flex items-center justify-between border-b border-border/60 pb-2">
                         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <DollarSign className="w-3.5 h-3.5 text-amber-500" /> Inventory & Revenue Impact
+                          <IndianRupee className="w-3.5 h-3.5 text-amber-500" /> Inventory & Revenue Impact
                         </span>
                         <Badge variant="outline" className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 border-emerald-500/20">
                           Stock Deducted
@@ -553,13 +553,13 @@ export default function PharmacyQRScannerPage() {
                         <div className="p-3 rounded-xl bg-muted/40 border border-border/40">
                           <span className="text-[11px] text-muted-foreground block">Gross Sales Added</span>
                           <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                            ${Number(fulfillmentResult?.total_sales || 34).toFixed(2)}
+                            ₹{Number(fulfillmentResult?.total_sales || 34).toFixed(2)}
                           </span>
                         </div>
                         <div className="p-3 rounded-xl bg-muted/40 border border-border/40">
                           <span className="text-[11px] text-muted-foreground block">Net Profit Recorded</span>
                           <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                            ${Number(fulfillmentResult?.profit || 10.20).toFixed(2)}
+                            ₹{Number(fulfillmentResult?.profit || 10.20).toFixed(2)}
                           </span>
                         </div>
                       </div>

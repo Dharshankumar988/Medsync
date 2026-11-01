@@ -95,4 +95,8 @@ export const aiService = {
       throw e;
     }
   },
+
+  async analyzeMedicalImage(imageUri: string, _prompt?: string) {
+    return aiService.analyzeImage(imageUri, 'medical_scan');
+  },
 };

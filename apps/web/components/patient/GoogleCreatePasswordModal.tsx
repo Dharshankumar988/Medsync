@@ -92,24 +92,18 @@ export default function GoogleCreatePasswordModal({
     }
   };
 
-  const handleSkip = () => {
-    // Dismiss for the current session so user is never spammed while navigating
-    sessionStorage.setItem(`medsync_pwd_skipped_${userId}`, "true");
-    onClose();
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleSkip(); }}>
-      <DialogContent className="sm:max-w-[460px] p-6 rounded-2xl bg-card border border-border/70 shadow-2xl">
+    <Dialog open={isOpen} onOpenChange={() => {}}>
+      <DialogContent className="sm:max-w-[460px] p-6 rounded-2xl bg-card border border-border/70 shadow-2xl [&>button]:hidden">
         <DialogHeader className="text-center space-y-2">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 mb-1">
             <LockKeyhole className="w-6 h-6" />
           </div>
           <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
-            Create an Account Password
+            Set Your Account Password
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-            You signed in via Google. Set a password so you can also sign in directly using your email address anytime.
+            Since you signed in via Google, setting an account password is required to secure your clinical vault and configure your 6-digit Authorization PIN.
           </DialogDescription>
         </DialogHeader>
 
@@ -203,7 +197,7 @@ export default function GoogleCreatePasswordModal({
             <Button
               type="submit"
               disabled={isLoading || !passwordsMatch || password.length < 6}
-              className="w-full h-11 text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md transition-all"
+              className="w-full h-11 text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md transition-all"
             >
               {isLoading ? (
                 <>
@@ -213,18 +207,9 @@ export default function GoogleCreatePasswordModal({
               ) : (
                 <>
                   <ShieldCheck className="mr-2 h-4 w-4" />
-                  Save Password
+                  Set Password & Continue
                 </>
               )}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={handleSkip}
-              disabled={isLoading}
-              className="w-full h-10 text-xs text-muted-foreground hover:text-foreground rounded-xl"
-            >
-              Skip for Now
             </Button>
           </div>
         </form>

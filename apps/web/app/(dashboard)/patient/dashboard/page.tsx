@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from "@medsync/ui";
 import { Skeleton } from "@medsync/ui";
 import { Clock, FileText, CheckCircle2, ChevronRight, AlertCircle, Syringe, Pill, Calendar, ShieldCheck, ShoppingBag, Activity } from "lucide-react";
-import { AuditHistory } from "@medsync/ui";
-import { HealthStatistics } from "@/components/patient/HealthStatistics";
+import { RecentPrescriptions } from "@/components/patient/RecentPrescriptions";
+import { RevolvingDoctorShowcase } from "@/components/patient/RevolvingDoctorShowcase";
 import { QuickActionsMenu } from "@/components/patient/QuickActionsMenu";
 import { supabase } from "@/lib/supabase";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -72,11 +72,11 @@ export default function PatientDashboard() {
         user.user_metadata?.has_password === true ||
         localStorage.getItem(`medsync_pwd_set_${user.id}`) === "true";
 
-      const skippedPasswordThisSession =
-        sessionStorage.getItem(`medsync_pwd_skipped_${user.id}`) === "true";
+
+
 
       let passwordPromptActive = false;
-      if (isGoogleUser && !hasSetPassword && !skippedPasswordThisSession) {
+      if (isGoogleUser && !hasSetPassword) {
         passwordPromptActive = true;
         setShowPasswordModal(true);
       }
@@ -240,7 +240,7 @@ export default function PatientDashboard() {
         variants={stagger}
       >
         <motion.div variants={fadeUp} className="col-span-full xl:col-span-2">
-          <HealthStatistics />
+          <RecentPrescriptions initialPrescriptions={dashboardData?.recent_prescriptions} />
         </motion.div>
         <motion.div variants={fadeUp} className="col-span-full xl:col-span-2">
           <QuickActionsMenu />
@@ -256,7 +256,7 @@ export default function PatientDashboard() {
         variants={stagger}
       >
         <motion.div variants={fadeUp} className="col-span-full lg:col-span-4 space-y-6">
-          <AuditHistory />
+          <RevolvingDoctorShowcase />
         </motion.div>
 
         <motion.div variants={fadeUp} className="col-span-full lg:col-span-3 space-y-6">

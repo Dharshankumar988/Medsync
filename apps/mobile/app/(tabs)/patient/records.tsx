@@ -401,10 +401,6 @@ export default function PatientRecordsScreen() {
               </Text>
             </View>
           )}
-        </CardContent>
-      </Card>
-    );
-  };
 
           <View style={styles.actionsRow}>
             <TouchableOpacity
@@ -423,20 +419,22 @@ export default function PatientRecordsScreen() {
 
   return (
     <RoleGuard allowedRole="patient">
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ScreenHeader
-          title="Medical Records & Pharmacy"
+          title="Medical Records"
           subtitle="Encrypted diagnostic files & prescriptions"
           rightElement={
             activeTab === 'RECORDS' ? (
               <TouchableOpacity
-                style={styles.addRecordHeaderBtn}
+                style={[styles.addRecordHeaderBtn, { backgroundColor: theme.primaryButton }]}
                 onPress={() => setUploadModalVisible(true)}
                 activeOpacity={0.85}
                 accessibilityLabel="Add Medical Document"
               >
-                <Plus size={15} color="#FFFFFF" />
-                <Text style={styles.addRecordHeaderBtnText}>Add</Text>
+                <Plus size={15} color={theme.primaryButtonText} />
+                <Text style={[styles.addRecordHeaderBtnText, { color: theme.primaryButtonText }]}>
+                  Add
+                </Text>
               </TouchableOpacity>
             ) : undefined
           }
@@ -593,27 +591,56 @@ export default function PatientRecordsScreen() {
 
         {/* Document Action Subheader for Records tab */}
         {activeTab === 'RECORDS' && (
-          <View style={styles.recordsActionBar}>
-            <View style={styles.recordsCountBadge}>
-              <FileText size={13} color="#2563EB" />
-              <Text style={styles.recordsCountText}>
+          <View
+            style={[
+              styles.recordsActionBar,
+              { backgroundColor: theme.background, borderBottomColor: theme.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.recordsCountBadge,
+                {
+                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#EFF6FF',
+                  borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <FileText size={13} color={isDark ? '#38BDF8' : '#2563EB'} />
+              <Text
+                style={[
+                  styles.recordsCountText,
+                  { color: isDark ? '#38BDF8' : '#1E40AF' },
+                ]}
+              >
                 {records.length} {records.length === 1 ? 'Record' : 'Records'} on Vault
               </Text>
             </View>
             <TouchableOpacity
-              style={styles.uploadCtaBtn}
+              style={[styles.uploadCtaBtn, { backgroundColor: theme.primaryButton }]}
               onPress={() => setUploadModalVisible(true)}
               activeOpacity={0.85}
               accessibilityLabel="Upload Document"
             >
-              <Plus size={14} color="#FFFFFF" />
-              <Text style={styles.uploadCtaText}>Add Document</Text>
+              <Plus size={14} color={theme.primaryButtonText} />
+              <Text style={[styles.uploadCtaText, { color: theme.primaryButtonText }]}>
+                Add Document
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
         {error && (
-          <View style={styles.errorBanner}>
+          <View
+            style={[
+              styles.errorBanner,
+              {
+                backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+              },
+            ]}
+          >
             <AlertCircle size={16} color="#EF4444" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
@@ -641,25 +668,41 @@ export default function PatientRecordsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={[Colors.roles.patient.primary]}
+              colors={[theme.accent]}
+              tintColor={theme.accent}
             />
           }
           ListEmptyComponent={
             !loading ? (
               <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconBox}>
-                  {activeTab === 'RECORDS' && <Shield size={36} color="#94A3B8" />}
-                  {activeTab === 'PRESCRIPTIONS' && <Pill size={36} color="#94A3B8" />}
-                  {activeTab === 'ORDERS' && <ShoppingBag size={36} color="#94A3B8" />}
+                <View
+                  style={[
+                    styles.emptyIconBox,
+                    {
+                      backgroundColor: isDark ? '#18181B' : '#F1F5F9',
+                      borderColor: theme.border,
+                      borderWidth: 1,
+                    },
+                  ]}
+                >
+                  {activeTab === 'RECORDS' && (
+                    <Shield size={36} color={isDark ? '#71717A' : '#94A3B8'} />
+                  )}
+                  {activeTab === 'PRESCRIPTIONS' && (
+                    <Pill size={36} color={isDark ? '#71717A' : '#94A3B8'} />
+                  )}
+                  {activeTab === 'ORDERS' && (
+                    <ShoppingBag size={36} color={isDark ? '#71717A' : '#94A3B8'} />
+                  )}
                 </View>
-                <Text style={styles.emptyTitle}>
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>
                   {activeTab === 'RECORDS'
                     ? 'No Medical Records Found'
                     : activeTab === 'PRESCRIPTIONS'
                     ? 'No Active Prescriptions'
                     : 'No Medicine Orders Found'}
                 </Text>
-                <Text style={styles.emptySubtitle}>
+                <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
                   {activeTab === 'RECORDS'
                     ? 'Encrypted clinical records and diagnostic summaries will be listed here once uploaded.'
                     : activeTab === 'PRESCRIPTIONS'
@@ -671,7 +714,7 @@ export default function PatientRecordsScreen() {
                   <Button
                     title="Upload Your First Medical Record"
                     size="sm"
-                    iconLeft={<Plus size={15} color="#FFFFFF" />}
+                    iconLeft={<Plus size={15} color={theme.primaryButtonText} />}
                     onPress={() => setUploadModalVisible(true)}
                     style={{ marginBottom: 12 }}
                   />
@@ -681,7 +724,7 @@ export default function PatientRecordsScreen() {
                   title="Reload"
                   variant="outline"
                   size="sm"
-                  iconLeft={<RefreshCw size={14} color={Colors.roles.patient.primary} />}
+                  iconLeft={<RefreshCw size={14} color={theme.text} />}
                   onPress={onRefresh}
                   style={styles.reloadBtn}
                 />
@@ -750,7 +793,6 @@ export default function PatientRecordsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   segmentContainer: {
     flexDirection: 'row',
@@ -985,9 +1027,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   recordsCountBadge: {
     flexDirection: 'row',

@@ -53,4 +53,8 @@ export const getUserProfile = (user: { id: string; email?: string | null; user_m
   role: normalizeRole(user.user_metadata?.role ?? user.app_metadata?.role),
   status: String(user.user_metadata?.status ?? user.app_metadata?.status ?? 'ACTIVE').toUpperCase(),
   full_name: (user.user_metadata?.full_name as string | undefined) ?? (user.user_metadata?.name as string | undefined) ?? null,
+  avatar_url: (user.user_metadata?.avatar_url as string | undefined) ?? (user.user_metadata?.picture as string | undefined) ?? null,
+  profile_image_url: (user.user_metadata?.profile_image_url as string | undefined) ?? (user.user_metadata?.avatar_url as string | undefined) ?? null,
+  profile_picture_url: (user.user_metadata?.profile_picture_url as string | undefined) ?? (user.user_metadata?.avatar_url as string | undefined) ?? null,
+  user_metadata: user.user_metadata,
 });

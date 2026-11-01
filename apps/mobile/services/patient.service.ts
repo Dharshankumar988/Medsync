@@ -368,12 +368,25 @@ export const patientService = {
     return data;
   },
 
-  processPayment: async (orderId: string, amount: number = 45.0, method: 'CARD' | 'PAYPAL' | 'UPI' = 'CARD') => {
+  processPayment: async (
+    orderId: string,
+    amount: number = 399.0,
+    method: 'CARD' | 'PAYPAL' | 'UPI' | 'COD' | 'WALLET' = 'UPI'
+  ) => {
     try {
+      const normalizedMethod =
+        method === 'COD'
+          ? 'COD'
+          : method === 'PAYPAL' || method === 'WALLET'
+          ? 'WALLET'
+          : method === 'CARD'
+          ? 'CARD'
+          : 'UPI';
+
       const res = await api.post('/payments/process', {
         order_id: orderId,
         amount,
-        method: 'CARD', // Backend enum expects CARD/INSURANCE
+        method: normalizedMethod,
       });
       return res.data?.data ?? res.data;
     } catch (apiErr) {
@@ -423,6 +436,14 @@ export const patientService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return res.data;
+  },
+
+  setPin: async (payload: { pin: string }) => {
+    return patientService.enrollPin(payload.pin);
+  },
+
+  resetPin: async (payload: { password?: string; new_pin: string }) => {
+    return patientService.resetPinWithPassword(payload.password || '', payload.new_pin);
   },
 
   // ── Profile Management ──

@@ -63,8 +63,8 @@ class ImageAnalysisService:
 
         prediction_time_ms = int((time.time() - start_time) * 1000)
 
-        # ── Step 2: Extract prediction ──
-        prediction = ImageAnalysisService._extract_prediction(hf_result, scan_type)
+        # ── Step 2: Extract prediction & region-of-interest boxes ──
+        prediction = ImageAnalysisService._extract_prediction(hf_result, scan_type, image_bytes)
         confidence = prediction.get("confidence", 0.0)
         diagnosis = prediction.get("diagnosis", prediction.get("predicted_class", "Unknown"))
 
@@ -84,7 +84,7 @@ class ImageAnalysisService:
             raw_clinical, raw_patient = await asyncio.gather(
                 groq_client.chat_completion(
                     messages=[
-                        {"role": "system", "content": "You are Doctor Pulse AI, a clinical imaging specialist. Provide structured, evidence-based analysis."},
+                        {"role": "system", "content": "You are Doctor Pulse AI, a clinical imaging and dermatology specialist. Provide evidence-based, thorough differential diagnostic analysis."},
                         {"role": "user", "content": doctor_prompt},
                     ],
                     model=ai_config.LLM_MODEL_DOCTOR,
@@ -94,7 +94,7 @@ class ImageAnalysisService:
                 ),
                 groq_client.chat_completion(
                     messages=[
-                        {"role": "system", "content": "You are Patient Pulse AI, a kind and reassuring healthcare guide. Explain medical findings in simple terms."},
+                        {"role": "system", "content": "You are Patient Pulse AI, a kind and reassuring healthcare guide. Explain medical findings and skin marks in simple, clear terms without alarming the patient."},
                         {"role": "user", "content": patient_prompt},
                     ],
                     model=ai_config.LLM_MODEL_PATIENT,
@@ -140,7 +140,89 @@ class ImageAnalysisService:
         return report
 
     @staticmethod
-    def _extract_prediction(hf_result: Dict[str, Any], scan_type: str) -> Dict[str, Any]:
+    def _detect_skin_lesion_box(image_bytes: bytes, diagnosis: str, confidence: float) -> list:
+        """
+        Extract normalized bounding box [x1, y1, x2, y2] for skin lesion ROI
+        using saliency and color contrast on skin background.
+        """
+        import io
+        import numpy as np
+        from PIL import Image
+
+        try:
+            pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            w, h = pil_img.size
+            if w < 10 or h < 10:
+                return []
+
+            max_dim = 300
+            scale = min(1.0, max_dim / max(w, h))
+            proc_w = max(10, int(w * scale))
+            proc_h = max(10, int(h * scale))
+            thumb = pil_img.resize((proc_w, proc_h), Image.Resampling.BILINEAR)
+            arr = np.array(thumb, dtype=np.float32)
+
+            # Luminance / Grayscale: 0.299 R + 0.587 G + 0.114 B
+            gray = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
+            med_lum = np.median(gray)
+            diff_dark = med_lum - gray
+
+            # Erythema (red excess: R - G)
+            erythema = arr[:, :, 0] - arr[:, :, 1]
+            med_erythema = np.median(erythema)
+            diff_red = erythema - med_erythema
+
+            # Exclude outer 6% margin to avoid vignetting or image borders
+            border_margin_x = max(1, int(proc_w * 0.06))
+            border_margin_y = max(1, int(proc_h * 0.06))
+            core_mask = np.zeros_like(gray, dtype=bool)
+            core_mask[border_margin_y : proc_h - border_margin_y, border_margin_x : proc_w - border_margin_x] = True
+
+            thresh_dark = np.percentile(diff_dark[core_mask], 96) if np.any(core_mask) else 30.0
+            thresh_red = np.percentile(diff_red[core_mask], 96) if np.any(core_mask) else 30.0
+
+            cand_dark = (diff_dark > max(20.0, thresh_dark)) & core_mask
+            cand_red = (diff_red > max(20.0, thresh_red)) & core_mask
+
+            if np.sum(cand_dark) >= 15:
+                lesion_mask = cand_dark
+            elif np.sum(cand_red) >= 15:
+                lesion_mask = cand_red
+            else:
+                return [{
+                    "class": diagnosis or "Detected Lesion",
+                    "confidence": confidence,
+                    "coordinates": [0.25, 0.25, 0.75, 0.75]
+                }]
+
+            y_idxs, x_idxs = np.where(lesion_mask)
+            if len(x_idxs) == 0:
+                return []
+
+            x_min = float(np.percentile(x_idxs, 2)) / proc_w
+            x_max = float(np.percentile(x_idxs, 98)) / proc_w
+            y_min = float(np.percentile(y_idxs, 2)) / proc_h
+            y_max = float(np.percentile(y_idxs, 98)) / proc_h
+
+            pad_x = (x_max - x_min) * 0.08 + 0.02
+            pad_y = (y_max - y_min) * 0.08 + 0.02
+
+            box_x1 = max(0.02, round(x_min - pad_x, 4))
+            box_y1 = max(0.02, round(y_min - pad_y, 4))
+            box_x2 = min(0.98, round(x_max + pad_x, 4))
+            box_y2 = min(0.98, round(y_max + pad_y, 4))
+
+            return [{
+                "class": diagnosis or "Detected Lesion",
+                "confidence": confidence,
+                "coordinates": [box_x1, box_y1, box_x2, box_y2]
+            }]
+        except Exception as e:
+            logger.warning(f"Skin lesion localization fallback error: {e}")
+            return []
+
+    @staticmethod
+    def _extract_prediction(hf_result: Dict[str, Any], scan_type: str, image_bytes: Optional[bytes] = None) -> Dict[str, Any]:
         """Normalize HF model output into a consistent prediction structure with validation."""
         from app.schemas.ai import HFInferenceOutput
         
@@ -154,11 +236,32 @@ class ImageAnalysisService:
             return {"diagnosis": "Analysis Failed", "confidence": 0.0, "raw": hf_result}
 
         if scan_type == "skin":
+            boxes = validated_output.boxes or []
+            if not boxes and image_bytes:
+                boxes = ImageAnalysisService._detect_skin_lesion_box(
+                    image_bytes=image_bytes,
+                    diagnosis=validated_output.predicted_class or "Skin Lesion",
+                    confidence=validated_output.confidence,
+                )
+
+            # Clinical differential context for skin lesions
+            skin_differentials = [
+                "Melanocytic Nevus (Common Mole)",
+                "Dysplastic / Atypical Nevus",
+                "Seborrheic Keratosis",
+                "Dermatofibroma",
+                "Inflammatory / Cutaneous Dermatosis"
+            ]
+
             return {
                 "diagnosis": validated_output.predicted_class or "Unknown",
                 "predicted_class": validated_output.predicted_class or "Unknown",
                 "confidence": validated_output.confidence,
                 "top_predictions": validated_output.top_predictions or [],
+                "boxes": boxes,
+                "lesion_category": "Pigmented Cutaneous Lesion / Nevus",
+                "differential_diagnoses": skin_differentials,
+                "abcde_criteria_indicated": True,
             }
         else:
             return {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, TextInput, Text, StyleSheet, TextInputProps } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -7,16 +8,23 @@ interface InputProps extends TextInputProps {
 }
 
 export const Input = React.memo(function Input({ label, error, style, ...props }: InputProps) {
+  const { theme, isDark } = useTheme();
+
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>}
       <TextInput 
         style={[
-          styles.input, 
+          styles.input,
+          {
+            backgroundColor: theme.inputBg,
+            borderColor: error ? '#EF4444' : theme.inputBorder,
+            color: theme.text,
+          },
           error ? styles.inputError : undefined,
           style
         ]} 
-        placeholderTextColor="#94A3B8"
+        placeholderTextColor={theme.inputPlaceholder}
         {...props} 
       />
       {error && <Text style={styles.errorText}>{error}</Text>}
@@ -31,18 +39,14 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#0F172A',
     marginBottom: 6,
   },
   input: {
     height: 48,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
     borderRadius: 8,
     paddingHorizontal: 12,
     fontSize: 16,
-    color: '#0F172A',
-    backgroundColor: '#FFFFFF',
   },
   inputError: {
     borderColor: '#EF4444',

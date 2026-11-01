@@ -39,10 +39,7 @@ export default function CreatePrescriptionPage() {
   const [newMedBrand, setNewMedBrand] = useState("");
   const [addingMed, setAddingMed] = useState(false);
 
-  // Link Clinic Pharmacy Modal State
-  const [isLinkPharmacyModalOpen, setIsLinkPharmacyModalOpen] = useState(false);
-  const [pharmacyToLink, setPharmacyToLink] = useState("");
-  const [linkingPharmacy, setLinkingPharmacy] = useState(false);
+
 
   // PIN Authorization State
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -156,41 +153,62 @@ export default function CreatePrescriptionPage() {
           if (name) facilityNameMap.set(name.toLowerCase(), name);
         });
 
-        if (pharmacyProfiles.length > 0) {
-          const userIds = pharmacyProfiles.map(p => p.user_id);
-          const { data: usersData } = await supabase
-            .from("users")
-            .select("id, full_name, status")
-            .in("id", userIds)
-            .eq("status", "ACTIVE");
-            
-          const mapped = pharmacyProfiles
-            .map(profile => {
-               const user = usersData?.find(u => u.id === profile.user_id);
-               if (!user) return null;
-               
-               const pUserId = String(profile.user_id);
-               const pHospitalId = profile.hospital_id ? String(profile.hospital_id) : "";
-               const pClinicName = (profile.clinic_name || "").trim().toLowerCase();
+        // Fetch active approved network pharmacies via backend API (bypasses RLS)
+        let networkPharmacies: any[] = [];
+        try {
+          const netRes = await api.get("/api/v1/pharmacies/network");
+          networkPharmacies = netRes.data?.data || netRes.data || [];
+        } catch {
+          try {
+            const allRes = await api.get("/api/v1/pharmacies/all");
+            networkPharmacies = allRes.data?.data || allRes.data || [];
+          } catch {}
+        }
 
-               let isLinked = false;
-               let linkedFacilityName = "";
+        const profilesMap = new Map((pharmacyProfiles || []).map((p: any) => [String(p.user_id), p]));
+        const combined = [...networkPharmacies];
+        for (const p of (pharmacyProfiles || [])) {
+          if (!combined.some(cp => String(cp.user_id || cp.pharmacy_id || cp.id) === String(p.user_id))) {
+            combined.push(p);
+          }
+        }
 
-               if (affiliatedIds.has(pUserId)) {
-                 isLinked = true;
-                 linkedFacilityName = "Direct Partner";
-               } else if (pHospitalId && facilityIdMap.has(pHospitalId)) {
-                 isLinked = true;
-                 linkedFacilityName = facilityIdMap.get(pHospitalId) || "Affiliated Facility";
-               } else if (pClinicName && facilityNameMap.has(pClinicName)) {
-                 isLinked = true;
-                 linkedFacilityName = facilityNameMap.get(pClinicName) || profile.clinic_name;
-               }
-               
-               return { ...profile, ...user, isLinked, linkedFacilityName };
-            })
-            .filter(Boolean);
-            
+        if (combined.length > 0) {
+          const mapped = combined.map(profile => {
+            const pUserId = String(profile.user_id || profile.pharmacy_id || profile.id);
+            const extra = profilesMap.get(pUserId) || {};
+            const pHospitalId = String(profile.hospital_id || extra.hospital_id || "");
+            const pClinicName = String(profile.clinic_name || extra.clinic_name || "").trim().toLowerCase();
+            const bName = String(profile.business_name || profile.full_name || extra.business_name || "Pharmacy").trim();
+
+            let isLinked = false;
+            let linkedFacilityName = "";
+
+            if (affiliatedIds.has(pUserId)) {
+              isLinked = true;
+              linkedFacilityName = "Direct Practice Partner";
+            } else if (pHospitalId && facilityIdMap.has(pHospitalId)) {
+              isLinked = true;
+              linkedFacilityName = facilityIdMap.get(pHospitalId) || "Affiliated Facility";
+            } else if (pClinicName && facilityNameMap.has(pClinicName)) {
+              isLinked = true;
+              linkedFacilityName = facilityNameMap.get(pClinicName) || profile.clinic_name;
+            }
+
+            return {
+              ...extra,
+              ...profile,
+              user_id: pUserId,
+              pharmacy_id: pUserId,
+              business_name: bName,
+              full_name: bName,
+              city: profile.city || extra.city || "Bengaluru",
+              address: profile.address || extra.address || "MedSync Network",
+              isLinked,
+              linkedFacilityName
+            };
+          });
+
           setLinkedPharmacies(mapped);
         }
       } catch (err) {
@@ -252,87 +270,6 @@ export default function CreatePrescriptionPage() {
       toast.error("Failed to add medicine");
     } finally {
       setAddingMed(false);
-    }
-  };
-
-  const handleLinkPharmacy = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pharmacyToLink) {
-      toast.error("Please select a pharmacy to link");
-      return;
-    }
-    setLinkingPharmacy(true);
-    try {
-      await api.post('/api/v1/doctor-locations/affiliate-pharmacy', {
-        pharmacy_id: pharmacyToLink
-      });
-      toast.success("Pharmacy linked to your clinic practice");
-      setRoutedPharmacyId(pharmacyToLink);
-      setIsLinkPharmacyModalOpen(false);
-      setPharmacyToLink("");
-
-      // Refresh pharmacies
-      const [docRes, hospRes, locsRes, pharmsRes, affilsRes] = await Promise.all([
-        supabase.from("doctors").select("hospital_id, clinic_name").eq("user_id", userId).maybeSingle(),
-        api.get("/api/v1/hospitals").catch(() => ({ data: { data: [] } })),
-        api.get("/api/v1/doctor-locations").catch(() => ({ data: { data: [] } })),
-        supabase.from("pharmacies").select("*"),
-        api.get("/api/v1/doctor-locations/affiliate-pharmacy").catch(() => ({ data: { data: [] } }))
-      ]);
-      const doctorProfile = docRes.data;
-      const allHospitals = hospRes.data?.data || [];
-      const doctorLocations = locsRes.data?.data || [];
-      const pharmacyProfiles = pharmsRes.data || [];
-      const directAffiliations = affilsRes.data?.data || [];
-      const affiliatedIds = new Set(directAffiliations.map((a: any) => String(a.pharmacy_id)));
-
-      const facilityIdMap = new Map<string, string>();
-      const facilityNameMap = new Map<string, string>();
-      if (doctorProfile?.hospital_id) {
-        const matched = allHospitals.find((h: any) => h.id === doctorProfile.hospital_id);
-        const name = matched?.name || "Primary Hospital";
-        facilityIdMap.set(String(doctorProfile.hospital_id), name);
-        facilityNameMap.set(name.toLowerCase(), name);
-      }
-      if (doctorProfile?.clinic_name) {
-        facilityNameMap.set(doctorProfile.clinic_name.trim().toLowerCase(), doctorProfile.clinic_name.trim());
-      }
-      doctorLocations.forEach((loc: any) => {
-        const name = loc.location_name || (loc.hospital_id ? allHospitals.find((h: any) => h.id === loc.hospital_id)?.name : "Workplace");
-        if (loc.hospital_id) facilityIdMap.set(String(loc.hospital_id), name);
-        if (name) facilityNameMap.set(name.toLowerCase(), name);
-      });
-
-      if (pharmacyProfiles.length > 0) {
-        const userIds = pharmacyProfiles.map(p => p.user_id);
-        const { data: usersData } = await supabase.from("users").select("id, full_name, status").in("id", userIds).eq("status", "ACTIVE");
-        const mapped = pharmacyProfiles.map(profile => {
-          const user = usersData?.find(u => u.id === profile.user_id);
-          if (!user) return null;
-          const pUserId = String(profile.user_id);
-          const pHospitalId = profile.hospital_id ? String(profile.hospital_id) : "";
-          const pClinicName = (profile.clinic_name || "").trim().toLowerCase();
-          let isLinked = false;
-          let linkedFacilityName = "";
-          if (affiliatedIds.has(pUserId)) {
-            isLinked = true;
-            linkedFacilityName = "Direct Partner";
-          } else if (pHospitalId && facilityIdMap.has(pHospitalId)) {
-            isLinked = true;
-            linkedFacilityName = facilityIdMap.get(pHospitalId) || "Affiliated Facility";
-          } else if (pClinicName && facilityNameMap.has(pClinicName)) {
-            isLinked = true;
-            linkedFacilityName = facilityNameMap.get(pClinicName) || profile.clinic_name;
-          }
-          return { ...profile, ...user, isLinked, linkedFacilityName };
-        }).filter(Boolean);
-        setLinkedPharmacies(mapped);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to link pharmacy");
-    } finally {
-      setLinkingPharmacy(false);
     }
   };
 
@@ -503,13 +440,7 @@ export default function CreatePrescriptionPage() {
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Route to Pharmacy (Optional)
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsLinkPharmacyModalOpen(true)}
-                    className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
-                  >
-                    + Link Practice Pharmacy
-                  </button>
+                  
                 </div>
                 <select 
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -526,7 +457,7 @@ export default function CreatePrescriptionPage() {
                       ))}
                     </optgroup>
                   )}
-                  <optgroup label="Other MedSync Network Pharmacies">
+                  <optgroup label="Approved MedSync Network Pharmacies">
                     {linkedPharmacies.filter(p => !p.isLinked).map(p => (
                       <option key={p.user_id} value={p.user_id}>
                         {p.business_name || p.full_name} ({p.city || "Bengaluru"})
@@ -761,49 +692,6 @@ export default function CreatePrescriptionPage() {
           </div>
         </div>
       )}
-
-      {/* Link Clinic Pharmacy Dialog */}
-      <Dialog open={isLinkPharmacyModalOpen} onOpenChange={setIsLinkPharmacyModalOpen}>
-        <DialogContent className="max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Link Pharmacy to Your Clinic Practice</DialogTitle>
-            <DialogDescription>
-              Affiliate a pharmacy from the network with your clinic or hospital to quickly route prescriptions.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleLinkPharmacy} className="space-y-4 pt-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Select Network Pharmacy *
-              </label>
-              <select
-                className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2"
-                value={pharmacyToLink}
-                onChange={(e) => setPharmacyToLink(e.target.value)}
-                required
-              >
-                <option value="">-- Choose a pharmacy --</option>
-                {linkedPharmacies.map((p) => (
-                  <option key={p.user_id} value={p.user_id}>
-                    {p.full_name || p.business_name} {p.address ? `• ${p.address}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsLinkPharmacyModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={linkingPharmacy || !pharmacyToLink} className="bg-primary">
-                {linkingPharmacy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
-                Link Pharmacy
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
 
     </div>
   );

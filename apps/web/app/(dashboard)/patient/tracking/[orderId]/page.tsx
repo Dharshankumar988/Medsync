@@ -341,7 +341,7 @@ export default function DeliveryTrackingPage() {
               <div className="flex justify-between py-1.5">
                 <span className="text-muted-foreground font-semibold">Total Amount</span>
                 <span className="font-bold text-sm text-foreground font-mono">
-                  ${Number(order.total_amount || 0).toFixed(2)}
+                  ₹{Number(order.total_amount || 0).toFixed(2)}
                 </span>
               </div>
             </CardContent>

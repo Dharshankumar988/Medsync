@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
-import { Activity, Users, FileText, Pill, DollarSign } from "lucide-react";
+import { Activity, Users, FileText, Pill, IndianRupee } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -210,7 +210,7 @@ export default function DoctorAnalyticsPage() {
                 <h3 className="text-3xl font-bold text-emerald-600">₹{stats.revenue.toLocaleString()}</h3>
               </div>
               <div className="p-3 bg-emerald-500/10 rounded-full">
-                <DollarSign className="w-6 h-6 text-emerald-600" />
+                <IndianRupee className="w-6 h-6 text-emerald-600" />
               </div>
             </div>
             <div className="mt-4 flex items-center text-xs text-muted-foreground">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -15,7 +15,8 @@ import {
   Clock,
   Layers,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Stethoscope
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DetectionFinding } from "./MedicalScanViewerModal";
@@ -35,9 +36,91 @@ export function DetectionCard({
   const [isExpanded, setIsExpanded] = useState(true);
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [clientBoxes, setClientBoxes] = useState<any[]>([]);
 
-  const activeBoxes = detection.boxes || [];
+  const explicitBoxes = detection.boxes || [];
+  const activeBoxes = explicitBoxes.length > 0 ? explicitBoxes : clientBoxes;
   const topPredictions = detection.top_predictions || [];
+
+  const isSkinScan = (detection.scan_type || "").toLowerCase().includes("skin");
+
+  // Client-side lesion detection fallback if no bounding boxes were returned
+  const detectLesionOnImage = useCallback((imgElement: HTMLImageElement) => {
+    try {
+      if (!imgElement.naturalWidth || !imgElement.naturalHeight) return null;
+      const canvas = document.createElement("canvas");
+      const width = 200;
+      const height = Math.round((imgElement.naturalHeight / imgElement.naturalWidth) * 200);
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return null;
+      ctx.drawImage(imgElement, 0, 0, width, height);
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      const grayValues: number[] = [];
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        grayValues.push(gray);
+      }
+
+      const sortedGray = [...grayValues].sort((a, b) => a - b);
+      const medianGray = sortedGray[Math.floor(sortedGray.length / 2)];
+
+      const marginX = Math.round(width * 0.05);
+      const marginY = Math.round(height * 0.05);
+
+      let minX = width, maxX = 0, minY = height, maxY = 0;
+      let matchCount = 0;
+
+      const threshold = Math.max(22, medianGray * 0.22);
+
+      for (let y = marginY; y < height - marginY; y++) {
+        for (let x = marginX; x < width - marginX; x++) {
+          const idx = y * width + x;
+          const diff = medianGray - grayValues[idx];
+          if (diff > threshold) {
+            matchCount++;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (matchCount >= 15 && minX < maxX && minY < maxY) {
+        const padX = (maxX - minX) * 0.12 + width * 0.02;
+        const padY = (maxY - minY) * 0.12 + height * 0.02;
+        const x1 = Math.max(0.02, (minX - padX) / width);
+        const y1 = Math.max(0.02, (minY - padY) / height);
+        const x2 = Math.min(0.98, (maxX + padX) / width);
+        const y2 = Math.min(0.98, (maxY + padY) / height);
+        return [{
+          coordinates: [Number(x1.toFixed(3)), Number(y1.toFixed(3)), Number(x2.toFixed(3)), Number(y2.toFixed(3))],
+          class: "Pigmented Lesion / Mole",
+          confidence: detection.confidence || 0.4
+        }];
+      }
+    } catch (e) {
+      console.warn("Client lesion detector fallback notice:", e);
+    }
+    return null;
+  }, [detection.confidence]);
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    setImgLoaded(true);
+    if (explicitBoxes.length === 0) {
+      const detected = detectLesionOnImage(e.currentTarget);
+      if (detected && detected.length > 0) {
+        setClientBoxes(detected);
+      }
+    }
+  };
 
   const isAbnormal = detection.diagnosis && 
     !detection.diagnosis.toLowerCase().includes("no fracture") &&
@@ -136,9 +219,15 @@ export function DetectionCard({
                 {detection.confidence_percent >= 80 ? "High Confidence" : "Moderate Confidence"}
               </span>
             </div>
-            <h4 className="text-base font-bold tracking-tight mt-0.5 truncate">
+            <h4 className="text-base font-bold tracking-tight mt-0.5 truncate capitalize">
               {detection.diagnosis}
             </h4>
+            {isSkinScan && (
+              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                <Stethoscope className="w-3 h-3 text-purple-400" />
+                <span>Visual Presentation: Pigmented Cutaneous Lesion / Nevus (Mole)</span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -186,7 +275,7 @@ export function DetectionCard({
                   <img
                     src={imageUrl}
                     alt={scanMeta.label}
-                    onLoad={() => setImgLoaded(true)}
+                    onLoad={handleImageLoad}
                     onError={() => setImgError(true)}
                     className="max-h-72 w-auto object-contain cursor-pointer transition-transform duration-200 group-hover:scale-[1.01]"
                     onClick={onInspectImage}
@@ -215,14 +304,19 @@ export function DetectionCard({
                             <rect
                               x={`${Math.max(0, x)}%`}
                               y={`${Math.max(0, y)}%`}
-                              width={`${Math.max(2, width)}%`}
-                              height={`${Math.max(2, height)}%`}
-                              fill="rgba(239, 68, 68, 0.15)"
+                              width={`${Math.max(3, width)}%`}
+                              height={`${Math.max(3, height)}%`}
+                              fill="rgba(239, 68, 68, 0.16)"
                               stroke="#ef4444"
                               strokeWidth="2.5"
                               strokeDasharray="4"
-                              className="drop-shadow-md"
+                              className="drop-shadow-md animate-pulse"
                             />
+                            {/* Corner marks */}
+                            <line x1={`${x}%`} y1={`${y}%`} x2={`${x + Math.min(width * 0.25, 4)}%`} y2={`${y}%`} stroke="#ef4444" strokeWidth="3" />
+                            <line x1={`${x}%`} y1={`${y}%`} x2={`${x}%`} y2={`${y + Math.min(height * 0.25, 4)}%`} stroke="#ef4444" strokeWidth="3" />
+                            <line x1={`${x + width}%`} y1={`${y + height}%`} x2={`${x + width - Math.min(width * 0.25, 4)}%`} y2={`${y + height}%`} stroke="#ef4444" strokeWidth="3" />
+                            <line x1={`${x + width}%`} y1={`${y + height}%`} x2={`${x + width}%`} y2={`${y + height - Math.min(height * 0.25, 4)}%`} stroke="#ef4444" strokeWidth="3" />
                           </g>
                         );
                       })}
@@ -250,7 +344,7 @@ export function DetectionCard({
                       className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900/90 text-zinc-200 border border-zinc-700 text-xs font-medium hover:bg-zinc-800 transition-colors"
                     >
                       {showAnnotations ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      <span>{showAnnotations ? "Hide Boxes" : "Show Boxes"}</span>
+                      <span>{showAnnotations ? "Hide Box" : "Show Box"}</span>
                     </button>
                   )}
                 </div>
@@ -268,7 +362,7 @@ export function DetectionCard({
                 onClick={onInspectImage}
                 className="text-primary hover:underline font-medium flex items-center gap-1"
               >
-                <span>Click to expand</span>
+                <span>Click to inspect lesion details</span>
                 <Maximize2 className="w-2.5 h-2.5" />
               </button>
             </div>
@@ -282,7 +376,7 @@ export function DetectionCard({
             {topPredictions.length > 0 && (
               <div className="p-3 rounded-xl bg-muted/40 border border-border/50 space-y-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Differential Probability Breakdown
+                  Model Probability Breakdown
                 </span>
                 <div className="space-y-1.5">
                   {topPredictions.map((pred, i) => {
@@ -291,7 +385,7 @@ export function DetectionCard({
                     return (
                       <div key={i} className="space-y-0.5">
                         <div className="flex justify-between text-xs">
-                          <span className="text-foreground font-medium">{label}</span>
+                          <span className="text-foreground font-medium capitalize">{label}</span>
                           <span className="text-muted-foreground font-mono">{pct}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">

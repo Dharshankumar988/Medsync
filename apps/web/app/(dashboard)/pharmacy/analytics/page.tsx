@@ -5,7 +5,7 @@ import { pharmacyService } from "@/services/pharmacy.service";
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from "@medsync/ui";
 import { 
   TrendingUp, Package, Clock, Truck, CheckCircle2, BarChart3, 
-  PieChart as PieIcon, Download, Loader2, DollarSign, Store,
+  PieChart as PieIcon, Download, Loader2, IndianRupee, Store,
   FileSpreadsheet, ShieldCheck, ArrowUpRight
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -79,15 +79,15 @@ export default function PharmacyAnalyticsPage() {
   const financialCards = [
     { 
       title: "Total Sales Revenue", 
-      value: `$${totalSales.toFixed(2)}`, 
-      subtext: `+$${weeklySales.toFixed(2)} in past 7 days`,
-      icon: DollarSign, 
+      value: `₹${totalSales.toFixed(2)}`, 
+      subtext: `+₹${weeklySales.toFixed(2)} in past 7 days`,
+      icon: IndianRupee, 
       color: "text-blue-500", 
       bg: "bg-blue-500/10" 
     },
     { 
       title: "Gross Profit Recorded", 
-      value: `$${totalProfit.toFixed(2)}`, 
+      value: `₹${totalProfit.toFixed(2)}`, 
       subtext: `${profitMargin}% average profit margin`,
       icon: TrendingUp, 
       color: "text-emerald-500", 
@@ -228,11 +228,11 @@ export default function PharmacyAnalyticsPage() {
                   const heightPct = Math.max(Math.round((day.sales / maxSale) * 130), 10);
                   return (
                     <div key={day.date} className="flex flex-col items-center gap-1.5 flex-1">
-                      <span className="text-[10px] font-semibold text-muted-foreground">${day.sales}</span>
+                      <span className="text-[10px] font-semibold text-muted-foreground">₹{day.sales}</span>
                       <div
                         className="w-7 bg-amber-500/80 hover:bg-amber-500 rounded-t-md transition-all duration-300"
                         style={{ height: `${heightPct}px` }}
-                        title={`${day.day}: $${day.sales} sales (${day.orders} orders)`}
+                        title={`${day.day}: ₹${day.sales} sales (${day.orders} orders)`}
                       />
                       <span className="text-[11px] text-muted-foreground font-medium">{day.day}</span>
                     </div>

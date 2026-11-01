@@ -355,7 +355,7 @@ export default function PharmacyInventoryPage() {
                         </span>
                       </td>
                       <td className="px-5 py-4 text-right font-mono text-muted-foreground whitespace-nowrap">
-                        ${Number(item.unit_price || 0).toFixed(2)}
+                        ₹{Number(item.unit_price || 0).toFixed(2)}
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span className={isExpired ? "text-red-500 font-bold font-mono" : isExpiring ? "text-purple-500 font-medium font-mono" : "text-muted-foreground font-mono"}>
@@ -765,7 +765,7 @@ export default function PharmacyInventoryPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Unit Price ($) *</label>
+                  <label className="text-sm font-medium">Unit Price (₹) *</label>
                   <Input
                     type="number"
                     min="0"

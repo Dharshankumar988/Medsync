@@ -40,7 +40,7 @@ export function InventoryOverviewWidget({ inventory = [] }: { inventory?: Pharma
         <div className="grid grid-cols-2 gap-4 mb-6">
            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
              <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Total Value</p>
-             <p className="text-2xl font-bold">${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+             <p className="text-2xl font-bold">₹{totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
            </div>
            <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
              <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mb-1">Items In Stock</p>

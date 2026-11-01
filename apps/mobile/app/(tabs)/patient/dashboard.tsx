@@ -36,9 +36,16 @@ import { useRole } from '../../../providers/role-provider';
 import { useTheme } from '../../../context/ThemeContext';
 import { PaymentStyleQRScanner } from '../../../components/patient/PaymentStyleQRScanner';
 import { CompleteHealthProfileModal } from '../../../components/patient/CompleteHealthProfileModal';
+import { HealthProfilePromptModal } from '../../../components/patient/HealthProfilePromptModal';
+import { AppointmentsAndOrdersOverview } from '../../../components/patient/AppointmentsAndOrdersOverview';
+import { DeliveryTrackingModal } from '../../../components/patient/DeliveryTrackingModal';
 import { UploadRecordModal } from '../../../components/patient/UploadRecordModal';
 import { OrderMedicinesModal } from '../../../components/patient/OrderMedicinesModal';
 import { PrescriptionQRModal } from '../../../components/patient/PrescriptionQRModal';
+import { AppointmentItem, MedicineOrderItem } from '../../../services/patient.service';
+
+// Web parity: Session storage cache for dismissed profile prompt
+const sessionDismissedProfiles = new Set<string>();
 
 export default function PatientDashboard() {
   const router = useRouter();
@@ -51,7 +58,8 @@ export default function PatientDashboard() {
 
   // Profile & Vitals
   const [profile, setProfile] = useState<any>(null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [showProfileEditorModal, setShowProfileEditorModal] = useState(false);
 
   // Modals
   const [qrScannerVisible, setQrScannerVisible] = useState(false);
@@ -61,6 +69,11 @@ export default function PatientDashboard() {
 
   // Notifications
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  // Appointments & Orders Overview
+  const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
+  const [orders, setOrders] = useState<MedicineOrderItem[]>([]);
+  const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<MedicineOrderItem | null>(null);
 
   // Summary
   const [summary, setSummary] = useState<PatientDashboardSummary>({
@@ -92,19 +105,27 @@ export default function PatientDashboard() {
   const loadDashboardData = useCallback(async () => {
     try {
       setError(null);
-      const [sumData, profData, notifs] = await Promise.all([
+      const [sumData, profData, notifs, appts, orderList] = await Promise.all([
         patientService.getDashboardSummary(),
         user?.id ? patientService.getProfile(user.id).catch(() => null) : null,
         patientService.getNotifications(true).catch(() => []),
+        patientService.getAppointments().catch(() => []),
+        patientService.getMedicineOrders().catch(() => []),
       ]);
 
       setSummary(sumData);
       setProfile(profData);
       setUnreadNotifCount(Array.isArray(notifs) ? notifs.length : 0);
+      setAppointments(appts || []);
+      setOrders(orderList || []);
 
-      // Prompt to complete profile if DOB or blood group is missing
-      if (profData && (!profData.date_of_birth || !profData.blood_group)) {
-        setShowProfileModal(true);
+      // Web parity: Prompt to complete profile if DOB, Gender, or Blood Group is missing
+      const isMissingMandatoryInfo =
+        !profData || !profData.date_of_birth || !profData.gender || !profData.blood_group;
+      const isDismissed = user?.id ? sessionDismissedProfiles.has(user.id) : false;
+
+      if (isMissingMandatoryInfo && !isDismissed) {
+        setShowPromptModal(true);
       }
     } catch (err: any) {
       console.warn('Dashboard fetch error:', err);
@@ -114,6 +135,18 @@ export default function PatientDashboard() {
       setRefreshing(false);
     }
   }, [user?.id]);
+
+  const handleDismissPrompt = useCallback(() => {
+    if (user?.id) {
+      sessionDismissedProfiles.add(user.id);
+    }
+    setShowPromptModal(false);
+  }, [user?.id]);
+
+  const handleCompleteNow = useCallback(() => {
+    setShowPromptModal(false);
+    setShowProfileEditorModal(true);
+  }, []);
 
   useEffect(() => {
     loadDashboardData();
@@ -476,108 +509,13 @@ export default function PatientDashboard() {
             </TouchableOpacity>
           )}
 
-          {/* ── 4. My Health Vitals (Clean Ergonomic Carousel) ── */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              Health Metrics
-            </Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/patient/profile')}>
-              <Text style={[styles.sectionLink, { color: theme.textMuted }]}>
-                Manage
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.vitalsScroll}
-          >
-            {/* Heart Rate */}
-            <View
-              style={[
-                styles.vitalCard,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-            >
-              <View style={styles.vitalHeader}>
-                <View
-                  style={[
-                    styles.vitalIconBadge,
-                    { backgroundColor: 'rgba(239, 68, 68, 0.12)' },
-                  ]}
-                >
-                  <Heart size={16} color="#EF4444" />
-                </View>
-                <Text style={[styles.vitalStatusBadge, { color: '#10B981' }]}>
-                  Normal
-                </Text>
-              </View>
-              <Text style={[styles.vitalLabel, { color: theme.textMuted }]}>
-                Heart Rate
-              </Text>
-              <Text style={[styles.vitalValue, { color: theme.text }]}>
-                74 <Text style={styles.vitalUnit}>bpm</Text>
-              </Text>
-            </View>
-
-            {/* Blood Pressure */}
-            <View
-              style={[
-                styles.vitalCard,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-            >
-              <View style={styles.vitalHeader}>
-                <View
-                  style={[
-                    styles.vitalIconBadge,
-                    { backgroundColor: 'rgba(56, 189, 248, 0.12)' },
-                  ]}
-                >
-                  <Activity size={16} color="#38BDF8" />
-                </View>
-                <Text style={[styles.vitalStatusBadge, { color: '#10B981' }]}>
-                  Optimal
-                </Text>
-              </View>
-              <Text style={[styles.vitalLabel, { color: theme.textMuted }]}>
-                Blood Pressure
-              </Text>
-              <Text style={[styles.vitalValue, { color: theme.text }]}>
-                120/80 <Text style={styles.vitalUnit}>mmHg</Text>
-              </Text>
-            </View>
-
-            {/* Vault Records Count */}
-            <View
-              style={[
-                styles.vitalCard,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-            >
-              <View style={styles.vitalHeader}>
-                <View
-                  style={[
-                    styles.vitalIconBadge,
-                    { backgroundColor: 'rgba(168, 85, 247, 0.12)' },
-                  ]}
-                >
-                  <ShieldCheck size={16} color="#C084FC" />
-                </View>
-                <Text style={[styles.vitalStatusBadge, { color: '#38BDF8' }]}>
-                  Encrypted
-                </Text>
-              </View>
-              <Text style={[styles.vitalLabel, { color: theme.textMuted }]}>
-                EHR Vault
-              </Text>
-              <Text style={[styles.vitalValue, { color: theme.text }]}>
-                {summary.totalRecordsCount || 0}{' '}
-                <Text style={styles.vitalUnit}>Files</Text>
-              </Text>
-            </View>
-          </ScrollView>
+          {/* ── 4. Appointments & Orders Overview (Interactive Schedule Calendar with Legend & Orders) ── */}
+          <AppointmentsAndOrdersOverview
+            appointments={appointments}
+            orders={orders}
+            onSelectOrderForTracking={(ord) => setSelectedOrderForTracking(ord)}
+            onRefresh={loadDashboardData}
+          />
 
           {/* ── 5. Quick Access to Records & Prescriptions Hub ── */}
           <View style={styles.sectionHeader}>
@@ -620,12 +558,24 @@ export default function PatientDashboard() {
           onClose={() => setQrScannerVisible(false)}
         />
 
+        {/* ── Health Profile Prompt Modal (First Login / Incomplete Mandatory Info) ── */}
+        <HealthProfilePromptModal
+          visible={showPromptModal}
+          onClose={handleDismissPrompt}
+          onCompleteNow={handleCompleteNow}
+        />
+
+        {/* ── Complete Health Profile Full Editor Modal ── */}
         <CompleteHealthProfileModal
-          visible={showProfileModal}
+          visible={showProfileEditorModal}
           userId={user?.id || ''}
-          onClose={() => setShowProfileModal(false)}
+          initialData={profile}
+          onClose={() => setShowProfileEditorModal(false)}
           onCompleted={() => {
-            setShowProfileModal(false);
+            setShowProfileEditorModal(false);
+            if (user?.id) {
+              sessionDismissedProfiles.add(user.id);
+            }
             loadDashboardData();
           }}
         />
@@ -646,6 +596,14 @@ export default function PatientDashboard() {
             setOrderModalVisible(false);
             loadDashboardData();
           }}
+        />
+
+        {/* ── Live Delivery Tracking Modal ── */}
+        <DeliveryTrackingModal
+          visible={!!selectedOrderForTracking}
+          orderId={selectedOrderForTracking?.id}
+          trackingNumber={selectedOrderForTracking?.tracking_number}
+          onClose={() => setSelectedOrderForTracking(null)}
         />
 
         <PrescriptionQRModal

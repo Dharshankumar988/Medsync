@@ -66,7 +66,13 @@ export default function RegisterScreen() {
     setIsGoogleLoading(true);
     setError('');
     try {
-      await authService.signInWithGoogle();
+      const res = await authService.signInWithGoogle();
+      if (res?.url) {
+        router.push({
+          pathname: '/(auth)/callback',
+          params: { rawUrl: res.url },
+        });
+      }
     } catch (err: any) {
       setError(formatErrorMessage(err));
     } finally {

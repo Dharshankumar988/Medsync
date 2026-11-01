@@ -99,7 +99,7 @@ export default function PharmacyPatientsPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Most Recent Fulfillment</span>
                       {patient.lastOrder.total_amount && (
-                        <span className="text-xs font-bold text-foreground">${patient.lastOrder.total_amount.toFixed(2)}</span>
+                        <span className="text-xs font-bold text-foreground">₹{patient.lastOrder.total_amount.toFixed(2)}</span>
                       )}
                     </div>
                     <div className="flex justify-between items-center gap-2">

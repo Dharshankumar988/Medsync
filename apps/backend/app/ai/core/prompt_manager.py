@@ -68,7 +68,6 @@ class PromptManager:
         clean_text = re.sub(r'[^\w\s]', '', lower).strip()
         return clean_text in conversational_phrases
 
-
     @staticmethod
     def build_messages(
         system_prompt: str,
@@ -102,7 +101,7 @@ class PromptManager:
             "bone": "X-Ray / Bone Fracture Analysis",
             "brain": "Brain MRI / Tumor Detection",
             "kidney": "Kidney CT / Stone Detection",
-            "skin": "Dermatological / Skin Disease Classification",
+            "skin": "Dermatological / Skin Lesion Classification",
         }
         scan_label = scan_labels.get(scan_type, "Medical Image Analysis")
 
@@ -123,22 +122,33 @@ class PromptManager:
   "disclaimer": "string"
 }"""
 
+        skin_special_guidance = ""
+        if scan_type == "skin":
+            skin_special_guidance = f"""
+CRITICAL DERMATOLOGY CLINICAL CONTEXT:
+- The preliminary machine learning model was trained on broad classification categories (e.g., acne, eczema, fungal, infection, normal, psoriasis, tumor).
+- When the model outputs a low or modest confidence score (e.g. {confidence_pct}%), or when evaluating localized cutaneous lesions (such as a pigmented spot or mole):
+  1. DO NOT simply echo '{diagnosis}' as a conclusive verdict.
+  2. Explain what the lesion visually resembles: Note that discrete, pigmented spots are characteristic of Pigmented Cutaneous Lesions (such as a Melanocytic Nevus / Common Mole, Dysplastic Nevus, or Seborrheic Keratosis).
+  3. Clearly articulate why a {confidence_pct}% '{diagnosis}' score represents a low-confidence classification and outline why classic infection signs (acute erythema, purulent exudate, heat, spreading margins) must be verified clinically.
+  4. Evaluate under the clinical ABCDE criteria (Asymmetry, Border irregularity, Color variation, Diameter relative to 6mm, Evolution).
+  5. Provide a realistic differential diagnosis (Melanocytic Nevus / Mole, Dysplastic Nevus, Seborrheic Keratosis, Dermatofibroma, vs Atypical/Infectious lesion).
+"""
+
         if role == "doctor":
             return f"""SYSTEM INSTRUCTIONS
-You are a clinical AI assistant. A medical image analysis model has processed a {scan_label} scan.
+You are a clinical AI imaging and dermatology specialist. A medical image analysis model has processed a {scan_label} scan.
 IMPORTANT:
-- The ML model prediction is an AI-generated result.
-- Do not claim certainty.
-- Do not fabricate findings, patient history, test results, or medications.
-- Do not contradict the underlying model result.
-- Clearly distinguish observed/model-derived findings from interpretation.
-- Recommend professional clinical evaluation where appropriate.
-- If information is insufficient, say so.
+- The ML model prediction is an AI-generated preliminary finding, not a definitive diagnosis.
+- Do not claim absolute certainty.
+- Clearly distinguish observed/model-derived flags from clinical interpretation and differential diagnoses.
+- When model confidence is modest (< 70%), provide clinical context explaining the ambiguity and alternative differentials.
+- Recommend professional in-person clinical evaluation with appropriate diagnostic tools (e.g., dermoscopy, biopsy) where indicated.
 - Return ONLY a valid JSON object matching the requested schema. Do not wrap in markdown blocks.
-
+{skin_special_guidance}
 MODEL OUTPUT
-- Diagnosis: {diagnosis}
-- Confidence: {confidence_pct}%
+- Diagnosis / Primary Flag: {diagnosis}
+- Statistical Confidence: {confidence_pct}%
 - Raw Details: {prediction}
 
 PATIENT CONTEXT
@@ -152,15 +162,16 @@ Provide a structured clinical report in JSON format strictly adhering to this sc
             return f"""SYSTEM INSTRUCTIONS
 You are a caring healthcare assistant. A medical scan ({scan_label}) was analyzed by our AI system.
 IMPORTANT:
-- The ML model prediction is an AI-generated result.
-- Do not claim certainty or provide a definitive diagnosis.
-- Avoid alarming language. Be warm and supportive.
-- Do not contradict the underlying model result.
+- The ML model prediction is an AI-generated preliminary check, not a definitive medical diagnosis.
+- Do not claim certainty. Avoid alarming language. Be warm, reassuring, and informative.
+- If the model flagged '{diagnosis}' with modest or low confidence ({confidence_pct}%), reassure the patient that skin marks and moles are very common and benign (such as everyday moles / nevi), and that a low-confidence flag does not automatically mean an infection or disease.
+- Explain the visual appearance in simple terms (e.g. mole / pigmented spot) and encourage a routine in-person check by a doctor or dermatologist for peace of mind.
 - Return ONLY a valid JSON object matching the requested schema. Do not wrap in markdown blocks.
-
+{skin_special_guidance}
 MODEL OUTPUT
 - Finding: {diagnosis}
-- Confidence: {confidence_pct}%
+- Statistical Confidence: {confidence_pct}%
+- Details: {prediction}
 
 PATIENT CONTEXT
 {patient_context_str}

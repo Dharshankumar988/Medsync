@@ -4,11 +4,12 @@ import { getAvatarByGender } from "@/lib/avatars";
 
 import { useEffect, useState, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, Button, Input, Skeleton } from "@medsync/ui";
+import { Card, CardContent, CardHeader, CardTitle, Button, Input, Skeleton, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Alert, AlertDescription } from "@medsync/ui";
 import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
 import { profileService } from "@/services/profile.service";
-import { Loader2, Save, Heart, Camera, Upload, Activity, PhoneCall, UserCheck, Lock, Eye, EyeOff, KeyRound, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { authService } from "@/services/auth.service";
+import { Loader2, Save, Heart, Camera, Upload, Activity, PhoneCall, UserCheck, Lock, Eye, EyeOff, KeyRound, ShieldAlert, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -29,6 +30,22 @@ function MyHealthContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSettingPassword, setIsSettingPassword] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+
+  // Gmail OTP Reset Password Flow for Configured Accounts
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetOtpDigits, setResetOtpDigits] = useState<string[]>(["", "", "", "", "", ""]);
+  const resetOtpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [isSendingResetOtp, setIsSendingResetOtp] = useState(false);
+  const [isVerifyingResetOtp, setIsVerifyingResetOtp] = useState(false);
+  const [resetCountdown, setResetCountdown] = useState(60);
+  const [canResendResetOtp, setCanResendResetOtp] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   const isFromOAuth = searchParams?.get("oauth") === "google" || searchParams?.get("setup") === "true";
   
@@ -58,14 +75,26 @@ function MyHealthContent() {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
         setUserId(data.user.id);
+        setUserEmail(data.user.email || "");
         const isGoogle = data.user.app_metadata?.provider === "google" ||
           (Array.isArray(data.user.app_metadata?.providers) && data.user.app_metadata.providers.includes("google")) ||
           searchParams?.get("oauth") === "google";
         setIsGoogleUser(Boolean(isGoogle));
-        setHasPassword(Boolean(data.user.user_metadata?.has_password));
+        const hasPwd = Boolean(data.user.user_metadata?.has_password) || (typeof window !== "undefined" && localStorage.getItem(`medsync_pwd_set_${data.user.id}`) === "true");
+        setHasPassword(hasPwd);
       }
     });
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!isResetModalOpen) return;
+    if (resetCountdown > 0) {
+      const timer = setTimeout(() => setResetCountdown(resetCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setCanResendResetOtp(true);
+    }
+  }, [resetCountdown, isResetModalOpen]);
 
   useEffect(() => {
     if (!userId) return;
@@ -206,6 +235,158 @@ function MyHealthContent() {
     }
   };
 
+  const handleStartResetFlow = async () => {
+    if (!userEmail) {
+      toast.error("Unable to find registered email address.");
+      return;
+    }
+    setResetError(null);
+    setResetSuccess(false);
+    setResetOtpDigits(["", "", "", "", "", ""]);
+    setResetNewPassword("");
+    setResetConfirmPassword("");
+    setIsResetModalOpen(true);
+    setIsSendingResetOtp(true);
+    setResetCountdown(60);
+    setCanResendResetOtp(false);
+
+    try {
+      await authService.sendResetOtp(userEmail);
+      toast.success("Authentic 6-digit OTP code dispatched to your Gmail!");
+      setTimeout(() => {
+        resetOtpRefs.current[0]?.focus();
+      }, 150);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message || "Failed to dispatch verification code via Gmail.";
+      setResetError(msg);
+      toast.error(msg);
+    } finally {
+      setIsSendingResetOtp(false);
+    }
+  };
+
+  const handleResendResetOtp = async () => {
+    if (!canResendResetOtp || isSendingResetOtp || !userEmail) return;
+    setIsSendingResetOtp(true);
+    setResetError(null);
+    try {
+      await authService.sendResetOtp(userEmail);
+      toast.success("New 6-digit verification code sent to your Gmail!");
+      setResetCountdown(60);
+      setCanResendResetOtp(false);
+      setResetOtpDigits(["", "", "", "", "", ""]);
+      setTimeout(() => {
+        resetOtpRefs.current[0]?.focus();
+      }, 100);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message || "Failed to resend code.";
+      setResetError(msg);
+      toast.error(msg);
+    } finally {
+      setIsSendingResetOtp(false);
+    }
+  };
+
+  const handleResetOtpChange = (index: number, val: string) => {
+    const cleaned = val.replace(/\D/g, "");
+    if (!cleaned) {
+      const copy = [...resetOtpDigits];
+      copy[index] = "";
+      setResetOtpDigits(copy);
+      return;
+    }
+    const char = cleaned.slice(-1);
+    const copy = [...resetOtpDigits];
+    copy[index] = char;
+    setResetOtpDigits(copy);
+
+    if (index < 5 && char) {
+      resetOtpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleResetOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !resetOtpDigits[index] && index > 0) {
+      resetOtpRefs.current[index - 1]?.focus();
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      resetOtpRefs.current[index - 1]?.focus();
+    } else if (e.key === "ArrowRight" && index < 5) {
+      resetOtpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleResetOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    const copy = [...resetOtpDigits];
+    for (let i = 0; i < pasted.length; i++) {
+      copy[i] = pasted[i];
+    }
+    setResetOtpDigits(copy);
+    const nextIdx = Math.min(pasted.length, 5);
+    resetOtpRefs.current[nextIdx]?.focus();
+  };
+
+  const handleVerifyResetOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    const otpCode = resetOtpDigits.join("");
+    if (otpCode.length !== 6) {
+      setResetError("Please enter all 6 digits of the OTP code sent to your Gmail.");
+      return;
+    }
+    if (resetNewPassword.length < 6) {
+      setResetError("New password must be at least 6 characters.");
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetError("New Password and Confirm Password do not match.");
+      return;
+    }
+
+    setIsVerifyingResetOtp(true);
+    try {
+      // 1. Backend verification and password encryption
+      await authService.verifyResetOtp({
+        email: userEmail,
+        otp_code: otpCode,
+        new_password: resetNewPassword,
+        confirm_password: resetConfirmPassword,
+      });
+
+      // 2. Client Supabase auth sync
+      try {
+        await supabase.auth.updateUser({
+          password: resetNewPassword,
+          data: { has_password: true },
+        });
+      } catch (authErr) {
+        console.warn("Supabase auth sync notice:", authErr);
+      }
+
+      if (typeof window !== "undefined" && userId) {
+        localStorage.setItem(`medsync_pwd_set_${userId}`, "true");
+      }
+
+      setResetSuccess(true);
+      toast.success("Account password updated successfully via Gmail OTP!");
+      setTimeout(() => {
+        setIsResetModalOpen(false);
+        setResetSuccess(false);
+        setResetOtpDigits(["", "", "", "", "", ""]);
+        setResetNewPassword("");
+        setResetConfirmPassword("");
+      }, 1200);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message || "Failed to verify OTP or update password.";
+      setResetError(msg);
+      toast.error(msg);
+    } finally {
+      setIsVerifyingResetOtp(false);
+    }
+  };
+
   const handleSetPassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       toast.error("Password must be at least 6 characters.");
@@ -225,6 +406,17 @@ function MyHealthContent() {
         toast.error(error.message || "Failed to set password");
         return;
       }
+      try {
+        await api.post("/api/v1/auth/set-oauth-password", {
+          password: newPassword,
+          confirm_password: confirmPassword,
+        });
+      } catch (backendErr) {
+        console.warn("Backend set-oauth-password notice:", backendErr);
+      }
+      if (typeof window !== "undefined" && userId) {
+        localStorage.setItem(`medsync_pwd_set_${userId}`, "true");
+      }
       toast.success("Account password set successfully! You can now use this password for PIN setup and secure actions.");
       setPasswordSuccess(true);
       setHasPassword(true);
@@ -242,7 +434,8 @@ function MyHealthContent() {
     setSaving(true);
     try {
       // If user filled in password fields as part of full save, update password
-      if (newPassword) {
+      // Only set initial password if account has no password yet (configured passwords must go through Gmail OTP flow)
+      if (!hasPassword && newPassword) {
         if (newPassword.length < 6) {
           toast.error("Password must be at least 6 characters.");
           setSaving(false);
@@ -389,64 +582,265 @@ function MyHealthContent() {
                 </span>
               )}
             </div>
-            {(hasPassword || passwordSuccess) && (
+            {(hasPassword || passwordSuccess) ? (
               <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 font-medium flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Password Configured
+              </span>
+            ) : (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 font-medium flex items-center gap-1">
+                <ShieldAlert className="w-3.5 h-3.5" /> Setup Required
               </span>
             )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {hasPassword
-              ? "Your account password protects your health data and is required when creating, resetting, or updating your 6-digit Authorization PIN. You can change it below."
-              : "Since you signed up with Google, setting an account password is required to enroll your secure 6-digit Authorization PIN for booking appointments and downloading records."}
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Account Password</label>
+          {(hasPassword || passwordSuccess) ? (
+            /* Protected Password Configured View - Direct edits disabled, Reset via Gmail OTP only */
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Your account password is encrypted and protects your clinical health records. For your protection, direct password changes are restricted. To change or reset your password, you must authorize via an authentic 6-digit OTP sent to your registered Gmail address.
+              </p>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-muted/40 border border-border/50">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Account Protection Active</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold">
+                      Protected
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    To modify your password, an authentic 6-digit verification code will be dispatched to:
+                  </p>
+                  {userEmail && (
+                    <p className="text-xs font-mono font-semibold text-primary pt-0.5">
+                      {userEmail}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleStartResetFlow}
+                  disabled={isSendingResetOtp}
+                  className="shrink-0 rounded-xl border-primary/30 hover:bg-primary/10 text-xs font-semibold"
+                >
+                  {isSendingResetOtp ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  ) : (
+                    <KeyRound className="w-3.5 h-3.5 mr-1.5 text-primary" />
+                  )}
+                  Reset Password via Gmail OTP
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* Initial Password Creation for Google Users */
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Since you signed up with Google, setting an account password is required to enroll your secure 6-digit Authorization PIN for booking appointments and downloading records.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Account Password</label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter secure password (min 6 chars)"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Confirm Account Password</label>
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter password to confirm"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isSettingPassword || !newPassword || newPassword.length < 6 || newPassword !== confirmPassword}
+                  onClick={handleSetPassword}
+                  className="rounded-xl border-primary/30 hover:bg-primary/10 text-xs font-semibold"
+                >
+                  {isSettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <KeyRound className="w-3.5 h-3.5 mr-1.5 text-primary" />}
+                  Set Account Password
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ─── Reset Password via Gmail OTP Modal ─── */}
+      <Dialog open={isResetModalOpen} onOpenChange={setIsResetModalOpen}>
+        <DialogContent className="sm:max-w-[480px] p-6 rounded-2xl bg-card border border-border/80 shadow-2xl">
+          <DialogHeader className="text-center space-y-2">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 mb-1">
+              <KeyRound className="w-6 h-6" />
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium">
+              <span>Gmail 2FA Verification</span>
+            </div>
+            <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
+              Reset Account Password
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+              We dispatched an authentic 6-digit OTP code to <strong className="text-foreground">{userEmail}</strong>. Please check your Gmail inbox (including Spam or Updates folder) and enter it below.
+            </DialogDescription>
+          </DialogHeader>
+
+          {resetError && (
+            <Alert variant="destructive" className="py-2.5 bg-destructive/10 text-destructive border-destructive/20 text-xs mt-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 mr-2" />
+              <AlertDescription>{resetError}</AlertDescription>
+            </Alert>
+          )}
+
+          {resetSuccess && (
+            <Alert className="py-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs mt-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mr-2" />
+              <AlertDescription>Password updated successfully! Closing...</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleVerifyResetOtpSubmit} className="space-y-4 mt-3">
+            {/* 6-digit OTP Input */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wider block">
+                6-Digit Verification Code
+              </label>
+              <div className="flex justify-between gap-2">
+                {resetOtpDigits.map((digit, idx) => (
+                  <Input
+                    key={idx}
+                    ref={(el) => { resetOtpRefs.current[idx] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleResetOtpChange(idx, e.target.value)}
+                    onKeyDown={(e) => handleResetOtpKeyDown(idx, e)}
+                    onPaste={handleResetOtpPaste}
+                    disabled={isVerifyingResetOtp || isSendingResetOtp}
+                    className="w-11 h-12 text-center text-lg font-bold font-mono rounded-xl bg-background border-input focus:ring-2 focus:ring-primary shadow-sm"
+                  />
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                <span>Didn't receive the email?</span>
+                {canResendResetOtp ? (
+                  <button
+                    type="button"
+                    onClick={handleResendResetOtp}
+                    disabled={isSendingResetOtp}
+                    className="text-primary hover:underline font-semibold"
+                  >
+                    {isSendingResetOtp ? "Sending..." : "Resend Code"}
+                  </button>
+                ) : (
+                  <span className="text-muted-foreground/70">
+                    Resend code in <strong className="text-foreground">{resetCountdown}s</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* New Password */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-medium text-foreground/80">New Password</label>
               <div className="relative">
                 <Input
-                  type={showPassword ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter secure password (min 6 chars)"
-                  className="pr-10"
+                  type={showResetNewPassword ? "text" : "password"}
+                  placeholder="Min 6 characters"
+                  value={resetNewPassword}
+                  onChange={(e) => setResetNewPassword(e.target.value)}
+                  disabled={isVerifyingResetOtp}
+                  required
+                  className="h-11 pr-10 text-sm bg-background border-input"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                  className="absolute right-3 top-3 text-muted-foreground/60 hover:text-muted-foreground"
+                  tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showResetNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
+
+            {/* Confirm New Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Confirm Account Password</label>
-              <Input
-                type={showPassword ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter password to confirm"
-              />
+              <label className="text-xs font-medium text-foreground/80">Confirm New Password</label>
+              <div className="relative">
+                <Input
+                  type={showResetConfirmPassword ? "text" : "password"}
+                  placeholder="Re-enter new password"
+                  value={resetConfirmPassword}
+                  onChange={(e) => setResetConfirmPassword(e.target.value)}
+                  disabled={isVerifyingResetOtp}
+                  required
+                  className="h-11 pr-10 text-sm bg-background border-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                  className="absolute right-3 top-3 text-muted-foreground/60 hover:text-muted-foreground"
+                  tabIndex={-1}
+                >
+                  {showResetConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex justify-end pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isSettingPassword || !newPassword || newPassword.length < 6 || newPassword !== confirmPassword}
-              onClick={handleSetPassword}
-              className="rounded-xl border-primary/30 hover:bg-primary/10 text-xs"
-            >
-              {isSettingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <KeyRound className="w-3.5 h-3.5 mr-1.5 text-primary" />}
-              {hasPassword ? "Update Password" : "Set Account Password"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+
+            <div className="pt-2 flex flex-col gap-2">
+              <Button
+                type="submit"
+                disabled={isVerifyingResetOtp || resetOtpDigits.some((d) => !d) || resetNewPassword.length < 6 || resetNewPassword !== resetConfirmPassword}
+                className="w-full h-11 text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md transition-all"
+              >
+                {isVerifyingResetOtp ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verifying OTP & Updating...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    Verify OTP & Update Password
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsResetModalOpen(false)}
+                disabled={isVerifyingResetOtp}
+                className="w-full h-10 text-xs text-muted-foreground hover:text-foreground rounded-xl"
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <Card className="rounded-2xl border border-border/60 bg-card/50">

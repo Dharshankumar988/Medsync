@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@medsync/ui";
-import { Bot, QrCode, UploadCloud, FileText, Pill, AlertTriangle } from "lucide-react";
+import { Bot, QrCode, UploadCloud, Pill } from "lucide-react";
 
 export function QuickActionsMenu() {
   const actions = [
@@ -17,12 +17,12 @@ export function QuickActionsMenu() {
       title: "Share QR Profile",
       description: "Quickly share medical history",
       icon: QrCode,
-      href: "/patient/qr",
+      href: "/patient/scan-qr",
       color: "bg-blue-500/10 text-blue-600",
     },
     {
       title: "Upload Records",
-      description: "Store documents on blockchain",
+      description: "Store documents securely",
       icon: UploadCloud,
       href: "/patient/records",
       color: "bg-emerald-500/10 text-emerald-600",
@@ -31,7 +31,7 @@ export function QuickActionsMenu() {
       title: "Order Medicines",
       description: "From nearby pharmacies",
       icon: Pill,
-      href: "/patient/pharmacy",
+      href: "/patient/orders",
       color: "bg-orange-500/10 text-orange-600",
     },
   ];
@@ -41,15 +41,7 @@ export function QuickActionsMenu() {
       <CardHeader>
         <CardTitle>Quick Actions</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <Button variant="destructive" className="w-full justify-start h-auto p-4 mb-2 animate-pulse">
-          <AlertTriangle className="mr-3 h-5 w-5" />
-          <div className="flex flex-col items-start text-left">
-            <span className="font-semibold">Emergency SOS</span>
-            <span className="text-xs opacity-90 font-normal">Notify emergency contacts & nearby hospitals</span>
-          </div>
-        </Button>
-
+      <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {actions.map((action, i) => (
             <Link key={i} href={action.href}>

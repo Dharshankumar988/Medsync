@@ -317,15 +317,15 @@ export default function NewOnlineOrderPage() {
                 <div className="p-5 rounded-xl bg-muted/30 border border-border/50">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-muted-foreground">Medications Total</span>
-                    <span className="font-medium">$35.00</span>
+                    <span className="font-medium">₹35.00</span>
                   </div>
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-muted-foreground">Delivery Fee</span>
-                    <span className="font-medium">$10.00</span>
+                    <span className="font-medium">₹10.00</span>
                   </div>
                   <div className="flex justify-between items-center pt-4 border-t border-border/50">
                     <span className="font-bold text-foreground">Total Due</span>
-                    <span className="font-bold text-xl text-foreground">$45.00</span>
+                    <span className="font-bold text-xl text-foreground">₹45.00</span>
                   </div>
                 </div>
 

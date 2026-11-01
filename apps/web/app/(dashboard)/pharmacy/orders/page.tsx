@@ -222,7 +222,7 @@ export default function PharmacyOrdersPage() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">{order.patient_name}</CardTitle>
                     {order.total_amount !== undefined && (
-                      <span className="text-xs font-bold text-foreground font-mono">${order.total_amount.toFixed(2)}</span>
+                      <span className="text-xs font-bold text-foreground font-mono">₹{order.total_amount.toFixed(2)}</span>
                     )}
                   </div>
                   {order.patient_contact && (

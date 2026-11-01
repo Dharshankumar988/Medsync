@@ -11,6 +11,10 @@ export interface UserProfile {
   role: Role;
   status: string;
   full_name?: string | null;
+  avatar_url?: string | null;
+  profile_image_url?: string | null;
+  profile_picture_url?: string | null;
+  user_metadata?: Record<string, any>;
 }
 
 export interface RoleContextValue {

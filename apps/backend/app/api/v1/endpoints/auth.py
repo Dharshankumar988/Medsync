@@ -289,10 +289,26 @@ async def patient_reset_password(payload: PatientResetPasswordRequest, db: Async
         
     from sqlalchemy import text
     try:
-        result = await db.execute(
-            text("UPDATE auth.users SET encrypted_password = crypt(:pwd, gen_salt('bf')) WHERE email = :email"),
-            {"pwd": payload.password, "email": target_email}
-        )
+        try:
+            result = await db.execute(
+                text("""
+                UPDATE auth.users 
+                SET encrypted_password = extensions.crypt(:pwd, extensions.gen_salt('bf')),
+                    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"has_password": true}'::jsonb
+                WHERE lower(email) = :email
+                """),
+                {"pwd": payload.password, "email": target_email}
+            )
+        except Exception:
+            result = await db.execute(
+                text("""
+                UPDATE auth.users 
+                SET encrypted_password = crypt(:pwd, gen_salt('bf')),
+                    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"has_password": true}'::jsonb
+                WHERE lower(email) = :email
+                """),
+                {"pwd": payload.password, "email": target_email}
+            )
         await db.commit()
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Auth user not found.")
@@ -338,10 +354,26 @@ async def provider_reset_password(payload: ProviderResetPasswordRequest, db: Asy
         
     from sqlalchemy import text
     try:
-        result = await db.execute(
-            text("UPDATE auth.users SET encrypted_password = crypt(:pwd, gen_salt('bf')) WHERE lower(email) = :email"),
-            {"pwd": payload.new_password, "email": target_email}
-        )
+        try:
+            result = await db.execute(
+                text("""
+                UPDATE auth.users 
+                SET encrypted_password = extensions.crypt(:pwd, extensions.gen_salt('bf')),
+                    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"has_password": true}'::jsonb
+                WHERE lower(email) = :email
+                """),
+                {"pwd": payload.new_password, "email": target_email}
+            )
+        except Exception:
+            result = await db.execute(
+                text("""
+                UPDATE auth.users 
+                SET encrypted_password = crypt(:pwd, gen_salt('bf')),
+                    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"has_password": true}'::jsonb
+                WHERE lower(email) = :email
+                """),
+                {"pwd": payload.new_password, "email": target_email}
+            )
         await db.commit()
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Auth user not found.")
@@ -1022,10 +1054,26 @@ async def verify_reset_otp(payload: ResetPasswordWithOTPRequest, db: AsyncSessio
 
     from sqlalchemy import text
     try:
-        result = await db.execute(
-            text("UPDATE auth.users SET encrypted_password = crypt(:pwd, gen_salt('bf')) WHERE lower(email) = :email"),
-            {"pwd": payload.new_password, "email": target_email}
-        )
+        try:
+            result = await db.execute(
+                text("""
+                UPDATE auth.users 
+                SET encrypted_password = extensions.crypt(:pwd, extensions.gen_salt('bf')),
+                    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"has_password": true}'::jsonb
+                WHERE lower(email) = :email
+                """),
+                {"pwd": payload.new_password, "email": target_email}
+            )
+        except Exception:
+            result = await db.execute(
+                text("""
+                UPDATE auth.users 
+                SET encrypted_password = crypt(:pwd, gen_salt('bf')),
+                    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"has_password": true}'::jsonb
+                WHERE lower(email) = :email
+                """),
+                {"pwd": payload.new_password, "email": target_email}
+            )
         await db.commit()
         if result.rowcount == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Auth account not found.")

@@ -487,3 +487,33 @@ def test_authenticated_principal_role_matching():
     assert str(pat_principal.role).upper() == UserRole.PATIENT.value
     pat_verified = checker(pat_principal)
     assert pat_verified.id == pat_principal.id
+
+
+def test_skin_lesion_detection_and_bounding_box():
+    """Verify ImageAnalysisService generates normalized bounding box ROI for skin lesions."""
+    import io
+    from PIL import Image
+    from app.ai.services.image_analysis import ImageAnalysisService
+
+    # Create synthetic skin image with dark mole
+    img = Image.new("RGB", (300, 200), color=(220, 180, 160))
+    for y in range(80, 120):
+        for x in range(120, 160):
+            if (x - 140) ** 2 + (y - 100) ** 2 < 15 ** 2:
+                img.putpixel((x, y), (60, 40, 30))
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    image_bytes = buf.getvalue()
+
+    boxes = ImageAnalysisService._detect_skin_lesion_box(image_bytes, "infection", 0.395)
+    assert len(boxes) == 1
+    box = boxes[0]
+    coords = box["coordinates"]
+    assert len(coords) == 4
+    # Coordinates must be normalized between 0 and 1
+    assert 0.0 <= coords[0] < coords[2] <= 1.0
+    assert 0.0 <= coords[1] < coords[3] <= 1.0
+    # Mole center is approx x=0.46, y=0.50
+    assert coords[0] <= 0.46 <= coords[2]
+    assert coords[1] <= 0.50 <= coords[3]

@@ -98,7 +98,13 @@ export default function LoginScreen() {
     setIsGoogleLoading(true);
     setError('');
     try {
-      await authService.signInWithGoogle();
+      const res = await authService.signInWithGoogle();
+      if (res?.url) {
+        router.push({
+          pathname: '/(auth)/callback',
+          params: { rawUrl: res.url },
+        });
+      }
     } catch (err: any) {
       setError(formatErrorMessage(err));
     } finally {
@@ -212,9 +218,6 @@ export default function LoginScreen() {
               />
             </View>
             <Text style={[styles.brandTitle, { color: theme.text }]}>MedSync</Text>
-            <Text style={[styles.brandTagline, { color: theme.textMuted }]}>
-              Patient Health & Clinical Vault
-            </Text>
           </View>
 
           {/* Shadcn UI Card */}

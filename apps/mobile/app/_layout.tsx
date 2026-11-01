@@ -1,8 +1,10 @@
 import '../global.css';
-import { Stack } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, StyleSheet, LogBox } from 'react-native';
+import * as Linking from 'expo-linking';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RoleProvider } from '../providers/role-provider';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
@@ -15,7 +17,17 @@ LogBox.ignoreLogs([
 const queryClient = new QueryClient();
 
 function NavigationStack() {
+  const router = useRouter();
   const { theme, isDark } = useTheme();
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      if (url && (url.includes('auth/callback') || url.includes('callback'))) {
+        router.replace('/(auth)/callback');
+      }
+    });
+    return () => subscription.remove();
+  }, [router]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

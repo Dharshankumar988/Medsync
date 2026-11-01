@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@medsync/ui";
 import { Skeleton } from "@medsync/ui";
-import { Users, Calendar, Activity, CheckCircle2, TrendingUp, DollarSign, ArrowUpRight, MessageSquare, Stethoscope, Brain, FileText, Clock } from "lucide-react";
+import { Users, Calendar, Activity, CheckCircle2, TrendingUp, IndianRupee, ArrowUpRight, MessageSquare, Stethoscope, Brain, FileText, Clock } from "lucide-react";
 import { Button } from "@medsync/ui";
-import { AuditHistory } from "@medsync/ui";
+import { CreatePrescriptionCard } from "@/components/doctor/CreatePrescriptionCard";
+import { DoctorPatientsWidget } from "@/components/doctor/DoctorPatientsWidget";
 import { AppointmentHeatmap } from "@/components/doctor/AppointmentHeatmap";
 import { PatientQueue } from "@/components/doctor/PatientQueue";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -128,7 +129,7 @@ export default function DoctorDashboard() {
       title: "Today's Revenue",
       value: `₹${((dashboardData?.today_appointments || 0) * 500).toLocaleString()}`,
       subtitle: `${dashboardData?.today_appointments || 0} patient(s) @ ₹500 fee`,
-      icon: DollarSign,
+      icon: IndianRupee,
       accent: "violet",
       href: "/doctor/analytics",
     },
@@ -238,7 +239,7 @@ export default function DoctorDashboard() {
         </motion.div>
       </motion.div>
 
-      {/* ─── Bottom Grid: Alerts + Audit ─── */}
+      {/* ─── Bottom Grid: Create Prescription Studio + Your Patients ─── */}
       <motion.div
         className="grid gap-6 md:grid-cols-2 lg:grid-cols-7"
         initial="hidden"
@@ -246,28 +247,12 @@ export default function DoctorDashboard() {
         viewport={{ once: true, margin: "-60px" }}
         variants={stagger}
       >
-        <motion.div variants={fadeUp} className="col-span-full lg:col-span-4 space-y-6">
-          <Card className="rounded-2xl border border-border/60 bg-card/50">
-            <CardHeader>
-              <CardTitle>Recent Patient Alerts</CardTitle>
-              <CardDescription>Critical updates from monitored patients.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-10 text-center bg-muted/10 rounded-xl border border-border/50">
-                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/30">
-                  <CheckCircle2 className="h-7 w-7 text-muted-foreground/50" />
-                </div>
-                <p className="font-semibold text-lg text-foreground">No Active Alerts</p>
-                <p className="text-sm text-muted-foreground mt-2 max-w-[280px] leading-relaxed">
-                  You have no pending critical alerts from your patients.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+        <motion.div variants={fadeUp} className="col-span-full lg:col-span-4">
+          <CreatePrescriptionCard />
         </motion.div>
 
-        <motion.div variants={fadeUp} className="col-span-full lg:col-span-3 space-y-6">
-          <AuditHistory />
+        <motion.div variants={fadeUp} className="col-span-full lg:col-span-3">
+          <DoctorPatientsWidget />
         </motion.div>
       </motion.div>
 
