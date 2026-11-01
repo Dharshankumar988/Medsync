@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     
     # External AI Microservice & RAG Worker
     MEDSYNC_AI_URL: str = "https://dharshan8197-medsync-ai.hf.space"
-    MEDSYNC_AI_TOKEN: str = ""
+    MEDSYNC_AI_TOKEN: str = "ms_ai_4c9d769acd23f75fb396b9e09bec77a82218824c83cbad53"
+    AI_SERVICE_TOKEN: str = "ms_ai_4c9d769acd23f75fb396b9e09bec77a82218824c83cbad53"
     RAG_WORKER_URL: str = ""
     AI_TIMEOUT: int = 30
 
@@ -55,8 +56,16 @@ class Settings(BaseSettings):
             self.SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or self.SUPABASE_KEY or ""
         if not self.SUPABASE_ANON_KEY:
             self.SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or self.SUPABASE_KEY or ""
+        default_ai_token = "ms_ai_4c9d769acd23f75fb396b9e09bec77a82218824c83cbad53"
         if not self.MEDSYNC_AI_TOKEN:
-            self.MEDSYNC_AI_TOKEN = os.getenv("MEDSYNC_AI_TOKEN") or os.getenv("AI_SERVICE_TOKEN") or ""
+            self.MEDSYNC_AI_TOKEN = (
+                os.getenv("MEDSYNC_AI_TOKEN")
+                or os.getenv("AI_SERVICE_TOKEN")
+                or self.AI_SERVICE_TOKEN
+                or default_ai_token
+            )
+        if not self.AI_SERVICE_TOKEN:
+            self.AI_SERVICE_TOKEN = self.MEDSYNC_AI_TOKEN or default_ai_token
         return self
 
     model_config = SettingsConfigDict(

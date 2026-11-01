@@ -1,7 +1,8 @@
 import logging
-from typing import List, Dict, Any
-from web3.contract import Contract
-from app.blockchain.contracts.loader import contract_loader
+from typing import List, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from web3.contract import Contract
 
 logger = logging.getLogger("blockchain.monitoring.events")
 
@@ -27,6 +28,7 @@ class EventListenerFramework:
     @staticmethod
     def decode_logs(contract_name: str, logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         try:
+            from app.blockchain.contracts.loader import contract_loader
             contract: Contract = contract_loader.get_contract(contract_name)
             decoded_events = []
             
@@ -65,6 +67,7 @@ class EventListenerFramework:
     @staticmethod
     def get_past_events(contract_name: str, event_name: str, from_block: int, to_block: int = 'latest'):
         try:
+            from app.blockchain.contracts.loader import contract_loader
             contract = contract_loader.get_contract(contract_name)
             event_type = getattr(contract.events, event_name)
             

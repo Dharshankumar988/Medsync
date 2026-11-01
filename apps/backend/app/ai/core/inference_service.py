@@ -77,11 +77,7 @@ class InferenceService:
         self._timeout = float(ai_config.HF_REQUEST_TIMEOUT)
         self._max_retries = ai_config.HF_MAX_RETRIES
         self._cold_start_wait = ai_config.HF_COLD_START_WAIT
-        self._headers = {}
-        token = settings.MEDSYNC_AI_TOKEN or getattr(settings, "AI_SERVICE_TOKEN", "") or os.getenv("MEDSYNC_AI_TOKEN") or os.getenv("AI_SERVICE_TOKEN") or ""
-        if token:
-            clean_token = token.strip('"').strip("'")
-            self._headers["Authorization"] = f"Bearer {clean_token}"
+        self._headers = self._get_request_headers()
 
         # Persistent async client — connection pooling
         self._client = httpx.AsyncClient(
@@ -95,6 +91,20 @@ class InferenceService:
         self._endpoint_healthy = True
         self._last_health_check = 0
         self._initialized = True
+
+    def _get_request_headers(self) -> Dict[str, str]:
+        token = (
+            getattr(settings, "MEDSYNC_AI_TOKEN", "")
+            or getattr(settings, "AI_SERVICE_TOKEN", "")
+            or os.getenv("MEDSYNC_AI_TOKEN")
+            or os.getenv("AI_SERVICE_TOKEN")
+            or "ms_ai_4c9d769acd23f75fb396b9e09bec77a82218824c83cbad53"
+        )
+        headers = {}
+        if token:
+            clean_token = str(token).strip('"').strip("'").strip()
+            headers["Authorization"] = f"Bearer {clean_token}"
+        return headers
 
     async def predict(self, scan_type: str, image_bytes: bytes) -> Dict[str, Any]:
         """
@@ -110,12 +120,13 @@ class InferenceService:
         url = f"{self._base_url}/api/v1/predict"
         files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
         data = {"scan_type": scan_type}
+        headers = self._get_request_headers()
 
         last_error = None
         for attempt in range(self._max_retries):
             try:
                 response = await self._client.post(
-                    url, files=files, data=data, headers=self._headers
+                    url, files=files, data=data, headers=headers
                 )
 
                 # Cold-start detection (HF Spaces returns 503 when sleeping)
@@ -162,7 +173,7 @@ class InferenceService:
                     fallback_predict_url,
                     files={"file": ("image.jpg", image_bytes, "image/jpeg")},
                     data={"scan_type": scan_type},
-                    headers=self._headers,
+                    headers=self._get_request_headers(),
                     timeout=20.0
                 )
                 if fb_resp.status_code == 200:
@@ -187,7 +198,7 @@ class InferenceService:
         """Check the health of the AI microservice endpoint."""
         url = f"{self._base_url}/api/v1/health"
         try:
-            response = await self._client.get(url, headers=self._headers, timeout=10.0)
+            response = await self._client.get(url, headers=self._get_request_headers(), timeout=10.0)
             if response.status_code == 200:
                 self._endpoint_healthy = True
                 self._last_health_check = time.time()

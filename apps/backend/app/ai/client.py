@@ -1,3 +1,4 @@
+import os
 import httpx
 import logging
 import asyncio
@@ -10,14 +11,30 @@ class AIMicroserviceClient:
     def __init__(self):
         self.base_url = settings.MEDSYNC_AI_URL.rstrip("/")
         self.timeout = settings.AI_TIMEOUT
-        self.headers = {}
-        if settings.MEDSYNC_AI_TOKEN:
-            self.headers["Authorization"] = f"Bearer {settings.MEDSYNC_AI_TOKEN}"
+
+    def _get_headers(self) -> Dict[str, str]:
+        token = (
+            getattr(settings, "MEDSYNC_AI_TOKEN", "")
+            or getattr(settings, "AI_SERVICE_TOKEN", "")
+            or os.getenv("MEDSYNC_AI_TOKEN")
+            or os.getenv("AI_SERVICE_TOKEN")
+            or "ms_ai_4c9d769acd23f75fb396b9e09bec77a82218824c83cbad53"
+        )
+        headers = {}
+        if token:
+            clean_token = str(token).strip('"').strip("'").strip()
+            headers["Authorization"] = f"Bearer {clean_token}"
+        return headers
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        return self._get_headers()
 
     async def predict(self, scan_type: str, image_bytes: bytes) -> Dict[str, Any]:
         url = f"{self.base_url}/predict"
         files = {"file": ("image.jpg", image_bytes, "image/jpeg")}
         data = {"scan_type": scan_type}
+        headers = self._get_headers()
         
         # Simple retry logic (up to 3 times)
         max_retries = 3
@@ -28,7 +45,7 @@ class AIMicroserviceClient:
                         url, 
                         files=files, 
                         data=data, 
-                        headers=self.headers
+                        headers=headers
                     )
                     response.raise_for_status()
                     return response.json()
@@ -43,7 +60,7 @@ class AIMicroserviceClient:
         url = f"{self.base_url}/health"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(url, headers=self.headers)
+                response = await client.get(url, headers=self._get_headers())
                 if response.status_code == 200:
                     return response.json()
                 return {"status": "error", "message": f"HTTP {response.status_code}"}
