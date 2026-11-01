@@ -77,21 +77,35 @@ export function PulseAIChat({ role = 'patient' }: PulseAIChatProps) {
       setIsLoading(true);
 
       const aiMsgId = (Date.now() + 1).toString();
-      setMessages((prev) => [...prev, { id: aiMsgId, role: 'assistant', content: '' }]);
+      let hasAddedAssistantMsg = false;
 
-      let receivedChunks = '';
       aiService.streamChat(
         role,
         userMessage.content,
         null,
         (chunk) => {
-          receivedChunks += chunk;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === aiMsgId ? { ...m, content: m.content + chunk } : m))
-          );
+          if (!hasAddedAssistantMsg) {
+            hasAddedAssistantMsg = true;
+            setMessages((prev) => [...prev, { id: aiMsgId, role: 'assistant', content: chunk }]);
+          } else {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === aiMsgId ? { ...m, content: m.content + chunk } : m))
+            );
+          }
         },
         () => setIsLoading(false),
-        async () => {
+        (err) => {
+          console.warn('Pulse AI chat error:', err);
+          if (!hasAddedAssistantMsg) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: aiMsgId,
+                role: 'assistant',
+                content: 'I encountered a temporary connection issue. Please try sending your query again.',
+              },
+            ]);
+          }
           setIsLoading(false);
         }
       );

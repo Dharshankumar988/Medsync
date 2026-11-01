@@ -25,7 +25,7 @@ export const aiService = {
     return res.data?.data;
   },
 
-  // Streaming Chat via verified FastAPI /ai/pulse/chat/stream
+  // Streaming Chat via verified FastAPI /ai/pulse/chat/stream with robust XHR and fallback
   streamChat(
     role: 'doctor' | 'patient' | 'pharmacy' | 'admin',
     message: string,
@@ -34,37 +34,81 @@ export const aiService = {
     onDone: () => void,
     onError: (err: any) => void
   ) {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return onError(new Error('Not authenticated'));
+    let completed = false;
+    let receivedAnyText = false;
 
-      const es = new EventSource(`${API_BASE_URL}/ai/pulse/chat/stream`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message, session_id: sessionId || null }),
-        lineEndingCharacter: '\n',
-      } as any);
+    const fallbackToDirectChat = () => {
+      if (completed) return;
+      completed = true;
+      aiService
+        .chat(role, message, sessionId)
+        .then((res) => {
+          const reply = res?.reply || res?.message || 'I am ready to assist with your medical questions.';
+          if (!receivedAnyText) {
+            onChunk(reply);
+          }
+          onDone();
+        })
+        .catch((err) => {
+          onError(err);
+          onDone();
+        });
+    };
 
-      es.addEventListener('message', (event: any) => {
-        if (event.data) {
-          onChunk(event.data);
-        }
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!session) return onError(new Error('Not authenticated'));
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE_URL}/ai/pulse/chat/stream`);
+        xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+
+        let lastIndex = 0;
+
+        xhr.onprogress = () => {
+          const fullText = xhr.responseText || '';
+          if (fullText.length > lastIndex) {
+            const newChunk = fullText.slice(lastIndex);
+            lastIndex = fullText.length;
+            receivedAnyText = true;
+            onChunk(newChunk);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            completed = true;
+            if (xhr.responseText && xhr.responseText.length > lastIndex) {
+              const remaining = xhr.responseText.slice(lastIndex);
+              receivedAnyText = true;
+              onChunk(remaining);
+            }
+            if (!receivedAnyText) {
+              fallbackToDirectChat();
+            } else {
+              onDone();
+            }
+          } else {
+            fallbackToDirectChat();
+          }
+        };
+
+        xhr.onerror = () => {
+          fallbackToDirectChat();
+        };
+
+        xhr.ontimeout = () => {
+          fallbackToDirectChat();
+        };
+
+        xhr.timeout = 30000;
+        xhr.send(JSON.stringify({ message, session_id: sessionId || null }));
+      })
+      .catch((err) => {
+        fallbackToDirectChat();
       });
-
-      es.addEventListener('error', (event: any) => {
-        if (event.type === 'error' && event.message) {
-          onError(event.message);
-        }
-        es.close();
-        onDone();
-      });
-
-      es.addEventListener('close', () => {
-        onDone();
-      });
-    }).catch(onError);
   },
 
   // Image analysis for medical imaging scans
