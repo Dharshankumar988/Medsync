@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState, useRef, memo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, Badge } from '@medsync/ui';
 import { MapPin, CheckCircle, Navigation } from 'lucide-react';

@@ -1,5 +1,6 @@
-import { getAvatarByGender } from "@/lib/avatars";
 "use client";
+
+import { getAvatarByGender } from "@/lib/avatars";
 
 import { useEffect, useState, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
