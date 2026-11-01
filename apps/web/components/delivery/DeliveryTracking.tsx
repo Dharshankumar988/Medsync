@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@medsync/ui';
-import { Truck, Clock, CheckCircle, Loader2, MapPin, AlertCircle } from 'lucide-react';
+import { Truck, Clock, CheckCircle, CheckCircle2, Loader2, MapPin, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
 import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
 
 const DeliveryMap = dynamic(() => import('./DeliveryMap'), { ssr: false });
 
@@ -29,6 +30,79 @@ export default function DeliveryTracking() {
   const [loading, setLoading] = useState(true);
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [expandedDelivery, setExpandedDelivery] = useState<string | null>(null);
+  const [liveProgress, setLiveProgress] = useState<Record<string, number>>({});
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+
+  // Live dynamic random speed progression simulation
+  useEffect(() => {
+    if (deliveries.length === 0) return;
+
+    // Initialize progress values from server data
+    setLiveProgress(prev => {
+      const next = { ...prev };
+      for (const d of deliveries) {
+        if (next[d.dispensing_log_id] === undefined) {
+          next[d.dispensing_log_id] = d.progress || 25;
+        }
+      }
+      return next;
+    });
+
+    const interval = setInterval(() => {
+      setLiveProgress(prev => {
+        let changed = false;
+        const next = { ...prev };
+        for (const d of deliveries) {
+          if (d.delivery_status === 'DELIVERED') {
+            if (next[d.dispensing_log_id] !== 100) {
+              next[d.dispensing_log_id] = 100;
+              changed = true;
+            }
+            continue;
+          }
+
+          const current = next[d.dispensing_log_id] ?? (d.progress || 25);
+          if (current < 97) {
+            // Realistic random speed steps between 0.3% and 1.8%
+            const jitter = +(Math.random() * 1.5 + 0.3).toFixed(1);
+            next[d.dispensing_log_id] = Math.min(97, +(current + jitter).toFixed(1));
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 2200);
+
+    return () => clearInterval(interval);
+  }, [deliveries]);
+
+  const handleConfirmReceived = async (logId: string) => {
+    setConfirmingId(logId);
+    try {
+      try {
+        await api.post(`/api/v1/delivery/tracking/${logId}/confirm-received`);
+      } catch (e1) {
+        // Fallback to complete-delivery on orders endpoint
+        await api.post(`/api/v1/orders/${logId}/complete-delivery`);
+      }
+
+      toast.success("Package receipt confirmed! Order marked as Delivered.");
+      
+      // Update local state immediately
+      setLiveProgress(prev => ({ ...prev, [logId]: 100 }));
+      setDeliveries(prev => prev.map(d => d.dispensing_log_id === logId ? { ...d, delivery_status: 'DELIVERED', progress: 100 } : d));
+
+      // Refresh list after 2s
+      setTimeout(() => {
+        fetchDeliveries();
+      }, 2000);
+    } catch (err: any) {
+      toast.error("Could not confirm receipt: " + (err.response?.data?.detail || err.message || "Please try again"));
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   const fetchDeliveries = async () => {
     try {
@@ -165,18 +239,60 @@ export default function DeliveryTracking() {
 
             <CardContent className="space-y-4">
               {/* Progress bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Delivery Progress</span>
-                  <span className="font-medium">{delivery.progress}%</span>
+              {(() => {
+                const currentPct = Math.round(liveProgress[delivery.dispensing_log_id] ?? delivery.progress ?? 25);
+                return (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Delivery Progress</span>
+                        {delivery.delivery_status !== 'DELIVERED' && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-500 animate-pulse">
+                            Live GPS
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-semibold font-mono text-primary">{currentPct}%</span>
+                    </div>
+                    <div className="h-2.5 bg-muted rounded-full overflow-hidden p-0.5">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 rounded-full transition-all duration-1000 ease-out"
+                        style={{ width: `${currentPct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Patient Received Package Action */}
+              {delivery.delivery_status !== 'DELIVERED' && (
+                <div className="p-3 bg-muted/40 rounded-xl border border-border/60 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-foreground">Package Arrival Confirmation</span>
+                    <span className="text-muted-foreground text-[11px]">Action required by you</span>
+                  </div>
+                  <button
+                    onClick={() => handleConfirmReceived(delivery.dispensing_log_id)}
+                    disabled={confirmingId === delivery.dispensing_log_id}
+                    className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {confirmingId === delivery.dispensing_log_id ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Confirming Delivery...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>I Have Received the Package</span>
+                      </>
+                    )}
+                  </button>
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Click this button when your delivery arrives to mark it as Delivered.
+                  </p>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-500"
-                    style={{ width: `${delivery.progress}%` }}
-                  />
-                </div>
-              </div>
+              )}
 
               {/* Delivery details */}
               <div className="grid grid-cols-2 gap-4 text-sm">

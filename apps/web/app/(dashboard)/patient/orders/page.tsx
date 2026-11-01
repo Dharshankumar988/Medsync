@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Skeleton, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@medsync/ui";
 import { ShoppingBag, Truck, CheckCircle2, AlertCircle, ChevronRight, Plus, CreditCard, Banknote, ShieldCheck, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import api from "@/lib/api";
 import { orderService } from "@/services/order.service";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -156,9 +157,30 @@ export default function OrdersPage() {
                         </div>
                       )}
                       
-                      <Button asChild variant="outline" className="w-full sm:w-auto rounded-xl">
+                      {['OUT_FOR_DELIVERY', 'SHIPPED', 'DISPATCHED', 'IN_TRANSIT'].includes((order.status || '').toUpperCase()) && (
+                        <Button 
+                          className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl text-xs shadow-sm"
+                          onClick={async () => {
+                            try {
+                              try {
+                                await api.post(`/api/v1/delivery/tracking/${order.id}/confirm-received`);
+                              } catch {
+                                await api.post(`/api/v1/orders/${order.id}/complete-delivery`);
+                              }
+                              toast.success("Package receipt confirmed! Order marked as Delivered.");
+                              loadOrders();
+                            } catch (e: any) {
+                              toast.error("Could not confirm receipt: " + (e.response?.data?.detail || e.message));
+                            }
+                          }}
+                        >
+                          <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Received Package
+                        </Button>
+                      )}
+
+                      <Button asChild variant="outline" className="w-full sm:w-auto rounded-xl text-xs">
                         <Link href={`/patient/tracking/${order.id}`}>
-                          <Truck className="mr-2 h-4 w-4" /> Track Order
+                          <Truck className="mr-2 h-3.5 w-3.5" /> Track Order
                         </Link>
                       </Button>
                     </div>

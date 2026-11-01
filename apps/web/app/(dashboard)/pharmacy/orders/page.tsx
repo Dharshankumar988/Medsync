@@ -66,11 +66,15 @@ export default function PharmacyOrdersPage() {
       );
       
       if (res.success) {
-        toast.success("Prescription dispensed and fulfilled successfully!");
-        setOrders(prev => prev.map(o => o.id === dispensingOrder ? { ...o, status: "DISPENSED" } : o));
+        toast.success("Prescription dispensed & dispatched for delivery!");
+        setOrders(prev => prev.map(o => o.id === dispensingOrder ? { ...o, status: "OUT_FOR_DELIVERY" } : o));
         setDispensingRxId(null);
         setDispensingOrder(null);
         setAuthPinInput("");
+        // Re-sync in background to reflect live server state
+        pharmacyService.getOrders().then(data => {
+          if (Array.isArray(data)) setOrders(data);
+        }).catch(() => {});
       } else {
         toast.error(`Failed to dispense: ${res.error || "Invalid PIN"}`);
       }

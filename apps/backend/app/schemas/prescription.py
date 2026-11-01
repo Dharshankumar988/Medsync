@@ -43,3 +43,21 @@ class PrescriptionOrderPlacementResponse(BaseModel):
     order_id: Optional[str] = None
     
     model_config = ConfigDict(use_enum_values=True)
+
+class PrescriptionListItem(BaseModel):
+    id: uuid.UUID
+    appointment_id: Optional[uuid.UUID] = None
+    patient_id: uuid.UUID
+    doctor_id: Optional[uuid.UUID] = None
+    diagnosis: Optional[str] = None
+    notes: Optional[str] = None
+    is_finalized: bool = True
+    is_dispensed: bool = False
+    created_at: datetime
+    pdf_url: Optional[str] = None
+    qr_token: Optional[str] = None
+    patient_name: Optional[str] = "Patient"
+    prescription_items: List[PrescriptionItemResponse] = []
+    
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+

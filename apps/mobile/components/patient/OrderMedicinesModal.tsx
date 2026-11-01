@@ -45,9 +45,11 @@ interface OrderMedicinesModalProps {
     contact_number?: string;
     data?: any;
   } | null;
+  defaultPharmacyId?: string | null;
   initialPrescriptionId?: string | null;
   onClose: () => void;
   onOrderSuccess?: (order: any) => void;
+  onSuccess?: (order?: any) => void;
 }
 
 type OrderStep = 'order_details' | 'payment' | 'success';
@@ -55,9 +57,11 @@ type OrderStep = 'order_details' | 'payment' | 'success';
 export function OrderMedicinesModal({
   visible,
   pharmacyData,
+  defaultPharmacyId,
   initialPrescriptionId,
   onClose,
   onOrderSuccess,
+  onSuccess,
 }: OrderMedicinesModalProps) {
   const router = useRouter();
   const [step, setStep] = useState<OrderStep>('order_details');
@@ -207,6 +211,9 @@ export function OrderMedicinesModal({
 
       if (onOrderSuccess) {
         onOrderSuccess(order);
+      }
+      if (onSuccess) {
+        onSuccess(order);
       }
     } catch (err: any) {
       Alert.alert('Payment & Order Failed', formatErrorMessage(err));

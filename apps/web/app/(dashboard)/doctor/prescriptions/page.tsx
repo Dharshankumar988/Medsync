@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { PrescriptionQR } from "@medsync/ui"; 
 import { toast } from "sonner";
 import axios from "axios";
+import api from "@/lib/api";
 import { getApiUrl } from "@/lib/backend-config";
 import Link from "next/link";
 
@@ -23,36 +24,60 @@ export default function DoctorPrescriptionsPage() {
   }, []);
 
   const loadPrescriptions = useCallback(async () => {
-    if (!userId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("prescriptions")
-        .select(`
-          *,
-          prescription_items(*),
-          patient:users!patient_id ( full_name )
-        `)
-        .eq("doctor_id", userId)
-        .order("created_at", { ascending: false });
-        
-      if (error) throw error;
-      
-      // Map patient data if join failed
-      let finalData = data || [];
-      if (finalData.length > 0 && !finalData[0].patient) {
-        const patientIds = [...new Set(finalData.map(p => p.patient_id))];
-        const { data: pData } = await supabase.from('patients').select('user_id, full_name').in('user_id', patientIds);
-        
-        finalData = finalData.map(p => {
-          const pat = pData?.find(x => x.user_id === p.patient_id);
-          return { ...p, patient: { full_name: pat?.full_name || "Unknown Patient" } };
-        });
+      // 1. Primary: Fetch via FastAPI backend (supports doctor profile & patient name mapping)
+      try {
+        const res = await api.get('/api/v1/prescriptions/');
+        const apiData = res.data?.data || res.data;
+        if (Array.isArray(apiData) && apiData.length > 0) {
+          const formatted = apiData.map((p: any) => ({
+            ...p,
+            patient: { full_name: p.patient_name || "Patient" },
+            prescription_items: p.prescription_items || []
+          }));
+          setPrescriptions(formatted);
+          setLoading(false);
+          return;
+        }
+      } catch (backendErr) {
+        console.warn("Backend prescription fetch fallback:", backendErr);
       }
-      
-      setPrescriptions(finalData);
+
+      // 2. Secondary: Fallback to Supabase
+      if (userId) {
+        // Query doctor profile to get any linked ID
+        const { data: docProf } = await supabase.from('doctors').select('id, user_id').eq('user_id', userId).maybeSingle();
+        const docIds = docProf ? [userId, docProf.id] : [userId];
+
+        const { data, error } = await supabase
+          .from("prescriptions")
+          .select(`
+            *,
+            prescription_items(*)
+          `)
+          .in("doctor_id", docIds)
+          .order("created_at", { ascending: false });
+          
+        if (!error && data) {
+          let finalData = data;
+          const patientIds = [...new Set(finalData.map(p => p.patient_id).filter(Boolean))];
+          if (patientIds.length > 0) {
+            const { data: pData } = await supabase.from('patients').select('user_id, full_name').in('user_id', patientIds);
+            finalData = finalData.map(p => {
+              const pat = pData?.find(x => x.user_id === p.patient_id);
+              return { ...p, patient: { full_name: pat?.full_name || "Patient" } };
+            });
+          }
+          setPrescriptions(finalData);
+          setLoading(false);
+          return;
+        }
+      }
+      setPrescriptions([]);
     } catch (err) {
       console.error("Error loading prescriptions", err);
+      setPrescriptions([]);
     } finally {
       setLoading(false);
     }

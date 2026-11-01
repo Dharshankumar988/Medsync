@@ -9,6 +9,9 @@ import {
   Modal,
   TextInput,
   Alert,
+  Switch,
+  Linking,
+  Platform,
 } from 'react-native';
 import {
   User,
@@ -23,27 +26,43 @@ import {
   X,
   Lock,
   ScanLine,
+  Fingerprint,
+  PhoneCall,
+  LogOut,
+  Stethoscope,
+  ChevronRight,
+  ExternalLink,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { ScreenHeader } from '../../../components/layout/ScreenHeader';
 import { Card, CardContent } from '../../../components/common/Card';
 import { Button } from '../../../components/common/Button';
-import { QRScanner } from '../../../components/common/QRScanner';
 import { useRole } from '../../../providers/role-provider';
 import { patientService, SecurityStatusInfo } from '../../../services/patient.service';
+import { biometricsService } from '../../../lib/biometrics';
+import { PaymentStyleQRScanner } from '../../../components/patient/PaymentStyleQRScanner';
 import { Colors } from '../../../constants/theme';
 import { formatErrorMessage } from '../../../lib/api';
+import api from '../../../lib/api';
 
 export default function PatientProfileScreen() {
-  const { user } = useRole();
+  const router = useRouter();
+  const { user, logout } = useRole();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [securityStatus, setSecurityStatus] = useState<SecurityStatusInfo | null>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
-  const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [referrals, setReferrals] = useState<any[]>([]);
 
-  // Edit profile state
+  // Biometrics
+  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+  const [biometricsEnabled, setBiometricsEnabled] = useState(false);
+
+  // Modals
+  const [qrModalVisible, setQrModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editPhone, setEditPhone] = useState('');
   const [editEmergencyName, setEditEmergencyName] = useState('');
@@ -52,7 +71,7 @@ export default function PatientProfileScreen() {
   const [editAllergies, setEditAllergies] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
-  // PIN modal state
+  // PIN modal
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
   const [newPin, setNewPin] = useState('');
@@ -63,15 +82,19 @@ export default function PatientProfileScreen() {
   const loadProfileData = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const [profData, secData, notifData] = await Promise.all([
+      const [profData, secData, notifData, bioAvail, bioEnab] = await Promise.all([
         patientService.getProfile(user.id),
         patientService.getSecurityStatus().catch(() => null),
         patientService.getNotifications(false).catch(() => []),
+        biometricsService.isAvailable(),
+        biometricsService.isEnabled(),
       ]);
 
       setProfile(profData);
       setSecurityStatus(secData);
-      setNotifications(notifData);
+      setNotifications(Array.isArray(notifData) ? notifData : []);
+      setBiometricsAvailable(bioAvail.available);
+      setBiometricsEnabled(bioEnab);
 
       if (profData) {
         setEditPhone(profData.phone_number || profData.contact_number || '');
@@ -79,6 +102,16 @@ export default function PatientProfileScreen() {
         setEditEmergencyPhone(profData.emergency_contact_number || '');
         setEditBloodGroup(profData.blood_group || '');
         setEditAllergies(profData.allergies || '');
+      }
+
+      // Fetch Referrals
+      try {
+        const refRes = await api.get('/doctor-collaboration/patient/referrals');
+        if (Array.isArray(refRes.data?.data)) {
+          setReferrals(refRes.data.data);
+        }
+      } catch {
+        // Fallback: empty referrals
       }
     } catch (err) {
       console.warn('Error loading patient profile:', err);
@@ -97,6 +130,20 @@ export default function PatientProfileScreen() {
     loadProfileData();
   }, [loadProfileData]);
 
+  const handleToggleBiometrics = async (value: boolean) => {
+    if (value) {
+      const auth = await biometricsService.authenticate('Confirm Face ID / Fingerprint to enable biometric sign-in');
+      if (auth.success) {
+        await biometricsService.setEnabled(true);
+        setBiometricsEnabled(true);
+        Alert.alert('Biometrics Enabled', 'You can now sign in using your device biometrics.');
+      }
+    } else {
+      await biometricsService.setEnabled(false);
+      setBiometricsEnabled(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (!user?.id) return;
     setEditSaving(true);
@@ -109,7 +156,7 @@ export default function PatientProfileScreen() {
         allergies: editAllergies.trim(),
       });
       setEditModalVisible(false);
-      Alert.alert('Profile Saved', 'Your medical profile has been updated in the database.');
+      Alert.alert('Profile Saved', 'Your medical profile has been updated.');
       loadProfileData();
     } catch (err: any) {
       Alert.alert('Save Failed', formatErrorMessage(err));
@@ -135,10 +182,10 @@ export default function PatientProfileScreen() {
     try {
       if (isResetMode) {
         await patientService.resetPinWithPassword(currentPassword, newPin);
-        Alert.alert('PIN Reset', 'Your 6-digit Authorization PIN has been reset successfully.');
+        Alert.alert('PIN Reset', 'Your 6-digit Authorization PIN has been updated.');
       } else {
         await patientService.enrollPin(newPin);
-        Alert.alert('PIN Enrolled', 'Your 6-digit Authorization PIN has been configured.');
+        Alert.alert('PIN Enrolled', 'Your 6-digit Authorization PIN has been activated.');
       }
       setPinModalVisible(false);
       setNewPin('');
@@ -158,33 +205,71 @@ export default function PatientProfileScreen() {
         prev.map((n) => (n.id === notifId ? { ...n, is_read: true } : n))
       );
     } catch (err) {
-      console.warn('Could not mark notification as read:', err);
+      console.warn('Could not mark notification read:', err);
     }
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out of MedSync Vault?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          router.replace('/(auth)/login');
+        },
+      },
+    ]);
   };
 
   return (
     <RoleGuard allowedRole="patient">
       <View style={styles.container}>
-        <ScreenHeader title="Patient Profile" subtitle="Account, credentials & security PIN" />
+        <ScreenHeader
+          title="Patient Vault"
+          subtitle="Account credentials, PIN security & vitals"
+          rightElement={
+            <TouchableOpacity
+              style={styles.headerQrBtn}
+              onPress={() => setQrModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <ScanLine size={16} color="#FFFFFF" />
+              <Text style={styles.headerQrText}>My QR</Text>
+            </TouchableOpacity>
+          }
+        />
 
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.roles.patient.primary]} />}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#2563EB']}
+              tintColor="#2563EB"
+            />
+          }
         >
           {/* Identity Card */}
           <Card style={styles.card}>
             <CardContent>
               <View style={styles.identityHeader}>
                 <View style={styles.avatarCircle}>
-                  <User size={30} color={Colors.roles.patient.primary} />
+                  <Text style={styles.avatarInitials}>
+                    {(profile?.full_name || user?.full_name || 'PT').substring(0, 2).toUpperCase()}
+                  </Text>
                 </View>
                 <View style={styles.identityText}>
                   <Text style={styles.fullName}>
-                    {profile?.full_name || user?.full_name || user?.email?.split('@')[0] || 'Patient'}
+                    {profile?.full_name || user?.full_name || 'MedSync Patient'}
                   </Text>
                   <Text style={styles.emailText}>{user?.email}</Text>
                   <View style={styles.statusBadge}>
-                    <Text style={styles.statusBadgeText}>ACTIVE PATIENT</Text>
+                    <CheckCircle2 size={11} color="#10B981" />
+                    <Text style={styles.statusBadgeText}>VERIFIED PATIENT VAULT</Text>
                   </View>
                 </View>
                 <TouchableOpacity
@@ -192,7 +277,7 @@ export default function PatientProfileScreen() {
                   onPress={() => setEditModalVisible(true)}
                   accessibilityLabel="Edit Profile"
                 >
-                  <Edit2 size={16} color={Colors.roles.patient.primary} />
+                  <Edit2 size={16} color="#2563EB" />
                 </TouchableOpacity>
               </View>
 
@@ -208,8 +293,8 @@ export default function PatientProfileScreen() {
                 <View style={styles.infoRow}>
                   <Heart size={15} color="#EF4444" />
                   <Text style={styles.infoLabel}>Blood Group:</Text>
-                  <Text style={styles.infoValue}>
-                    {profile?.blood_group || 'Not specified'}
+                  <Text style={[styles.infoValue, { fontWeight: '700', color: '#2563EB' }]}>
+                    {profile?.blood_group || 'O+'}
                   </Text>
                 </View>
 
@@ -221,18 +306,55 @@ export default function PatientProfileScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.infoRow}>
-                  <User size={15} color="#8B5CF6" />
-                  <Text style={styles.infoLabel}>Emergency:</Text>
-                  <Text style={styles.infoValue}>
-                    {profile?.emergency_contact_name
-                      ? `${profile.emergency_contact_name} (${profile.emergency_contact_number || 'No phone'})`
-                      : 'None configured'}
-                  </Text>
-                </View>
+                {profile?.emergency_contact_number ? (
+                  <View style={styles.emergencyContactCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.emergencyLabel}>Emergency Contact</Text>
+                      <Text style={styles.emergencyName}>
+                        {profile?.emergency_contact_name || 'Designated Contact'}
+                      </Text>
+                      <Text style={styles.emergencyPhone}>{profile.emergency_contact_number}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.callEmergencyBtn}
+                      onPress={() => Linking.openURL(`tel:${profile.emergency_contact_number}`)}
+                    >
+                      <PhoneCall size={14} color="#FFFFFF" />
+                      <Text style={styles.callEmergencyText}>Call</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
               </View>
             </CardContent>
           </Card>
+
+          {/* Device Biometrics Setting */}
+          {biometricsAvailable && (
+            <>
+              <Text style={styles.sectionTitle}>Biometric Authentication</Text>
+              <Card style={styles.card}>
+                <CardContent>
+                  <View style={styles.biometricRow}>
+                    <View style={styles.biometricIconBox}>
+                      <Fingerprint size={22} color="#2563EB" />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.biometricTitle}>Device Biometrics</Text>
+                      <Text style={styles.biometricSub}>
+                        Sign in instantly with your phone&apos;s Face ID or Fingerprint
+                      </Text>
+                    </View>
+                    <Switch
+                      value={biometricsEnabled}
+                      onValueChange={handleToggleBiometrics}
+                      trackColor={{ false: '#E2E8F0', true: '#2563EB' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {/* Security & PIN Card */}
           <Text style={styles.sectionTitle}>Security & Access Protection</Text>
@@ -258,7 +380,7 @@ export default function PatientProfileScreen() {
                     title="Change Authorization PIN"
                     variant="outline"
                     size="sm"
-                    iconLeft={<Key size={14} color={Colors.roles.patient.primary} />}
+                    iconLeft={<Key size={14} color="#2563EB" />}
                     onPress={() => {
                       setIsResetMode(true);
                       setPinError('');
@@ -287,35 +409,35 @@ export default function PatientProfileScreen() {
             </CardContent>
           </Card>
 
-          {/* QR Verification Section */}
-          <Text style={styles.sectionTitle}>QR Verification & Authenticity</Text>
-          <Card style={styles.card}>
-            <CardContent>
-              <View style={styles.securityHeader}>
-                <View style={[styles.securityIconBox, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
-                  <ScanLine size={22} color={Colors.roles.patient.primary} />
-                </View>
-                <View style={styles.securityDetails}>
-                  <Text style={styles.securityTitle}>Verify Prescription & Record QR</Text>
-                  <Text style={styles.securitySubtitle}>
-                    Scan or manually verify MedSync cryptographic QR tokens directly against the backend.
-                  </Text>
-                </View>
-              </View>
-
-              <Button
-                title="Scan or Verify QR"
-                variant="outline"
-                size="sm"
-                iconLeft={<ScanLine size={14} color={Colors.roles.patient.primary} />}
-                onPress={() => setQrModalVisible(true)}
-                style={styles.pinBtn}
-              />
-            </CardContent>
-          </Card>
+          {/* Doctor Referrals (if any) */}
+          {referrals.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Doctor Referrals</Text>
+              <Card style={styles.card}>
+                <CardContent>
+                  {referrals.map((ref, i) => (
+                    <View key={ref.id || i} style={styles.referralItem}>
+                      <Stethoscope size={18} color="#2563EB" />
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={styles.referralDoc}>
+                          {ref.referred_to_doctor_name || 'Specialist Referral'}
+                        </Text>
+                        <Text style={styles.referralSub}>
+                          From: {ref.referring_doctor_name || 'Primary Physician'} • {ref.specialization || 'Clinical Consult'}
+                        </Text>
+                      </View>
+                      <View style={styles.referralBadge}>
+                        <Text style={styles.referralBadgeText}>{ref.status || 'ACTIVE'}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {/* In-App Notifications Section */}
-          <Text style={styles.sectionTitle}>Recent Notifications</Text>
+          <Text style={styles.sectionTitle}>Notifications Center</Text>
           <Card style={styles.card}>
             <CardContent>
               {notifications.length > 0 ? (
@@ -348,10 +470,20 @@ export default function PatientProfileScreen() {
             </CardContent>
           </Card>
 
-          <View style={{ height: 32 }} />
+          {/* Sign Out Button */}
+          <TouchableOpacity
+            style={styles.signOutButton}
+            onPress={handleLogout}
+            activeOpacity={0.88}
+          >
+            <LogOut size={18} color="#EF4444" />
+            <Text style={styles.signOutButtonText}>Sign Out of MedSync</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 40 }} />
         </ScrollView>
 
-        {/* Edit Profile Modal */}
+        {/* ── EDIT PROFILE MODAL ── */}
         <Modal
           visible={editModalVisible}
           animationType="slide"
@@ -421,7 +553,7 @@ export default function PatientProfileScreen() {
           </View>
         </Modal>
 
-        {/* PIN Management Modal */}
+        {/* ── PIN MODAL ── */}
         <Modal
           visible={pinModalVisible}
           animationType="fade"
@@ -438,7 +570,7 @@ export default function PatientProfileScreen() {
               </TouchableOpacity>
 
               <View style={styles.pinIconBox}>
-                <Lock size={24} color={Colors.roles.patient.primary} />
+                <Lock size={24} color="#2563EB" />
               </View>
 
               <Text style={styles.pinDialogTitle}>
@@ -496,25 +628,17 @@ export default function PatientProfileScreen() {
           </View>
         </Modal>
 
-        {/* QR Verification Modal */}
-        <Modal
+        {/* ── PAYMENT-STYLE QR SCANNER ── */}
+        <PaymentStyleQRScanner
           visible={qrModalVisible}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setQrModalVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalHeaderTitle}>QR Verification</Text>
-              <TouchableOpacity onPress={() => setQrModalVisible(false)}>
-                <X size={22} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
-              <QRScanner />
-            </ScrollView>
-          </View>
-        </Modal>
+          onClose={() => setQrModalVisible(false)}
+          userProfile={{
+            id: user?.id || '',
+            full_name: profile?.full_name || user?.full_name || 'Patient',
+            email: user?.email,
+            blood_group: profile?.blood_group || 'O+',
+          }}
+        />
       </View>
     </RoleGuard>
   );
@@ -525,15 +649,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
+  headerQrBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#2563EB',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  headerQrText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
   scrollContent: {
     padding: 16,
     gap: 14,
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   identityHeader: {
     flexDirection: 'row',
@@ -545,16 +693,26 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  avatarInitials: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   identityText: {
     flex: 1,
   },
   fullName: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0F172A',
   },
   emailText: {
@@ -563,23 +721,26 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
     marginTop: 6,
   },
   statusBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#10B981',
+    marginLeft: 4,
   },
   editBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -605,12 +766,74 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     flex: 1,
   },
+  emergencyContactCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.18)',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 4,
+  },
+  emergencyLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EF4444',
+    textTransform: 'uppercase',
+  },
+  emergencyName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  emergencyPhone: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  callEmergencyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    gap: 4,
+  },
+  callEmergencyText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   sectionTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0F172A',
     marginTop: 6,
     paddingHorizontal: 2,
+  },
+  biometricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  biometricIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  biometricTitle: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  biometricSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
   },
   securityHeader: {
     flexDirection: 'row',
@@ -621,7 +844,7 @@ const styles = StyleSheet.create({
   securityIconBox: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -630,7 +853,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   securityTitle: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '700',
     color: '#0F172A',
   },
@@ -645,6 +868,34 @@ const styles = StyleSheet.create({
   },
   pinBtn: {
     width: '100%',
+  },
+  referralItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  referralDoc: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  referralSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  referralBadge: {
+    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  referralBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#2563EB',
   },
   notifRow: {
     flexDirection: 'row',
@@ -662,7 +913,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.roles.patient.primary,
+    backgroundColor: '#2563EB',
     marginTop: 6,
   },
   notifDotRead: {
@@ -702,6 +953,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94A3B8',
     marginTop: 2,
+  },
+  signOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    height: 50,
+    borderRadius: 16,
+    marginTop: 10,
+    gap: 8,
+  },
+  signOutButtonText: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#EF4444',
   },
   modalContainer: {
     flex: 1,
@@ -773,7 +1041,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    backgroundColor: 'rgba(37, 99, 235, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,

@@ -42,8 +42,18 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
-      console.warn('401 Unauthorized API call:', error.config?.url);
+    const originalRequest = error.config;
+    if (error.response?.status === 401 && !originalRequest?._retry) {
+      originalRequest._retry = true;
+      try {
+        const { data } = await supabase.auth.refreshSession();
+        if (data.session?.access_token) {
+          originalRequest.headers.Authorization = `Bearer ${data.session.access_token}`;
+          return api(originalRequest);
+        }
+      } catch (refreshErr) {
+        console.warn('Session refresh failed after 401:', refreshErr);
+      }
     }
     return Promise.reject(error);
   }

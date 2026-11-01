@@ -20,6 +20,9 @@ class ActiveDeliveryItem(BaseModel):
     progress: int = 0
     route: Optional[Dict[str, Any]] = None
     current_location: Optional[Dict[str, Any]] = None
+    order_id: Optional[str] = None
+    can_confirm_received: bool = True
+    order_type: Optional[str] = None
 
 class DeliveryDetailData(BaseModel):
     model_config = ConfigDict(use_enum_values=True)

@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   Plus,
   FileUp,
+  ScanLine,
 } from 'lucide-react-native';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { ScreenHeader } from '../../../components/layout/ScreenHeader';
@@ -32,6 +33,8 @@ import { Button } from '../../../components/common/Button';
 import { PinVerificationModal } from '../../../components/patient/PinVerificationModal';
 import { UploadRecordModal } from '../../../components/patient/UploadRecordModal';
 import { OrderMedicinesModal } from '../../../components/patient/OrderMedicinesModal';
+import { PrescriptionQRModal } from '../../../components/patient/PrescriptionQRModal';
+import { DeliveryTrackingModal } from '../../../components/patient/DeliveryTrackingModal';
 import {
   patientService,
   MedicalRecordItem,
@@ -63,6 +66,12 @@ export default function PatientRecordsScreen() {
   // Order Medicines modal state (triggered from Prescriptions or Pharmacy)
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [selectedPrescriptionForOrder, setSelectedPrescriptionForOrder] = useState<PrescriptionItem | null>(null);
+
+  // Prescription QR Modal state
+  const [selectedPrescriptionForQr, setSelectedPrescriptionForQr] = useState<PrescriptionItem | null>(null);
+
+  // Delivery Tracking Modal state
+  const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<MedicineOrderItem | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -274,12 +283,20 @@ export default function PatientRecordsScreen() {
 
           <View style={styles.actionsRow}>
             <Button
-              title="Download PDF"
+              title="PDF"
               size="sm"
               iconLeft={<Download size={14} color="#FFFFFF" />}
               onPress={() => handleDownloadPrescriptionPress(item.id)}
               style={styles.actionBtn}
             />
+            <TouchableOpacity
+              style={styles.showQrBtn}
+              onPress={() => setSelectedPrescriptionForQr(item)}
+              activeOpacity={0.8}
+            >
+              <ScanLine size={14} color="#2563EB" />
+              <Text style={styles.showQrBtnText}>Show QR</Text>
+            </TouchableOpacity>
             {!item.is_dispensed && (
               <TouchableOpacity
                 style={styles.orderDeliveryBtn}
@@ -290,7 +307,7 @@ export default function PatientRecordsScreen() {
                 activeOpacity={0.8}
               >
                 <ShoppingBag size={14} color="#FFFFFF" />
-                <Text style={styles.orderDeliveryBtnText}>Order Delivery</Text>
+                <Text style={styles.orderDeliveryBtnText}>Order</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -329,6 +346,17 @@ export default function PatientRecordsScreen() {
               <Text style={styles.trackingText}>Tracking: {item.tracking_number}</Text>
             </View>
           )}
+
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={styles.trackDeliveryBtn}
+              onPress={() => setSelectedOrderForTracking(item)}
+              activeOpacity={0.85}
+            >
+              <Truck size={14} color="#FFFFFF" />
+              <Text style={styles.trackDeliveryBtnText}>Live Delivery Tracking</Text>
+            </TouchableOpacity>
+          </View>
         </CardContent>
       </Card>
     );
@@ -523,6 +551,21 @@ export default function PatientRecordsScreen() {
             loadData();
             setActiveTab('ORDERS');
           }}
+        />
+
+        {/* Prescription QR Counter Modal */}
+        <PrescriptionQRModal
+          visible={!!selectedPrescriptionForQr}
+          prescription={selectedPrescriptionForQr}
+          onClose={() => setSelectedPrescriptionForQr(null)}
+        />
+
+        {/* Live Delivery Tracking Modal */}
+        <DeliveryTrackingModal
+          visible={!!selectedOrderForTracking}
+          orderId={selectedOrderForTracking?.id}
+          trackingNumber={selectedOrderForTracking?.tracking_number}
+          onClose={() => setSelectedOrderForTracking(null)}
         />
       </View>
     </RoleGuard>
@@ -843,6 +886,38 @@ const styles = StyleSheet.create({
     backgroundColor: '#059669',
   },
   orderDeliveryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  showQrBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.25)',
+  },
+  showQrBtnText: {
+    color: '#2563EB',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  trackDeliveryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#2563EB',
+  },
+  trackDeliveryBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',

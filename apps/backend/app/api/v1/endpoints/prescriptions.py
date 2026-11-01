@@ -8,7 +8,7 @@ from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import UserRole
 from app.schemas.response import APIResponse
 from app.schemas.session import AuthenticatedPrincipal
-from app.schemas.prescription import PrescriptionCreate, PrescriptionResponse, PrescriptionOrderPlacementResponse
+from app.schemas.prescription import PrescriptionCreate, PrescriptionResponse, PrescriptionOrderPlacementResponse, PrescriptionListItem, PrescriptionItemResponse
 from app.services.prescription import PrescriptionService
 from app.services.qr_pdf_service import QRPdfService
 from sqlalchemy import select
@@ -21,6 +21,86 @@ router = APIRouter()
 require_doctor = RoleChecker([UserRole.DOCTOR])
 
 DOWNLOAD_PIN_CACHE: dict[str, str] = {}
+
+@router.get("/", response_model=APIResponse[list[PrescriptionListItem]])
+async def list_prescriptions(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user)
+):
+    from app.models.patient import Patient
+    from app.models.doctor import Doctor
+    from app.models.user import UserRole
+    
+    role_str = str(current_user.role).upper()
+    stmt = select(Prescription).order_by(Prescription.created_at.desc())
+    
+    if role_str == UserRole.DOCTOR.value:
+        doc_stmt = select(Doctor).where(Doctor.user_id == current_user.id)
+        doc_res = await db.execute(doc_stmt)
+        doc_prof = doc_res.scalar_one_or_none()
+        doc_ids = [current_user.id]
+        if doc_prof:
+            doc_ids.append(doc_prof.id)
+        stmt = stmt.where(Prescription.doctor_id.in_(doc_ids))
+    elif role_str == UserRole.PATIENT.value:
+        stmt = stmt.where(Prescription.patient_id == current_user.id)
+    elif role_str == UserRole.ADMIN.value:
+        pass
+    else:
+        stmt = stmt.limit(50)
+
+    result = await db.execute(stmt)
+    prescriptions = result.scalars().all()
+    
+    patient_ids = list({p.patient_id for p in prescriptions if p.patient_id})
+    pat_map = {}
+    if patient_ids:
+        pat_stmt = select(Patient).where(Patient.user_id.in_(patient_ids))
+        pat_res = await db.execute(pat_stmt)
+        for pat in pat_res.scalars().all():
+            pat_map[pat.user_id] = pat.full_name
+            
+    rx_ids = [p.id for p in prescriptions]
+    items_map: dict[uuid.UUID, list[PrescriptionItem]] = {rid: [] for rid in rx_ids}
+    if rx_ids:
+        items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id.in_(rx_ids))
+        items_res = await db.execute(items_stmt)
+        for it in items_res.scalars().all():
+            items_map[it.prescription_id].append(it)
+            
+    items_out = []
+    for rx in prescriptions:
+        raw_items = items_map.get(rx.id, [])
+        item_models = [
+            PrescriptionItemResponse(
+                id=i.id,
+                medicine_name=i.medicine_name,
+                dosage=i.dosage,
+                frequency=i.frequency,
+                duration_days=i.duration_days,
+                instructions=i.instructions
+            )
+            for i in raw_items
+        ]
+        items_out.append(
+            PrescriptionListItem(
+                id=rx.id,
+                appointment_id=rx.appointment_id,
+                patient_id=rx.patient_id,
+                doctor_id=rx.doctor_id,
+                diagnosis=rx.diagnosis,
+                notes=rx.notes,
+                is_finalized=rx.is_finalized,
+                is_dispensed=rx.is_dispensed,
+                created_at=rx.created_at,
+                pdf_url=rx.pdf_url,
+                qr_token=rx.qr_token,
+                patient_name=pat_map.get(rx.patient_id, "Patient"),
+                prescription_items=item_models
+            )
+        )
+        
+    return APIResponse(message="Prescriptions retrieved successfully", data=items_out)
 
 @router.post("/", response_model=APIResponse[PrescriptionResponse], status_code=status.HTTP_201_CREATED)
 async def create_prescription(
@@ -357,7 +437,7 @@ async def dispense_prescription(
     order_res = await db.execute(order_stmt)
     order = order_res.scalar_one_or_none()
 
-    order_status_val = OrderStatus.DELIVERED if is_delivery else "RECEIVED_BY_PATIENT"
+    order_status_val = OrderStatus.OUT_FOR_DELIVERY if is_delivery else OrderStatus.RECEIVED_BY_PATIENT
     order_type_val = "ONLINE_DELIVERY" if is_delivery else "WALK_IN_PICKUP"
     patient_addr = (patient.address if patient and patient.address else "Walk-in Counter Pickup") if not is_delivery else (patient.address if patient and patient.address else "Bangalore Central")
 
@@ -468,7 +548,7 @@ async def dispense_prescription(
     # 6. Create PrescriptionDispensingLog
     patient_phone = (patient.phone_number or patient.contact_number) if patient else None
     pharmacy_phone = (pharmacy.contact_number or pharmacy.phone_number) if pharmacy else None
-    disp_status_val = "DELIVERED" if is_delivery else "RECEIVED_BY_PATIENT"
+    disp_status_val = "DISPATCHED" if is_delivery else "RECEIVED_BY_PATIENT"
 
     medicines_list = [
         {"medicine_name": i.medicine_name, "dosage": i.dosage, "quantity": 1}
@@ -488,7 +568,7 @@ async def dispense_prescription(
         pharmacy_contact=pharmacy_phone,
         delivery_status=disp_status_val,
         delivery_started_at=datetime.utcnow(),
-        delivery_completed_at=datetime.utcnow(),
+        delivery_completed_at=None if is_delivery else datetime.utcnow(),
         estimated_delivery_minutes=estimated_minutes,
         delivery_route=delivery_route,
         notes=f"Fulfillment: {'Dispensed & Delivered' if is_delivery else 'Received by Patient (Walk-in Counter)'}"

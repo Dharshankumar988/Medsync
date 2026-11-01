@@ -9,6 +9,7 @@ import api from "@/lib/api";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { toast } from "sonner";
 
 const DeliveryMap = dynamic(() => import("@/components/pharmacy/DeliveryMap").then(m => m.DeliveryMap), { 
   ssr: false,
@@ -286,6 +287,27 @@ export default function DeliveryTrackingPage() {
                   <p className="text-xs text-amber-500 font-medium flex items-center justify-center gap-1.5">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> In transit to delivery address
                   </p>
+
+                  <Button 
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm"
+                    onClick={async () => {
+                      try {
+                        try {
+                          await api.post(`/api/v1/delivery/tracking/${orderId}/confirm-received`);
+                        } catch {
+                          await api.post(`/api/v1/orders/${orderId}/complete-delivery`);
+                        }
+                        setDeliveryStatus("delivered");
+                        setProgress(100);
+                        toast.success("Package receipt confirmed! Order marked as Delivered.");
+                      } catch (err: any) {
+                        toast.error("Could not confirm receipt: " + (err.response?.data?.detail || err.message));
+                      }
+                    }}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    I Have Received the Package
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-3 text-center py-2">

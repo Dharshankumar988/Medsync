@@ -1,0 +1,45 @@
+name: MedSync Mobile EAS Update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/mobile/**'
+  workflow_dispatch:
+
+jobs:
+  update:
+    name: Publish EAS Over-The-Air Update
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: 🚀 Setup EAS
+        uses: expo/eas-build-action@v0.8.3
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📥 Install Dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: 🔍 TypeScript Validation
+        run: npx tsc --noEmit
+
+      - name: 📲 Publish Over-The-Air Update to Production
+        run: eas update --auto --channel production

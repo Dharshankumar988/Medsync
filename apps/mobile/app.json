@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -13,14 +13,25 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.medsync.mobile"
+      "bundleIdentifier": "com.medsync.mobile",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Allow MedSync to access biometric authentication for secure health records."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0A"
       },
-      "package": "com.medsync.mobile"
+      "package": "com.medsync.mobile",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -40,10 +51,28 @@
         {
           "photosPermission": "Allow MedSync to access your photos for medical image analysis."
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow MedSync to access Face ID for secure authentication."
+        }
       ]
     ],
     "updates": {
-      "enabled": false
+      "enabled": true,
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "f28125c2-8e9e-4413-96b8-d74f3d6c6662"
+      }
     }
   }
 }

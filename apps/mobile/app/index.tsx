@@ -12,10 +12,12 @@ export default function IndexScreen() {
 
     if (!isAuthenticated || !role) {
       router.replace('/(auth)/login');
+    } else if (role === 'patient') {
+      router.replace('/(tabs)/patient/dashboard');
     } else {
-      router.replace(`/(tabs)/${role}/dashboard` as any);
+      router.replace('/(auth)/login');
     }
   }, [isLoading, isAuthenticated, role, router]);
 
-  return <LoadingScreen message="Initializing MedSync..." />;
+  return <LoadingScreen message="Initializing MedSync Vault..." />;
 }

@@ -27,15 +27,16 @@ export const Colors = {
   // ─────────────────────────────────────────────────────────────────────────
   roles: {
     patient: {
-      primary:      '#3B82F6',   // blue-500
-      primaryDim:   '#2563EB',   // blue-600 (darker button)
-      bg:           'rgba(59,130,246,0.10)',
-      bgGlow:       'rgba(59,130,246,0.04)',
-      bgGlowStrong: 'rgba(59,130,246,0.08)',
-      text:         '#60A5FA',   // blue-400 (on dark bg)
-      badgeBg:      'rgba(59,130,246,0.10)',
-      badgeText:    '#60A5FA',
-      badgeBorder:  'rgba(59,130,246,0.20)',
+      primary:      '#2563EB',   // MedSync Royal Blue (matches web --role-primary)
+      primaryDim:   '#1D4ED8',   // blue-700
+      primaryLight: '#3B82F6',   // blue-500
+      bg:           'rgba(37, 99, 235, 0.08)',
+      bgGlow:       'rgba(37, 99, 235, 0.04)',
+      bgGlowStrong: 'rgba(37, 99, 235, 0.12)',
+      text:         '#2563EB',
+      badgeBg:      'rgba(37, 99, 235, 0.08)',
+      badgeText:    '#2563EB',
+      badgeBorder:  'rgba(37, 99, 235, 0.20)',
     },
     doctor: {
       primary:      '#10B981',   // emerald-500
@@ -231,7 +232,7 @@ export const Typography = {
   },
 } as const;
 
-// ── Shadow presets ────────────────────────────────────────────────────────
+// ── Shadow & Glass presets ────────────────────────────────────────────────────────
 export const Shadows = {
   card: {
     shadowColor:   '#0F172A',
@@ -248,11 +249,54 @@ export const Shadows = {
     elevation:     1,
   },
   button: {
-    shadowColor:   '#0F172A',
-    shadowOffset:  { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius:  4,
-    elevation:     2,
+    shadowColor:   '#2563EB',
+    shadowOffset:  { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius:  8,
+    elevation:     3,
+  },
+  glassGlow: {
+    shadowColor:   '#2563EB',
+    shadowOffset:  { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius:  16,
+    elevation:     6,
+  },
+} as const;
+
+export const Glass = {
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.9)',
+    borderRadius: 18,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  blueGlow: {
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(37, 99, 235, 0.22)',
+    borderRadius: 20,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  frostedDark: {
+    backgroundColor: 'rgba(15, 23, 42, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.25)',
+    borderRadius: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 6,
   },
 } as const;
 

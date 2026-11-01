@@ -1,25 +1,15 @@
 import React, { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import {
   LayoutDashboard,
   FileText,
   Calendar,
-  Activity,
+  Sparkles,
   User,
-  Users,
-  ShoppingBag,
-  Package,
-  Shield,
-  Server,
-  Blocks,
 } from 'lucide-react-native';
 import { useRole } from '../../providers/role-provider';
-import { getRoleTheme } from '../../constants/theme';
 import { LoadingScreen } from '../../components/layout/LoadingScreen';
-import { PharmacyDesktopNotice } from '../../components/common/PharmacyDesktopNotice';
-import { FloatingQuickActions } from '../../components/common/FloatingQuickActions';
-import { View, StyleSheet } from 'react-native';
 
 export default function TabLayout() {
   const { role, isLoading, isAuthenticated } = useRole();
@@ -32,40 +22,33 @@ export default function TabLayout() {
   }, [isLoading, isAuthenticated, router]);
 
   if (isLoading) {
-    return <LoadingScreen message="Loading MedSync..." />;
+    return <LoadingScreen message="Loading MedSync Vault..." />;
   }
 
   if (!isAuthenticated || !role) {
     return <LoadingScreen message="Redirecting to sign in..." />;
   }
 
-  // Pharmacy is optimized for desktop browsers only
-  if (role === 'pharmacy') {
-    return <PharmacyDesktopNotice />;
-  }
-
-  const roleTheme = getRoleTheme(role);
-
   const screenOptions = {
     headerShown: false,
-    tabBarActiveTintColor: roleTheme.primary,
+    tabBarActiveTintColor: '#2563EB',
     tabBarInactiveTintColor: '#94A3B8',
     tabBarStyle: {
       backgroundColor: '#FFFFFF',
-      borderTopWidth: 1,
-      borderTopColor: 'rgba(15, 23, 42, 0.08)',
+      borderTopWidth: 1.5,
+      borderTopColor: 'rgba(37, 99, 235, 0.1)',
       height: Platform.OS === 'ios' ? 88 : 66,
-      paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+      paddingBottom: Platform.OS === 'ios' ? 26 : 10,
       paddingTop: 8,
-      shadowColor: '#0F172A',
+      shadowColor: '#2563EB',
       shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.04,
-      shadowRadius: 12,
+      shadowOpacity: 0.06,
+      shadowRadius: 14,
       elevation: 8,
     },
     tabBarLabelStyle: {
-      fontSize: 10.5,
-      fontWeight: '600' as const,
+      fontSize: 11,
+      fontWeight: '700' as const,
       letterSpacing: 0.2,
       marginTop: -2,
     },
@@ -74,216 +57,104 @@ export default function TabLayout() {
   return (
     <View style={styles.container}>
       <Tabs screenOptions={screenOptions}>
-      {/* ── PATIENT TABS ── */}
-      <Tabs.Screen
-        name="patient/dashboard"
-        options={{
-          title: 'Dashboard',
-          href: role === 'patient' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <LayoutDashboard size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="patient/records"
-        options={{
-          title: 'Records',
-          href: role === 'patient' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <FileText size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="patient/appointments"
-        options={{
-          title: 'Appointments',
-          href: role === 'patient' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Calendar size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="patient/pulse-ai"
-        options={{
-          title: 'Pulse AI',
-          href: role === 'patient' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Activity size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="patient/profile"
-        options={{
-          title: 'Profile',
-          href: role === 'patient' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <User size={size ?? 22} color={color} />,
-        }}
-      />
+        {/* ── 1. PATIENT HOME / DASHBOARD ── */}
+        <Tabs.Screen
+          name="patient/dashboard"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, focused }) => (
+              <LayoutDashboard
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            ),
+          }}
+        />
 
-      {/* ── DOCTOR TABS ── */}
-      <Tabs.Screen
-        name="doctor/dashboard"
-        options={{
-          title: 'Dashboard',
-          href: role === 'doctor' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <LayoutDashboard size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="doctor/patients"
-        options={{
-          title: 'Patients',
-          href: role === 'doctor' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Users size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="doctor/appointments"
-        options={{
-          title: 'Schedule',
-          href: role === 'doctor' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Calendar size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="doctor/pulse-ai"
-        options={{
-          title: 'Pulse AI',
-          href: role === 'doctor' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Activity size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="doctor/profile"
-        options={{
-          title: 'Profile',
-          href: role === 'doctor' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <User size={size ?? 22} color={color} />,
-        }}
-      />
+        {/* ── 2. PATIENT RECORDS & PRESCRIPTIONS HUB ── */}
+        <Tabs.Screen
+          name="patient/records"
+          options={{
+            title: 'Records',
+            tabBarIcon: ({ color, focused }) => (
+              <FileText
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            ),
+          }}
+        />
 
-      {/* ── PHARMACY TABS ── */}
-      <Tabs.Screen
-        name="pharmacy/dashboard"
-        options={{
-          title: 'Dashboard',
-          href: null,
-          tabBarIcon: ({ color, size }) => <LayoutDashboard size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="pharmacy/orders"
-        options={{
-          title: 'Orders',
-          href: null,
-          tabBarIcon: ({ color, size }) => <ShoppingBag size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="pharmacy/inventory"
-        options={{
-          title: 'Inventory',
-          href: null,
-          tabBarIcon: ({ color, size }) => <Package size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="pharmacy/pulse-ai"
-        options={{
-          title: 'Pulse AI',
-          href: null,
-          tabBarIcon: ({ color, size }) => <Activity size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="pharmacy/profile"
-        options={{
-          title: 'Profile',
-          href: null,
-          tabBarIcon: ({ color, size }) => <User size={size ?? 22} color={color} />,
-        }}
-      />
+        {/* ── 3. PATIENT VISITS & APPOINTMENTS ── */}
+        <Tabs.Screen
+          name="patient/appointments"
+          options={{
+            title: 'Visits',
+            tabBarIcon: ({ color, focused }) => (
+              <Calendar
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            ),
+          }}
+        />
 
-      {/* ── HOSPITAL TABS ── */}
-      <Tabs.Screen
-        name="hospital/dashboard"
-        options={{
-          title: 'Dashboard',
-          href: role === 'hospital' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <LayoutDashboard size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="hospital/doctors"
-        options={{
-          title: 'Doctors',
-          href: role === 'hospital' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Users size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="hospital/appointments"
-        options={{
-          title: 'Schedule',
-          href: role === 'hospital' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Calendar size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="hospital/profile"
-        options={{
-          title: 'Profile',
-          href: role === 'hospital' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <User size={size ?? 22} color={color} />,
-        }}
-      />
+        {/* ── 4. PULSE AI CLINICAL ASSISTANT ── */}
+        <Tabs.Screen
+          name="patient/pulse-ai"
+          options={{
+            title: 'Pulse AI',
+            tabBarIcon: ({ color, focused }) => (
+              <Sparkles
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            ),
+          }}
+        />
 
-      {/* ── ADMIN TABS ── */}
-      <Tabs.Screen
-        name="admin/dashboard"
-        options={{
-          title: 'Dashboard',
-          href: role === 'admin' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <LayoutDashboard size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="admin/users"
-        options={{
-          title: 'Users',
-          href: role === 'admin' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Users size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="admin/blockchain"
-        options={{
-          title: 'Blockchain',
-          href: role === 'admin' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Blocks size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="admin/security"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="admin/system"
-        options={{
-          title: 'System',
-          href: role === 'admin' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <Server size={size ?? 22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="admin/profile"
-        options={{
-          title: 'Profile',
-          href: role === 'admin' ? undefined : null,
-          tabBarIcon: ({ color, size }) => <User size={size ?? 22} color={color} />,
-        }}
-      />
-    </Tabs>
-    <FloatingQuickActions />
-  </View>
+        {/* ── 5. PATIENT HEALTH & PROFILE ── */}
+        <Tabs.Screen
+          name="patient/profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color, focused }) => (
+              <User
+                size={22}
+                color={color}
+                strokeWidth={focused ? 2.5 : 2}
+              />
+            ),
+          }}
+        />
+
+        {/* ── LEGACY NON-PATIENT SCREENS: STRICTLY HIDDEN FROM TABS ── */}
+        <Tabs.Screen name="doctor/dashboard" options={{ href: null }} />
+        <Tabs.Screen name="doctor/patients" options={{ href: null }} />
+        <Tabs.Screen name="doctor/appointments" options={{ href: null }} />
+        <Tabs.Screen name="doctor/pulse-ai" options={{ href: null }} />
+        <Tabs.Screen name="doctor/profile" options={{ href: null }} />
+        <Tabs.Screen name="hospital/dashboard" options={{ href: null }} />
+        <Tabs.Screen name="hospital/doctors" options={{ href: null }} />
+        <Tabs.Screen name="hospital/appointments" options={{ href: null }} />
+        <Tabs.Screen name="hospital/profile" options={{ href: null }} />
+        <Tabs.Screen name="pharmacy/dashboard" options={{ href: null }} />
+        <Tabs.Screen name="pharmacy/inventory" options={{ href: null }} />
+        <Tabs.Screen name="pharmacy/orders" options={{ href: null }} />
+        <Tabs.Screen name="pharmacy/pulse-ai" options={{ href: null }} />
+        <Tabs.Screen name="pharmacy/profile" options={{ href: null }} />
+        <Tabs.Screen name="admin/dashboard" options={{ href: null }} />
+        <Tabs.Screen name="admin/users" options={{ href: null }} />
+        <Tabs.Screen name="admin/security" options={{ href: null }} />
+        <Tabs.Screen name="admin/system" options={{ href: null }} />
+        <Tabs.Screen name="admin/blockchain" options={{ href: null }} />
+        <Tabs.Screen name="admin/profile" options={{ href: null }} />
+      </Tabs>
+    </View>
   );
 }
 
@@ -291,6 +162,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    position: 'relative',
   },
 });
