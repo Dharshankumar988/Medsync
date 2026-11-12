@@ -303,7 +303,11 @@ export default function PatientRecordsScreen() {
 
   const renderRecordItem = ({ item }: { item: MedicalRecordItem }) => {
     const isPublic = item.description?.includes('[PUBLIC]') ?? false;
-    const cleanDescription = (item.description || '').replace('[PUBLIC]', '').trim();
+    const isConsultationPdf = Boolean(item.description?.includes('[CONSULTATION:'));
+    const cleanDescription = (item.description || '')
+      .replace(/\[CONSULTATION:[^\]]+\]/g, '')
+      .replace('[PUBLIC]', '')
+      .trim();
     const formattedDate = item.created_at ? new Date(item.created_at).toLocaleDateString() : '—';
 
     return (
@@ -314,20 +318,36 @@ export default function PatientRecordsScreen() {
               style={[
                 styles.iconBoxBlue,
                 {
-                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#F0F9FF',
-                  borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
+                  backgroundColor: isConsultationPdf
+                    ? isDark
+                      ? 'rgba(16, 185, 129, 0.14)'
+                      : '#ECFDF5'
+                    : isDark
+                    ? 'rgba(56, 189, 248, 0.12)'
+                    : '#F0F9FF',
+                  borderColor: isConsultationPdf
+                    ? isDark
+                      ? 'rgba(16, 185, 129, 0.3)'
+                      : '#A7F3D0'
+                    : isDark
+                    ? 'rgba(56, 189, 248, 0.25)'
+                    : '#BAE6FD',
                   borderWidth: 1,
                 },
               ]}
             >
-              <FileText size={20} color={isDark ? '#38BDF8' : '#0284C7'} />
+              <FileText
+                size={20}
+                color={isConsultationPdf ? '#10B981' : isDark ? '#38BDF8' : '#0284C7'}
+              />
             </View>
             <View style={styles.titleColumn}>
-              <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={1}>
+              <Text style={[styles.itemTitle, { color: theme.text }]} numberOfLines={2}>
                 {item.title}
               </Text>
               <Text style={[styles.itemSubtitle, { color: theme.textMuted }]}>
-                Uploaded: {formattedDate}
+                {isConsultationPdf ? 'Doctor Consultation Note • ' : 'Uploaded: '}
+                {formattedDate}
               </Text>
             </View>
             <View style={[styles.badge, isPublic ? styles.publicBadge : styles.privateBadge]}>
@@ -617,18 +637,21 @@ export default function PatientRecordsScreen() {
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ScreenHeader
           title="Medical Records"
-          subtitle="Encrypted diagnostic files & prescriptions"
+          subtitle="Files, prescriptions & doctor notes"
           rightElement={
             <TouchableOpacity
-              style={[styles.addRecordHeaderBtn, { backgroundColor: '#059669', marginRight: 0 }]}
+              style={[
+                styles.addRecordHeaderBtn,
+                { backgroundColor: '#059669', marginRight: 0, paddingHorizontal: 10 },
+              ]}
               onPress={() => {
                 setSelectedPrescriptionForOrder(null);
                 setOrderModalVisible(true);
               }}
               activeOpacity={0.85}
             >
-              <ShoppingBag size={13} color="#FFFFFF" />
-              <Text style={styles.addRecordHeaderBtnText}>Order Meds</Text>
+              <ShoppingBag size={12} color="#FFFFFF" />
+              <Text style={styles.addRecordHeaderBtnText}>Order</Text>
             </TouchableOpacity>
           }
         />

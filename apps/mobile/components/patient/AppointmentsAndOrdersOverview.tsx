@@ -199,6 +199,49 @@ export function AppointmentsAndOrdersOverview({
     return appointmentDatesMap.get(selectedDateStr) || [];
   }, [viewAllAppointments, appointments, appointmentDatesMap, selectedDateStr]);
 
+  // Nearest upcoming consultation on or after today for Quick Jump
+  const nextUpcomingAppt = useMemo(() => {
+    const active = appointments
+      .filter((a) => {
+        const dKey = String(a.appointment_date || '').split('T')[0];
+        return dKey >= todayStr && (a.status === 'CONFIRMED' || a.status === 'PENDING');
+      })
+      .sort((a, b) =>
+        `${a.appointment_date || ''} ${a.start_time || ''}`.localeCompare(
+          `${b.appointment_date || ''} ${b.start_time || ''}`
+        )
+      );
+    return active[0] || null;
+  }, [appointments, todayStr]);
+
+  const jumpToDateStr = (dateStr: string) => {
+    const clean = dateStr.split('T')[0];
+    const [yStr, mStr] = clean.split('-');
+    const y = parseInt(yStr, 10);
+    const m = parseInt(mStr, 10);
+    if (Number.isFinite(y) && Number.isFinite(m)) {
+      setCurrentDate(new Date(y, m - 1, 1));
+    }
+    setSelectedDateStr(clean);
+    setViewAllAppointments(false);
+  };
+
+  const formatApptTime = (raw?: string | null) => {
+    if (!raw) return '10:00 AM';
+    const [hStr, mStr] = String(raw).split(':');
+    const h = parseInt(hStr || '', 10);
+    if (!Number.isFinite(h)) return String(raw);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${(mStr || '00').slice(0, 2)} ${period}`;
+  };
+
+  const formatReadableDate = (dateStr: string) => {
+    const d = new Date(`${dateStr.split('T')[0]}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
   return (
     <View style={styles.container}>
       {/* ── Segmented Control Bar ── */}
@@ -235,8 +278,11 @@ export function AppointmentsAndOrdersOverview({
                 fontWeight: activeTab === 'appointments' ? '700' : '500',
               },
             ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
           >
-            Appointments & Schedule
+            Appointments
           </Text>
         </TouchableOpacity>
 
@@ -254,7 +300,7 @@ export function AppointmentsAndOrdersOverview({
           <ShoppingBag
             size={15}
             color={activeTab === 'orders' ? '#10B981' : theme.textMuted}
-            style={{ marginRight: 6 }}
+            style={{ marginRight: 5 }}
           />
           <Text
             style={[
@@ -264,8 +310,11 @@ export function AppointmentsAndOrdersOverview({
                 fontWeight: activeTab === 'orders' ? '700' : '500',
               },
             ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
           >
-            Recent Orders ({orders.length})
+            Orders ({orders.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -289,18 +338,48 @@ export function AppointmentsAndOrdersOverview({
               },
             ]}
           >
-            {/* Month Header with Navigation */}
+            {/* Month Header with Navigation & Quick Jumps */}
             <View style={styles.calendarHeader}>
-              <View>
+              <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={[styles.calendarMonthTitle, { color: theme.text }]}>
                   {MONTH_NAMES[currentMonth]} {currentYear}
                 </Text>
                 <Text style={[styles.calendarMonthSub, { color: theme.textMuted }]}>
-                  {appointments.length} Consultations Scheduled
+                  {appointments.length} Consultation{appointments.length === 1 ? '' : 's'} Scheduled
                 </Text>
               </View>
 
               <View style={styles.monthNavRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.quickJumpBtn,
+                    {
+                      backgroundColor: isDark ? '#1A1E29' : '#F1F5F9',
+                      borderColor: isDark ? '#2A3040' : '#E2E8F0',
+                    },
+                  ]}
+                  onPress={() => jumpToDateStr(todayStr)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.quickJumpBtnText, { color: theme.text }]}>Today</Text>
+                </TouchableOpacity>
+                {nextUpcomingAppt?.appointment_date ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.quickJumpBtn,
+                      {
+                        backgroundColor: isDark ? 'rgba(59, 130, 246, 0.16)' : '#EFF6FF',
+                        borderColor: isDark ? 'rgba(59, 130, 246, 0.35)' : '#BFDBFE',
+                      },
+                    ]}
+                    onPress={() => jumpToDateStr(nextUpcomingAppt.appointment_date)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.quickJumpBtnText, { color: '#3B82F6' }]}>
+                      Next: {formatReadableDate(nextUpcomingAppt.appointment_date)}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity
                   style={[
                     styles.navBtn,
@@ -486,12 +565,12 @@ export function AppointmentsAndOrdersOverview({
           {/* Schedule Header Row */}
           <View style={styles.scheduleHeaderRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.scheduleTitle, { color: theme.text }]}>
+              <Text style={[styles.scheduleTitle, { color: theme.text }]} numberOfLines={1}>
                 {viewAllAppointments
                   ? 'All Scheduled Consultations'
                   : selectedDateStr === todayStr
                   ? "Today's Schedule"
-                  : `Schedule for ${selectedDateStr}`}
+                  : `Schedule • ${formatReadableDate(selectedDateStr)}`}
               </Text>
               {!viewAllAppointments && (
                 <Text style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
@@ -543,10 +622,10 @@ export function AppointmentsAndOrdersOverview({
             >
               <CalendarIcon size={28} color={theme.textMuted} />
               <Text style={[styles.emptyCardTitle, { color: theme.text }]}>
-                No consultations on {selectedDateStr}
+                No visits on {formatReadableDate(selectedDateStr)}
               </Text>
               <Text style={[styles.emptyCardSub, { color: theme.textMuted }]}>
-                Select a date marked with a dot (●) on the calendar, or tap below to schedule a new visit.
+                Tap a dotted date on the calendar or schedule a new clinic consultation.
               </Text>
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
@@ -556,7 +635,7 @@ export function AppointmentsAndOrdersOverview({
                   activeOpacity={0.85}
                 >
                   <Plus size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.bookActionBtnText}>Book Visit</Text>
+                  <Text style={styles.bookActionBtnText}>Book for {formatReadableDate(selectedDateStr)}</Text>
                 </TouchableOpacity>
 
                 {appointments.length > 0 && (
@@ -660,14 +739,14 @@ export function AppointmentsAndOrdersOverview({
                     <View style={styles.apptTimeItem}>
                       <Clock size={13} color={theme.textMuted} style={{ marginRight: 5 }} />
                       <Text style={[styles.apptTimeText, { color: theme.textSecondary }]}>
-                        {appt.start_time || '10:00 AM'}
+                        {formatApptTime(appt.start_time)}
                       </Text>
                     </View>
 
                     <View style={styles.apptTimeItem}>
                       <CalendarIcon size={13} color={theme.textMuted} style={{ marginRight: 5 }} />
                       <Text style={[styles.apptTimeText, { color: theme.textSecondary }]}>
-                        {appt.appointment_date}
+                        {formatReadableDate(appt.appointment_date)}
                       </Text>
                     </View>
                   </View>
@@ -916,7 +995,20 @@ const styles = StyleSheet.create({
   },
   monthNavRow: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: 6,
+  },
+  quickJumpBtn: {
+    height: 30,
+    paddingHorizontal: 9,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickJumpBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   navBtn: {
     width: 32,

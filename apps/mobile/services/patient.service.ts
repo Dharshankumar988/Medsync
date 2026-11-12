@@ -107,6 +107,9 @@ export const patientService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Authentication required');
 
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
     const [
       { count: apptCount, data: appts },
       { count: recCount, data: recs },
@@ -118,7 +121,9 @@ export const patientService = {
         .select('*', { count: 'exact' })
         .eq('patient_id', user.id)
         .in('status', ['PENDING', 'CONFIRMED'])
+        .gte('appointment_date', todayIso)
         .order('appointment_date', { ascending: true })
+        .order('start_time', { ascending: true })
         .limit(3),
       supabase
         .from('medical_records')

@@ -154,6 +154,104 @@ class QRPdfService:
         return buffer
 
     @staticmethod
+    def generate_consultation_pdf(
+        consultation_data: dict,
+        patient_data: dict,
+        doctor_data: dict,
+    ) -> io.BytesIO:
+        """Generates a formatted A4 PDF for clinical consultation notes shared with the patient."""
+        import textwrap
+
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+
+        def draw_wrapped(text: str, x: float, y: float, max_chars: int = 88, leading: int = 14) -> float:
+            for paragraph in str(text or "").splitlines() or ["—"]:
+                lines = textwrap.wrap(paragraph, width=max_chars) or [""]
+                for line in lines:
+                    if y < 75:
+                        c.showPage()
+                        y = height - 60
+                        c.setFont("Helvetica", 10)
+                    c.drawString(x, y, line)
+                    y -= leading
+            return y
+
+        # Header
+        c.setFont("Helvetica-Bold", 19)
+        c.drawString(50, height - 52, "MedSync Consultation Summary")
+        c.setFont("Helvetica", 9.5)
+        c.setFillColorRGB(0.3, 0.35, 0.42)
+        visit_date = str(consultation_data.get("visit_date") or "")[:10] or "Recorded Visit"
+        c.drawString(50, height - 70, f"Consultation Date: {visit_date}")
+        c.setFillColorRGB(0, 0, 0)
+
+        # Divider
+        c.setStrokeColorRGB(0.82, 0.85, 0.9)
+        c.line(50, height - 82, width - 50, height - 82)
+
+        # Doctor & Patient Details
+        y = height - 106
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(50, y, f"Attending Physician: Dr. {doctor_data.get('name', 'MedSync Specialist')}")
+        c.setFont("Helvetica", 10)
+        y -= 16
+        c.drawString(50, y, f"Specialization: {doctor_data.get('specialization', 'Clinical Care')}  |  Clinic: {doctor_data.get('clinic_name', 'MedSync Network')}")
+        y -= 22
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(50, y, f"Patient: {patient_data.get('name', 'Patient')}")
+        y -= 16
+        c.setFont("Helvetica", 10)
+        c.drawString(50, y, f"Patient ID: {patient_data.get('id', '—')}")
+        y -= 24
+
+        sections = [
+            ("Reported Symptoms", consultation_data.get("symptoms")),
+            ("Clinical Observations", consultation_data.get("observations")),
+            ("Diagnosis", consultation_data.get("diagnosis")),
+            ("Treatment Plan", consultation_data.get("treatment_plan")),
+            ("Doctor's Clinical Notes", consultation_data.get("clinical_notes")),
+        ]
+        follow_up_date = consultation_data.get("follow_up_date")
+        follow_up_notes = consultation_data.get("follow_up_notes")
+        if follow_up_date or follow_up_notes:
+            fu_text = f"Date: {follow_up_date or 'TBD'}"
+            if follow_up_notes:
+                fu_text += f"\n{follow_up_notes}"
+            sections.append(("Follow-Up Instructions", fu_text))
+
+        has_content = False
+        for label, value in sections:
+            if not value or not str(value).strip():
+                continue
+            has_content = True
+            if y < 105:
+                c.showPage()
+                y = height - 60
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(50, y, f"{label}:")
+            y -= 16
+            c.setFont("Helvetica", 10)
+            y = draw_wrapped(str(value).strip(), 60, y)
+            y -= 10
+
+        if not has_content:
+            c.setFont("Helvetica", 10)
+            c.drawString(50, y, "Consultation completed and recorded in MedSync EHR.")
+
+        # Footer
+        c.setFont("Helvetica-Oblique", 8)
+        c.setFillColorRGB(0.35, 0.4, 0.48)
+        c.drawString(50, 48, "Digitally issued clinical consultation summary from your attending physician on MedSync.")
+        c.drawString(50, 36, "Encrypted and accessible inside Patient Medical Records.")
+
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+        return buffer
+
+    @staticmethod
     def convert_to_pdf(raw_bytes: bytes, filename: str = "") -> bytes:
         """Converts any uploaded file (image, text, pdf) into a clean A4 PDF."""
         # 1. Check if it's already a valid PDF

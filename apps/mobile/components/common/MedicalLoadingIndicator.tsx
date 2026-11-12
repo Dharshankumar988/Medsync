@@ -7,7 +7,7 @@ import {
   Easing,
   Modal,
 } from 'react-native';
-import { Activity, ShieldCheck, HeartPulse } from 'lucide-react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 interface MedicalLoadingIndicatorProps {
   visible?: boolean;
@@ -22,202 +22,82 @@ export function MedicalLoadingIndicator({
   visible = true,
   message = 'Securing Connection...',
   subMessage = 'Validating cryptographic credentials',
-  icon = 'pulse',
-  color = '#10B981',
+  color = '#38BDF8',
   isModal = false,
 }: MedicalLoadingIndicatorProps) {
-  // Animation values
-  const ring1Scale = useRef(new Animated.Value(0.8)).current;
-  const ring1Opacity = useRef(new Animated.Value(0.7)).current;
-  const ring2Scale = useRef(new Animated.Value(0.8)).current;
-  const ring2Opacity = useRef(new Animated.Value(0.5)).current;
-  const iconScale = useRef(new Animated.Value(1)).current;
+  const { theme } = useTheme();
+  const barTranslate = useRef(new Animated.Value(-110)).current;
   const textFade = useRef(new Animated.Value(0.7)).current;
 
   useEffect(() => {
     if (!visible) return;
 
-    // Concentric expanding ring 1
-    const animRing1 = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(ring1Scale, {
-            toValue: 1.6,
-            duration: 1800,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(ring1Opacity, {
-            toValue: 0,
-            duration: 1800,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(ring1Scale, {
-            toValue: 0.8,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-          Animated.timing(ring1Opacity, {
-            toValue: 0.7,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
+    barTranslate.setValue(-110);
+    const animBar = Animated.loop(
+      Animated.timing(barTranslate, {
+        toValue: 220,
+        duration: 1150,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      })
     );
 
-    // Staggered concentric expanding ring 2
-    const animRing2 = Animated.loop(
-      Animated.sequence([
-        Animated.delay(600),
-        Animated.parallel([
-          Animated.timing(ring2Scale, {
-            toValue: 1.8,
-            duration: 1800,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(ring2Opacity, {
-            toValue: 0,
-            duration: 1800,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.timing(ring2Scale, {
-            toValue: 0.8,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-          Animated.timing(ring2Opacity, {
-            toValue: 0.5,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-
-    // Heartbeat icon pulse rhythm
-    const animIcon = Animated.loop(
-      Animated.sequence([
-        Animated.timing(iconScale, {
-          toValue: 1.18,
-          duration: 350,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(iconScale, {
-          toValue: 0.95,
-          duration: 250,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(iconScale, {
-          toValue: 1.12,
-          duration: 250,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(iconScale, {
-          toValue: 1.0,
-          duration: 500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.delay(500),
-      ])
-    );
-
-    // Subtle text glow/fade
     const animText = Animated.loop(
       Animated.sequence([
         Animated.timing(textFade, {
-          toValue: 1.0,
-          duration: 900,
+          toValue: 1,
+          duration: 850,
           useNativeDriver: true,
         }),
         Animated.timing(textFade, {
-          toValue: 0.55,
-          duration: 900,
+          toValue: 0.65,
+          duration: 850,
           useNativeDriver: true,
         }),
       ])
     );
 
-    animRing1.start();
-    animRing2.start();
-    animIcon.start();
+    animBar.start();
     animText.start();
 
     return () => {
-      animRing1.stop();
-      animRing2.stop();
-      animIcon.stop();
+      animBar.stop();
       animText.stop();
     };
-  }, [visible, ring1Scale, ring1Opacity, ring2Scale, ring2Opacity, iconScale, textFade]);
+  }, [visible, barTranslate, textFade]);
 
   if (!visible) return null;
 
-  const renderIcon = () => {
-    if (icon === 'shield') return <ShieldCheck size={28} color={color} />;
-    if (icon === 'activity') return <Activity size={28} color={color} />;
-    return <HeartPulse size={28} color={color} />;
-  };
-
   const content = (
     <View style={styles.centerBox}>
-      {/* Animated Ripple Rings Container */}
-      <View style={styles.ringsContainer}>
+      {/* Sleek Animated Loadbar */}
+      <View style={[styles.loadBarTrack, { borderColor: `${color}30` }]}>
         <Animated.View
           style={[
-            styles.ring,
+            styles.loadBarFill,
             {
-              borderColor: color,
-              transform: [{ scale: ring2Scale }],
-              opacity: ring2Opacity,
+              backgroundColor: color,
+              transform: [{ translateX: barTranslate }],
             },
           ]}
         />
-        <Animated.View
-          style={[
-            styles.ring,
-            {
-              borderColor: color,
-              transform: [{ scale: ring1Scale }],
-              opacity: ring1Opacity,
-            },
-          ]}
-        />
-        {/* Core Pulsing Icon Badge */}
-        <Animated.View
-          style={[
-            styles.coreBadge,
-            {
-              backgroundColor: `${color}18`,
-              borderColor: color,
-              transform: [{ scale: iconScale }],
-            },
-          ]}
-        >
-          {renderIcon()}
-        </Animated.View>
       </View>
 
-      {/* Animated Status Text */}
       {message ? (
-        <Animated.Text style={[styles.message, { opacity: textFade }]}>
+        <Animated.Text
+          style={[
+            styles.message,
+            { opacity: textFade, color: isModal ? '#F8FAFC' : theme.text },
+          ]}
+        >
           {message}
         </Animated.Text>
       ) : null}
 
       {subMessage ? (
-        <Text style={styles.subMessage}>{subMessage}</Text>
+        <Text style={[styles.subMessage, { color: isModal ? '#94A3B8' : theme.textMuted }]}>
+          {subMessage}
+        </Text>
       ) : null}
     </View>
   );
@@ -236,7 +116,7 @@ export function MedicalLoadingIndicator({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(10, 15, 29, 0.75)',
+    backgroundColor: 'rgba(10, 15, 29, 0.78)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -244,48 +124,37 @@ const styles = StyleSheet.create({
   centerBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: 18,
     paddingHorizontal: 24,
+    width: '100%',
+    maxWidth: 320,
   },
-  ringsContainer: {
-    width: 90,
-    height: 90,
-    alignItems: 'center',
-    justifyContent: 'center',
+  loadBarTrack: {
+    width: 210,
+    height: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: 'rgba(148, 163, 184, 0.18)',
+    overflow: 'hidden',
     marginBottom: 16,
   },
-  ring: {
-    position: 'absolute',
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 2,
-  },
-  coreBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
+  loadBarFill: {
+    width: 96,
+    height: '100%',
+    borderRadius: 999,
   },
   message: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0F172A',
+    color: '#F8FAFC',
     textAlign: 'center',
-    letterSpacing: 0.2,
-    marginTop: 4,
+    letterSpacing: 0.1,
+    marginTop: 2,
   },
   subMessage: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#64748B',
+    color: '#94A3B8',
     textAlign: 'center',
     marginTop: 4,
   },

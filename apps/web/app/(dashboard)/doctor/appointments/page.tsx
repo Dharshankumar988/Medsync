@@ -7,7 +7,7 @@ import {
 } from "@medsync/ui";
 import {
   Calendar, Clock, Loader2, User, Search, CheckCircle, XCircle,
-  Stethoscope, ChevronRight, Filter, RefreshCw, ArrowRight
+  Stethoscope, ChevronRight, Filter, RefreshCw, ArrowRight, Download, Share2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -33,6 +33,7 @@ export default function DoctorAppointmentsPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [updatingId, setUpdatingId] = useState<string>("");
+  const [sharingPdfId, setSharingPdfId] = useState<string>("");
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -122,6 +123,30 @@ export default function DoctorAppointmentsPage() {
       }
     } finally {
       setUpdatingId("");
+    }
+  };
+
+  const handleShareConsultationPdf = async (appointmentId: string) => {
+    setSharingPdfId(appointmentId);
+    try {
+      await api.post(`${API_PREFIX}/consultations/appointment/${appointmentId}/share-pdf`);
+      toast.success("Consultation notes PDF shared to patient's Medical Records!");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to share consultation notes PDF");
+    } finally {
+      setSharingPdfId("");
+    }
+  };
+
+  const handleDownloadConsultationPdf = async (appointmentId: string) => {
+    try {
+      const res = await api.get(`${API_PREFIX}/consultations/appointment/${appointmentId}/pdf`, {
+        responseType: "blob",
+      });
+      const blobUrl = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      window.open(blobUrl, "_blank");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to download consultation PDF");
     }
   };
 
@@ -231,11 +256,35 @@ export default function DoctorAppointmentsPage() {
           )}
 
           {appt.status === "COMPLETED" && (
-            <Button size="sm" variant="secondary" asChild className="rounded-lg">
-              <Link href={`/doctor/appointments/${appt.id}/consultation`}>
-                View Notes <ArrowRight className="w-3.5 h-3.5 ml-1" />
-              </Link>
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleDownloadConsultationPdf(appt.id)}
+                className="rounded-lg"
+              >
+                <Download className="w-3.5 h-3.5 mr-1" /> PDF
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleShareConsultationPdf(appt.id)}
+                disabled={sharingPdfId === appt.id}
+                className="rounded-lg border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10"
+              >
+                {sharingPdfId === appt.id ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                ) : (
+                  <Share2 className="w-3.5 h-3.5 mr-1" />
+                )}
+                Share Notes PDF
+              </Button>
+              <Button size="sm" variant="secondary" asChild className="rounded-lg">
+                <Link href={`/doctor/appointments/${appt.id}/consultation`}>
+                  View Notes <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </Link>
+              </Button>
+            </>
           )}
         </div>
       </div>

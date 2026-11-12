@@ -7,7 +7,7 @@ import {
 } from "@medsync/ui";
 import {
   Loader2, ArrowLeft, Save, Pill, CheckCircle2, User,
-  Calendar, Clock, FileText, Stethoscope, Heart, ClipboardList
+  Calendar, Clock, FileText, Stethoscope, Heart, ClipboardList, Download, Share2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -25,6 +25,8 @@ export default function ConsultationPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [sharingPdf, setSharingPdf] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [appointment, setAppointment] = useState<any>(null);
   const [patient, setPatient] = useState<any>(null);
   const [consultation, setConsultation] = useState<any>(null);
@@ -183,6 +185,33 @@ export default function ConsultationPage() {
     }
   };
 
+  const handleShareNotesPdf = async () => {
+    setSharingPdf(true);
+    try {
+      await api.post(`${API_PREFIX}/consultations/appointment/${appointmentId}/share-pdf`);
+      toast.success("Consultation notes PDF shared with patient in Medical Records!");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to share consultation notes PDF");
+    } finally {
+      setSharingPdf(false);
+    }
+  };
+
+  const handleDownloadNotesPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const res = await api.get(`${API_PREFIX}/consultations/appointment/${appointmentId}/pdf`, {
+        responseType: "blob",
+      });
+      const blobUrl = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      window.open(blobUrl, "_blank");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to generate consultation PDF");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   if (loading)
     return (
       <div className="flex h-64 items-center justify-center">
@@ -300,7 +329,35 @@ export default function ConsultationPage() {
                 />
               </div>
 
-              {!isCompleted && (
+              {isCompleted ? (
+                <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/40 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={handleDownloadNotesPdf}
+                    disabled={downloadingPdf}
+                    className="rounded-xl"
+                  >
+                    {downloadingPdf ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2" />
+                    )}
+                    Download PDF
+                  </Button>
+                  <Button
+                    onClick={handleShareNotesPdf}
+                    disabled={sharingPdf}
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white"
+                  >
+                    {sharingPdf ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Share2 className="w-4 h-4 mr-2" />
+                    )}
+                    Share Notes PDF to Patient
+                  </Button>
+                </div>
+              ) : (
                 <div className="flex justify-between border-t border-border/40 pt-4">
                   <Button
                     variant="outline"

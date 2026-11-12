@@ -87,11 +87,16 @@ export const ScreenHeader = React.memo(function ScreenHeader({
               </Text>
             </View>
           )}
-          <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+          <Text
+            style={[styles.title, { color: theme.text }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.78}
+          >
             {title}
           </Text>
           {subtitle ? (
-            <Text style={[styles.subtitle, { color: theme.textMuted }]} numberOfLines={1}>
+            <Text style={[styles.subtitle, { color: theme.textMuted }]} numberOfLines={2}>
               {subtitle}
             </Text>
           ) : null}
@@ -103,7 +108,7 @@ export const ScreenHeader = React.memo(function ScreenHeader({
             onPress={() => router.push('/(tabs)/patient/profile')}
             activeOpacity={0.8}
           >
-            <Avatar src={userAvatar} fallback={userInitials} size={36} />
+            <Avatar src={userAvatar} fallback={userInitials} size={32} />
           </TouchableOpacity>
 
           {showLogout && (
@@ -176,11 +181,12 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+    flexShrink: 0,
   },
   logoutButton: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',

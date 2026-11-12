@@ -1,6 +1,7 @@
 import uuid
 from typing import Optional, List
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.db import get_db
@@ -115,6 +116,14 @@ async def get_patient_consultations_history(
     return APIResponse(message="Consultation history retrieved", data=results)
 
 
+class ConsultationPdfShareResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    record_id: str
+    consultation_id: str
+    version_number: int
+    title: str
+
+
 @router.patch("/{consultation_id}/consent", response_model=APIResponse[ConsultationResponse])
 async def update_consultation_consent(
     consultation_id: uuid.UUID,
@@ -126,3 +135,77 @@ async def update_consultation_consent(
         db, consultation_id, current_user.id, req.is_public
     )
     return APIResponse(message="Consultation consent updated", data=result)
+
+
+@router.post("/{consultation_id}/share-pdf", response_model=APIResponse[ConsultationPdfShareResponse])
+async def share_consultation_pdf(
+    consultation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_doctor),
+):
+    """Generate and share consultation notes as a PDF into the patient's Medical Records."""
+    shared = await ConsultationService.share_consultation_pdf_to_patient(
+        db, consultation_id, current_user.id, notify_patient=True
+    )
+    return APIResponse(
+        message="Consultation notes PDF shared with patient",
+        data=ConsultationPdfShareResponse(**shared),
+    )
+
+
+@router.post("/appointment/{appointment_id}/share-pdf", response_model=APIResponse[ConsultationPdfShareResponse])
+async def share_appointment_consultation_pdf(
+    appointment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(require_doctor),
+):
+    """Share consultation notes PDF for an appointment, creating a consultation summary if needed."""
+    consultation = await ConsultationService.get_or_create_for_appointment(
+        db, appointment_id, current_user.id
+    )
+    shared = await ConsultationService.share_consultation_pdf_to_patient(
+        db, consultation.id, current_user.id, notify_patient=True
+    )
+    return APIResponse(
+        message="Consultation notes PDF shared with patient",
+        data=ConsultationPdfShareResponse(**shared),
+    )
+
+
+@router.get("/{consultation_id}/pdf")
+async def download_consultation_pdf(
+    consultation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user),
+):
+    """Download the formatted PDF for a consultation."""
+    pdf_bytes, filename, _ = await ConsultationService.build_consultation_pdf_bytes(
+        db, consultation_id, current_user.id, requester_role=str(current_user.role)
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/appointment/{appointment_id}/pdf")
+async def download_appointment_consultation_pdf(
+    appointment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user),
+):
+    """Download the consultation notes PDF for a given appointment."""
+    consultation = await ConsultationService.get_by_appointment(db, appointment_id)
+    if not consultation:
+        consultation = await ConsultationService.get_or_create_for_appointment(
+            db, appointment_id, current_user.id
+        )
+    pdf_bytes, filename, _ = await ConsultationService.build_consultation_pdf_bytes(
+        db, consultation.id, current_user.id, requester_role=str(current_user.role)
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

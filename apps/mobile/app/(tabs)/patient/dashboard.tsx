@@ -184,7 +184,37 @@ export default function PatientDashboard() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  const nextAppt = summary.nextAppointment;
+  const nextAppt = useMemo(() => {
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate()
+    ).padStart(2, '0')}`;
+
+    const upcoming = (appointments || [])
+      .filter((a: any) => {
+        const st = String(a?.status || '').toUpperCase();
+        const dateKey = String(a?.appointment_date || '').split('T')[0];
+        return dateKey >= todayIso && (st === 'PENDING' || st === 'CONFIRMED');
+      })
+      .sort((a: any, b: any) => {
+        const ka = `${a.appointment_date || ''} ${a.start_time || ''}`;
+        const kb = `${b.appointment_date || ''} ${b.start_time || ''}`;
+        return ka.localeCompare(kb);
+      });
+
+    return upcoming[0] || summary.nextAppointment;
+  }, [appointments, summary.nextAppointment]);
+
+  const formatApptTime = (rawTime?: string | null) => {
+    if (!rawTime) return '';
+    const parts = String(rawTime).split(':');
+    const hh = parseInt(parts[0] || '', 10);
+    const mm = parts[1] || '00';
+    if (!Number.isFinite(hh)) return String(rawTime);
+    const period = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh % 12 || 12;
+    return `${h12}:${mm.slice(0, 2)} ${period}`;
+  };
 
   return (
     <RoleGuard allowedRole="patient">
@@ -515,16 +545,25 @@ export default function PatientDashboard() {
                 <Text style={[styles.apptLabel, { color: theme.textMuted }]}>
                   UPCOMING APPOINTMENT
                 </Text>
-                <Text style={[styles.apptDoctorName, { color: theme.text }]}>
-                  {nextAppt.doctor_name || 'Medical Specialist'}
+                <Text style={[styles.apptDoctorName, { color: theme.text }]} numberOfLines={1}>
+                  {nextAppt.doctor_name
+                    ? nextAppt.doctor_name.startsWith('Dr.')
+                      ? nextAppt.doctor_name
+                      : `Dr. ${nextAppt.doctor_name}`
+                    : 'Scheduled Consultation'}
                 </Text>
-                <Text style={[styles.apptTime, { color: theme.textSecondary }]}>
-                  {new Date(nextAppt.appointment_date).toLocaleDateString(undefined, {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                  })}{' '}
-                  at {nextAppt.time_slot}
+                <Text style={[styles.apptTime, { color: theme.textSecondary }]} numberOfLines={1}>
+                  {new Date(`${String(nextAppt.appointment_date).split('T')[0]}T00:00:00`).toLocaleDateString(
+                    undefined,
+                    {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                    }
+                  )}
+                  {formatApptTime(nextAppt.start_time || (nextAppt as any).time_slot)
+                    ? ` • ${formatApptTime(nextAppt.start_time || (nextAppt as any).time_slot)}`
+                    : ''}
                 </Text>
               </View>
               <ChevronRight size={18} color={theme.textMuted} />

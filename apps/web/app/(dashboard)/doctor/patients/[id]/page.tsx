@@ -58,6 +58,7 @@ import {
   ChevronDown,
   ChevronUp,
   Droplet,
+  Share2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
@@ -97,6 +98,7 @@ function PatientDetailContent() {
   const [downloadingRecordId, setDownloadingRecordId] = useState<string | null>(null);
   const [downloadingPrescriptionId, setDownloadingPrescriptionId] = useState<string | null>(null);
   const [updatingAppointmentId, setUpdatingAppointmentId] = useState<string | null>(null);
+  const [sharingConsultationPdfId, setSharingConsultationPdfId] = useState<string | null>(null);
 
   // Modals
   const [isReferralOpen, setIsReferralOpen] = useState(false);
@@ -608,6 +610,31 @@ function PatientDetailContent() {
       fetchPatientData();
     } finally {
       setUpdatingAppointmentId(null);
+    }
+  };
+
+  const handleShareConsultationPdf = async (appointmentId: string) => {
+    setSharingConsultationPdfId(appointmentId);
+    try {
+      await api.post(`/api/v1/consultations/appointment/${appointmentId}/share-pdf`);
+      toast.success("Consultation notes PDF shared to patient's Medical Records!");
+      fetchPatientData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to share consultation notes PDF");
+    } finally {
+      setSharingConsultationPdfId(null);
+    }
+  };
+
+  const handleDownloadConsultationPdf = async (appointmentId: string) => {
+    try {
+      const res = await api.get(`/api/v1/consultations/appointment/${appointmentId}/pdf`, {
+        responseType: "blob",
+      });
+      const blobUrl = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      window.open(blobUrl, "_blank");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to download consultation PDF");
     }
   };
 
@@ -1812,6 +1839,37 @@ function PatientDetailContent() {
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Mark Completed
                             </Button>
+                          )}
+                          {a.status === "COMPLETED" && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs rounded-xl"
+                                onClick={() => handleDownloadConsultationPdf(a.id)}
+                              >
+                                <Download className="w-3.5 h-3.5 mr-1" /> Notes PDF
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs rounded-xl border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10"
+                                disabled={sharingConsultationPdfId === a.id}
+                                onClick={() => handleShareConsultationPdf(a.id)}
+                              >
+                                {sharingConsultationPdfId === a.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                                ) : (
+                                  <Share2 className="w-3.5 h-3.5 mr-1" />
+                                )}
+                                Share Notes PDF
+                              </Button>
+                              <Button size="sm" variant="secondary" asChild className="h-8 text-xs rounded-xl">
+                                <Link href={`/doctor/appointments/${a.id}/consultation`}>
+                                  View Notes
+                                </Link>
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </CardContent>

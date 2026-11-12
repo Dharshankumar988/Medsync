@@ -143,15 +143,17 @@ async def update_record_consent(
         else:
             db.add(RecordPermission(
                 record_id=record_id,
-                granted_to=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+                granted_to=current_user.id,
                 granted_by=current_user.id,
                 access_level="PUBLIC",
                 is_revoked=False
             ))
+        record.is_public = True
         record.description = f"{clean_desc} [PUBLIC]".strip()
     else:
         if pub_perm:
             pub_perm.is_revoked = True
+        record.is_public = False
         record.description = clean_desc if clean_desc else None
 
     await db.commit()
@@ -374,6 +376,9 @@ async def update_record_consent(
         raise HTTPException(status_code=403, detail="Only the patient or admin can modify consent")
 
     record.is_public = payload.is_public
+    desc = record.description or ""
+    clean_desc = desc.replace("[PUBLIC]", "").strip()
+    record.description = f"{clean_desc} [PUBLIC]".strip() if payload.is_public else (clean_desc if clean_desc else None)
     
     perm_stmt = select(RecordPermission).where(
         RecordPermission.record_id == record_id,

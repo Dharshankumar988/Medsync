@@ -313,3 +313,70 @@ def test_contract_loader_abis_match_deployed_contracts():
     assert contract_loader.get_abi("ConsentManager") == contract_loader.get_abi("ConsentManagement")
 
 
+@pytest.mark.asyncio
+async def test_post_record_consent_uses_valid_user_id_for_public_permission():
+    """POST /api/v1/records/{id}/consent must not insert sentinel UUID 0000... into RecordPermission.granted_to."""
+    from app.api.v1.endpoints.records import require_patient as records_require_patient
+
+    patient_id = uuid.uuid4()
+    record_id = uuid.uuid4()
+    principal = AuthenticatedPrincipal(
+        id=patient_id, email="patient@medsync.io", role="PATIENT", status="ACTIVE"
+    )
+    record_obj = SimpleNamespace(
+        id=record_id,
+        patient_id=patient_id,
+        description="Blood test",
+        is_public=False,
+    )
+
+    added_items = []
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=_make_result(scalar=None))
+    mock_db.add = MagicMock(side_effect=lambda obj: added_items.append(obj))
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[records_require_patient] = lambda: principal
+
+    with patch("app.api.v1.endpoints.records.record_repo.get", AsyncMock(return_value=record_obj)):
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+                resp = await client.post(
+                    f"/api/v1/records/{record_id}/consent",
+                    json={"is_public": True},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+    assert resp.status_code == 200, resp.text
+    assert record_obj.is_public is True
+    assert "[PUBLIC]" in record_obj.description
+    assert len(added_items) == 1
+    assert added_items[0].granted_to == patient_id
+    assert str(added_items[0].granted_to) != "00000000-0000-0000-0000-000000000000"
+
+
+def test_generate_consultation_pdf_returns_valid_pdf():
+    """Consultation summary PDF generator produces non-empty PDF bytes with consultation notes."""
+    from app.services.qr_pdf_service import QRPdfService
+
+    pdf_io = QRPdfService.generate_consultation_pdf(
+        consultation_data={
+            "visit_date": "2026-11-12",
+            "symptoms": "Persistent cough for 4 days",
+            "observations": "Mild wheeze, SpO2 98%",
+            "diagnosis": "Acute bronchitis",
+            "treatment_plan": "Hydration, steam inhalation, prescribed bronchodilator",
+            "clinical_notes": "Advise follow-up if fever spikes above 101F.",
+            "follow_up_date": "2026-11-19",
+            "follow_up_notes": "Review chest auscultation.",
+        },
+        patient_data={"name": "Dharshan Kumar", "id": str(uuid.uuid4())},
+        doctor_data={"name": "Aadhya Patel", "specialization": "Pulmonology", "clinic_name": "MedSync Clinic"},
+    )
+    raw = pdf_io.read()
+    assert raw.startswith(b"%PDF")
+    assert len(raw) > 500
+
+
+
