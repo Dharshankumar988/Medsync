@@ -38,6 +38,7 @@
     },
     "scheme": "medsync",
     "plugins": [
+      "./plugins/withMonorepoGradleFix",
       "expo-router",
       "expo-secure-store",
       [

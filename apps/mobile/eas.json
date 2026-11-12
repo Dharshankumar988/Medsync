@@ -10,7 +10,10 @@
     },
     "preview": {
       "distribution": "internal",
+      "node": "20.18.0",
+      "pnpm": "10.0.0",
       "android": {
+        "image": "ubuntu-22.04-jdk-17-ndk-26b",
         "buildType": "apk"
       },
       "channel": "preview",
@@ -22,7 +25,10 @@
       }
     },
     "production": {
+      "node": "20.18.0",
+      "pnpm": "10.0.0",
       "android": {
+        "image": "ubuntu-22.04-jdk-17-ndk-26b",
         "buildType": "app-bundle"
       },
       "channel": "production",
