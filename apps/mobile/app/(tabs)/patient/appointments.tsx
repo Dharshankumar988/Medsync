@@ -239,8 +239,11 @@ export default function PatientAppointmentsScreen() {
   // "Book Again" from a past appointment
   const handleBookAgain = (pastAppt: AppointmentItem) => {
     // Look up doctor in doctors list or construct fallback
-    const matchedDoc = doctors.find((d) => d.id === pastAppt.doctor_id) || {
+    const matchedDoc = doctors.find(
+      (d) => d.user_id === pastAppt.doctor_id || d.id === pastAppt.doctor_id
+    ) || {
       id: pastAppt.doctor_id,
+      user_id: pastAppt.doctor_id,
       full_name: pastAppt.doctor_name || 'Practitioner',
       specialization: 'Consulting Doctor',
       clinic_name: 'MedSync Healthcare',
@@ -316,7 +319,7 @@ export default function PatientAppointmentsScreen() {
 
   // Called when user taps "Confirm Appointment (₹...)" in the booking form
   const handleInitiateBooking = () => {
-    if (!selectedDoctor?.id) {
+    if (!selectedDoctor?.user_id && !selectedDoctor?.id) {
       setBookingError('Please choose a consulting doctor.');
       return;
     }
@@ -339,7 +342,7 @@ export default function PatientAppointmentsScreen() {
     setBookingLoading(true);
     try {
       await patientService.bookAppointment({
-        doctor_id: selectedDoctor.id,
+        doctor_id: selectedDoctor.user_id || selectedDoctor.id,
         appointment_date: appointmentDate,
         start_time: startTime,
         reason: reason.trim() || 'General Consultation',

@@ -346,7 +346,7 @@ export default function PatientDashboard() {
                 activeOpacity={0.88}
               >
                 <Scan size={16} color="#09090B" strokeWidth={2.5} />
-                <Text style={styles.cardPrimaryBtnText}>Scan Hospital / Rx</Text>
+                <Text style={styles.cardPrimaryBtnText}>Scan Hospital</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -389,7 +389,7 @@ export default function PatientDashboard() {
                   activeOpacity={0.8}
                 >
                   <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669' }}>
-                    + Order Rx
+                    + Order Meds
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -571,7 +571,7 @@ export default function PatientDashboard() {
                   Prescriptions & Documents
                 </Text>
                 <Text style={[styles.hubDesc, { color: theme.textMuted }]}>
-                  {summary.activePrescriptionsCount} Active Rx • PIN-Protected Vault
+                  {summary.activePrescriptionsCount} Active Prescriptions • PIN Vault
                 </Text>
               </View>
               <ChevronRight size={18} color={theme.textMuted} />

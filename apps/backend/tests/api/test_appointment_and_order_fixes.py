@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, date, time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -173,4 +174,142 @@ async def test_get_profile_returns_avatar_urls():
     data = resp.json()["data"]
     assert data["profile_image_url"] == avatar_url
     assert data["profile_picture_url"] == avatar_url
+
+
+@pytest.mark.asyncio
+async def test_upload_record_requires_enrolled_pin_first():
+    """Uploading a record without an enrolled PIN returns a clear 400 prompt instead of 401."""
+    from app.api.v1.endpoints.records import require_patient as records_require_patient
+
+    patient_id = uuid.uuid4()
+    principal = AuthenticatedPrincipal(
+        id=patient_id, email="patient@medsync.io", role="PATIENT", status="ACTIVE"
+    )
+    mock_db = AsyncMock()
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[records_require_patient] = lambda: principal
+
+    with patch("app.services.security_service.has_enrolled_pin", AsyncMock(return_value=False)):
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+                resp = await client.post(
+                    "/api/v1/records",
+                    data={"title": "Blood Test", "pin": "123456"},
+                    files={"file": ("report.pdf", b"%PDF-1.4 test", "application/pdf")},
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+    assert resp.status_code == 400, resp.text
+    assert "not set up" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_book_appointment_resolves_doctor_table_id_to_user_id():
+    """Passing doctors.id instead of doctors.user_id must store doctor.user_id to satisfy appointments_doctor_id_fkey."""
+    from datetime import date, time
+    from app.services.appointment import AppointmentService
+    from app.schemas.appointment import AppointmentCreate
+
+    patient_id = uuid.uuid4()
+    doctor_table_id = uuid.UUID("3b000000-0000-0000-0000-000000000001")
+    doctor_user_id = uuid.UUID("1b000000-0000-0000-0000-000000000001")
+
+    user_obj = SimpleNamespace(id=patient_id, profile_completion_percentage=100)
+    doctor_obj = SimpleNamespace(
+        id=doctor_table_id,
+        user_id=doctor_user_id,
+        full_name="Aadhya Patel",
+        is_accepting_appointments=True,
+    )
+    patient_obj = SimpleNamespace(full_name="Dharshan")
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            _make_result(scalar=user_obj),
+            _make_result(scalar=doctor_obj),
+            _make_result(scalar=doctor_user_id),
+            _make_result(scalar=patient_obj),
+        ]
+    )
+
+    req = AppointmentCreate(
+        doctor_id=doctor_table_id,
+        appointment_date=date(2026, 11, 13),
+        start_time=time(11, 0),
+        notes="Fever & Flu",
+        pin="123456",
+    )
+
+    mock_conflict = AsyncMock(return_value=False)
+    mock_create = AsyncMock(side_effect=lambda db, obj_in: SimpleNamespace(**obj_in))
+    mock_notify = AsyncMock()
+
+    with patch("app.services.appointment.appointment_repo.check_conflict", mock_conflict), \
+         patch("app.services.appointment.appointment_repo.create", mock_create), \
+         patch("app.services.appointment.NotificationService.send_notification", mock_notify):
+        appt = await AppointmentService.book_appointment(mock_db, patient_id, req)
+
+    assert appt.doctor_id == doctor_user_id
+    assert mock_conflict.call_args.args[1] == doctor_user_id
+    assert mock_create.call_args.kwargs["obj_in"]["doctor_id"] == doctor_user_id
+    assert mock_notify.call_args_list[0].kwargs["user_id"] == doctor_user_id
+
+
+@pytest.mark.asyncio
+async def test_book_appointment_raises_404_for_missing_doctor():
+    """Booking with a nonexistent doctor UUID raises NotFoundException rather than triggering a Postgres FK error."""
+    from datetime import date, time
+    from app.services.appointment import AppointmentService
+    from app.schemas.appointment import AppointmentCreate
+    from app.core.exceptions import NotFoundException
+
+    patient_id = uuid.uuid4()
+    missing_doctor_id = uuid.uuid4()
+    user_obj = SimpleNamespace(id=patient_id, profile_completion_percentage=100)
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            _make_result(scalar=user_obj),
+            _make_result(scalar=None),
+            _make_result(scalar=None),
+        ]
+    )
+
+    req = AppointmentCreate(
+        doctor_id=missing_doctor_id,
+        appointment_date=date(2026, 11, 13),
+        start_time=time(11, 0),
+        pin="123456",
+    )
+
+    with pytest.raises(NotFoundException):
+        await AppointmentService.book_appointment(mock_db, patient_id, req)
+
+
+def test_contract_loader_abis_match_deployed_contracts():
+    """All 6 core smart contracts resolve canonical addresses and ABIs including ConsentManagement & grantAccess."""
+    from app.blockchain.contracts.loader import contract_loader
+
+    required_methods = {
+        "ConsentManagement": {"grantConsent", "revokeConsent", "checkConsent", "getConsentId"},
+        "PatientRegistry": {"registerPatient", "verifyPatient", "updateWallet", "deactivatePatient", "getPatient"},
+        "DoctorRegistry": {"registerDoctor", "verifyDoctor", "suspendDoctor", "updateAffiliation", "getDoctor"},
+        "PharmacyRegistry": {"registerPharmacy", "verifyPharmacy", "suspendPharmacy", "getPharmacy"},
+        "MedicalRecordRegistry": {"registerRecord", "verifyRecord", "grantAccess", "revokeAccess", "getRecord"},
+        "PrescriptionRegistry": {"createPrescription", "verifyPrescription", "revokePrescription", "getPrescription"},
+    }
+
+    for contract_name, expected_fns in required_methods.items():
+        assert contract_name in contract_loader.addresses
+        abi = contract_loader.get_abi(contract_name)
+        fn_names = {item["name"] for item in abi if isinstance(item, dict) and item.get("type") == "function"}
+        missing = expected_fns - fn_names
+        assert not missing, f"{contract_name} ABI missing methods: {missing}"
+
+    # Verify alias fallback works too
+    assert contract_loader.get_abi("ConsentManager") == contract_loader.get_abi("ConsentManagement")
+
 

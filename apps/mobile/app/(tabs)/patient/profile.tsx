@@ -41,7 +41,7 @@ import {
   Scale,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { ScreenHeader } from '../../../components/layout/ScreenHeader';
 import { Card, CardContent } from '../../../components/common/Card';
@@ -123,6 +123,12 @@ export default function PatientProfileScreen() {
   useEffect(() => {
     loadProfileData();
   }, [loadProfileData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileData();
+    }, [loadProfileData])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

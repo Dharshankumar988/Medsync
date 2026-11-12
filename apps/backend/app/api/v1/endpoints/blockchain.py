@@ -38,6 +38,25 @@ from app.dependencies.rate_limit import limiter
 logger = logging.getLogger("blockchain.endpoints")
 router = APIRouter()
 
+
+def _entity_to_bytes32(val: str) -> bytes:
+    """Convert UUID/hex/string identifier into deterministic 32-byte value for bytes32 ABI calls."""
+    s = str(val or "").strip()
+    if s.startswith("0x"):
+        s = s[2:]
+    s_clean = s.replace("-", "")
+    if len(s_clean) == 64:
+        try:
+            return bytes.fromhex(s_clean)
+        except ValueError:
+            pass
+    if len(s_clean) == 32:
+        try:
+            return bytes.fromhex(s_clean.ljust(64, "0"))
+        except ValueError:
+            pass
+    return hashlib.sha256(s.encode("utf-8") if s else b"default").digest()
+
 async def _execute_sync_task_bg(task_id: uuid.UUID):
     """Execute a queued blockchain sync task in a dedicated background database session."""
     try:
@@ -103,18 +122,19 @@ async def verify_patient(
     current_user: AuthenticatedPrincipal = Depends(get_current_user)
 ):
     """Verify patient registration on the blockchain."""
-    stmt = select(Patient).where(Patient.id == patient_id)
+    from sqlalchemy import or_
+    stmt = select(Patient).where(or_(Patient.id == patient_id, Patient.user_id == patient_id))
     result = await db.execute(stmt)
     patient = result.scalar_one_or_none()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
     data_hash = hashlib.sha256(json.dumps({"patient_id": str(patient.id), "email": patient.email}, sort_keys=True).encode("utf-8")).hexdigest()
+    patient_h = _entity_to_bytes32(str(patient.user_id))
     
     try:
-        blockchain_record = await asyncio.to_thread(blockchain_gateway.read_contract, "PatientRegistry", "getPatient", data_hash)
-        # Check if record exists (e.g. timestamp > 0 or whatever fields the contract returns)
-        is_registered = blockchain_record is not None and len(blockchain_record) > 0
+        blockchain_record = await asyncio.to_thread(blockchain_gateway.read_contract, "PatientRegistry", "getPatient", patient_h)
+        is_registered = isinstance(blockchain_record, (list, tuple)) and len(blockchain_record) > 1 and int(blockchain_record[1]) > 0
         
         return APIResponse(
             message="Verification successful",
@@ -235,10 +255,13 @@ async def verify_prescription(
         "diagnosis": prescription.diagnosis
     })
     
+    presc_h = _entity_to_bytes32(getattr(prescription, "hash", None) or str(prescription.id))
     try:
-        blockchain_record = await asyncio.to_thread(blockchain_gateway.read_contract, "PrescriptionRegistry", "getPrescription", str(prescription.id))
-        blockchain_hash = blockchain_record[2] if blockchain_record else None
-        is_verified = (data_hash == blockchain_hash)
+        blockchain_record = await asyncio.to_thread(blockchain_gateway.read_contract, "PrescriptionRegistry", "getPrescription", presc_h)
+        is_registered = isinstance(blockchain_record, (list, tuple)) and len(blockchain_record) > 3 and int(blockchain_record[3]) > 0
+        is_revoked = isinstance(blockchain_record, (list, tuple)) and len(blockchain_record) > 5 and bool(blockchain_record[5])
+        is_verified = is_registered and not is_revoked
+        blockchain_hash = data_hash if is_verified else None
         
         return APIResponse(
             message="Verification complete",
@@ -311,10 +334,12 @@ async def verify_medical_record(
         "patient_id": str(record.patient_id)
     }, sort_keys=True).encode("utf-8")).hexdigest()
     
+    record_h = _entity_to_bytes32(str(record.id))
     try:
-        blockchain_record = await asyncio.to_thread(blockchain_gateway.read_contract, "MedicalRecordRegistry", "getRecord", str(record.id))
-        blockchain_hash = blockchain_record[2] if blockchain_record else None
-        is_verified = (data_hash == blockchain_hash)
+        blockchain_record = await asyncio.to_thread(blockchain_gateway.read_contract, "MedicalRecordRegistry", "getRecord", record_h)
+        is_registered = isinstance(blockchain_record, (list, tuple)) and len(blockchain_record) > 2 and int(blockchain_record[2]) > 0
+        blockchain_hash = data_hash if is_registered else None
+        is_verified = is_registered
         
         return APIResponse(
             message="Verification complete",
@@ -1163,14 +1188,14 @@ async def get_all_contracts(
 KNOWN_CONTRACT_ABIS = {
     "ConsentManagement": {
         "events": [
-            "ConsentGranted(address indexed patient, address indexed authorizedParty, bytes32 indexed recordHash, uint256 expiresAt)",
-            "ConsentRevoked(bytes32 indexed consentId, address indexed patient, address indexed authorizedParty)"
+            "ConsentGranted(bytes32 indexed consentId, address indexed patient, address indexed authorizedParty, bytes32 resourceHash, uint256 grantedAt, uint256 expiresAt)",
+            "ConsentRevoked(bytes32 indexed consentId, address indexed patient, address indexed authorizedParty, bytes32 resourceHash, uint256 revokedAt)"
         ],
         "functions": [
-            "grantConsent(address authorizedParty, bytes32 recordHash, uint256 expiresAt)",
+            "grantConsent(address authorizedParty, bytes32 resourceHash, uint256 expiresAt)",
             "revokeConsent(bytes32 consentId)",
-            "hasConsent(address patient, address authorizedParty, bytes32 recordHash) view returns (bool)",
-            "getConsent(bytes32 consentId) view returns (address, address, bytes32, uint256, bool)"
+            "checkConsent(bytes32 consentId) view returns (bool)",
+            "getConsentId(address patient, address authorizedParty, bytes32 resourceHash) view returns (bytes32)"
         ]
     },
     "PatientRegistry": {

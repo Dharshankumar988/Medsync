@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import {
@@ -12,17 +12,57 @@ import { useRole } from '../../providers/role-provider';
 import { useTheme } from '../../context/ThemeContext';
 import { LoadingScreen } from '../../components/layout/LoadingScreen';
 import { FloatingQuickActions } from '../../components/common/FloatingQuickActions';
+import { MandatoryPinSetupModal } from '../../components/patient/MandatoryPinSetupModal';
+import { isStartupSplashDone, subscribeStartupSplash } from '../../components/layout/StartupSplash';
+import { patientService } from '../../services/patient.service';
 
 export default function TabLayout() {
-  const { role, isLoading, isAuthenticated } = useRole();
+  const { role, user, isLoading, isAuthenticated, logout } = useRole();
   const { theme, isDark } = useTheme();
   const router = useRouter();
+  const [splashReady, setSplashReady] = useState(() => isStartupSplashDone());
+  const [requiresPinSetup, setRequiresPinSetup] = useState(false);
+
+  useEffect(() => {
+    return subscribeStartupSplash(() => setSplashReady(true));
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
+      setRequiresPinSetup(false);
       router.replace('/(auth)/login');
     }
   }, [isLoading, isAuthenticated, router]);
+
+  useEffect(() => {
+    let active = true;
+    const normalizedRole = (role || '').toLowerCase();
+
+    if (
+      isLoading ||
+      !isAuthenticated ||
+      !user?.id ||
+      !['patient', 'pharmacy', 'doctor'].includes(normalizedRole)
+    ) {
+      setRequiresPinSetup(false);
+      return;
+    }
+
+    patientService
+      .getSecurityStatus()
+      .then((sec) => {
+        if (!active) return;
+        const enrolled = Boolean(sec?.has_pin || sec?.status === 'COMPLETED');
+        setRequiresPinSetup(!enrolled);
+      })
+      .catch(() => {
+        // Do not lock user out on transient offline failure
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isLoading, isAuthenticated, user?.id, role]);
 
   if (isLoading) {
     return <LoadingScreen message="Loading MedSync Vault..." />;
@@ -133,7 +173,20 @@ export default function TabLayout() {
       </Tabs>
 
       {/* Floating Action Buttons above bottom menu: Bottom-Left Scan QR & Bottom-Right Pulse AI */}
-      <FloatingQuickActions />
+      {!requiresPinSetup && <FloatingQuickActions />}
+
+      {/* Mandatory First-Time Auth PIN Setup Gate */}
+      <MandatoryPinSetupModal
+        visible={splashReady && requiresPinSetup}
+        role={role}
+        userEmail={user?.email}
+        onCompleted={() => setRequiresPinSetup(false)}
+        onSignOut={async () => {
+          setRequiresPinSetup(false);
+          await logout();
+          router.replace('/(auth)/login');
+        }}
+      />
     </View>
   );
 }

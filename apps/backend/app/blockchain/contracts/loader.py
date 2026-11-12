@@ -37,8 +37,13 @@ def _resolve_paths() -> tuple[str, str]:
     bundled_deployments = os.path.join(backend_dir, "blockchain", "artifacts", "deployments", blockchain_settings.NETWORK_NAME)
     bundled_abis = os.path.join(backend_dir, "blockchain", "artifacts", "abis")
     
-    if os.path.isdir(bundled_deployments):
+    if os.path.isdir(bundled_deployments) or os.path.isdir(bundled_abis):
         return bundled_deployments, bundled_abis
+
+    # Fallback to canonical ABI directory bundled directly in app/blockchain/abi
+    package_abis = os.path.join(backend_dir, "blockchain", "abi")
+    if os.path.isdir(package_abis):
+        return "", package_abis
         
     return "", ""
 
@@ -98,7 +103,14 @@ class ContractLoader:
                 self.addresses[name] = def_addr
 
     def get_abi(self, contract_name: str) -> list:
-        abi_file = os.path.join(self.abis_dir, f"{contract_name}.json")
+        alias_map = {
+            "ConsentManager": "ConsentManagement",
+            "RecordRegistry": "MedicalRecordRegistry",
+        }
+        canonical_name = alias_map.get(contract_name, contract_name)
+        abi_file = os.path.join(self.abis_dir, f"{canonical_name}.json")
+        if not os.path.exists(abi_file):
+            abi_file = os.path.join(self.abis_dir, f"{contract_name}.json")
         if not os.path.exists(abi_file):
             raise ContractNotFound(f"ABI file not found for {contract_name}")
         with open(abi_file, "r") as f:

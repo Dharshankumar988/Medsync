@@ -472,7 +472,7 @@ export default function PatientRecordsScreen() {
               activeOpacity={0.85}
             >
               <ShoppingBag size={13} color="#FFFFFF" />
-              <Text style={styles.addRecordHeaderBtnText}>Order Rx</Text>
+              <Text style={styles.addRecordHeaderBtnText}>Order Meds</Text>
             </TouchableOpacity>
           }
         />
@@ -844,7 +844,7 @@ export default function PatientRecordsScreen() {
 
                 {activeTab === 'PRESCRIPTIONS' && (
                   <Button
-                    title="Book Doctor Visit for Rx"
+                    title="Book Doctor Visit"
                     size="sm"
                     iconLeft={<Calendar size={15} color={theme.primaryButtonText} />}
                     onPress={() => router.push('/(tabs)/patient/appointments?tab=DISCOVERY')}

@@ -17,19 +17,31 @@ class AppointmentService:
     @staticmethod
     async def book_appointment(db: AsyncSession, patient_id: uuid.UUID, req: AppointmentCreate):
         # 1. Enforce Profile Completeness
-        from app.models.user import User
+        from app.models.user import User, UserRole
         user_stmt = select(User).where(User.id == patient_id)
         user_res = await db.execute(user_stmt)
         user = user_res.scalar_one_or_none()
         if not user or user.profile_completion_percentage < 100:
             raise BadRequestException("Please complete your health profile before booking an appointment.")
 
-        # 2. Check if Doctor is accepting appointments
+        # 2. Resolve canonical Doctor -> users.id (appointments.doctor_id FK references users.id)
         doc_stmt = select(Doctor).where((Doctor.user_id == req.doctor_id) | (Doctor.id == req.doctor_id))
         doc_res = await db.execute(doc_stmt)
         doctor = doc_res.scalar_one_or_none()
-        if doctor and not doctor.is_accepting_appointments:
-            raise DomainException("Doctor is currently not accepting new appointments.")
+        if doctor:
+            if not doctor.is_accepting_appointments:
+                raise DomainException("Doctor is currently not accepting new appointments.")
+            resolved_doctor_user_id = doctor.user_id
+        else:
+            doc_user_stmt = select(User).where(User.id == req.doctor_id, User.role == UserRole.DOCTOR)
+            doc_user_res = await db.execute(doc_user_stmt)
+            if not doc_user_res.scalar_one_or_none():
+                raise NotFoundException("Selected doctor was not found.")
+            resolved_doctor_user_id = req.doctor_id
+
+        resolved_user_check = await db.execute(select(User.id).where(User.id == resolved_doctor_user_id))
+        if not resolved_user_check.scalar_one_or_none():
+            raise NotFoundException("Doctor account is incomplete or unavailable.")
 
         resolved_end_time = req.end_time
         if resolved_end_time is None:
@@ -39,15 +51,15 @@ class AppointmentService:
 
         # 3. Check double-booking
         conflict = await appointment_repo.check_conflict(
-            db, req.doctor_id, req.appointment_date, req.start_time, resolved_end_time
+            db, resolved_doctor_user_id, req.appointment_date, req.start_time, resolved_end_time
         )
         if conflict:
             raise DomainException("Doctor is not available at this time slot")
 
-        # 3. Create appointment
+        # 4. Create appointment
         appt_in = {
             "patient_id": patient_id,
-            "doctor_id": req.doctor_id,
+            "doctor_id": resolved_doctor_user_id,
             "appointment_date": req.appointment_date,
             "start_time": req.start_time,
             "end_time": resolved_end_time,
@@ -62,7 +74,7 @@ class AppointmentService:
         pat = pat_res.scalar_one_or_none()
         patient_name = pat.full_name if pat else "Patient"
 
-        doctor_user_id = doctor.user_id if doctor else req.doctor_id
+        doctor_user_id = resolved_doctor_user_id
         doctor_name = doctor.full_name if doctor else "Doctor"
 
         await NotificationService.send_notification(
@@ -289,7 +301,7 @@ class AppointmentService:
 
         # Track cancellation
         if target_status in (AppointmentStatus.CANCELLED, AppointmentStatus.REJECTED):
-            appt.cancelled_at = datetime.now(timezone.utc)
+            appt.cancelled_at = datetime.utcnow()
             appt.cancellation_reason = reason
 
         appt.status = target_status

@@ -49,9 +49,15 @@ async def upload_record(
     db: AsyncSession = Depends(get_db),
     current_user: AuthenticatedPrincipal = Depends(require_patient)
 ):
-    from app.services.security_service import validate_patient_pin
+    from app.services.security_service import validate_patient_pin, has_enrolled_pin
     from fastapi import HTTPException
-    
+
+    if not await has_enrolled_pin(db, current_user.id):
+        raise HTTPException(
+            status_code=400,
+            detail="Authorization PIN is not set up yet. Please set up your 6-digit Authorization PIN first."
+        )
+
     is_valid = await validate_patient_pin(db, current_user.id, pin)
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")

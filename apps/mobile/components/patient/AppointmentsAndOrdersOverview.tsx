@@ -690,7 +690,7 @@ export function AppointmentsAndOrdersOverview({
                 style={[styles.viewToggleBtn, { backgroundColor: '#10B981', borderColor: '#10B981' }]}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.viewToggleBtnText, { color: '#FFFFFF' }]}>+ Order Rx</Text>
+                <Text style={[styles.viewToggleBtnText, { color: '#FFFFFF' }]}>+ Order Meds</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => router.push('/(tabs)/patient/records?tab=ORDERS')}

@@ -90,6 +90,7 @@ class HealthMonitoringService:
             "DoctorRegistry": "getDoctor",
             "MedicalRecordRegistry": "getRecord",
             "PrescriptionRegistry": "getPrescription",
+            "ConsentManagement": "checkConsent",
         }
         method_name = probe_methods.get(name)
         if method_name and hasattr(contract.functions, method_name):

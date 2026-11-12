@@ -3,10 +3,24 @@ import { supabase } from '@/lib/supabase';
 import { SecurityService } from '@/services/security.service';
 import { useSecurityStore } from '@/store/useSecurityStore';
 
+const PIN_ENABLED_ROLES = new Set(['patient', 'pharmacy', 'doctor']);
+
 export function useSecurityEnrollment(userId?: string, role?: string) {
-  const { status, setStatus } = useSecurityStore();
-  const isInitiallyEnrolled = status === 'COMPLETED' || status === 'PIN_CREATED';
-  const [isLoading, setIsLoading] = useState(!isInitiallyEnrolled);
+  const {
+    status,
+    checkedUserId,
+    setStatus,
+    openEnrollmentModal,
+    resetForUser,
+  } = useSecurityStore();
+
+  const normalizedRole = (role || '').toLowerCase();
+  const isAlreadyCheckedCompleted =
+    Boolean(userId) &&
+    checkedUserId === userId &&
+    (status === 'COMPLETED' || status === 'PIN_CREATED');
+
+  const [isLoading, setIsLoading] = useState(!isAlreadyCheckedCompleted);
 
   useEffect(() => {
     let isMounted = true;
@@ -14,49 +28,91 @@ export function useSecurityEnrollment(userId?: string, role?: string) {
     async function checkSecurity() {
       try {
         let activeUserId = userId;
-        let activeRole = (role || '').toLowerCase();
+        let activeRole = normalizedRole;
 
-        // 1. Auto-resolve session if parameters are not yet populated by caller
         if (!activeUserId || !activeRole) {
-          const { data: { session } } = await supabase.auth.getSession();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
           if (session?.user) {
             activeUserId = activeUserId || session.user.id;
-            activeRole = activeRole || (session.user.user_metadata?.role || session.user.app_metadata?.role || 'patient').toLowerCase();
+            activeRole =
+              activeRole ||
+              String(
+                session.user.user_metadata?.role ||
+                  session.user.app_metadata?.role ||
+                  'patient'
+              ).toLowerCase();
           }
         }
 
-        if (!activeUserId || activeRole !== 'patient') {
+        if (!activeUserId || !PIN_ENABLED_ROLES.has(activeRole)) {
           if (isMounted) setIsLoading(false);
           return;
         }
 
-        // 2. Direct Supabase credential check (fast, resilient against backend spin-down)
-        try {
-          const { data: cred } = await supabase
-            .from('patient_security_credentials')
-            .select('id, is_active')
-            .eq('patient_id', activeUserId)
-            .maybeSingle();
+        resetForUser(activeUserId);
 
-          if (cred && cred.is_active !== false) {
-            if (isMounted) {
-              setStatus('COMPLETED');
-              setIsLoading(false);
+        let resolvedHasPin: boolean | null = null;
+
+        // 1. Authoritative backend status check across Patient, Pharmacy, Doctor
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            const res = await SecurityService.getStatus(session.access_token);
+            const dataHasPin = res?.data?.has_pin;
+            const statusVal = res?.data?.status || res?.status;
+            if (typeof dataHasPin === 'boolean') {
+              resolvedHasPin = dataHasPin;
+            } else if (statusVal === 'COMPLETED' || statusVal === 'PIN_CREATED') {
+              resolvedHasPin = true;
+            } else if (statusVal === 'NOT_STARTED') {
+              resolvedHasPin = false;
             }
-            return;
           }
-        } catch (dbErr) {
-          console.warn('Direct security credential check note:', dbErr);
+        } catch (apiErr) {
+          console.warn('Backend security status check fallback:', apiErr);
         }
 
-        // 3. Authoritative check via backend API
-        const { data: session } = await supabase.auth.getSession();
-        if (session?.session?.access_token) {
-          const res = await SecurityService.getStatus(session.session.access_token);
-          const statusVal = res?.data?.status || res?.status || 'NOT_STARTED';
-          if (isMounted) {
-            setStatus(statusVal);
+        // 2. Direct Supabase fallback if backend API was unavailable
+        if (resolvedHasPin === null) {
+          try {
+            if (activeRole === 'patient') {
+              const { data: cred } = await supabase
+                .from('patient_security_credentials')
+                .select('id, is_active')
+                .eq('patient_id', activeUserId)
+                .maybeSingle();
+              resolvedHasPin = Boolean(cred && cred.is_active !== false);
+            } else if (activeRole === 'pharmacy') {
+              const { data: ph } = await supabase
+                .from('pharmacies')
+                .select('security_pin_hash')
+                .eq('user_id', activeUserId)
+                .maybeSingle();
+              resolvedHasPin = Boolean(ph?.security_pin_hash);
+            } else if (activeRole === 'doctor') {
+              const { data: doc } = await supabase
+                .from('doctors')
+                .select('security_pin_hash')
+                .eq('user_id', activeUserId)
+                .maybeSingle();
+              resolvedHasPin = Boolean(doc?.security_pin_hash);
+            }
+          } catch (dbErr) {
+            console.warn('Direct security credential check note:', dbErr);
           }
+        }
+
+        if (!isMounted) return;
+
+        if (resolvedHasPin === true) {
+          setStatus('COMPLETED', activeUserId);
+        } else if (resolvedHasPin === false) {
+          setStatus('NOT_STARTED', activeUserId);
+          openEnrollmentModal(undefined, true);
         }
       } catch (err) {
         console.error('Error fetching security status:', err);
@@ -72,7 +128,7 @@ export function useSecurityEnrollment(userId?: string, role?: string) {
     return () => {
       isMounted = false;
     };
-  }, [userId, role]);
+  }, [userId, normalizedRole, resetForUser, setStatus, openEnrollmentModal]);
 
   return { status, isLoading };
 }

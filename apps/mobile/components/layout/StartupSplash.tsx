@@ -3,6 +3,24 @@ import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
 
 const APP_LOGO = require('../../assets/images/app-logo.png');
 
+let startupSplashDone = false;
+const splashListeners = new Set<() => void>();
+
+export function isStartupSplashDone(): boolean {
+  return startupSplashDone;
+}
+
+export function subscribeStartupSplash(listener: () => void): () => void {
+  if (startupSplashDone) {
+    listener();
+    return () => {};
+  }
+  splashListeners.add(listener);
+  return () => {
+    splashListeners.delete(listener);
+  };
+}
+
 interface StartupSplashProps {
   onFinish?: () => void;
 }
@@ -116,6 +134,9 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ onFinish }) => {
         }),
       ]).start(() => {
         pulseLoop.stop();
+        startupSplashDone = true;
+        splashListeners.forEach((fn) => fn());
+        splashListeners.clear();
         if (mounted) {
           setVisible(false);
           onFinish?.();

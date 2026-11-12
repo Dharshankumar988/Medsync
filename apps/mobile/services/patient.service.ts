@@ -277,7 +277,7 @@ export const patientService = {
   getAvailableDoctors: async () => {
     const { data, error } = await supabase
       .from('doctors')
-      .select('id, full_name, clinic_name, clinic_phone, qualifications, consultation_hours, specialization, consultation_fee');
+      .select('id, user_id, full_name, clinic_name, clinic_phone, qualifications, consultation_hours, specialization, consultation_fee');
 
     if (error) {
       console.warn('Failed to fetch doctors list from Supabase:', error);
