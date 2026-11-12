@@ -239,10 +239,30 @@ export const patientService = {
     hospital_id?: string;
     appointment_date: string;
     start_time: string;
+    end_time?: string;
     reason?: string;
+    notes?: string;
     pin: string;
   }) => {
-    const res = await api.post('/appointments/book', payload);
+    const computeEndTime = (startStr: string): string => {
+      const parts = startStr.split(':').map((p) => parseInt(p, 10) || 0);
+      const totalMins = (parts[0] || 0) * 60 + (parts[1] || 0) + 30;
+      const endH = String(Math.floor(totalMins / 60) % 24).padStart(2, '0');
+      const endM = String(totalMins % 60).padStart(2, '0');
+      return `${endH}:${endM}:00`;
+    };
+
+    const normalizedStart =
+      payload.start_time.split(':').length === 2
+        ? `${payload.start_time}:00`
+        : payload.start_time;
+
+    const res = await api.post('/appointments/book', {
+      ...payload,
+      start_time: normalizedStart,
+      end_time: payload.end_time || computeEndTime(normalizedStart),
+      notes: payload.notes ?? payload.reason,
+    });
     return res.data?.data;
   },
 
@@ -333,15 +353,19 @@ export const patientService = {
     pharmacy_id: string;
     prescription_id?: string | null;
     delivery_address: string;
+    total_amount?: number;
     items?: Array<{ inventory_id: string; quantity: number }>;
     notes?: string;
   }) => {
+    const resolvedTotal = typeof payload.total_amount === 'number' ? payload.total_amount : 399.0;
+
     // 1. Try backend orders endpoint
     try {
-      const res = await api.post('/orders', {
+      const res = await api.post('/orders/', {
         pharmacy_id: payload.pharmacy_id,
         prescription_id: payload.prescription_id || null,
         delivery_address: payload.delivery_address,
+        total_amount: resolvedTotal,
         items: payload.items || [],
       });
       if (res.data?.data) {
@@ -355,8 +379,6 @@ export const patientService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    const trackingNumber = `TRK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
     const { data, error } = await supabase
       .from('medicine_orders')
       .insert({
@@ -366,21 +388,22 @@ export const patientService = {
         delivery_address: payload.delivery_address,
         status: 'PENDING',
         order_type: 'ONLINE_DELIVERY',
-        total_amount: 0.0,
-        tracking_number: trackingNumber,
+        total_amount: resolvedTotal,
       })
       .select()
       .single();
 
     if (error) {
-      // In case table schema has fewer columns, fallback to minimal payload
+      // In case table schema has fewer optional columns, fallback with required total_amount preserved
       const { data: retryData, error: retryErr } = await supabase
         .from('medicine_orders')
         .insert({
           patient_id: user.id,
           pharmacy_id: payload.pharmacy_id,
+          prescription_id: payload.prescription_id || null,
           delivery_address: payload.delivery_address,
           status: 'PENDING',
+          total_amount: resolvedTotal,
         })
         .select()
         .single();

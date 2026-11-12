@@ -256,30 +256,40 @@ class StorageService:
             pass
             
         # If public access fails or bucket is private, generate 10-year signed URL
-        signed_url = await StorageService.create_signed_download_url(f"{target_bucket}/{object_path}", expires_in=315360000)
+        signed_url = await StorageService.create_signed_download_url(
+            object_path,
+            expires_in=315360000,
+            bucket_name=target_bucket,
+        )
         return signed_url
 
     @staticmethod
-    def _clean_object_path(object_path: str) -> str:
+    def _clean_object_path(object_path: str, bucket_name: str | None = None) -> str:
         cleaned = object_path.strip()
         if cleaned.startswith("supabase://"):
             cleaned = cleaned.replace("supabase://", "").split("#")[0]
         # Remove bucket prefix if prepended
-        bucket_prefix = f"{settings.SUPABASE_STORAGE_BUCKET}/"
+        bucket = bucket_name or settings.SUPABASE_STORAGE_BUCKET
+        bucket_prefix = f"{bucket}/"
         if cleaned.startswith(bucket_prefix):
             cleaned = cleaned[len(bucket_prefix):]
         return cleaned
 
     @staticmethod
-    async def create_signed_download_url(object_path: str, expires_in: int = 300) -> str:
+    async def create_signed_download_url(
+        object_path: str,
+        expires_in: int = 300,
+        bucket_name: str | None = None,
+    ) -> str:
         # If it is already an absolute HTTP/HTTPS URL, return it directly
         if object_path.startswith("http://") or object_path.startswith("https://"):
             return object_path
 
         StorageService._ensure_configured()
-        clean_path = StorageService._clean_object_path(object_path)
+        bucket = bucket_name or settings.SUPABASE_STORAGE_BUCKET
+        clean_path = StorageService._clean_object_path(object_path, bucket_name=bucket)
 
-        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/sign/{settings.SUPABASE_STORAGE_BUCKET}/{clean_path}"
+        url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/sign/{bucket}/{clean_path}"
         headers = {
             "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
             "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
@@ -292,12 +302,12 @@ class StorageService:
 
         if response.status_code not in (200, 201):
             logger.warning(f"Supabase signed URL generation failed ({response.status_code}): {response.text}")
-            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{clean_path}"
+            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{bucket}/{clean_path}"
 
         data = response.json()
         signed_url = data.get("signedURL") or data.get("signedUrl")
         if not signed_url:
-            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{settings.SUPABASE_STORAGE_BUCKET}/{clean_path}"
+            return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{bucket}/{clean_path}"
         if signed_url.startswith("/object/"):
             signed_url = f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1{signed_url}"
         elif signed_url.startswith("/"):

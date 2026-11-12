@@ -407,6 +407,26 @@ async def provider_reset_password(payload: ProviderResetPasswordRequest, db: Asy
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _ensure_pending_verification_request(db: AsyncSession, user: User, role: UserRole) -> None:
+    """Create a pending VerificationRequest if an unverified Doctor/Pharmacy lacks one."""
+    if user.is_verified or user.status == UserStatus.SUSPENDED:
+        return
+    if role not in (UserRole.DOCTOR, UserRole.PHARMACY):
+        return
+    existing_vr = await db.execute(
+        select(VerificationRequest).where(VerificationRequest.user_id == user.id)
+    )
+    if existing_vr.scalars().first() is None:
+        role_type = RoleType.DOCTOR if role == UserRole.DOCTOR else RoleType.PHARMACY
+        db.add(
+            VerificationRequest(
+                user_id=user.id,
+                role_type=role_type,
+                status=VerificationStatus.PENDING,
+            )
+        )
+
+
 @router.post("/sync", response_model=APIResponse[SyncUserResponseData])
 async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)):
     """
@@ -472,6 +492,7 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                         doc.clinic_name = payload.clinic_name
                     if payload.hospital_id:
                         doc.hospital_id = payload.hospital_id
+                await _ensure_pending_verification_request(db, existing_user_id, UserRole.DOCTOR)
                 await db.commit()
             elif payload.role == UserRole.PHARMACY:
                 phm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == existing_user_id.id))
@@ -485,8 +506,35 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                         phm.gst_number = payload.gst_number
                     if payload.contact_number:
                         phm.contact_number = payload.contact_number
+                    if payload.address:
+                        phm.address = payload.address
+                    if payload.city:
+                        phm.city = payload.city
+                    if payload.state:
+                        phm.state = payload.state
+                    if payload.country:
+                        phm.country = payload.country
+                    if payload.pincode:
+                        phm.pincode = payload.pincode
                     if payload.hospital_id:
                         phm.hospital_id = payload.hospital_id
+                else:
+                    phm = Pharmacy(
+                        user_id=existing_user_id.id,
+                        business_name=payload.business_name or payload.full_name or "Pharmacy Partner",
+                        license_number=payload.license_number or f"LIC-PHM-{str(existing_user_id.id)[:8]}",
+                        gst_number=payload.gst_number,
+                        contact_number=payload.contact_number,
+                        address=payload.address,
+                        city=payload.city,
+                        state=payload.state,
+                        country=payload.country,
+                        pincode=payload.pincode,
+                        hospital_id=payload.hospital_id,
+                        clinic_name=payload.clinic_name,
+                    )
+                    db.add(phm)
+                await _ensure_pending_verification_request(db, existing_user_id, UserRole.PHARMACY)
                 await db.commit()
 
             return APIResponse(message="User already synced", data=SyncUserResponseData(id=str(payload.id)))
@@ -509,6 +557,7 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
             if auth_user:
                 # Update user ID to match new authoritative Supabase auth ID (cascades to profile tables)
                 existing_user_email.id = payload.id
+                await _ensure_pending_verification_request(db, existing_user_email, payload.role)
                 await db.commit()
                 return APIResponse(message="User already synced and ID updated", data=SyncUserResponseData(id=str(payload.id)))
             else:

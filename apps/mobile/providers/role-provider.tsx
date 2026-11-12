@@ -24,6 +24,7 @@ export interface RoleContextValue {
   isAuthenticated: boolean;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  updateUserAvatar: (avatarUrl: string) => void;
 }
 
 const RoleContext = createContext<RoleContextValue>({
@@ -33,12 +34,86 @@ const RoleContext = createContext<RoleContextValue>({
   isAuthenticated: false,
   logout: async () => {},
   refresh: async () => {},
+  updateUserAvatar: () => {},
 });
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<Role | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const buildHydratedProfile = useCallback(async (authUser: any): Promise<{ userRole: Role; profile: UserProfile }> => {
+    let rawRole = authUser.user_metadata?.role ?? authUser.app_metadata?.role;
+    let userStatus = String(authUser.user_metadata?.status ?? authUser.app_metadata?.status ?? "ACTIVE").toUpperCase();
+    let avatarUrl: string | null =
+      (authUser.user_metadata?.profile_picture_url as string | undefined) ||
+      (authUser.user_metadata?.profile_image_url as string | undefined) ||
+      (authUser.user_metadata?.avatar_url as string | undefined) ||
+      (authUser.user_metadata?.picture as string | undefined) ||
+      null;
+    let fullName: string | null =
+      (authUser.user_metadata?.full_name as string | undefined) ??
+      (authUser.user_metadata?.name as string | undefined) ??
+      null;
+
+    try {
+      const { data: dbUser } = await supabase
+        .from('users')
+        .select('role, status, profile_image_url')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (dbUser) {
+        if (!rawRole && dbUser.role) {
+          rawRole = dbUser.role;
+        }
+        if (dbUser.status) {
+          userStatus = String(dbUser.status).toUpperCase();
+        }
+        if (dbUser.profile_image_url) {
+          avatarUrl = dbUser.profile_image_url;
+        }
+      }
+    } catch {
+      // Ignore lookup error and proceed with available metadata
+    }
+
+    const userRole = (normalizeRole(rawRole) as Role) || "patient";
+
+    if (!avatarUrl && (userRole === 'patient' || userRole === 'doctor')) {
+      try {
+        const table = userRole === 'patient' ? 'patients' : 'doctors';
+        const { data: roleRow } = await supabase
+          .from(table)
+          .select('full_name, profile_picture_url')
+          .eq('user_id', authUser.id)
+          .maybeSingle();
+        if (roleRow?.profile_picture_url) {
+          avatarUrl = roleRow.profile_picture_url;
+        }
+        if (!fullName && roleRow?.full_name) {
+          fullName = roleRow.full_name;
+        }
+      } catch {
+        // Ignore fallback lookup error
+      }
+    }
+
+    return {
+      userRole,
+      profile: {
+        id: authUser.id,
+        email: authUser.email ?? '',
+        role: userRole,
+        status: userStatus,
+        full_name: fullName,
+        avatar_url: avatarUrl,
+        profile_image_url: avatarUrl,
+        profile_picture_url: avatarUrl,
+        user_metadata: authUser.user_metadata ?? {},
+      },
+    };
+  }, []);
 
   const resolveUserFromSupabase = useCallback(async () => {
     try {
@@ -48,37 +123,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         return;
       }
-      let rawRole = data.user.user_metadata?.role ?? data.user.app_metadata?.role;
-      let userStatus = String(data.user.user_metadata?.status ?? data.user.app_metadata?.status ?? "ACTIVE").toUpperCase();
-
-      // Check canonical public.users table if role not set in auth metadata
-      if (!rawRole) {
-        try {
-          const { data: dbUser } = await supabase
-            .from('users')
-            .select('role, is_active')
-            .eq('id', data.user.id)
-            .maybeSingle();
-
-          if (dbUser?.role) {
-            rawRole = dbUser.role;
-            if (dbUser.is_active === false) {
-              userStatus = 'SUSPENDED';
-            }
-          }
-        } catch {
-          // Ignore lookup error and proceed with available metadata
-        }
-      }
-
-      const userRole = (normalizeRole(rawRole) as Role) || "patient";
-      const profile: UserProfile = {
-        id: data.user.id,
-        email: data.user.email ?? '',
-        role: userRole,
-        status: userStatus,
-        full_name: (data.user.user_metadata?.full_name as string) ?? (data.user.user_metadata?.name as string) ?? null,
-      };
+      const { userRole, profile } = await buildHydratedProfile(data.user);
       setRole(userRole);
       setUser(profile);
     } catch {
@@ -87,7 +132,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [buildHydratedProfile]);
 
   useEffect(() => {
     resolveUserFromSupabase();
@@ -95,36 +140,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
-          let rawRole = session.user.user_metadata?.role ?? session.user.app_metadata?.role;
-          let userStatus = String(session.user.user_metadata?.status ?? session.user.app_metadata?.status ?? "ACTIVE").toUpperCase();
-
-          if (!rawRole) {
-            try {
-              const { data: dbUser } = await supabase
-                .from('users')
-                .select('role, is_active')
-                .eq('id', session.user.id)
-                .maybeSingle();
-
-              if (dbUser?.role) {
-                rawRole = dbUser.role;
-                if (dbUser.is_active === false) {
-                  userStatus = 'SUSPENDED';
-                }
-              }
-            } catch {
-              // Ignore lookup error
-            }
-          }
-
-          const userRole = (normalizeRole(rawRole) as Role) || "patient";
-          const profile: UserProfile = {
-            id: session.user.id,
-            email: session.user.email ?? '',
-            role: userRole,
-            status: userStatus,
-            full_name: (session.user.user_metadata?.full_name as string) ?? (session.user.user_metadata?.name as string) ?? null,
-          };
+          const { userRole, profile } = await buildHydratedProfile(session.user);
           setRole(userRole);
           setUser(profile);
           setIsLoading(false);
@@ -139,7 +155,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  }, [resolveUserFromSupabase]);
+  }, [resolveUserFromSupabase, buildHydratedProfile]);
 
   const logout = useCallback(async () => {
     try {
@@ -150,6 +166,25 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const updateUserAvatar = useCallback((avatarUrl: string) => {
+    setUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            avatar_url: avatarUrl,
+            profile_image_url: avatarUrl,
+            profile_picture_url: avatarUrl,
+            user_metadata: {
+              ...(prev.user_metadata || {}),
+              avatar_url: avatarUrl,
+              profile_image_url: avatarUrl,
+              profile_picture_url: avatarUrl,
+            },
+          }
+        : prev
+    );
+  }, []);
+
   const value = useMemo(
     () => ({
       role,
@@ -158,8 +193,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: !!user && !!role,
       logout,
       refresh: resolveUserFromSupabase,
+      updateUserAvatar,
     }),
-    [role, user, isLoading, logout, resolveUserFromSupabase]
+    [role, user, isLoading, logout, resolveUserFromSupabase, updateUserAvatar]
   );
 
   return (

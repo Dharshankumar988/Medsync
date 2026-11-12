@@ -7,6 +7,7 @@ import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, ShieldCheck, 
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase";
 import { authService } from "@/services/auth.service";
+import { MedSyncLogo } from "@/components/brand/MedSyncLogo";
 import {
   Tooltip,
   TooltipContent,
@@ -255,9 +256,7 @@ export const Sidebar = memo(function Sidebar({ role }: { role: string }) {
 
       <div className="flex h-16 items-center px-5 mb-4 mt-2">
         <Link href="/" className="flex items-center gap-3 pl-1">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Activity className="h-5 w-5" />
-          </div>
+          <MedSyncLogo size={36} />
           <AnimatePresence mode="wait">
             {!isCollapsed && (
               <motion.span 

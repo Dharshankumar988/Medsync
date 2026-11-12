@@ -106,6 +106,8 @@ async def get_profile(
         "full_name": None,
         "role": user.role,
         "profile_completion_percentage": user.profile_completion_percentage,
+        "profile_image_url": user.profile_image_url,
+        "profile_picture_url": user.profile_image_url,
         "cover_image_url": user.cover_image_url,
         "bio": user.bio,
         "social_links": user.social_links,
@@ -117,6 +119,7 @@ async def get_profile(
         profile = profile.scalar_one_or_none()
         if profile:
             profile_data["full_name"] = profile.full_name
+            profile_data["profile_picture_url"] = profile.profile_picture_url or user.profile_image_url
             profile_data.update({
                 "date_of_birth": str(profile.date_of_birth) if profile.date_of_birth else None,
                 "gender": profile.gender,
@@ -140,6 +143,7 @@ async def get_profile(
         profile = profile.scalar_one_or_none()
         if profile:
             profile_data["full_name"] = profile.full_name
+            profile_data["profile_picture_url"] = profile.profile_picture_url or user.profile_image_url
             profile_data.update({
                 "qualifications": profile.qualifications,
                 "clinic_name": profile.clinic_name,

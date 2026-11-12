@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,10 @@ import {
   RefreshControl,
   Linking,
   Alert,
+  Animated,
+  Easing,
 } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   FileText,
   Download,
@@ -25,6 +28,7 @@ import {
   Plus,
   FileUp,
   ScanLine,
+  Calendar,
 } from 'lucide-react-native';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { ScreenHeader } from '../../../components/layout/ScreenHeader';
@@ -49,6 +53,8 @@ type ViewTab = 'RECORDS' | 'PRESCRIPTIONS' | 'ORDERS';
 
 export default function PatientRecordsScreen() {
   const { theme, isDark } = useTheme();
+  const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const [activeTab, setActiveTab] = useState<ViewTab>('RECORDS');
   const [records, setRecords] = useState<MedicalRecordItem[]>([]);
   const [prescriptions, setPrescriptions] = useState<PrescriptionItem[]>([]);
@@ -56,6 +62,39 @@ export default function PatientRecordsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const tabFadeAnim = useRef(new Animated.Value(1)).current;
+  const tabSlideAnim = useRef(new Animated.Value(0)).current;
+
+  const switchViewTab = useCallback((nextTab: ViewTab) => {
+    setActiveTab((prev) => {
+      if (prev === nextTab) return prev;
+      tabFadeAnim.setValue(0);
+      tabSlideAnim.setValue(10);
+      Animated.parallel([
+        Animated.timing(tabFadeAnim, {
+          toValue: 1,
+          duration: 240,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(tabSlideAnim, {
+          toValue: 0,
+          duration: 240,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+      return nextTab;
+    });
+  }, [tabFadeAnim, tabSlideAnim]);
+
+  useEffect(() => {
+    const requested = (params?.tab || '').toUpperCase();
+    if (requested === 'RECORDS' || requested === 'PRESCRIPTIONS' || requested === 'ORDERS') {
+      switchViewTab(requested as ViewTab);
+    }
+  }, [params?.tab, switchViewTab]);
 
   // PIN modal state for record or prescription download
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
@@ -423,6 +462,19 @@ export default function PatientRecordsScreen() {
         <ScreenHeader
           title="Medical Records"
           subtitle="Encrypted diagnostic files & prescriptions"
+          rightElement={
+            <TouchableOpacity
+              style={[styles.addRecordHeaderBtn, { backgroundColor: '#059669', marginRight: 0 }]}
+              onPress={() => {
+                setSelectedPrescriptionForOrder(null);
+                setOrderModalVisible(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <ShoppingBag size={13} color="#FFFFFF" />
+              <Text style={styles.addRecordHeaderBtnText}>Order Rx</Text>
+            </TouchableOpacity>
+          }
         />
 
         {/* Tab Segment Controls */}
@@ -450,7 +502,7 @@ export default function PatientRecordsScreen() {
                     : theme.border,
               },
             ]}
-            onPress={() => setActiveTab('RECORDS')}
+            onPress={() => switchViewTab('RECORDS')}
           >
             <FileText
               size={14}
@@ -497,7 +549,7 @@ export default function PatientRecordsScreen() {
                     : theme.border,
               },
             ]}
-            onPress={() => setActiveTab('PRESCRIPTIONS')}
+            onPress={() => switchViewTab('PRESCRIPTIONS')}
           >
             <Pill
               size={14}
@@ -544,7 +596,7 @@ export default function PatientRecordsScreen() {
                     : theme.border,
               },
             ]}
-            onPress={() => setActiveTab('ORDERS')}
+            onPress={() => switchViewTab('ORDERS')}
           >
             <ShoppingBag
               size={14}
@@ -616,6 +668,84 @@ export default function PatientRecordsScreen() {
           </View>
         )}
 
+        {/* Action Subheader for Prescriptions tab */}
+        {activeTab === 'PRESCRIPTIONS' && (
+          <View
+            style={[
+              styles.recordsActionBar,
+              { backgroundColor: theme.background, borderBottomColor: theme.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.recordsCountBadge,
+                {
+                  backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5',
+                  borderColor: isDark ? 'rgba(16, 185, 129, 0.25)' : '#A7F3D0',
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Pill size={13} color="#10B981" />
+              <Text style={[styles.recordsCountText, { color: isDark ? '#34D399' : '#047857' }]}>
+                {prescriptions.length} {prescriptions.length === 1 ? 'Prescription' : 'Prescriptions'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.uploadCtaBtn, { backgroundColor: '#059669' }]}
+              onPress={() => {
+                setSelectedPrescriptionForOrder(null);
+                setOrderModalVisible(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <ShoppingBag size={14} color="#FFFFFF" />
+              <Text style={[styles.uploadCtaText, { color: '#FFFFFF' }]}>
+                Order Medicines
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Action Subheader for Orders tab */}
+        {activeTab === 'ORDERS' && (
+          <View
+            style={[
+              styles.recordsActionBar,
+              { backgroundColor: theme.background, borderBottomColor: theme.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.recordsCountBadge,
+                {
+                  backgroundColor: isDark ? 'rgba(99, 102, 241, 0.12)' : '#EEF2FF',
+                  borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : '#C7D2FE',
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Package size={13} color="#6366F1" />
+              <Text style={[styles.recordsCountText, { color: isDark ? '#A5B4FC' : '#4338CA' }]}>
+                {orders.length} {orders.length === 1 ? 'Order' : 'Orders'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.uploadCtaBtn, { backgroundColor: '#059669' }]}
+              onPress={() => {
+                setSelectedPrescriptionForOrder(null);
+                setOrderModalVisible(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <Plus size={14} color="#FFFFFF" />
+              <Text style={[styles.uploadCtaText, { color: '#FFFFFF' }]}>
+                New Order
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {error && (
           <View
             style={[
@@ -632,6 +762,13 @@ export default function PatientRecordsScreen() {
         )}
 
         {/* Data List based on activeTab */}
+        <Animated.View
+          style={{
+            flex: 1,
+            opacity: tabFadeAnim,
+            transform: [{ translateY: tabSlideAnim }],
+          }}
+        >
         <FlatList
           data={
             activeTab === 'RECORDS'
@@ -705,6 +842,29 @@ export default function PatientRecordsScreen() {
                   />
                 )}
 
+                {activeTab === 'PRESCRIPTIONS' && (
+                  <Button
+                    title="Book Doctor Visit for Rx"
+                    size="sm"
+                    iconLeft={<Calendar size={15} color={theme.primaryButtonText} />}
+                    onPress={() => router.push('/(tabs)/patient/appointments?tab=DISCOVERY')}
+                    style={{ marginBottom: 12 }}
+                  />
+                )}
+
+                {activeTab === 'ORDERS' && (
+                  <Button
+                    title="Order from Prescription"
+                    size="sm"
+                    iconLeft={<ShoppingBag size={15} color="#FFFFFF" />}
+                    onPress={() => {
+                      setSelectedPrescriptionForOrder(null);
+                      setOrderModalVisible(true);
+                    }}
+                    style={{ marginBottom: 12, backgroundColor: '#059669' }}
+                  />
+                )}
+
                 <Button
                   title="Reload"
                   variant="outline"
@@ -717,6 +877,7 @@ export default function PatientRecordsScreen() {
             ) : null
           }
         />
+        </Animated.View>
 
         {/* Universal PIN Authorization Modal for Downloads */}
         <PinVerificationModal

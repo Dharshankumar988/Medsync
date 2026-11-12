@@ -32,6 +32,7 @@ import { useTheme } from "next-themes";
 
 import { HeroGraphic } from "../components/HeroGraphic";
 import { MouseReactiveGrid } from "../components/MouseReactiveGrid";
+import { MedSyncLogo } from "@/components/brand/MedSyncLogo";
 
 const BentoGrid = dynamic(() => import("../components/BentoGrid").then((mod) => mod.BentoGrid), {
   ssr: true,
@@ -126,7 +127,7 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl">
         <nav className="mx-auto max-w-6xl flex h-16 items-center justify-between px-6" aria-label="Main navigation">
           <Link href="/" className="flex items-center gap-2.5 font-semibold text-lg text-foreground" aria-label="MedSync Home">
-            <Activity className="h-5 w-5 text-blue-500" />
+            <MedSyncLogo size={30} />
             <span className="tracking-tight">MedSync</span>
           </Link>
 
@@ -423,8 +424,8 @@ export default function Home() {
       <footer className="border-t border-border/60 py-12">
         <div className="mx-auto max-w-6xl px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Activity className="h-4 w-4 text-blue-500" />
+            <div className="flex items-center gap-2.5 text-sm font-medium text-muted-foreground">
+              <MedSyncLogo size={24} />
               <span>MedSync</span>
             </div>
             <div className="flex items-center gap-8 text-sm text-muted-foreground">

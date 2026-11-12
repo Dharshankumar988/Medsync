@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.repositories.appointment import appointment_repo
 from app.schemas.appointment import AppointmentCreate, AppointmentResponse, AppointmentListResponse
 from app.core.exceptions import DomainException, NotFoundException, ForbiddenException, BadRequestException
@@ -31,9 +31,15 @@ class AppointmentService:
         if doctor and not doctor.is_accepting_appointments:
             raise DomainException("Doctor is currently not accepting new appointments.")
 
+        resolved_end_time = req.end_time
+        if resolved_end_time is None:
+            resolved_end_time = (
+                datetime.combine(req.appointment_date, req.start_time) + timedelta(minutes=30)
+            ).time()
+
         # 3. Check double-booking
         conflict = await appointment_repo.check_conflict(
-            db, req.doctor_id, req.appointment_date, req.start_time, req.end_time
+            db, req.doctor_id, req.appointment_date, req.start_time, resolved_end_time
         )
         if conflict:
             raise DomainException("Doctor is not available at this time slot")
@@ -44,7 +50,7 @@ class AppointmentService:
             "doctor_id": req.doctor_id,
             "appointment_date": req.appointment_date,
             "start_time": req.start_time,
-            "end_time": req.end_time,
+            "end_time": resolved_end_time,
             "notes": req.notes,
             "status": AppointmentStatus.PENDING,
             "location_id": req.location_id,

@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/providers/theme-provider";
 import { Providers } from "@/providers/query-provider";
 import { RoleProvider } from "@/providers/role-provider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
+import { WebStartupSplash } from "@/components/brand/WebStartupSplash";
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,13 @@ const inter = Inter({
 export const metadata = {
   title: "MedSync — Secure Healthcare Platform",
   description: "Enterprise healthcare platform powered by AI diagnostics and blockchain-verified medical records. Built for hospitals, doctors, pharmacies, and patients.",
+  icons: {
+    icon: [
+      { url: "/medsync-logo.png", type: "image/png" },
+      { url: "/favicon.ico" },
+    ],
+    apple: [{ url: "/medsync-logo.png", type: "image/png" }],
+  },
   openGraph: {
     title: "MedSync — Secure Healthcare Platform",
     description: "Enterprise healthcare platform powered by AI diagnostics and blockchain-verified medical records.",
@@ -39,6 +47,7 @@ export default function RootLayout({
               disableTransitionOnChange
             >
               <RoleProvider>
+                <WebStartupSplash />
                 {children}
               </RoleProvider>
             </ThemeProvider>

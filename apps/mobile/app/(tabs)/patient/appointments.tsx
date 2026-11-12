@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,10 @@ import {
   ScrollView,
   Linking,
   ActivityIndicator,
+  Animated,
+  Easing,
 } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import {
   Calendar,
   Clock,
@@ -63,10 +66,43 @@ const QUICK_REASONS = ['General Consultation', 'Routine Follow-up', 'Fever & Flu
 
 export default function PatientAppointmentsScreen() {
   const { theme, isDark } = useTheme();
+  const params = useLocalSearchParams<{ tab?: string }>();
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<MainTab>('UPCOMING');
   const [discoveryTab, setDiscoveryTab] = useState<DiscoverySubTab>('DOCTORS');
+  const tabFadeAnim = useRef(new Animated.Value(1)).current;
+  const tabSlideAnim = useRef(new Animated.Value(0)).current;
+
+  const switchMainTab = useCallback((nextTab: MainTab) => {
+    setActiveTab((prev) => {
+      if (prev === nextTab) return prev;
+      tabFadeAnim.setValue(0);
+      tabSlideAnim.setValue(10);
+      Animated.parallel([
+        Animated.timing(tabFadeAnim, {
+          toValue: 1,
+          duration: 240,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(tabSlideAnim, {
+          toValue: 0,
+          duration: 240,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+      return nextTab;
+    });
+  }, [tabFadeAnim, tabSlideAnim]);
+
+  useEffect(() => {
+    const requested = (params?.tab || '').toUpperCase();
+    if (requested === 'DISCOVERY' || requested === 'UPCOMING' || requested === 'PAST') {
+      switchMainTab(requested as MainTab);
+    }
+  }, [params?.tab, switchMainTab]);
 
   // Appointments
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
@@ -430,6 +466,19 @@ export default function PatientAppointmentsScreen() {
         <ScreenHeader
           title="Visits & Doctors"
           subtitle="Hospitals, doctors & appointment schedule"
+          rightElement={
+            <TouchableOpacity
+              onPress={() => switchMainTab('DISCOVERY')}
+              style={[
+                styles.headerBookPill,
+                { backgroundColor: '#2563EB' },
+              ]}
+              activeOpacity={0.85}
+            >
+              <Plus size={13} color="#FFFFFF" />
+              <Text style={styles.headerBookPillText}>Book</Text>
+            </TouchableOpacity>
+          }
         />
 
         {/* ── Top Level Segmented Tab Controls ── */}
@@ -447,7 +496,7 @@ export default function PatientAppointmentsScreen() {
                 { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
               ],
             ]}
-            onPress={() => setActiveTab('UPCOMING')}
+            onPress={() => switchMainTab('UPCOMING')}
           >
             <Text
               style={[
@@ -470,7 +519,7 @@ export default function PatientAppointmentsScreen() {
                 { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
               ],
             ]}
-            onPress={() => setActiveTab('PAST')}
+            onPress={() => switchMainTab('PAST')}
           >
             <Text
               style={[
@@ -493,7 +542,7 @@ export default function PatientAppointmentsScreen() {
                 { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
               ],
             ]}
-            onPress={() => setActiveTab('DISCOVERY')}
+            onPress={() => switchMainTab('DISCOVERY')}
           >
             <Text
               style={[
@@ -517,6 +566,13 @@ export default function PatientAppointmentsScreen() {
         )}
 
         {/* ── TAB 1: UPCOMING VISITS ── */}
+        <Animated.View
+          style={{
+            flex: 1,
+            opacity: tabFadeAnim,
+            transform: [{ translateY: tabSlideAnim }],
+          }}
+        >
         {activeTab === 'UPCOMING' && (
           <FlatList
             data={upcomingList}
@@ -550,7 +606,7 @@ export default function PatientAppointmentsScreen() {
                   </Text>
                   <TouchableOpacity
                     style={[styles.primaryActionBtn, { backgroundColor: theme.primaryButton }]}
-                    onPress={() => setActiveTab('DISCOVERY')}
+                    onPress={() => switchMainTab('DISCOVERY')}
                     activeOpacity={0.85}
                   >
                     <Search size={15} color={theme.primaryButtonText} style={{ marginRight: 6 }} />
@@ -975,6 +1031,7 @@ export default function PatientAppointmentsScreen() {
             )}
           </ScrollView>
         )}
+        </Animated.View>
 
         {/* ── BOOKING MODAL (PRE-FILLED DOCTOR + SCHEDULE) ── */}
         <Modal
@@ -1201,6 +1258,19 @@ const styles = StyleSheet.create({
   },
   mainTabBtnText: {
     fontSize: 13.5,
+  },
+  headerBookPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 18,
+  },
+  headerBookPillText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   listContent: {
     padding: 16,

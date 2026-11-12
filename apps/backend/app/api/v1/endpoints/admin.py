@@ -12,7 +12,7 @@ from app.models.doctor_location import DoctorLocation, LocationType
 from app.models.pharmacy import Pharmacy
 from app.models.patient import Patient
 from app.models.hospital import Hospital
-from app.models.verification import VerificationRequest, VerificationStatus
+from app.models.verification import VerificationRequest, VerificationStatus, RoleType
 from app.models.appointment import Appointment
 from app.models.prescription import Prescription
 from app.models.pharmacy_system import MedicineOrder
@@ -102,6 +102,161 @@ async def _insert_auth_user_fallback(
     # If auth.users schema doesn't exist (e.g. SQLite unit tests), roll back cleanly and continue.
     await db.rollback()
 
+async def _build_registration_verification_item(
+    request_id: str,
+    user: User,
+    doctor: Optional[Doctor],
+    pharmacy: Optional[Pharmacy],
+    created_at: Any,
+    db: AsyncSession,
+) -> PendingVerificationItem:
+    """Build a typed PendingVerificationItem for a Doctor or Pharmacy registration."""
+    profile_data = None
+    if user.role == UserRole.DOCTOR and doctor:
+        gst_no = None
+        clean_lic = doctor.license_number or ""
+        if " | GST: " in clean_lic:
+            parts = clean_lic.split(" | GST: ")
+            clean_lic = parts[0].strip()
+            gst_no = parts[1].strip()
+
+        practice_type = "CLINIC" if doctor.clinic_name else "HOSPITAL"
+        applied_hospital_info = None
+        clinic_info = None
+
+        clinic_hosp_stmt = select(Hospital).where(
+            (Hospital.user_id == user.id) & (Hospital.type == "clinic")
+        )
+        clinic_hosp_res = await db.execute(clinic_hosp_stmt)
+        clinic_hosp = clinic_hosp_res.scalar_one_or_none()
+
+        if doctor.hospital_id:
+            hosp_stmt = select(Hospital).where(Hospital.id == doctor.hospital_id)
+            hosp_res = await db.execute(hosp_stmt)
+            linked_hosp = hosp_res.scalar_one_or_none()
+            if linked_hosp:
+                if (linked_hosp.type or "").lower() == "clinic":
+                    practice_type = "CLINIC"
+                    clinic_info = {
+                        "name": linked_hosp.name,
+                        "address": linked_hosp.address,
+                        "city": linked_hosp.city,
+                        "state": linked_hosp.state,
+                        "latitude": float(linked_hosp.latitude) if linked_hosp.latitude is not None else None,
+                        "longitude": float(linked_hosp.longitude) if linked_hosp.longitude is not None else None,
+                        "google_maps_url": linked_hosp.google_maps_url,
+                    }
+                else:
+                    practice_type = "HOSPITAL"
+                    applied_hospital_info = {
+                        "id": str(linked_hosp.id),
+                        "name": linked_hosp.name,
+                        "address": linked_hosp.address,
+                        "city": linked_hosp.city,
+                        "state": linked_hosp.state,
+                        "phone": linked_hosp.phone_number,
+                        "type": linked_hosp.type or "hospital"
+                    }
+
+        if not clinic_info and (doctor.clinic_name or clinic_hosp):
+            practice_type = "CLINIC"
+            clinic_info = {
+                "name": doctor.clinic_name or (clinic_hosp.name if clinic_hosp else "Private Clinic"),
+                "address": doctor.clinic_address or (clinic_hosp.address if clinic_hosp else None),
+                "city": doctor.city or (clinic_hosp.city if clinic_hosp else None),
+                "state": doctor.state or (clinic_hosp.state if clinic_hosp else None),
+                "pincode": doctor.pincode,
+                "phone": doctor.clinic_phone,
+                "email": doctor.clinic_email,
+                "latitude": float(clinic_hosp.latitude) if clinic_hosp and clinic_hosp.latitude is not None else None,
+                "longitude": float(clinic_hosp.longitude) if clinic_hosp and clinic_hosp.longitude is not None else None,
+                "google_maps_url": clinic_hosp.google_maps_url if clinic_hosp else None,
+            }
+
+        profile_data = PendingVerificationProfile(
+            full_name=doctor.full_name,
+            specialization=doctor.specialization,
+            experience_years=doctor.experience_years,
+            qualifications=doctor.qualifications,
+            license_number=clean_lic,
+            gst_number=gst_no,
+            medical_council_reg_number=doctor.medical_council_reg_number,
+            practice_type=practice_type,
+            clinic_info=clinic_info,
+            applied_hospital_info=applied_hospital_info,
+            hospital_name=doctor.hospital_name or (applied_hospital_info["name"] if applied_hospital_info else None),
+            hospital_address=doctor.hospital_address or (applied_hospital_info["address"] if applied_hospital_info else None),
+            clinic_name=doctor.clinic_name or (clinic_info["name"] if clinic_info else None),
+            clinic_address=doctor.clinic_address or (clinic_info["address"] if clinic_info else None),
+            city=doctor.city or (clinic_info["city"] if clinic_info else None),
+            state=doctor.state or (clinic_info["state"] if clinic_info else None),
+            consultation_fee=doctor.consultation_fee,
+            clinic_phone=doctor.clinic_phone,
+        )
+    elif user.role == UserRole.PHARMACY and pharmacy:
+        affiliated_info = None
+        if pharmacy.hospital_id:
+            hosp_stmt = select(Hospital).where(Hospital.id == pharmacy.hospital_id)
+            hosp_res = await db.execute(hosp_stmt)
+            aff_hosp = hosp_res.scalar_one_or_none()
+            if aff_hosp:
+                affiliated_info = {
+                    "id": str(aff_hosp.id),
+                    "name": aff_hosp.name,
+                    "type": aff_hosp.type or "facility",
+                    "city": aff_hosp.city,
+                    "address": aff_hosp.address
+                }
+
+        profile_data = PendingVerificationProfile(
+            business_name=pharmacy.business_name,
+            license_number=pharmacy.license_number,
+            gst_number=pharmacy.gst_number,
+            contact_number=pharmacy.contact_number or pharmacy.phone_number,
+            address=pharmacy.address,
+            city=pharmacy.city,
+            state=pharmacy.state,
+            country=pharmacy.country,
+            clinic_name=pharmacy.clinic_name or (affiliated_info["name"] if affiliated_info and affiliated_info["type"] == "clinic" else None),
+            hospital_name=affiliated_info["name"] if affiliated_info else None,
+        )
+
+    return PendingVerificationItem(
+        request_id=request_id,
+        user_id=str(user.id),
+        email=user.email,
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        verification_type="REGISTRATION",
+        profile=profile_data,
+        created_at=created_at.isoformat() if created_at else ""
+    )
+
+
+async def _get_or_create_verification_request_for_user(
+    db: AsyncSession,
+    user: User,
+) -> VerificationRequest:
+    """Return an existing VerificationRequest for the user or create a pending one."""
+    existing_res = await db.execute(
+        select(VerificationRequest)
+        .where(VerificationRequest.user_id == user.id)
+        .order_by(VerificationRequest.created_at.desc())
+    )
+    v_req = existing_res.scalars().first()
+    if v_req:
+        return v_req
+
+    role_type = RoleType.DOCTOR if user.role == UserRole.DOCTOR else RoleType.PHARMACY
+    v_req = VerificationRequest(
+        user_id=user.id,
+        role_type=role_type,
+        status=VerificationStatus.PENDING,
+    )
+    db.add(v_req)
+    await db.flush()
+    return v_req
+
+
 @router.get("/verifications/pending", response_model=APIResponse[list[PendingVerificationItem]])
 async def get_pending_verifications(
     db: AsyncSession = Depends(get_db),
@@ -113,6 +268,7 @@ async def get_pending_verifications(
     from app.models.doctor_location import DoctorLocation
 
     data: list[PendingVerificationItem] = []
+    seen_user_ids: set[uuid.UUID] = set()
 
     # 1. Fetch pending professional signup verification requests (Doctor & Pharmacy)
     stmt = select(VerificationRequest, User, Doctor, Pharmacy).join(
@@ -122,132 +278,47 @@ async def get_pending_verifications(
     ).outerjoin(
         Pharmacy, User.id == Pharmacy.user_id
     ).where(
-        VerificationRequest.status == VerificationStatus.PENDING
+        VerificationRequest.status == VerificationStatus.PENDING,
+        User.deleted_at.is_(None),
     ).offset(skip).limit(limit)
     
     result = await db.execute(stmt)
     rows = result.all()
 
     for req, user, doctor, pharmacy in rows:
-        profile_data = None
-        if user.role == UserRole.DOCTOR and doctor:
-            gst_no = None
-            clean_lic = doctor.license_number or ""
-            if " | GST: " in clean_lic:
-                parts = clean_lic.split(" | GST: ")
-                clean_lic = parts[0].strip()
-                gst_no = parts[1].strip()
-
-            practice_type = "CLINIC" if doctor.clinic_name else "HOSPITAL"
-            applied_hospital_info = None
-            clinic_info = None
-
-            clinic_hosp_stmt = select(Hospital).where(
-                (Hospital.user_id == user.id) & (Hospital.type == "clinic")
+        seen_user_ids.add(user.id)
+        data.append(
+            await _build_registration_verification_item(
+                str(req.id), user, doctor, pharmacy, req.created_at, db
             )
-            clinic_hosp_res = await db.execute(clinic_hosp_stmt)
-            clinic_hosp = clinic_hosp_res.scalar_one_or_none()
+        )
 
-            if doctor.hospital_id:
-                hosp_stmt = select(Hospital).where(Hospital.id == doctor.hospital_id)
-                hosp_res = await db.execute(hosp_stmt)
-                linked_hosp = hosp_res.scalar_one_or_none()
-                if linked_hosp:
-                    if (linked_hosp.type or "").lower() == "clinic":
-                        practice_type = "CLINIC"
-                        clinic_info = {
-                            "name": linked_hosp.name,
-                            "address": linked_hosp.address,
-                            "city": linked_hosp.city,
-                            "state": linked_hosp.state,
-                            "latitude": float(linked_hosp.latitude) if linked_hosp.latitude is not None else None,
-                            "longitude": float(linked_hosp.longitude) if linked_hosp.longitude is not None else None,
-                            "google_maps_url": linked_hosp.google_maps_url,
-                        }
-                    else:
-                        practice_type = "HOSPITAL"
-                        applied_hospital_info = {
-                            "id": str(linked_hosp.id),
-                            "name": linked_hosp.name,
-                            "address": linked_hosp.address,
-                            "city": linked_hosp.city,
-                            "state": linked_hosp.state,
-                            "phone": linked_hosp.phone_number,
-                            "type": linked_hosp.type or "hospital"
-                        }
-
-            if not clinic_info and (doctor.clinic_name or clinic_hosp):
-                practice_type = "CLINIC"
-                clinic_info = {
-                    "name": doctor.clinic_name or (clinic_hosp.name if clinic_hosp else "Private Clinic"),
-                    "address": doctor.clinic_address or (clinic_hosp.address if clinic_hosp else None),
-                    "city": doctor.city or (clinic_hosp.city if clinic_hosp else None),
-                    "state": doctor.state or (clinic_hosp.state if clinic_hosp else None),
-                    "pincode": doctor.pincode,
-                    "phone": doctor.clinic_phone,
-                    "email": doctor.clinic_email,
-                    "latitude": float(clinic_hosp.latitude) if clinic_hosp and clinic_hosp.latitude is not None else None,
-                    "longitude": float(clinic_hosp.longitude) if clinic_hosp and clinic_hosp.longitude is not None else None,
-                    "google_maps_url": clinic_hosp.google_maps_url if clinic_hosp else None,
-                }
-
-            profile_data = PendingVerificationProfile(
-                full_name=doctor.full_name,
-                specialization=doctor.specialization,
-                experience_years=doctor.experience_years,
-                qualifications=doctor.qualifications,
-                license_number=clean_lic,
-                gst_number=gst_no,
-                medical_council_reg_number=doctor.medical_council_reg_number,
-                practice_type=practice_type,
-                clinic_info=clinic_info,
-                applied_hospital_info=applied_hospital_info,
-                hospital_name=doctor.hospital_name or (applied_hospital_info["name"] if applied_hospital_info else None),
-                hospital_address=doctor.hospital_address or (applied_hospital_info["address"] if applied_hospital_info else None),
-                clinic_name=doctor.clinic_name or (clinic_info["name"] if clinic_info else None),
-                clinic_address=doctor.clinic_address or (clinic_info["address"] if clinic_info else None),
-                city=doctor.city or (clinic_info["city"] if clinic_info else None),
-                state=doctor.state or (clinic_info["state"] if clinic_info else None),
-                consultation_fee=doctor.consultation_fee,
-                clinic_phone=doctor.clinic_phone,
+    # 1b. Reconcile unverified Doctor & Pharmacy accounts that lack any VerificationRequest row
+    orphan_stmt = (
+        select(User, Doctor, Pharmacy)
+        .outerjoin(VerificationRequest, User.id == VerificationRequest.user_id)
+        .outerjoin(Doctor, User.id == Doctor.user_id)
+        .outerjoin(Pharmacy, User.id == Pharmacy.user_id)
+        .where(
+            VerificationRequest.id.is_(None),
+            User.role.in_([UserRole.DOCTOR, UserRole.PHARMACY]),
+            User.is_verified == False,
+            User.status != UserStatus.SUSPENDED,
+            User.deleted_at.is_(None),
+        )
+        .order_by(User.created_at.desc())
+        .limit(limit)
+    )
+    orphan_res = await db.execute(orphan_stmt)
+    for user, doctor, pharmacy in orphan_res.all():
+        if user.id in seen_user_ids:
+            continue
+        seen_user_ids.add(user.id)
+        data.append(
+            await _build_registration_verification_item(
+                str(user.id), user, doctor, pharmacy, user.created_at, db
             )
-        elif user.role == UserRole.PHARMACY and pharmacy:
-            affiliated_info = None
-            if pharmacy.hospital_id:
-                hosp_stmt = select(Hospital).where(Hospital.id == pharmacy.hospital_id)
-                hosp_res = await db.execute(hosp_stmt)
-                aff_hosp = hosp_res.scalar_one_or_none()
-                if aff_hosp:
-                    affiliated_info = {
-                        "id": str(aff_hosp.id),
-                        "name": aff_hosp.name,
-                        "type": aff_hosp.type or "facility",
-                        "city": aff_hosp.city,
-                        "address": aff_hosp.address
-                    }
-
-            profile_data = PendingVerificationProfile(
-                business_name=pharmacy.business_name,
-                license_number=pharmacy.license_number,
-                gst_number=pharmacy.gst_number,
-                contact_number=pharmacy.contact_number or pharmacy.phone_number,
-                address=pharmacy.address,
-                city=pharmacy.city,
-                state=pharmacy.state,
-                country=pharmacy.country,
-                clinic_name=pharmacy.clinic_name or (affiliated_info["name"] if affiliated_info and affiliated_info["type"] == "clinic" else None),
-                hospital_name=affiliated_info["name"] if affiliated_info else None,
-            )
-
-        data.append(PendingVerificationItem(
-            request_id=str(req.id),
-            user_id=str(user.id),
-            email=user.email,
-            role=user.role.value if hasattr(user.role, "value") else str(user.role),
-            verification_type="REGISTRATION",
-            profile=profile_data,
-            created_at=req.created_at.isoformat() if req.created_at else ""
-        ))
+        )
 
     # 2. Fetch pending doctor practice / workplace affiliations
     loc_stmt = (
@@ -403,6 +474,19 @@ async def approve_verification(
             data=AdminActionResponseData(success=True, id=str(location.id))
         )
 
+    # 3. Fallback: approve an unverified Doctor or Pharmacy user reconciled without a VerificationRequest row
+    user_stmt = select(User).where(
+        User.id == request_id,
+        User.role.in_([UserRole.DOCTOR, UserRole.PHARMACY]),
+        User.deleted_at.is_(None),
+    )
+    user_res = await db.execute(user_stmt)
+    target_user = user_res.scalar_one_or_none()
+    if target_user:
+        ensured_req = await _get_or_create_verification_request_for_user(db, target_user)
+        req = await VerificationService.approve_request(db, ensured_req.id, current_admin.id)
+        return APIResponse(message="Approved successfully", data=AdminActionResponseData(success=True, id=str(req.id)))
+
     raise HTTPException(status_code=404, detail="Pending verification request or workplace affiliation not found")
 
 @router.post("/verifications/{request_id}/reject", response_model=APIResponse[AdminActionResponseData])
@@ -451,6 +535,19 @@ async def reject_verification(
             message="Doctor workplace affiliation rejected",
             data=AdminActionResponseData(success=True, id=str(location.id))
         )
+
+    # 3. Fallback: reject an unverified Doctor or Pharmacy user reconciled without a VerificationRequest row
+    user_stmt = select(User).where(
+        User.id == request_id,
+        User.role.in_([UserRole.DOCTOR, UserRole.PHARMACY]),
+        User.deleted_at.is_(None),
+    )
+    user_res = await db.execute(user_stmt)
+    target_user = user_res.scalar_one_or_none()
+    if target_user:
+        ensured_req = await _get_or_create_verification_request_for_user(db, target_user)
+        req = await VerificationService.reject_request(db, ensured_req.id, current_admin.id, "Rejected by admin")
+        return APIResponse(message="Rejected successfully", data=AdminActionResponseData(success=True, id=str(req.id)))
 
     raise HTTPException(status_code=404, detail="Pending verification request or workplace affiliation not found")
 
@@ -1125,18 +1222,46 @@ async def get_admin_dashboard(
     stmt = select(VerificationRequest, User).join(
         User, VerificationRequest.user_id == User.id
     ).where(
-        VerificationRequest.status == VerificationStatus.PENDING
+        VerificationRequest.status == VerificationStatus.PENDING,
+        User.deleted_at.is_(None),
     ).limit(5)
     result = await db.execute(stmt)
     rows = result.all()
     recent_pending = []
+    seen_recent_ids = set()
     for req, user in rows:
+        seen_recent_ids.add(user.id)
         recent_pending.append({
             "request_id": str(req.id),
             "email": user.email,
             "role": user.role.value,
-            "created_at": req.created_at.isoformat()
+            "created_at": req.created_at.isoformat() if req.created_at else ""
         })
+
+    if len(recent_pending) < 5:
+        orphan_recent_stmt = (
+            select(User)
+            .outerjoin(VerificationRequest, User.id == VerificationRequest.user_id)
+            .where(
+                VerificationRequest.id.is_(None),
+                User.role.in_([UserRole.DOCTOR, UserRole.PHARMACY]),
+                User.is_verified == False,
+                User.status != UserStatus.SUSPENDED,
+                User.deleted_at.is_(None),
+            )
+            .order_by(User.created_at.desc())
+            .limit(5 - len(recent_pending))
+        )
+        orphan_recent_res = await db.execute(orphan_recent_stmt)
+        for orphan_user in orphan_recent_res.scalars().all():
+            if orphan_user.id in seen_recent_ids:
+                continue
+            recent_pending.append({
+                "request_id": str(orphan_user.id),
+                "email": orphan_user.email,
+                "role": orphan_user.role.value if hasattr(orphan_user.role, "value") else str(orphan_user.role),
+                "created_at": orphan_user.created_at.isoformat() if orphan_user.created_at else ""
+            })
         
     data = {
         "users": {

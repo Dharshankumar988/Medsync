@@ -46,6 +46,7 @@ async def list_orders(
     return APIResponse(message="Orders retrieved successfully", data=orders)
 
 @router.post("/", response_model=APIResponse[MedicineOrderResponse], status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=APIResponse[MedicineOrderResponse], status_code=status.HTTP_201_CREATED)
 async def place_order(
     req: MedicineOrderCreate,
     db: AsyncSession = Depends(get_db),

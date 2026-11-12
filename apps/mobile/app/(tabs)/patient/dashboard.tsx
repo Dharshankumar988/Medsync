@@ -33,6 +33,7 @@ import {
 } from 'lucide-react-native';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { Avatar } from '../../../components/common/Avatar';
+import { AnimatedEntrance, AnimatedScaleButton } from '../../../components/common/AnimatedEntrance';
 import { patientService, PatientDashboardSummary } from '../../../services/patient.service';
 import { useRole } from '../../../providers/role-provider';
 import { useTheme } from '../../../context/ThemeContext';
@@ -283,22 +284,24 @@ export default function PatientDashboard() {
           )}
 
           {/* ── 1. Digital Health Card (Hero Card - Apple/GPay Wallet Style) ── */}
-          <View
-            style={[
-              styles.healthCard,
-              {
-                backgroundColor: isDark ? '#141418' : '#09090B',
-                borderColor: isDark ? '#27272A' : '#18181B',
-              },
-            ]}
-          >
+          <AnimatedEntrance delay={40} duration={340}>
+            <View
+              style={[
+                styles.healthCard,
+                {
+                  backgroundColor: isDark ? '#141418' : '#09090B',
+                  borderColor: isDark ? '#27272A' : '#18181B',
+                },
+              ]}
+            >
             {/* Card Top Row */}
             <View style={styles.healthCardHeader}>
               <View style={styles.cardBrandBadge}>
                 <Image
                   source={require('../../../assets/images/app-logo.png')}
                   style={styles.cardLogoIcon}
-                  resizeMode="contain"
+                  resizeMode="cover"
+                  fadeDuration={0}
                 />
                 <Text style={styles.cardBrandText}>MEDSYNC HEALTH PASS</Text>
               </View>
@@ -355,116 +358,145 @@ export default function PatientDashboard() {
                 <Text style={styles.cardSecondaryBtnText}>My Health QR</Text>
               </TouchableOpacity>
             </View>
-          </View>
+            </View>
+          </AnimatedEntrance>
 
           {/* ── 2. Primary Quick Actions Grid (Payment App 4-Key Services) ── */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              Quick Services
-            </Text>
-          </View>
-
-          <View style={styles.servicesGrid}>
-            {/* Action 1: Book Doctor Visit */}
-            <TouchableOpacity
-              style={[
-                styles.serviceTile,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-              onPress={() => router.push('/(tabs)/patient/appointments')}
-              activeOpacity={0.85}
-            >
-              <View
-                style={[
-                  styles.serviceIconBox,
-                  { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#F0F9FF' },
-                ]}
-              >
-                <Calendar size={22} color={isDark ? '#38BDF8' : '#0284C7'} />
+          <AnimatedEntrance delay={100} duration={340}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Quick Services
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => router.push('/(tabs)/patient/appointments?tab=DISCOVERY')}
+                  style={[
+                    styles.headerQuickPill,
+                    { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.14)' : '#EFF6FF' },
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#0284C7' }}>
+                    + Book
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setOrderModalVisible(true)}
+                  style={[
+                    styles.headerQuickPill,
+                    { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.14)' : '#ECFDF5' },
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669' }}>
+                    + Order Rx
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <Text style={[styles.serviceTitle, { color: theme.text }]}>
-                Book Visit
-              </Text>
-              <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
-                Doctors & Clinics
-              </Text>
-            </TouchableOpacity>
+            </View>
 
-            {/* Action 2: Order Medicines */}
-            <TouchableOpacity
-              style={[
-                styles.serviceTile,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-              onPress={() => setOrderModalVisible(true)}
-              activeOpacity={0.85}
-            >
-              <View
+            <View style={styles.servicesGrid}>
+              {/* Action 1: Book Doctor Visit */}
+              <AnimatedScaleButton
+                containerStyle={{ width: '48%' }}
                 style={[
-                  styles.serviceIconBox,
-                  { backgroundColor: isDark ? 'rgba(52, 211, 153, 0.12)' : '#ECFDF5' },
+                  styles.serviceTile,
+                  { width: '100%', backgroundColor: theme.card, borderColor: theme.border },
                 ]}
+                onPress={() => router.push('/(tabs)/patient/appointments?tab=DISCOVERY')}
               >
-                <Pill size={22} color={isDark ? '#34D399' : '#059669'} />
-              </View>
-              <Text style={[styles.serviceTitle, { color: theme.text }]}>
-                Order Meds
-              </Text>
-              <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
-                Pharmacy Delivery
-              </Text>
-            </TouchableOpacity>
+                <View
+                  style={[
+                    styles.serviceIconBox,
+                    { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#F0F9FF' },
+                  ]}
+                >
+                  <Calendar size={22} color={isDark ? '#38BDF8' : '#0284C7'} />
+                </View>
+                <Text style={[styles.serviceTitle, { color: theme.text }]}>
+                  Book Visit
+                </Text>
+                <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
+                  Doctors & Clinics
+                </Text>
+              </AnimatedScaleButton>
 
-            {/* Action 3: Pulse AI Copilot */}
-            <TouchableOpacity
-              style={[
-                styles.serviceTile,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-              onPress={() => router.push('/(tabs)/patient/pulse-ai')}
-              activeOpacity={0.85}
-            >
-              <View
+              {/* Action 2: Order Medicines */}
+              <AnimatedScaleButton
+                containerStyle={{ width: '48%' }}
                 style={[
-                  styles.serviceIconBox,
-                  { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.12)' : '#FAF5FF' },
+                  styles.serviceTile,
+                  { width: '100%', backgroundColor: theme.card, borderColor: theme.border },
                 ]}
+                onPress={() => setOrderModalVisible(true)}
               >
-                <Sparkles size={22} color={isDark ? '#C084FC' : '#7C3AED'} />
-              </View>
-              <Text style={[styles.serviceTitle, { color: theme.text }]}>
-                Pulse AI
-              </Text>
-              <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
-                Symptom Triage
-              </Text>
-            </TouchableOpacity>
+                <View
+                  style={[
+                    styles.serviceIconBox,
+                    { backgroundColor: isDark ? 'rgba(52, 211, 153, 0.12)' : '#ECFDF5' },
+                  ]}
+                >
+                  <Pill size={22} color={isDark ? '#34D399' : '#059669'} />
+                </View>
+                <Text style={[styles.serviceTitle, { color: theme.text }]}>
+                  Order Meds
+                </Text>
+                <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
+                  Pharmacy Delivery
+                </Text>
+              </AnimatedScaleButton>
 
-            {/* Action 4: Upload EHR Records */}
-            <TouchableOpacity
-              style={[
-                styles.serviceTile,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-              onPress={() => setUploadModalVisible(true)}
-              activeOpacity={0.85}
-            >
-              <View
+              {/* Action 3: Pulse AI Copilot */}
+              <AnimatedScaleButton
+                containerStyle={{ width: '48%' }}
                 style={[
-                  styles.serviceIconBox,
-                  { backgroundColor: isDark ? 'rgba(251, 146, 60, 0.12)' : '#FFF7ED' },
+                  styles.serviceTile,
+                  { width: '100%', backgroundColor: theme.card, borderColor: theme.border },
                 ]}
+                onPress={() => router.push('/(tabs)/patient/pulse-ai')}
               >
-                <FileText size={22} color={isDark ? '#FB923C' : '#EA580C'} />
-              </View>
-              <Text style={[styles.serviceTitle, { color: theme.text }]}>
-                Upload EHR
-              </Text>
-              <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
-                Encrypt to Vault
-              </Text>
-            </TouchableOpacity>
-          </View>
+                <View
+                  style={[
+                    styles.serviceIconBox,
+                    { backgroundColor: isDark ? 'rgba(168, 85, 247, 0.12)' : '#FAF5FF' },
+                  ]}
+                >
+                  <Sparkles size={22} color={isDark ? '#C084FC' : '#7C3AED'} />
+                </View>
+                <Text style={[styles.serviceTitle, { color: theme.text }]}>
+                  Pulse AI
+                </Text>
+                <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
+                  Symptom Triage
+                </Text>
+              </AnimatedScaleButton>
+
+              {/* Action 4: Upload EHR Records */}
+              <AnimatedScaleButton
+                containerStyle={{ width: '48%' }}
+                style={[
+                  styles.serviceTile,
+                  { width: '100%', backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+                onPress={() => setUploadModalVisible(true)}
+              >
+                <View
+                  style={[
+                    styles.serviceIconBox,
+                    { backgroundColor: isDark ? 'rgba(251, 146, 60, 0.12)' : '#FFF7ED' },
+                  ]}
+                >
+                  <FileText size={22} color={isDark ? '#FB923C' : '#EA580C'} />
+                </View>
+                <Text style={[styles.serviceTitle, { color: theme.text }]}>
+                  Upload EHR
+                </Text>
+                <Text style={[styles.serviceDesc, { color: theme.textMuted }]}>
+                  Encrypt to Vault
+                </Text>
+              </AnimatedScaleButton>
+            </View>
+          </AnimatedEntrance>
 
           {/* ── 3. Next Appointment Banner (if scheduled) ── */}
           {nextAppt && (
@@ -500,46 +532,88 @@ export default function PatientDashboard() {
           )}
 
           {/* ── 4. Appointments & Orders Overview (Interactive Schedule Calendar with Legend & Orders) ── */}
-          <AppointmentsAndOrdersOverview
-            appointments={appointments}
-            orders={orders}
-            onSelectOrderForTracking={(ord) => setSelectedOrderForTracking(ord)}
-            onRefresh={loadDashboardData}
-          />
+          <AnimatedEntrance delay={170} duration={340}>
+            <AppointmentsAndOrdersOverview
+              appointments={appointments}
+              orders={orders}
+              onSelectOrderForTracking={(ord) => setSelectedOrderForTracking(ord)}
+              onBookVisit={() => router.push('/(tabs)/patient/appointments?tab=DISCOVERY')}
+              onOrderMedicines={() => setOrderModalVisible(true)}
+              onRefresh={loadDashboardData}
+            />
+          </AnimatedEntrance>
 
           {/* ── 5. Quick Access to Records & Prescriptions Hub ── */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              Clinical Hub
-            </Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/patient/records')}>
-              <Text style={[styles.sectionLink, { color: theme.text }]}>
-                View All <ArrowUpRight size={13} color={theme.text} />
+          <AnimatedEntrance delay={230} duration={340}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Clinical Hub
               </Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/patient/records?tab=PRESCRIPTIONS')}>
+                <Text style={[styles.sectionLink, { color: theme.text }]}>
+                  Prescriptions <ArrowUpRight size={13} color={theme.text} />
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity
-            style={[
-              styles.hubActionCard,
-              { backgroundColor: theme.card, borderColor: theme.border },
-            ]}
-            onPress={() => router.push('/(tabs)/patient/records')}
-            activeOpacity={0.85}
-          >
-            <View style={styles.hubIconBox}>
-              <FileText size={22} color={theme.text} />
+            <AnimatedScaleButton
+              style={[
+                styles.hubActionCard,
+                { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 10 },
+              ]}
+              onPress={() => router.push('/(tabs)/patient/records?tab=PRESCRIPTIONS')}
+            >
+              <View style={styles.hubIconBox}>
+                <FileText size={22} color={theme.text} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 14 }}>
+                <Text style={[styles.hubTitle, { color: theme.text }]}>
+                  Prescriptions & Documents
+                </Text>
+                <Text style={[styles.hubDesc, { color: theme.textMuted }]}>
+                  {summary.activePrescriptionsCount} Active Rx • PIN-Protected Vault
+                </Text>
+              </View>
+              <ChevronRight size={18} color={theme.textMuted} />
+            </AnimatedScaleButton>
+
+            {/* Quick Book & Order Dual Action Bar */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <AnimatedScaleButton
+                containerStyle={{ flex: 1 }}
+                style={[
+                  styles.hubQuickActionBtn,
+                  {
+                    backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : '#EFF6FF',
+                    borderColor: isDark ? 'rgba(56, 189, 248, 0.3)' : '#BFDBFE',
+                  },
+                ]}
+                onPress={() => router.push('/(tabs)/patient/appointments?tab=DISCOVERY')}
+              >
+                <Calendar size={16} color={isDark ? '#38BDF8' : '#0284C7'} />
+                <Text style={{ fontSize: 12.5, fontWeight: '700', color: isDark ? '#E0F2FE' : '#0369A1' }}>
+                  Book Doctor Visit
+                </Text>
+              </AnimatedScaleButton>
+
+              <AnimatedScaleButton
+                containerStyle={{ flex: 1 }}
+                style={[
+                  styles.hubQuickActionBtn,
+                  {
+                    backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5',
+                    borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#A7F3D0',
+                  },
+                ]}
+                onPress={() => setOrderModalVisible(true)}
+              >
+                <Pill size={16} color={isDark ? '#34D399' : '#059669'} />
+                <Text style={{ fontSize: 12.5, fontWeight: '700', color: isDark ? '#D1FAE5' : '#047857' }}>
+                  Order Prescriptions
+                </Text>
+              </AnimatedScaleButton>
             </View>
-            <View style={{ flex: 1, marginLeft: 14 }}>
-              <Text style={[styles.hubTitle, { color: theme.text }]}>
-                Prescriptions & Documents
-              </Text>
-              <Text style={[styles.hubDesc, { color: theme.textMuted }]}>
-                {summary.activePrescriptionsCount} Active Rx • PIN-Protected Vault
-              </Text>
-            </View>
-            <ChevronRight size={18} color={theme.textMuted} />
-          </TouchableOpacity>
+          </AnimatedEntrance>
         </ScrollView>
 
         {/* ── Modals ── */}
@@ -939,6 +1013,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerQuickPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  hubQuickActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
   },
 
   /* ── Services Grid ── */

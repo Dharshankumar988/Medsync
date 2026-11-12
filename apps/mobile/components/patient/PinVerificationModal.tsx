@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,21 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
-import { Shield, Lock, X, Eye, EyeOff, KeyRound, CheckCircle2 } from 'lucide-react-native';
+import {
+  Shield,
+  Lock,
+  X,
+  Eye,
+  EyeOff,
+  KeyRound,
+  CheckCircle2,
+  Sparkles,
+  ChevronRight,
+} from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../context/ThemeContext';
 import { Button } from '../common/Button';
 import { formatErrorMessage } from '../../lib/api';
@@ -51,6 +64,56 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Smooth modal & mode transitions
+  const dialogScale = useRef(new Animated.Value(0.92)).current;
+  const dialogOpacity = useRef(new Animated.Value(0)).current;
+  const modeOpacity = useRef(new Animated.Value(1)).current;
+  const modeTranslateY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setMode(initialMode);
+      dialogScale.setValue(0.92);
+      dialogOpacity.setValue(0);
+      Animated.parallel([
+        Animated.spring(dialogScale, {
+          toValue: 1,
+          friction: 7,
+          tension: 120,
+          useNativeDriver: true,
+        }),
+        Animated.timing(dialogOpacity, {
+          toValue: 1,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible, initialMode, dialogScale, dialogOpacity]);
+
+  const switchMode = (nextMode: 'VERIFY' | 'SETUP') => {
+    Haptics.selectionAsync().catch(() => {});
+    setError('');
+    modeOpacity.setValue(0);
+    modeTranslateY.setValue(8);
+    setMode(nextMode);
+    Animated.parallel([
+      Animated.timing(modeOpacity, {
+        toValue: 1,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(modeTranslateY, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
   const handleVerifySubmit = async () => {
     if (pin.length !== 6 || !/^\d+$/.test(pin)) {
       setError('PIN must be exactly 6 digits.');
@@ -73,9 +136,10 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
         msg.toLowerCase().includes('no pin') ||
         msg.toLowerCase().includes('invalid credential')
       ) {
-        setError('No Authorization PIN found. Please set up your 6-digit PIN below.');
-        setMode('SETUP');
+        setError('No Authorization PIN found. Set up your 6-digit PIN below to continue.');
+        switchMode('SETUP');
       } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         setError(msg);
       }
       setPin('');
@@ -143,12 +207,14 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
       >
-        <View
+        <Animated.View
           style={[
             styles.dialog,
             {
               backgroundColor: isDark ? '#18181B' : '#FFFFFF',
               borderColor: isDark ? '#27272A' : '#E2E8F0',
+              opacity: dialogOpacity,
+              transform: [{ scale: dialogScale }],
             },
           ]}
         >
@@ -220,7 +286,13 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
 
           {/* ── MODE 1: VERIFY PIN ── */}
           {mode === 'VERIFY' ? (
-            <View style={{ width: '100%' }}>
+            <Animated.View
+              style={{
+                width: '100%',
+                opacity: modeOpacity,
+                transform: [{ translateY: modeTranslateY }],
+              }}
+            >
               <TextInput
                 style={[
                   styles.pinInput,
@@ -243,17 +315,66 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
                 autoFocus
               />
 
+              {/* Highlighted First-Time / Forgot PIN Banner Card */}
               <TouchableOpacity
-                style={styles.switchModeLink}
-                onPress={() => {
-                  setError('');
-                  setMode('SETUP');
-                }}
-                activeOpacity={0.8}
+                style={[
+                  styles.firstTimeBanner,
+                  {
+                    backgroundColor: isDark ? 'rgba(56, 189, 248, 0.11)' : '#EFF6FF',
+                    borderColor: isDark ? 'rgba(56, 189, 248, 0.45)' : '#93C5FD',
+                  },
+                ]}
+                onPress={() => switchMode('SETUP')}
+                activeOpacity={0.82}
               >
-                <Text style={[styles.switchModeText, { color: '#38BDF8' }]}>
-                  First time or forgot PIN? Set up with account password →
-                </Text>
+                <View
+                  style={[
+                    styles.firstTimeIconBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(56, 189, 248, 0.2)' : '#DBEAFE',
+                    },
+                  ]}
+                >
+                  <Sparkles size={16} color={isDark ? '#38BDF8' : '#0284C7'} />
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <View style={styles.firstTimeBadgeRow}>
+                    <View
+                      style={[
+                        styles.firstTimePill,
+                        { backgroundColor: isDark ? '#38BDF8' : '#0284C7' },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.firstTimePillText,
+                          { color: isDark ? '#09090B' : '#FFFFFF' },
+                        ]}
+                      >
+                        FIRST TIME?
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.firstTimeTitle,
+                        { color: isDark ? '#E0F2FE' : '#0F172A' },
+                      ]}
+                    >
+                      Set up or reset PIN
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.firstTimeSub,
+                      { color: isDark ? '#93C5FD' : '#1E40AF' },
+                    ]}
+                  >
+                    Create your 6-digit PIN using your account password
+                  </Text>
+                </View>
+
+                <ChevronRight size={18} color={isDark ? '#38BDF8' : '#0284C7'} />
               </TouchableOpacity>
 
               <View style={styles.actions}>
@@ -272,10 +393,16 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
                   style={styles.confirmBtn}
                 />
               </View>
-            </View>
+            </Animated.View>
           ) : (
             /* ── MODE 2: SETUP PIN WITH ACCOUNT PASSWORD ── */
-            <View style={{ width: '100%' }}>
+            <Animated.View
+              style={{
+                width: '100%',
+                opacity: modeOpacity,
+                transform: [{ translateY: modeTranslateY }],
+              }}
+            >
               {/* Account Password Field */}
               <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>
                 MedSync Account Password
@@ -356,10 +483,7 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
 
               <TouchableOpacity
                 style={styles.switchModeLink}
-                onPress={() => {
-                  setError('');
-                  setMode('VERIFY');
-                }}
+                onPress={() => switchMode('VERIFY')}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.switchModeText, { color: '#38BDF8' }]}>
@@ -383,9 +507,9 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
                   style={styles.confirmBtn}
                 />
               </View>
-            </View>
+            </Animated.View>
           )}
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -483,14 +607,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   switchModeLink: {
-    paddingVertical: 8,
+    paddingVertical: 10,
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   switchModeText: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  firstTimeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  firstTimeIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  firstTimeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  firstTimePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  firstTimePillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  firstTimeTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  firstTimeSub: {
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 15,
   },
   successBanner: {
     flexDirection: 'row',

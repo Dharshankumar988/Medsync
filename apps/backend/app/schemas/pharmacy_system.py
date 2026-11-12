@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import date, datetime
 from app.models.pharmacy_system import OrderStatus
 
@@ -90,7 +90,8 @@ class MedicineOrderCreate(BaseModel):
     delivery_address: str
     delivery_latitude: Optional[float] = None
     delivery_longitude: Optional[float] = None
-    items: List[OrderItemCreate]
+    total_amount: Optional[float] = None
+    items: List[OrderItemCreate] = Field(default_factory=list)
 
 class MedicineOrderResponse(BaseModel):
     id: uuid.UUID

@@ -206,8 +206,8 @@ export default function LoginScreen() {
               style={[
                 styles.logoWrapper,
                 {
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
+                  backgroundColor: '#00040D',
+                  borderColor: 'rgba(56, 189, 248, 0.3)',
                 },
               ]}
             >
@@ -215,6 +215,7 @@ export default function LoginScreen() {
                 source={require('../../assets/images/app-logo.png')}
                 style={styles.logoImage}
                 resizeMode="cover"
+                fadeDuration={0}
               />
             </View>
             <Text style={[styles.brandTitle, { color: theme.text }]}>MedSync</Text>

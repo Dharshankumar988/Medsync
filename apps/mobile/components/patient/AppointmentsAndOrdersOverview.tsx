@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Animated,
+  Easing,
 } from 'react-native';
 import {
   Calendar as CalendarIcon,
@@ -28,6 +30,8 @@ interface AppointmentsAndOrdersOverviewProps {
   appointments: AppointmentItem[];
   orders: MedicineOrderItem[];
   onSelectOrderForTracking?: (order: MedicineOrderItem) => void;
+  onBookVisit?: () => void;
+  onOrderMedicines?: () => void;
   onRefresh?: () => void;
 }
 
@@ -51,12 +55,53 @@ export function AppointmentsAndOrdersOverview({
   appointments,
   orders,
   onSelectOrderForTracking,
+  onBookVisit,
+  onOrderMedicines,
 }: AppointmentsAndOrdersOverviewProps) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
 
   // Tab switch: 'appointments' | 'orders'
   const [activeTab, setActiveTab] = useState<'appointments' | 'orders'>('appointments');
+  const tabFadeAnim = useRef(new Animated.Value(1)).current;
+  const tabSlideAnim = useRef(new Animated.Value(0)).current;
+
+  const handleTabSwitch = (nextTab: 'appointments' | 'orders') => {
+    if (nextTab === activeTab) return;
+    tabFadeAnim.setValue(0);
+    tabSlideAnim.setValue(nextTab === 'orders' ? 12 : -12);
+    setActiveTab(nextTab);
+    Animated.parallel([
+      Animated.timing(tabFadeAnim, {
+        toValue: 1,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(tabSlideAnim, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const triggerBookVisit = () => {
+    if (onBookVisit) {
+      onBookVisit();
+    } else {
+      router.push('/(tabs)/patient/appointments?tab=DISCOVERY');
+    }
+  };
+
+  const triggerOrderMedicines = () => {
+    if (onOrderMedicines) {
+      onOrderMedicines();
+    } else {
+      router.push('/(tabs)/patient/records?tab=PRESCRIPTIONS');
+    }
+  };
 
   // Calendar state
   const today = useMemo(() => new Date(), []);
@@ -174,7 +219,7 @@ export function AppointmentsAndOrdersOverview({
               { backgroundColor: isDark ? '#222734' : '#FFFFFF' },
             ],
           ]}
-          onPress={() => setActiveTab('appointments')}
+          onPress={() => handleTabSwitch('appointments')}
           activeOpacity={0.85}
         >
           <CalendarIcon
@@ -203,7 +248,7 @@ export function AppointmentsAndOrdersOverview({
               { backgroundColor: isDark ? '#222734' : '#FFFFFF' },
             ],
           ]}
-          onPress={() => setActiveTab('orders')}
+          onPress={() => handleTabSwitch('orders')}
           activeOpacity={0.85}
         >
           <ShoppingBag
@@ -226,6 +271,12 @@ export function AppointmentsAndOrdersOverview({
       </View>
 
       {/* ── TAB 1: APPOINTMENTS & CALENDAR ── */}
+      <Animated.View
+        style={{
+          opacity: tabFadeAnim,
+          transform: [{ translateX: tabSlideAnim }],
+        }}
+      >
       {activeTab === 'appointments' ? (
         <View>
           {/* Calendar Card */}
@@ -449,26 +500,35 @@ export function AppointmentsAndOrdersOverview({
               )}
             </View>
 
-            <TouchableOpacity
-              onPress={() => setViewAllAppointments(!viewAllAppointments)}
-              style={[
-                styles.viewToggleBtn,
-                {
-                  backgroundColor: viewAllAppointments ? '#3B82F6' : (isDark ? '#1F2430' : '#E2E8F0'),
-                  borderColor: viewAllAppointments ? '#2563EB' : theme.border,
-                },
-              ]}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.viewToggleBtnText,
-                  { color: viewAllAppointments ? '#FFFFFF' : theme.text },
-                ]}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                onPress={triggerBookVisit}
+                style={[styles.viewToggleBtn, { backgroundColor: '#2563EB', borderColor: '#2563EB' }]}
+                activeOpacity={0.85}
               >
-                {viewAllAppointments ? 'Selected Day' : 'View All'}
-              </Text>
-            </TouchableOpacity>
+                <Text style={[styles.viewToggleBtnText, { color: '#FFFFFF' }]}>+ Book</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setViewAllAppointments(!viewAllAppointments)}
+                style={[
+                  styles.viewToggleBtn,
+                  {
+                    backgroundColor: viewAllAppointments ? '#3B82F6' : (isDark ? '#1F2430' : '#E2E8F0'),
+                    borderColor: viewAllAppointments ? '#2563EB' : theme.border,
+                  },
+                ]}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.viewToggleBtnText,
+                    { color: viewAllAppointments ? '#FFFFFF' : theme.text },
+                  ]}
+                >
+                  {viewAllAppointments ? 'Selected Day' : 'View All'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {displayedAppointments.length === 0 ? (
@@ -492,7 +552,7 @@ export function AppointmentsAndOrdersOverview({
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
                 <TouchableOpacity
                   style={styles.bookActionBtn}
-                  onPress={() => router.push('/(tabs)/patient/appointments')}
+                  onPress={triggerBookVisit}
                   activeOpacity={0.85}
                 >
                   <Plus size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
@@ -624,14 +684,23 @@ export function AppointmentsAndOrdersOverview({
               Recent Medicine Deliveries
             </Text>
 
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)/patient/records')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.scheduleLink, { color: '#10B981' }]}>
-                Orders Vault <ArrowRight size={12} color="#10B981" />
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <TouchableOpacity
+                onPress={triggerOrderMedicines}
+                style={[styles.viewToggleBtn, { backgroundColor: '#10B981', borderColor: '#10B981' }]}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.viewToggleBtnText, { color: '#FFFFFF' }]}>+ Order Rx</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/patient/records?tab=ORDERS')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.scheduleLink, { color: '#10B981' }]}>
+                  Vault <ArrowRight size={12} color="#10B981" />
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {orders.length === 0 ? (
@@ -651,6 +720,14 @@ export function AppointmentsAndOrdersOverview({
               <Text style={[styles.emptyCardSub, { color: theme.textMuted }]}>
                 Order prescription medications directly from your verified digital records with doorstep priority delivery.
               </Text>
+              <TouchableOpacity
+                style={[styles.bookActionBtn, { backgroundColor: '#10B981', marginTop: 12 }]}
+                onPress={triggerOrderMedicines}
+                activeOpacity={0.85}
+              >
+                <Plus size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.bookActionBtnText}>Order Prescription</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             orders.slice(0, 5).map((order) => {
@@ -775,6 +852,7 @@ export function AppointmentsAndOrdersOverview({
           )}
         </View>
       )}
+      </Animated.View>
     </View>
   );
 }

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { MedSyncLogo } from "@/components/brand/MedSyncLogo";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -369,8 +370,8 @@ function LoginContent() {
           variants={stagger}
         >
           <motion.div variants={fadeUp}>
-            <Link href="/" className="inline-flex items-center gap-2 mb-10 group" aria-label="MedSync Home">
-              <Activity className="h-5 w-5 text-blue-500" />
+            <Link href="/" className="inline-flex items-center gap-2.5 mb-10 group" aria-label="MedSync Home">
+              <MedSyncLogo size={32} />
               <span className="text-lg font-semibold tracking-tight text-foreground">MedSync</span>
             </Link>
           </motion.div>

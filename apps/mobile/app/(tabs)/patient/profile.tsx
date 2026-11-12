@@ -53,10 +53,11 @@ import { biometricsService } from '../../../lib/biometrics';
 import { CompleteHealthProfileModal } from '../../../components/patient/CompleteHealthProfileModal';
 import { formatErrorMessage } from '../../../lib/api';
 import api from '../../../lib/api';
+import { supabase } from '../../../lib/supabase';
 
 export default function PatientProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useRole();
+  const { user, logout, refresh, updateUserAvatar } = useRole();
   const { theme, isDark, toggleTheme } = useTheme();
 
   const [loading, setLoading] = useState(true);
@@ -72,6 +73,7 @@ export default function PatientProfileScreen() {
 
   // Profile Picture Upload
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
 
   // Health Profile Modal (Comprehensive)
   const [healthModalVisible, setHealthModalVisible] = useState(false);
@@ -203,10 +205,26 @@ export default function PatientProfileScreen() {
         );
 
         if (res?.profile_image_url) {
+          const uploadedUrl = res.profile_image_url;
+          setAvatarLoadError(false);
           setProfile((prev: any) => ({
-            ...prev,
-            profile_picture_url: res.profile_image_url,
+            ...(prev || {}),
+            profile_picture_url: uploadedUrl,
+            profile_image_url: uploadedUrl,
           }));
+          updateUserAvatar(uploadedUrl);
+          try {
+            await supabase.auth.updateUser({
+              data: {
+                avatar_url: uploadedUrl,
+                profile_image_url: uploadedUrl,
+                profile_picture_url: uploadedUrl,
+              },
+            });
+          } catch {
+            // Non-blocking metadata sync
+          }
+          await refresh();
         }
         Alert.alert('Success', 'Profile photo updated successfully!');
         loadProfileData();
@@ -286,9 +304,16 @@ export default function PatientProfileScreen() {
 
   const avatarUrl =
     profile?.profile_picture_url ||
+    profile?.profile_image_url ||
+    user?.profile_picture_url ||
     user?.profile_image_url ||
+    user?.avatar_url ||
     (user?.user_metadata as any)?.avatar_url;
   const userInitials = (profile?.full_name || user?.full_name || 'PT').substring(0, 2).toUpperCase();
+
+  useEffect(() => {
+    setAvatarLoadError(false);
+  }, [avatarUrl]);
 
   return (
     <RoleGuard allowedRole="patient">
@@ -328,11 +353,12 @@ export default function PatientProfileScreen() {
                 activeOpacity={0.8}
                 disabled={uploadingPhoto}
               >
-                {avatarUrl ? (
+                {avatarUrl && !avatarLoadError ? (
                   <Image
                     source={{ uri: avatarUrl }}
                     style={styles.avatarImage}
                     resizeMode="cover"
+                    onError={() => setAvatarLoadError(true)}
                   />
                 ) : (
                   <View

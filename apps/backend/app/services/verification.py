@@ -1,12 +1,18 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.models.verification import VerificationRequest, VerificationStatus
 from app.models.user import User, UserStatus
+from app.models.admin import Admin
 from app.core.exceptions import NotFoundException, BadRequestException
 
 class VerificationService:
+    @staticmethod
+    async def _resolve_reviewer_id(db: AsyncSession, admin_user_id: uuid.UUID) -> uuid.UUID | None:
+        res = await db.execute(select(Admin.id).where(Admin.user_id == admin_user_id))
+        return res.scalar_one_or_none()
+
     @staticmethod
     async def approve_request(db: AsyncSession, request_id: uuid.UUID, admin_id: uuid.UUID) -> VerificationRequest:
         stmt = select(VerificationRequest).where(VerificationRequest.id == request_id)
@@ -19,10 +25,13 @@ class VerificationService:
         if req.status == VerificationStatus.APPROVED:
             raise BadRequestException("Request is already approved")
             
+        now_utc = datetime.utcnow()
+        reviewer_id = await VerificationService._resolve_reviewer_id(db, admin_id)
+
         # Update verification request
         req.status = VerificationStatus.APPROVED
-        req.reviewer_id = admin_id
-        req.approval_date = datetime.now(timezone.utc)
+        req.reviewer_id = reviewer_id
+        req.approval_date = now_utc
         
         # Update user status to active
         user_stmt = select(User).where(User.id == req.user_id)
@@ -44,7 +53,7 @@ class VerificationService:
                 doctor = doc_result.scalar_one_or_none()
                 if doctor:
                     doctor.doctor_status = "ACTIVE"
-                    doctor.approval_date = datetime.now(timezone.utc)
+                    doctor.approval_date = now_utc
                     doctor.approved_by = admin_id
 
                     # Automatically verify all private clinics registered by this doctor
@@ -81,7 +90,7 @@ class VerificationService:
                     for loc in locs_res.scalars().all():
                         loc.verification_status = LocationVerificationStatus.APPROVED
                         loc.verified_by = admin_id
-                        loc.verified_at = datetime.now(timezone.utc)
+                        loc.verified_at = now_utc
 
                     _hospitals_cache.clear()
             elif user.role.value == "PHARMACY":
@@ -157,9 +166,11 @@ class VerificationService:
         if req.status == VerificationStatus.REJECTED:
             raise BadRequestException("Request is already rejected")
             
+        now_utc = datetime.utcnow()
+        reviewer_id = await VerificationService._resolve_reviewer_id(db, admin_id)
         req.status = VerificationStatus.REJECTED
-        req.reviewer_id = admin_id
-        req.review_date = datetime.now(timezone.utc)
+        req.reviewer_id = reviewer_id
+        req.review_date = now_utc
         req.rejection_reason = reason
         
         user_stmt = select(User).where(User.id == req.user_id)
@@ -173,7 +184,7 @@ class VerificationService:
             if doctor:
                 doctor.doctor_status = "REJECTED"
                 doctor.approval_notes = reason
-                doctor.approval_date = datetime.now(timezone.utc)
+                doctor.approval_date = now_utc
                 doctor.approved_by = admin_id
         
         await db.commit()

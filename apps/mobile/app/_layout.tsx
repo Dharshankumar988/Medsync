@@ -8,6 +8,7 @@ import * as Linking from 'expo-linking';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RoleProvider } from '../providers/role-provider';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { StartupSplash } from '../components/layout/StartupSplash';
 
 LogBox.ignoreLogs([
   '[EventSource] Unable to identify the line ending character',
@@ -40,6 +41,7 @@ function NavigationStack() {
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
+      <StartupSplash />
     </View>
   );
 }

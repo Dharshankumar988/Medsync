@@ -834,10 +834,10 @@ export default function AdminUsers() {
 
                             <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-2">
                               <span><Mail className="w-3 h-3 inline mr-1" />{req.email}</span>
-                              {prof.clinic_phone && (
+                              {(prof.clinic_phone || prof.contact_number) && (
                                 <>
                                   <span>•</span>
-                                  <span><Phone className="w-3 h-3 inline mr-1" />{prof.clinic_phone}</span>
+                                  <span><Phone className="w-3 h-3 inline mr-1" />{prof.clinic_phone || prof.contact_number}</span>
                                 </>
                               )}
                               <span>•</span>
@@ -1986,8 +1986,10 @@ export default function AdminUsers() {
                   ) : (
                     <div className="space-y-1 text-sm bg-amber-500/[0.04] p-3 rounded-lg border border-amber-500/20">
                       <p className="font-semibold text-amber-700 dark:text-amber-400">Pharmacy Store</p>
-                      <p className="text-foreground font-medium">{prof.business_name}</p>
-                      <p className="text-xs text-muted-foreground">{prof.address}, {prof.city}</p>
+                      <p className="text-foreground font-medium">{prof.business_name || req.email}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {[prof.address, prof.city, prof.state].filter(Boolean).join(", ") || "Address on record"}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1995,17 +1997,17 @@ export default function AdminUsers() {
                 {/* Doctor / Professional Credentials */}
                 <div className="p-4 rounded-xl border border-border/60 bg-card space-y-3">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Award className="w-4 h-4 text-primary" /> Physician Identity & Credentials
+                    <Award className="w-4 h-4 text-primary" /> {isDoctor ? "Physician Identity & Credentials" : "Pharmacy Identity & Credentials"}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-xs text-muted-foreground">Email Address</span>
                       <p className="font-medium text-foreground">{req.email}</p>
                     </div>
-                    {prof.clinic_phone && (
+                    {(prof.clinic_phone || prof.contact_number) && (
                       <div>
                         <span className="text-xs text-muted-foreground">Contact Phone</span>
-                        <p className="font-medium text-foreground">{prof.clinic_phone}</p>
+                        <p className="font-medium text-foreground">{prof.clinic_phone || prof.contact_number}</p>
                       </div>
                     )}
                     <div>

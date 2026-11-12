@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { getBackendBaseUrl } from "@/lib/backend-config";
 import { toast } from "sonner";
+import { MedSyncLogo } from "@/components/brand/MedSyncLogo";
 
 interface VerifiedPharmacy {
   pharmacy_id: string;
@@ -321,10 +322,8 @@ export default function PharmacyPublicVerifyPage() {
 
         {/* --- HEADER NAV --- */}
         <div className="flex items-center justify-between pb-2">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <MedSyncLogo size={32} />
             <span className="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
               MedSync Verify
             </span>

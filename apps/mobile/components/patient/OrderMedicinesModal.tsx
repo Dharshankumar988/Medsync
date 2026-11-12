@@ -272,6 +272,7 @@ export function OrderMedicinesModal({
         pharmacy_id: pharmacyId!,
         prescription_id: selectedPrescriptionId!,
         delivery_address: deliveryAddress.trim(),
+        total_amount: 399.0,
         notes: notes.trim() || undefined,
       });
 

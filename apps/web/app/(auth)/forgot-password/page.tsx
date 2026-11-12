@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { MedSyncLogo } from "@/components/brand/MedSyncLogo";
 import axios from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -295,8 +296,8 @@ function ForgotPasswordContent() {
           variants={stagger}
         >
           <motion.div variants={fadeUp}>
-            <Link href="/login" className="inline-flex items-center gap-2 mb-10 group" aria-label="Back to login">
-              <Activity className="h-5 w-5 text-blue-500" />
+            <Link href="/login" className="inline-flex items-center gap-2.5 mb-10 group" aria-label="Back to login">
+              <MedSyncLogo size={32} />
               <span className="text-lg font-semibold tracking-tight text-foreground">MedSync</span>
             </Link>
           </motion.div>

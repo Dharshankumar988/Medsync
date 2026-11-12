@@ -34,6 +34,9 @@ class PharmacyService:
                     from fastapi import HTTPException
                     raise HTTPException(status_code=400, detail=f"Cannot order {item.quantity}. Only {inv.stock_quantity} in stock for {inv.batch_number}.")
                 total_amount += (inv.selling_price or inv.unit_price) * item.quantity
+
+        if total_amount == 0.0 and req.total_amount is not None:
+            total_amount = float(req.total_amount)
         
         order_in = {
             "patient_id": patient_id,

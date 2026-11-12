@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutDashboard, FileText, Calendar, Pill, Brain, Shield, Activity, LogOut, Moon, Sun, Building2 } from "lucide-react";
+import { MedSyncLogo } from "@/components/brand/MedSyncLogo";
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -50,8 +51,8 @@ export function SystemMap({ role }: { role: string }) {
       onMouseLeave={() => setIsExpanded(false)}
     >
       <div className="flex h-20 items-center justify-center pt-4">
-        <Link href="/" className="group relative flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-          <Activity className="h-6 w-6" />
+        <Link href="/" className="group relative flex h-12 w-12 items-center justify-center rounded-2xl transition-transform hover:scale-105">
+          <MedSyncLogo size={44} />
           <AnimatePresence>
             {isExpanded && (
               <motion.span 
@@ -73,10 +74,10 @@ export function SystemMap({ role }: { role: string }) {
           {/* Central Core Node */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
             <div className={cn(
-              "flex items-center justify-center rounded-full bg-card border-2 shadow-lg transition-all duration-700",
+              "flex items-center justify-center rounded-2xl bg-[#00040D] border-2 shadow-lg transition-all duration-700 overflow-hidden",
               isExpanded ? "h-16 w-16 border-primary/40 shadow-primary/20" : "h-12 w-12 border-primary/20"
             )}>
-              <Activity className={cn("text-primary transition-all duration-700", isExpanded ? "h-6 w-6" : "h-5 w-5")} />
+              <MedSyncLogo size={isExpanded ? 56 : 42} showWordmark={false} />
             </div>
           </div>
 
