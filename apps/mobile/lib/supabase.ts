@@ -28,10 +28,66 @@ const createSupabaseStub = () => ({
   },
 });
 
+const SECURE_STORE_CHUNK_SIZE = 1800;
+
 const secureStoreAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+  getItem: async (key: string): Promise<string | null> => {
+    const chunkCountStr = await SecureStore.getItemAsync(`${key}__chunks`);
+    if (chunkCountStr) {
+      const count = parseInt(chunkCountStr, 10);
+      if (Number.isFinite(count) && count > 0) {
+        const parts = await Promise.all(
+          Array.from({ length: count }, (_, i) => SecureStore.getItemAsync(`${key}__chunk_${i}`))
+        );
+        if (parts.some((p) => p === null)) return null;
+        return parts.join('');
+      }
+    }
+    return SecureStore.getItemAsync(key);
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    // Clean up any previous chunks before writing
+    const prevCountStr = await SecureStore.getItemAsync(`${key}__chunks`);
+    if (prevCountStr) {
+      const prevCount = parseInt(prevCountStr, 10) || 0;
+      await Promise.all([
+        SecureStore.deleteItemAsync(`${key}__chunks`),
+        ...Array.from({ length: prevCount }, (_, i) =>
+          SecureStore.deleteItemAsync(`${key}__chunk_${i}`)
+        ),
+      ]);
+    }
+
+    if (value.length <= SECURE_STORE_CHUNK_SIZE) {
+      await SecureStore.setItemAsync(key, value);
+      return;
+    }
+
+    const totalChunks = Math.ceil(value.length / SECURE_STORE_CHUNK_SIZE);
+    await SecureStore.deleteItemAsync(key);
+    await SecureStore.setItemAsync(`${key}__chunks`, String(totalChunks));
+    await Promise.all(
+      Array.from({ length: totalChunks }, (_, i) =>
+        SecureStore.setItemAsync(
+          `${key}__chunk_${i}`,
+          value.slice(i * SECURE_STORE_CHUNK_SIZE, (i + 1) * SECURE_STORE_CHUNK_SIZE)
+        )
+      )
+    );
+  },
+  removeItem: async (key: string): Promise<void> => {
+    const prevCountStr = await SecureStore.getItemAsync(`${key}__chunks`);
+    if (prevCountStr) {
+      const prevCount = parseInt(prevCountStr, 10) || 0;
+      await Promise.all([
+        SecureStore.deleteItemAsync(`${key}__chunks`),
+        ...Array.from({ length: prevCount }, (_, i) =>
+          SecureStore.deleteItemAsync(`${key}__chunk_${i}`)
+        ),
+      ]);
+    }
+    await SecureStore.deleteItemAsync(key);
+  },
 };
 
 export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey, {
@@ -39,6 +95,7 @@ export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUr
     storage: secureStoreAdapter,
     autoRefreshToken: true,
     persistSession: true,
+    detectSessionInUrl: false,
   },
 }) : (createSupabaseStub() as unknown as ReturnType<typeof createClient>);
 

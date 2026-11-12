@@ -29,7 +29,7 @@ import {
   Heart,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { authService } from '../../services/auth.service';
+import { authService, claimOAuthCallbackUrl } from '../../services/auth.service';
 import { MedicalLoadingIndicator } from '../../components/common/MedicalLoadingIndicator';
 import { GoogleIcon } from '../../components/common/GoogleIcon';
 import { formatErrorMessage } from '../../lib/api';
@@ -67,8 +67,8 @@ export default function RegisterScreen() {
     setError('');
     try {
       const res = await authService.signInWithGoogle();
-      if (res?.url) {
-        router.push({
+      if (res?.url && claimOAuthCallbackUrl(res.url)) {
+        router.replace({
           pathname: '/(auth)/callback',
           params: { rawUrl: res.url },
         });

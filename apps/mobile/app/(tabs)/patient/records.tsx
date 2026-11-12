@@ -114,15 +114,57 @@ export default function PatientRecordsScreen() {
   // Delivery Tracking Modal state
   const [selectedOrderForTracking, setSelectedOrderForTracking] = useState<MedicineOrderItem | null>(null);
 
+  // Offline / Local Cached File URIs so already-downloaded PDFs & records open without re-downloading
+  const [downloadedRxUris, setDownloadedRxUris] = useState<Record<string, string>>({});
+  const [downloadedRecordUris, setDownloadedRecordUris] = useState<Record<string, string>>({});
+
+  const refreshCachedFiles = useCallback(
+    async (recsList: MedicalRecordItem[], rxList: PrescriptionItem[]) => {
+      try {
+        if (recsList.length > 0) {
+          const recEntries = await Promise.all(
+            recsList.map(async (r) => {
+              const uri = await patientService.getCachedRecordUri(r.id, r.file_metadata?.mime_type);
+              return uri ? ([r.id, uri] as const) : null;
+            })
+          );
+          const recMap: Record<string, string> = {};
+          recEntries.forEach((e) => {
+            if (e) recMap[e[0]] = e[1];
+          });
+          setDownloadedRecordUris((prev) => ({ ...prev, ...recMap }));
+        }
+        if (rxList.length > 0) {
+          const rxEntries = await Promise.all(
+            rxList.map(async (rx) => {
+              const uri = await patientService.getCachedPrescriptionPdfUri(rx.id);
+              return uri ? ([rx.id, uri] as const) : null;
+            })
+          );
+          const rxMap: Record<string, string> = {};
+          rxEntries.forEach((e) => {
+            if (e) rxMap[e[0]] = e[1];
+          });
+          setDownloadedRxUris((prev) => ({ ...prev, ...rxMap }));
+        }
+      } catch {
+        // Ignore cache probe failures
+      }
+    },
+    []
+  );
+
   const loadData = useCallback(async () => {
     try {
       setError(null);
       if (activeTab === 'RECORDS') {
         const data = await patientService.getMedicalRecords();
         setRecords(data);
+        refreshCachedFiles(data, []);
       } else if (activeTab === 'PRESCRIPTIONS') {
         const data = await patientService.getPrescriptions();
         setPrescriptions(data);
+        refreshCachedFiles([], data);
       } else if (activeTab === 'ORDERS') {
         const data = await patientService.getMedicineOrders();
         setOrders(data);
@@ -134,7 +176,7 @@ export default function PatientRecordsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab]);
+  }, [activeTab, refreshCachedFiles]);
 
   useEffect(() => {
     setLoading(true);
@@ -146,13 +188,36 @@ export default function PatientRecordsScreen() {
     loadData();
   }, [loadData]);
 
-  const handleDownloadRecordPress = (recordId: string) => {
-    setSelectedEntityId(recordId);
+  const handleOpenCachedOrDownloadRecord = async (record: MedicalRecordItem) => {
+    const cachedUri =
+      downloadedRecordUris[record.id] ||
+      (await patientService.getCachedRecordUri(record.id, record.file_metadata?.mime_type));
+
+    if (cachedUri) {
+      const opened = await patientService.openLocalFile(cachedUri);
+      if (opened) return;
+    }
+
+    setSelectedEntityId(record.id);
     setSelectedEntityType('RECORD');
     setPinModalVisible(true);
   };
 
-  const handleDownloadPrescriptionPress = (prescriptionId: string) => {
+  const handleOpenCachedOrDownloadPrescription = async (prescriptionId: string) => {
+    const cachedUri =
+      downloadedRxUris[prescriptionId] ||
+      (await patientService.getCachedPrescriptionPdfUri(prescriptionId));
+
+    if (cachedUri) {
+      const opened = await patientService.openLocalFile(cachedUri);
+      if (opened) return;
+      // Only clear if file no longer opens; allow fresh download below
+      Alert.alert(
+        'Unable to Open PDF',
+        'No PDF viewer app responded, or the cached file could not be opened. Re-downloading now.'
+      );
+    }
+
     setSelectedEntityId(prescriptionId);
     setSelectedEntityType('PRESCRIPTION');
     setPinModalVisible(true);
@@ -160,12 +225,19 @@ export default function PatientRecordsScreen() {
 
   const handleConfirmPinDownload = async (pin: string) => {
     if (!selectedEntityId) return;
+    const entityId = selectedEntityId;
 
     if (selectedEntityType === 'RECORD') {
       try {
-        const data = await patientService.downloadRecordWithPin(selectedEntityId, pin);
+        const data = await patientService.downloadRecordWithPin(entityId, pin);
         setPinModalVisible(false);
         setSelectedEntityId(null);
+
+        if (data?.localUri) {
+          setDownloadedRecordUris((prev) => ({ ...prev, [entityId]: data.localUri }));
+          const opened = await patientService.openLocalFile(data.localUri);
+          if (opened) return;
+        }
 
         const downloadUrl = data?.url || data?.signed_url || data?.download_url;
         if (downloadUrl) {
@@ -183,9 +255,15 @@ export default function PatientRecordsScreen() {
       }
     } else {
       try {
-        const data = await patientService.authorizePrescriptionDownload(selectedEntityId, pin);
+        const data = await patientService.authorizePrescriptionDownload(entityId, pin);
         setPinModalVisible(false);
         setSelectedEntityId(null);
+
+        if (data?.localUri) {
+          setDownloadedRxUris((prev) => ({ ...prev, [entityId]: data.localUri }));
+          const opened = await patientService.openLocalFile(data.localUri);
+          if (opened) return;
+        }
 
         const downloadUrl = data?.download_url || data?.url || data?.signed_url || data?.pdf_url;
         if (downloadUrl) {
@@ -193,16 +271,16 @@ export default function PatientRecordsScreen() {
           if (supported) {
             await Linking.openURL(downloadUrl);
           } else {
-            Alert.alert('Download Ready', `Prescription PDF link: ${downloadUrl}`);
+            Alert.alert('Prescription PDF Ready', `Saved locally or open at: ${downloadUrl}`);
           }
         } else {
           Alert.alert(
-            'Prescription Authorized',
-            `Authorization PIN confirmed. Access reference: ${data?.authorization_reference || 'CONFIRMED'}`
+            'Download Incomplete',
+            'PIN verified, but the prescription PDF could not be retrieved.'
           );
         }
       } catch (err: any) {
-        Alert.alert('Authorization Failed', formatErrorMessage(err));
+        Alert.alert('Download Failed', formatErrorMessage(err));
       }
     }
   };
@@ -268,11 +346,22 @@ export default function PatientRecordsScreen() {
 
           <View style={styles.actionsRow}>
             <Button
-              title="Download"
+              title={downloadedRecordUris[item.id] ? 'Open' : 'Download'}
               size="sm"
-              iconLeft={<Download size={14} color={theme.primaryButtonText} />}
-              onPress={() => handleDownloadRecordPress(item.id)}
-              style={[styles.actionBtn, { backgroundColor: theme.primaryButton }]}
+              iconLeft={
+                downloadedRecordUris[item.id] ? (
+                  <FileText size={14} color="#FFFFFF" />
+                ) : (
+                  <Download size={14} color={theme.primaryButtonText} />
+                )
+              }
+              onPress={() => handleOpenCachedOrDownloadRecord(item)}
+              style={[
+                styles.actionBtn,
+                {
+                  backgroundColor: downloadedRecordUris[item.id] ? '#059669' : theme.primaryButton,
+                },
+              ]}
             />
             <TouchableOpacity
               style={[
@@ -360,11 +449,22 @@ export default function PatientRecordsScreen() {
 
           <View style={styles.actionsRow}>
             <Button
-              title="PDF"
+              title={downloadedRxUris[item.id] ? 'Open PDF' : 'PDF'}
               size="sm"
-              iconLeft={<Download size={14} color={theme.primaryButtonText} />}
-              onPress={() => handleDownloadPrescriptionPress(item.id)}
-              style={[styles.actionBtn, { backgroundColor: theme.primaryButton }]}
+              iconLeft={
+                downloadedRxUris[item.id] ? (
+                  <FileText size={14} color="#FFFFFF" />
+                ) : (
+                  <Download size={14} color={theme.primaryButtonText} />
+                )
+              }
+              onPress={() => handleOpenCachedOrDownloadPrescription(item.id)}
+              style={[
+                styles.actionBtn,
+                {
+                  backgroundColor: downloadedRxUris[item.id] ? '#059669' : theme.primaryButton,
+                },
+              ]}
             />
             <TouchableOpacity
               style={[
@@ -401,6 +501,26 @@ export default function PatientRecordsScreen() {
 
   const renderOrderItem = ({ item }: { item: MedicineOrderItem }) => {
     const formattedDate = item.created_at ? new Date(item.created_at).toLocaleDateString() : '—';
+    const statusUpper = String(item.status || 'PENDING').toUpperCase();
+    const isDelivered = statusUpper === 'DELIVERED';
+    const isCancelled = statusUpper === 'CANCELLED';
+    const isInTransit = ['SHIPPED', 'OUT_FOR_DELIVERY', 'DISPATCHED', 'IN_TRANSIT'].includes(statusUpper);
+
+    const badgeBg = isDelivered
+      ? 'rgba(16, 185, 129, 0.14)'
+      : isCancelled
+      ? 'rgba(239, 68, 68, 0.14)'
+      : isInTransit
+      ? 'rgba(59, 130, 246, 0.14)'
+      : 'rgba(245, 158, 11, 0.14)';
+    const badgeColor = isDelivered
+      ? '#10B981'
+      : isCancelled
+      ? '#EF4444'
+      : isInTransit
+      ? '#3B82F6'
+      : '#D97706';
+
     return (
       <Card style={[styles.cardItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <CardContent>
@@ -409,20 +529,36 @@ export default function PatientRecordsScreen() {
               style={[
                 styles.iconBoxIndigo,
                 {
-                  backgroundColor: isDark ? 'rgba(99, 102, 241, 0.12)' : '#EEF2FF',
-                  borderColor: isDark ? 'rgba(99, 102, 241, 0.25)' : '#C7D2FE',
+                  backgroundColor: isDelivered
+                    ? isDark
+                      ? 'rgba(16, 185, 129, 0.12)'
+                      : '#ECFDF5'
+                    : isDark
+                    ? 'rgba(99, 102, 241, 0.12)'
+                    : '#EEF2FF',
+                  borderColor: isDelivered
+                    ? isDark
+                      ? 'rgba(16, 185, 129, 0.25)'
+                      : '#A7F3D0'
+                    : isDark
+                    ? 'rgba(99, 102, 241, 0.25)'
+                    : '#C7D2FE',
                   borderWidth: 1,
                 },
               ]}
             >
-              <Package size={20} color="#6366F1" />
+              {isDelivered ? (
+                <CheckCircle2 size={20} color="#10B981" />
+              ) : (
+                <Package size={20} color="#6366F1" />
+              )}
             </View>
             <View style={styles.titleColumn}>
               <Text style={[styles.itemTitle, { color: theme.text }]}>Order #{item.id.slice(0, 8)}</Text>
               <Text style={[styles.itemSubtitle, { color: theme.textMuted }]}>Ordered: {formattedDate}</Text>
             </View>
-            <View style={[styles.badge, styles.pendingBadge]}>
-              <Text style={[styles.badgeText, styles.pendingText]}>{item.status}</Text>
+            <View style={[styles.badge, { backgroundColor: badgeBg }]}>
+              <Text style={[styles.badgeText, { color: badgeColor }]}>{statusUpper}</Text>
             </View>
           </View>
 
@@ -432,7 +568,7 @@ export default function PatientRecordsScreen() {
             </Text>
           )}
 
-          {item.tracking_number && (
+          {item.tracking_number && !isDelivered && !isCancelled && (
             <View style={styles.trackingRow}>
               <Truck size={14} color={theme.textMuted} />
               <Text style={[styles.trackingText, { color: theme.textSecondary }]}>
@@ -441,16 +577,36 @@ export default function PatientRecordsScreen() {
             </View>
           )}
 
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={styles.trackDeliveryBtn}
-              onPress={() => setSelectedOrderForTracking(item)}
-              activeOpacity={0.85}
-            >
-              <Truck size={14} color="#FFFFFF" />
-              <Text style={styles.trackDeliveryBtnText}>Live Delivery Tracking</Text>
-            </TouchableOpacity>
-          </View>
+          {!isCancelled && (
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.trackDeliveryBtn,
+                  isDelivered && {
+                    backgroundColor: isDark ? 'rgba(16, 185, 129, 0.14)' : '#ECFDF5',
+                    borderWidth: 1,
+                    borderColor: isDark ? 'rgba(16, 185, 129, 0.35)' : '#A7F3D0',
+                  },
+                ]}
+                onPress={() => setSelectedOrderForTracking(item)}
+                activeOpacity={0.85}
+              >
+                {isDelivered ? (
+                  <CheckCircle2 size={14} color="#10B981" />
+                ) : (
+                  <Truck size={14} color="#FFFFFF" />
+                )}
+                <Text
+                  style={[
+                    styles.trackDeliveryBtnText,
+                    isDelivered && { color: '#10B981' },
+                  ]}
+                >
+                  {isDelivered ? 'Delivered • View Summary' : 'Live Delivery Tracking'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </CardContent>
       </Card>
     );
@@ -924,11 +1080,14 @@ export default function PatientRecordsScreen() {
           onClose={() => setSelectedPrescriptionForQr(null)}
         />
 
-        {/* Live Delivery Tracking Modal */}
+        {/* Delivery Tracking / Summary Modal */}
         <DeliveryTrackingModal
           visible={!!selectedOrderForTracking}
+          order={selectedOrderForTracking}
           orderId={selectedOrderForTracking?.id}
           trackingNumber={selectedOrderForTracking?.tracking_number}
+          orderStatus={selectedOrderForTracking?.status}
+          deliveryAddress={selectedOrderForTracking?.delivery_address}
           onClose={() => setSelectedOrderForTracking(null)}
         />
       </View>

@@ -835,13 +835,18 @@ export function AppointmentsAndOrdersOverview({
                         </Text>
                       </View>
 
-                      {onSelectOrderForTracking && (
+                      {onSelectOrderForTracking && order.status !== 'CANCELLED' && (
                         <TouchableOpacity
-                          style={styles.trackOrderBtn}
+                          style={[
+                            styles.trackOrderBtn,
+                            order.status === 'DELIVERED' && { backgroundColor: '#10B981' },
+                          ]}
                           onPress={() => onSelectOrderForTracking(order)}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.trackOrderBtnText}>Live Track</Text>
+                          <Text style={styles.trackOrderBtnText}>
+                            {order.status === 'DELIVERED' ? 'Summary' : 'Live Track'}
+                          </Text>
                         </TouchableOpacity>
                       )}
                     </View>

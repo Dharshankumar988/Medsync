@@ -662,11 +662,14 @@ export default function PatientDashboard() {
           }}
         />
 
-        {/* ── Live Delivery Tracking Modal ── */}
+        {/* ── Delivery Tracking / Summary Modal ── */}
         <DeliveryTrackingModal
           visible={!!selectedOrderForTracking}
+          order={selectedOrderForTracking}
           orderId={selectedOrderForTracking?.id}
           trackingNumber={selectedOrderForTracking?.tracking_number}
+          orderStatus={selectedOrderForTracking?.status}
+          deliveryAddress={selectedOrderForTracking?.delivery_address}
           onClose={() => setSelectedOrderForTracking(null)}
         />
 

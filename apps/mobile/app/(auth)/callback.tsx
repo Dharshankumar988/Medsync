@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -26,11 +26,28 @@ import {
 } from 'lucide-react-native';
 import api from '../../lib/api';
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out. Please try again.`)), ms);
+    }),
+  ]);
+}
+
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const searchParams = useLocalSearchParams();
+  const rawUrlParam = typeof searchParams.rawUrl === 'string' ? searchParams.rawUrl : '';
+  const codeParam = typeof searchParams.code === 'string' ? searchParams.code : '';
+  const accessTokenParam = typeof searchParams.access_token === 'string' ? searchParams.access_token : '';
+  const refreshTokenParam = typeof searchParams.refresh_token === 'string' ? searchParams.refresh_token : '';
   const { refresh } = useRole();
   const { theme, isDark } = useTheme();
+
+  const processedSignatureRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
 
   const [status, setStatus] = useState('Connecting to Google...');
   const [loading, setLoading] = useState(true);
@@ -46,43 +63,70 @@ export default function AuthCallbackScreen() {
   const [isSettingPassword, setIsSettingPassword] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const signature = `${rawUrlParam}|${codeParam}|${accessTokenParam}|${refreshTokenParam}`;
+    if (processedSignatureRef.current === signature) {
+      return;
+    }
+    processedSignatureRef.current = signature;
 
     async function handleCallback() {
       try {
-        const rawUrl = (searchParams.rawUrl as string) || '';
-        let targetUrl = rawUrl;
+        let targetUrl = rawUrlParam;
 
         if (!targetUrl) {
           const initialUrl = await Linking.getInitialURL();
           targetUrl = initialUrl || '';
         }
 
-        let code = (searchParams.code as string) || null;
-        let accessToken = (searchParams.access_token as string) || null;
-        let refreshToken = (searchParams.refresh_token as string) || null;
+        let code: string | null = codeParam || null;
+        let accessToken: string | null = accessTokenParam || null;
+        let refreshToken: string | null = refreshTokenParam || null;
+        let oauthError: string | null = null;
 
         if (targetUrl) {
           const codeMatch = targetUrl.match(/[?&]code=([^&#]+)/);
           const accessMatch = targetUrl.match(/[#?&]access_token=([^&#]+)/);
           const refreshMatch = targetUrl.match(/[#?&]refresh_token=([^&#]+)/);
+          const errDescMatch = targetUrl.match(/[#?&]error_description=([^&#]+)/);
+          const errMatch = targetUrl.match(/[#?&]error=([^&#]+)/);
           if (codeMatch) code = decodeURIComponent(codeMatch[1]);
           if (accessMatch) accessToken = decodeURIComponent(accessMatch[1]);
           if (refreshMatch) refreshToken = decodeURIComponent(refreshMatch[1]);
+          if (errDescMatch) oauthError = decodeURIComponent(errDescMatch[1].replace(/\+/g, ' '));
+          else if (errMatch) oauthError = decodeURIComponent(errMatch[1]);
+        }
+
+        if (oauthError) {
+          throw new Error(oauthError);
         }
 
         // Exchange code for session if PKCE code returned
         if (code) {
-          setStatus('Exchanging authentication code...');
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (isMountedRef.current) setStatus('Exchanging authentication code...');
+          const { error: exchangeError } = await withTimeout(
+            supabase.auth.exchangeCodeForSession(code),
+            15000,
+            'Google authorization exchange'
+          );
           if (exchangeError) throw exchangeError;
         } else if (accessToken && refreshToken) {
           // Set session if tokens present (implicit flow)
-          setStatus('Establishing secure session...');
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
+          if (isMountedRef.current) setStatus('Establishing secure session...');
+          const { error: sessionError } = await withTimeout(
+            supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            }),
+            15000,
+            'Session setup'
+          );
           if (sessionError) throw sessionError;
         }
 
@@ -90,7 +134,7 @@ export default function AuthCallbackScreen() {
         const {
           data: { session },
           error: getSessionError,
-        } = await supabase.auth.getSession();
+        } = await withTimeout(supabase.auth.getSession(), 10000, 'Session verification');
         if (getSessionError) throw getSessionError;
 
         if (!session?.user) {
@@ -98,14 +142,15 @@ export default function AuthCallbackScreen() {
         }
 
         const user = session.user;
-        setStatus('Checking security credentials...');
+        if (isMountedRef.current) setStatus('Checking security credentials...');
 
-        // Check if user already configured their account password
-        const hasPassword = Boolean(user.user_metadata?.has_password);
+        // Check if user already has an email/password credential or completed OAuth password setup
+        const providers = Array.isArray(user.app_metadata?.providers) ? user.app_metadata.providers : [];
+        const hasPassword = Boolean(user.user_metadata?.has_password) || providers.includes('email');
 
         if (!hasPassword) {
           // Google user needs to configure their password before entering the app
-          if (isMounted) {
+          if (isMountedRef.current) {
             setNeedsPasswordSetup(true);
             setLoading(false);
           }
@@ -116,7 +161,7 @@ export default function AuthCallbackScreen() {
         await completeUserSetup(user);
       } catch (err: any) {
         console.error('Google callback error in mobile:', err);
-        if (isMounted) {
+        if (isMountedRef.current) {
           setErrorMsg(err.message || 'Google authentication could not be completed.');
           setLoading(false);
         }
@@ -124,14 +169,10 @@ export default function AuthCallbackScreen() {
     }
 
     handleCallback();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [searchParams]);
+  }, [rawUrlParam, codeParam, accessTokenParam, refreshTokenParam]);
 
   const completeUserSetup = async (user: any) => {
-    setStatus('Synchronizing patient vault...');
+    if (isMountedRef.current) setStatus('Synchronizing patient vault...');
     try {
       const fullName =
         user.user_metadata?.full_name ||
@@ -139,26 +180,39 @@ export default function AuthCallbackScreen() {
         (user.email ? user.email.split('@')[0] : 'Patient User');
       const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
 
-      await api.post('/auth/sync', {
-        id: user.id,
-        email: user.email,
-        role: 'PATIENT',
-        full_name: fullName,
-        is_verified: true,
-        auth_provider: 'google',
-        profile_picture_url: avatarUrl || undefined,
-      });
+      await withTimeout(
+        api.post('/auth/sync', {
+          id: user.id,
+          email: user.email,
+          role: 'PATIENT',
+          full_name: fullName,
+          is_verified: true,
+          auth_provider: 'google',
+          profile_picture_url: avatarUrl || undefined,
+        }),
+        20000,
+        'Vault sync'
+      );
 
       if (!user.user_metadata?.role) {
-        await supabase.auth.updateUser({
-          data: { role: 'PATIENT' },
-        });
+        await withTimeout(
+          supabase.auth.updateUser({
+            data: { role: 'PATIENT' },
+          }),
+          8000,
+          'Profile update'
+        );
       }
     } catch (syncErr) {
       console.warn('Backend sync warning during mobile Google callback:', syncErr);
     }
 
-    await refresh();
+    try {
+      await withTimeout(refresh(), 8000, 'Session refresh');
+    } catch (refreshErr) {
+      console.warn('RoleProvider refresh notice during mobile Google callback:', refreshErr);
+    }
+
     router.replace('/(tabs)/patient/dashboard');
   };
 

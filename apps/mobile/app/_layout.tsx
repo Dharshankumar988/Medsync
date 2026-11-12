@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RoleProvider } from '../providers/role-provider';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { StartupSplash } from '../components/layout/StartupSplash';
+import { claimOAuthCallbackUrl } from '../services/auth.service';
 
 LogBox.ignoreLogs([
   '[EventSource] Unable to identify the line ending character',
@@ -24,6 +25,7 @@ function NavigationStack() {
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => {
       if (url && (url.includes('auth/callback') || url.includes('callback'))) {
+        if (!claimOAuthCallbackUrl(url)) return;
         router.replace({
           pathname: '/(auth)/callback',
           params: { rawUrl: url },

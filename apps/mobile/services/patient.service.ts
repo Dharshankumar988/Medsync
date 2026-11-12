@@ -1,5 +1,25 @@
+import { Linking, Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as WebBrowser from 'expo-web-browser';
 import api from '../lib/api';
 import { supabase } from '../lib/supabase';
+
+const PRESCRIPTION_CACHE_DIR = `${FileSystem.documentDirectory}prescriptions/`;
+const RECORD_CACHE_DIR = `${FileSystem.documentDirectory}records/`;
+
+const resolveBackendDownloadUrl = (rawUrl: string): { url: string; needsAuthHeader: boolean } => {
+  const trimmed = String(rawUrl || '').trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    const apiBase = String(api.defaults.baseURL || '').replace(/\/api\/v1\/?$/, '');
+    return {
+      url: trimmed,
+      needsAuthHeader: Boolean(apiBase && trimmed.startsWith(apiBase)),
+    };
+  }
+  const base = String(api.defaults.baseURL || '').replace(/\/api\/v1\/?$/, '');
+  const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return { url: `${base}${path}`, needsAuthHeader: true };
+};
 
 export interface PatientDashboardSummary {
   upcomingAppointmentsCount: number;
@@ -162,7 +182,31 @@ export const patientService = {
 
   downloadRecordWithPin: async (recordId: string, pin: string) => {
     const res = await api.post(`/records/${recordId}/download`, { pin });
-    return res.data?.data;
+    const data = res.data?.data;
+    const rawUrl = data?.url || data?.signed_url || data?.download_url;
+    if (rawUrl) {
+      try {
+        await FileSystem.makeDirectoryAsync(RECORD_CACHE_DIR, { intermediates: true });
+        const extMatch = String(rawUrl).split('?')[0].match(/\.(pdf|png|jpe?g|webp|txt)$/i);
+        const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.pdf';
+        const localUri = `${RECORD_CACHE_DIR}record_${recordId}${ext}`;
+        const { url: resolvedUrl, needsAuthHeader } = resolveBackendDownloadUrl(rawUrl);
+        let headers: Record<string, string> | undefined;
+        if (needsAuthHeader) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData.session?.access_token) {
+            headers = { Authorization: `Bearer ${sessionData.session.access_token}` };
+          }
+        }
+        const dl = await FileSystem.downloadAsync(resolvedUrl, localUri, headers ? { headers } : undefined);
+        if (dl.status === 200) {
+          return { ...data, url: resolvedUrl, localUri: dl.uri };
+        }
+      } catch (cacheErr) {
+        console.warn('Could not cache downloaded record locally:', cacheErr);
+      }
+    }
+    return data;
   },
 
   updateRecordConsent: async (recordId: string, isPublic: boolean) => {
@@ -324,14 +368,176 @@ export const patientService = {
     return (data ?? []) as PrescriptionItem[];
   },
 
+  getCachedPrescriptionPdfUri: async (prescriptionId: string): Promise<string | null> => {
+    try {
+      const localUri = `${PRESCRIPTION_CACHE_DIR}prescription_${prescriptionId}.pdf`;
+      const info = await FileSystem.getInfoAsync(localUri);
+      if (info.exists && (info.size ?? 0) > 100) {
+        return localUri;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  getCachedRecordUri: async (recordId: string, mimeType?: string): Promise<string | null> => {
+    try {
+      const preferredExt = mimeType?.includes('png')
+        ? ['.png', '.pdf', '.jpg']
+        : mimeType?.includes('jpeg') || mimeType?.includes('jpg')
+        ? ['.jpg', '.jpeg', '.pdf']
+        : ['.pdf', '.png', '.jpg'];
+      for (const ext of preferredExt) {
+        const localUri = `${RECORD_CACHE_DIR}record_${recordId}${ext}`;
+        const info = await FileSystem.getInfoAsync(localUri);
+        if (info.exists && (info.size ?? 0) > 100) {
+          return localUri;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  openLocalFile: async (localUri: string): Promise<boolean> => {
+    try {
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(localUri);
+        await Linking.openURL(contentUri);
+        return true;
+      }
+      const canOpen = await Linking.canOpenURL(localUri).catch(() => false);
+      if (canOpen) {
+        await Linking.openURL(localUri);
+        return true;
+      }
+      await WebBrowser.openBrowserAsync(localUri);
+      return true;
+    } catch (err) {
+      console.warn('openLocalFile failed:', err);
+      return false;
+    }
+  },
+
   authorizePrescriptionDownload: async (prescriptionId: string, pin: string) => {
     const formData = new FormData();
     formData.append('pin', pin);
 
-    const res = await api.post(`/prescriptions/${prescriptionId}/authorize-download`, formData, {
+    const authRes = await api.post(`/prescriptions/${prescriptionId}/authorize-download`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return res.data?.data;
+    const authData = authRes.data?.data || {};
+    const authRef = authData.authorization_reference;
+
+    let downloadTargetUrl: string | null = null;
+    if (authRef) {
+      const dlMetaRes = await api.get(`/prescriptions/download/${authRef}`);
+      downloadTargetUrl = dlMetaRes.data?.data?.url || null;
+    }
+
+    if (!downloadTargetUrl) {
+      downloadTargetUrl = `/api/v1/prescriptions/${prescriptionId}/download`;
+    }
+
+    await FileSystem.makeDirectoryAsync(PRESCRIPTION_CACHE_DIR, { intermediates: true });
+    const localUri = `${PRESCRIPTION_CACHE_DIR}prescription_${prescriptionId}.pdf`;
+
+    const tryDownload = async (rawTarget: string) => {
+      const { url: resolvedUrl, needsAuthHeader } = resolveBackendDownloadUrl(rawTarget);
+      let headers: Record<string, string> | undefined;
+      if (needsAuthHeader) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session?.access_token) {
+          headers = { Authorization: `Bearer ${sessionData.session.access_token}` };
+        }
+      }
+      const res = await FileSystem.downloadAsync(resolvedUrl, localUri, headers ? { headers } : undefined);
+      const info = await FileSystem.getInfoAsync(localUri);
+      if (res.status !== 200 || !info.exists || (info.size ?? 0) < 100) {
+        await FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => {});
+        throw new Error(`PDF download returned status ${res.status}`);
+      }
+      return { resolvedUrl, localUri };
+    };
+
+    try {
+      const { resolvedUrl } = await tryDownload(downloadTargetUrl);
+      return { ...authData, url: resolvedUrl, localUri };
+    } catch (primaryErr) {
+      // Fallback to authenticated direct PDF stream endpoint
+      const fallbackPath = `/api/v1/prescriptions/${prescriptionId}/download`;
+      if (downloadTargetUrl !== fallbackPath) {
+        const { resolvedUrl } = await tryDownload(fallbackPath);
+        return { ...authData, url: resolvedUrl, localUri };
+      }
+      throw primaryErr;
+    }
+  },
+
+  // ── Verified Pharmacies ──
+  getVerifiedPharmacies: async (): Promise<Array<{
+    pharmacy_id: string;
+    user_id: string;
+    business_name: string;
+    address: string;
+    city?: string | null;
+    phone: string;
+    is_24x7?: boolean;
+    is_verified?: boolean;
+  }>> => {
+    const { data: pharmacies, error } = await supabase
+      .from('pharmacies')
+      .select('id, user_id, business_name, address, city, contact_number, is_24x7, qr_status')
+      .order('business_name', { ascending: true });
+
+    if (error || !pharmacies) {
+      return [];
+    }
+
+    const activePharmacies = pharmacies.filter(
+      (p: any) => String(p.qr_status || 'ACTIVE').toUpperCase() !== 'SUSPENDED'
+    );
+
+    const userIds = activePharmacies.map((p: any) => p.user_id).filter(Boolean);
+    let userMap = new Map<string, { status?: string; is_verified?: boolean }>();
+    if (userIds.length > 0) {
+      try {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, status, is_verified')
+          .in('id', userIds);
+        if (usersData) {
+          userMap = new Map(usersData.map((u: any) => [u.id, u]));
+        }
+      } catch {
+        // Fallback cleanly if users lookup is restricted
+      }
+    }
+
+    const mapped = activePharmacies
+      .filter((p: any) => {
+        const u = userMap.get(p.user_id);
+        if (u && String(u.status || '').toUpperCase() === 'SUSPENDED') return false;
+        return true;
+      })
+      .map((p: any) => {
+        const u = userMap.get(p.user_id);
+        return {
+          pharmacy_id: p.user_id || p.id,
+          user_id: p.user_id || p.id,
+          business_name: p.business_name || 'MedSync Network Pharmacy',
+          address: [p.address, p.city].filter(Boolean).join(', ') || 'Verified City Dispensary',
+          city: p.city || null,
+          phone: p.contact_number || '',
+          is_24x7: Boolean(p.is_24x7),
+          is_verified: u ? Boolean(u.is_verified) : true,
+        };
+      });
+
+    // Show verified pharmacies first while preserving alphabetical order within groups
+    return mapped.sort((a, b) => Number(b.is_verified) - Number(a.is_verified));
   },
 
   // ── Medicine Orders ──

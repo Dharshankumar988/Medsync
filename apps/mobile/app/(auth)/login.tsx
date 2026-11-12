@@ -30,7 +30,7 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { authService } from '../../services/auth.service';
+import { authService, claimOAuthCallbackUrl } from '../../services/auth.service';
 import { biometricsService } from '../../lib/biometrics';
 import { useTheme } from '../../context/ThemeContext';
 import { formatErrorMessage } from '../../lib/api';
@@ -99,8 +99,8 @@ export default function LoginScreen() {
     setError('');
     try {
       const res = await authService.signInWithGoogle();
-      if (res?.url) {
-        router.push({
+      if (res?.url && claimOAuthCallbackUrl(res.url)) {
+        router.replace({
           pathname: '/(auth)/callback',
           params: { rawUrl: res.url },
         });

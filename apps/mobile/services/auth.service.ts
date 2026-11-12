@@ -5,6 +5,20 @@ import * as WebBrowser from 'expo-web-browser';
 
 WebBrowser.maybeCompleteAuthSession();
 
+let lastOAuthUrl: string | null = null;
+let lastOAuthAt = 0;
+
+export function claimOAuthCallbackUrl(url: string): boolean {
+  if (!url) return false;
+  const now = Date.now();
+  if (lastOAuthUrl === url && now - lastOAuthAt < 10000) {
+    return false;
+  }
+  lastOAuthUrl = url;
+  lastOAuthAt = now;
+  return true;
+}
+
 export const authService = {
   login: async (credentials: { email: string; password: string }) => {
     const { data, error } = await supabase.auth.signInWithPassword({

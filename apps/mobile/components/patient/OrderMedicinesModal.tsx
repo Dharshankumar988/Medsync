@@ -29,6 +29,9 @@ import {
   Compass,
   Check,
   Pill,
+  Search,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -82,6 +85,10 @@ export function OrderMedicinesModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
   const [defaultPharmacy, setDefaultPharmacy] = useState<any | null>(null);
+  const [pharmacies, setPharmacies] = useState<any[]>([]);
+  const [selectedPharmacy, setSelectedPharmacy] = useState<any | null>(null);
+  const [pharmacyPickerOpen, setPharmacyPickerOpen] = useState(false);
+  const [pharmacySearch, setPharmacySearch] = useState('');
 
   // Map & Pin location modal
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
@@ -98,12 +105,17 @@ export function OrderMedicinesModal({
     if (visible) {
       setStep('order_details');
       setCreatedOrder(null);
+      setPharmacyPickerOpen(false);
+      setPharmacySearch('');
+      setSelectedPharmacy(null);
       if (initialPrescriptionId) {
         setSelectedPrescriptionId(initialPrescriptionId);
       }
       loadInitialData();
     } else {
       setSelectedPrescriptionId(null);
+      setSelectedPharmacy(null);
+      setPharmacyPickerOpen(false);
       setNotes('');
     }
   }, [visible, initialPrescriptionId]);
@@ -111,7 +123,7 @@ export function OrderMedicinesModal({
   const loadInitialData = async () => {
     setLoadingPrescriptions(true);
     try {
-      const [rxs, profile, fallbackPharmacy] = await Promise.all([
+      const [rxs, profile, pharmaciesList] = await Promise.all([
         patientService.getPrescriptions().catch(() => []),
         (async () => {
           try {
@@ -125,34 +137,20 @@ export function OrderMedicinesModal({
             return null;
           }
         })(),
-        (async () => {
-          if (
-            !pharmacyData?.pharmacy_id &&
-            !pharmacyData?.pharmacy_user_id &&
-            !pharmacyData?.resource_id
-          ) {
-            try {
-              const { data: pharm } = await supabase
-                .from('pharmacies')
-                .select('*')
-                .limit(1)
-                .single();
-              return pharm;
-            } catch {
-              return null;
-            }
-          }
-          return null;
-        })(),
+        patientService.getVerifiedPharmacies().catch(() => []),
       ]);
 
-      if (fallbackPharmacy) {
-        setDefaultPharmacy({
-          pharmacy_id: fallbackPharmacy.user_id || fallbackPharmacy.id,
-          business_name: fallbackPharmacy.business_name || 'MedSync Network Pharmacy',
-          address: fallbackPharmacy.address || 'Verified City Dispensary',
-          phone: fallbackPharmacy.contact_number || fallbackPharmacy.phone_number || '',
-        });
+      setPharmacies(pharmaciesList);
+
+      if (pharmaciesList.length > 0) {
+        const matchedDefault = defaultPharmacyId
+          ? pharmaciesList.find(
+              (p: any) => p.pharmacy_id === defaultPharmacyId || p.user_id === defaultPharmacyId
+            )
+          : null;
+        setDefaultPharmacy(matchedDefault || pharmaciesList[0]);
+      } else {
+        setDefaultPharmacy(null);
       }
 
       setPrescriptions(rxs);
@@ -174,7 +172,7 @@ export function OrderMedicinesModal({
     }
   };
 
-  const activePharm = pharmacyData || defaultPharmacy;
+  const activePharm = selectedPharmacy || pharmacyData || defaultPharmacy;
   const pharmacyId =
     activePharm?.pharmacy_user_id ||
     activePharm?.pharmacy_id ||
@@ -649,7 +647,7 @@ export function OrderMedicinesModal({
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
               >
-                {/* Pharmacy Context Banner */}
+                {/* Pharmacy Context Banner & Selector */}
                 <View
                   style={[
                     styles.pharmacyCard,
@@ -671,7 +669,7 @@ export function OrderMedicinesModal({
                   </View>
                   <View style={styles.metaRow}>
                     <MapPin size={13} color={isDark ? '#6EE7B7' : '#64748B'} />
-                    <Text style={[styles.pharmacyMeta, { color: isDark ? '#A7F3D0' : '#475569' }]}>
+                    <Text style={[styles.pharmacyMeta, { color: isDark ? '#A7F3D0' : '#475569', flex: 1 }]}>
                       {pharmacyAddress}
                     </Text>
                   </View>
@@ -683,7 +681,138 @@ export function OrderMedicinesModal({
                       </Text>
                     </View>
                   ) : null}
+
+                  {pharmacies.length > 1 && (
+                    <TouchableOpacity
+                      style={[
+                        styles.changePharmacyBtn,
+                        {
+                          backgroundColor: isDark ? 'rgba(16, 185, 129, 0.14)' : '#D1FAE5',
+                          borderColor: isDark ? 'rgba(16, 185, 129, 0.32)' : '#6EE7B7',
+                        },
+                      ]}
+                      onPress={() => setPharmacyPickerOpen((prev) => !prev)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.changePharmacyBtnText,
+                          { color: isDark ? '#34D399' : '#065F46' },
+                        ]}
+                      >
+                        {pharmacyPickerOpen
+                          ? 'Hide Pharmacy List'
+                          : `Change Pharmacy (${pharmacies.length} available)`}
+                      </Text>
+                      {pharmacyPickerOpen ? (
+                        <ChevronUp size={15} color={isDark ? '#34D399' : '#065F46'} />
+                      ) : (
+                        <ChevronDown size={15} color={isDark ? '#34D399' : '#065F46'} />
+                      )}
+                    </TouchableOpacity>
+                  )}
                 </View>
+
+                {pharmacyPickerOpen && pharmacies.length > 0 && (
+                  <View
+                    style={[
+                      styles.pharmacyPickerBox,
+                      {
+                        backgroundColor: isDark ? '#12141A' : '#F8FAFC',
+                        borderColor: isDark ? '#1F2430' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.pharmacySearchRow,
+                        {
+                          backgroundColor: isDark ? '#181B22' : '#FFFFFF',
+                          borderColor: isDark ? '#272B36' : '#CBD5E1',
+                        },
+                      ]}
+                    >
+                      <Search size={15} color={theme.textMuted} />
+                      <TextInput
+                        style={[styles.pharmacySearchInput, { color: theme.text }]}
+                        value={pharmacySearch}
+                        onChangeText={setPharmacySearch}
+                        placeholder="Search pharmacy name or area..."
+                        placeholderTextColor={theme.textMuted}
+                      />
+                    </View>
+
+                    <ScrollView
+                      style={styles.pharmacyPickerList}
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {pharmacies
+                        .filter((p) => {
+                          const q = pharmacySearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            String(p.business_name || '').toLowerCase().includes(q) ||
+                            String(p.address || '').toLowerCase().includes(q) ||
+                            String(p.city || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((p) => {
+                          const pId = p.user_id || p.pharmacy_id;
+                          const isCurrent = pId === pharmacyId;
+                          return (
+                            <TouchableOpacity
+                              key={pId}
+                              style={[
+                                styles.pharmacyOptionRow,
+                                {
+                                  backgroundColor: isCurrent
+                                    ? isDark
+                                      ? 'rgba(16, 185, 129, 0.14)'
+                                      : '#ECFDF5'
+                                    : isDark
+                                    ? '#161922'
+                                    : '#FFFFFF',
+                                  borderColor: isCurrent
+                                    ? '#10B981'
+                                    : isDark
+                                    ? '#242936'
+                                    : '#E2E8F0',
+                                },
+                              ]}
+                              onPress={() => {
+                                Haptics.selectionAsync().catch(() => {});
+                                setSelectedPharmacy(p);
+                                setPharmacyPickerOpen(false);
+                              }}
+                              activeOpacity={0.85}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.pharmacyOptionName, { color: theme.text }]}>
+                                  {p.business_name}
+                                </Text>
+                                <Text
+                                  style={[styles.pharmacyOptionMeta, { color: theme.textMuted }]}
+                                  numberOfLines={1}
+                                >
+                                  {p.address}
+                                  {p.is_24x7 ? ' • 24x7' : ''}
+                                </Text>
+                              </View>
+                              <View
+                                style={[
+                                  styles.radioCircle,
+                                  isCurrent && styles.radioCircleSelected,
+                                ]}
+                              >
+                                {isCurrent && <View style={styles.radioInner} />}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </ScrollView>
+                  </View>
+                )}
 
                 {/* Prescription Selector (Strictly from verified prescriptions) */}
                 <View style={styles.section}>
@@ -1274,5 +1403,59 @@ const styles = StyleSheet.create({
   closeSuccessBtnText: {
     fontSize: 13.5,
     fontWeight: '600',
+  },
+  changePharmacyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  changePharmacyBtnText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  pharmacyPickerBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 10,
+  },
+  pharmacySearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    height: 40,
+  },
+  pharmacySearchInput: {
+    flex: 1,
+    fontSize: 13,
+    height: '100%',
+  },
+  pharmacyPickerList: {
+    maxHeight: 220,
+  },
+  pharmacyOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+  },
+  pharmacyOptionName: {
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  pharmacyOptionMeta: {
+    fontSize: 11.5,
+    marginTop: 2,
   },
 });

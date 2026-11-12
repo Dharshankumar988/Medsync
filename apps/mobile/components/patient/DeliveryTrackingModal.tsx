@@ -26,19 +26,32 @@ import { useTheme } from '../../context/ThemeContext';
 interface DeliveryTrackingModalProps {
   visible: boolean;
   onClose: () => void;
+  order?: any | null;
   orderId?: string | null;
   trackingNumber?: string | null;
+  orderStatus?: string | null;
+  pharmacyName?: string | null;
+  deliveryAddress?: string | null;
 }
 
 export function DeliveryTrackingModal({
   visible,
   onClose,
+  order,
   orderId,
   trackingNumber,
+  orderStatus,
+  pharmacyName,
+  deliveryAddress,
 }: DeliveryTrackingModalProps) {
   const { theme, isDark } = useTheme();
   const [deliveries, setDeliveries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const effectiveOrderId = orderId || order?.id || null;
+  const effectiveTrackingNumber = trackingNumber || order?.tracking_number || null;
+  const effectiveAddress = deliveryAddress || order?.delivery_address || null;
+  const rawOrderStatus = String(orderStatus || order?.status || '').toUpperCase();
 
   const fetchActiveDelivery = async () => {
     try {
@@ -55,14 +68,36 @@ export function DeliveryTrackingModal({
   };
 
   useEffect(() => {
-    if (visible) {
-      fetchActiveDelivery();
-      const interval = setInterval(fetchActiveDelivery, 6000);
-      return () => clearInterval(interval);
+    if (!visible) return;
+    if (rawOrderStatus === 'DELIVERED' || rawOrderStatus === 'CANCELLED') {
+      setLoading(false);
+      return;
     }
-  }, [visible]);
+    fetchActiveDelivery();
+    const interval = setInterval(fetchActiveDelivery, 6000);
+    return () => clearInterval(interval);
+  }, [visible, rawOrderStatus]);
 
-  const activeDelivery = deliveries.length > 0 ? deliveries[0] : null;
+  const activeDelivery =
+    (effectiveOrderId
+      ? deliveries.find(
+          (d) => d.order_id === effectiveOrderId || d.dispensing_log_id === effectiveOrderId
+        )
+      : null) || (rawOrderStatus === 'DELIVERED' ? null : deliveries[0] || null);
+
+  const resolvedStatus = String(
+    rawOrderStatus === 'DELIVERED' || rawOrderStatus === 'CANCELLED'
+      ? rawOrderStatus
+      : activeDelivery?.delivery_status || rawOrderStatus || 'PROCESSING'
+  ).toUpperCase();
+
+  const isDelivered = resolvedStatus === 'DELIVERED';
+  const isCancelled = resolvedStatus === 'CANCELLED';
+  const isInTransit = ['SHIPPED', 'OUT_FOR_DELIVERY', 'DISPATCHED', 'IN_TRANSIT'].includes(
+    resolvedStatus
+  );
+  const resolvedPharmacyName =
+    activeDelivery?.pharmacy_name || pharmacyName || order?.pharmacy_name || 'MedSync Network Pharmacy';
 
   return (
     <Modal
@@ -79,15 +114,36 @@ export function DeliveryTrackingModal({
               <View
                 style={[
                   styles.iconCircle,
-                  { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.14)' : '#F0F9FF' },
+                  {
+                    backgroundColor: isDelivered
+                      ? isDark
+                        ? 'rgba(16, 185, 129, 0.16)'
+                        : '#ECFDF5'
+                      : isDark
+                      ? 'rgba(56, 189, 248, 0.14)'
+                      : '#F0F9FF',
+                  },
                 ]}
               >
-                <Truck size={22} color={theme.accent} />
+                {isDelivered ? (
+                  <CheckCircle2 size={22} color="#10B981" />
+                ) : (
+                  <Truck size={22} color={theme.accent} />
+                )}
               </View>
               <View style={{ marginLeft: 12 }}>
-                <Text style={[styles.title, { color: theme.text }]}>Live Delivery Tracking</Text>
+                <Text style={[styles.title, { color: theme.text }]}>
+                  {isDelivered
+                    ? 'Delivery Completed'
+                    : isCancelled
+                    ? 'Order Cancelled'
+                    : 'Live Delivery Tracking'}
+                </Text>
                 <Text style={[styles.subtitle, { color: theme.textMuted }]}>
-                  {trackingNumber || (orderId ? `Order #${orderId.substring(0, 8)}` : 'Prescription Express')}
+                  {effectiveTrackingNumber ||
+                    (effectiveOrderId
+                      ? `Order #${effectiveOrderId.substring(0, 8)}`
+                      : 'Prescription Express')}
                 </Text>
               </View>
             </View>
@@ -97,34 +153,93 @@ export function DeliveryTrackingModal({
             </TouchableOpacity>
           </View>
 
-          {loading && !activeDelivery ? (
+          {loading && !activeDelivery && !isDelivered && !isCancelled ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={theme.accent} />
               <Text style={[styles.loadingText, { color: theme.textMuted }]}>Connecting to Courier GPS...</Text>
             </View>
           ) : (
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Delivery ETA Badge */}
+              {/* Delivery Status Banner */}
               <View
                 style={[
                   styles.etaCard,
                   {
-                    backgroundColor: isDark ? 'rgba(56, 189, 248, 0.08)' : '#F0F9FF',
-                    borderColor: isDark ? 'rgba(56, 189, 248, 0.22)' : '#BAE6FD',
+                    backgroundColor: isDelivered
+                      ? isDark
+                        ? 'rgba(16, 185, 129, 0.1)'
+                        : '#ECFDF5'
+                      : isCancelled
+                      ? isDark
+                        ? 'rgba(239, 68, 68, 0.1)'
+                        : '#FEF2F2'
+                      : isDark
+                      ? 'rgba(56, 189, 248, 0.08)'
+                      : '#F0F9FF',
+                    borderColor: isDelivered
+                      ? isDark
+                        ? 'rgba(16, 185, 129, 0.28)'
+                        : '#A7F3D0'
+                      : isCancelled
+                      ? isDark
+                        ? 'rgba(239, 68, 68, 0.28)'
+                        : '#FCA5A5'
+                      : isDark
+                      ? 'rgba(56, 189, 248, 0.22)'
+                      : '#BAE6FD',
                   },
                 ]}
               >
                 <View style={styles.etaHeader}>
-                  <Clock size={18} color={theme.accent} />
-                  <Text style={[styles.etaLabel, { color: theme.accent }]}>Estimated Arrival</Text>
+                  {isDelivered ? (
+                    <CheckCircle2 size={18} color="#10B981" />
+                  ) : isCancelled ? (
+                    <AlertCircle size={18} color="#EF4444" />
+                  ) : (
+                    <Clock size={18} color={theme.accent} />
+                  )}
+                  <Text
+                    style={[
+                      styles.etaLabel,
+                      {
+                        color: isDelivered
+                          ? '#10B981'
+                          : isCancelled
+                          ? '#EF4444'
+                          : theme.accent,
+                      },
+                    ]}
+                  >
+                    {isDelivered
+                      ? 'Order Status'
+                      : isCancelled
+                      ? 'Order Status'
+                      : isInTransit
+                      ? 'Estimated Arrival'
+                      : 'Fulfillment Status'}
+                  </Text>
                 </View>
                 <Text style={[styles.etaTime, { color: theme.text }]}>
-                  {activeDelivery?.estimated_delivery_minutes
-                    ? `${activeDelivery.estimated_delivery_minutes} Mins`
-                    : '18 - 25 Mins'}
+                  {isDelivered
+                    ? 'Delivered'
+                    : isCancelled
+                    ? 'Cancelled'
+                    : isInTransit
+                    ? activeDelivery?.estimated_delivery_minutes
+                      ? `${activeDelivery.estimated_delivery_minutes} Mins`
+                      : '18 - 25 Mins'
+                    : 'Preparing Order'}
                 </Text>
                 <Text style={[styles.etaSub, { color: theme.textMuted }]}>
-                  Courier is currently navigating to your address
+                  {isDelivered
+                    ? effectiveAddress
+                      ? `Handed over at ${effectiveAddress}`
+                      : 'Medications delivered & signed off'
+                    : isCancelled
+                    ? 'This medicine order has been cancelled.'
+                    : isInTransit
+                    ? 'Courier is currently navigating to your address'
+                    : 'Your verified pharmacy is packing your prescription'}
                 </Text>
               </View>
 
@@ -138,48 +253,108 @@ export function DeliveryTrackingModal({
                   <View style={styles.stepContent}>
                     <Text style={[styles.stepTitle, { color: theme.text }]}>Prescription Verified & Packed</Text>
                     <Text style={[styles.stepDesc, { color: theme.textMuted }]}>
-                      {activeDelivery?.pharmacy_name || 'Verified Network Pharmacy'} — Sealed in tamper-evident pouch
+                      {resolvedPharmacyName} — Sealed in tamper-evident pouch
                     </Text>
                   </View>
                 </View>
 
                 {/* Line */}
-                <View style={styles.stepLine} />
+                <View
+                  style={[
+                    styles.stepLine,
+                    { backgroundColor: isInTransit || isDelivered ? '#10B981' : theme.border },
+                  ]}
+                />
 
                 {/* Step 2: In Transit */}
                 <View style={styles.timelineStep}>
-                  <View style={[styles.stepDot, { backgroundColor: theme.accent }]}>
-                    <Truck size={14} color="#09090B" />
+                  <View
+                    style={[
+                      styles.stepDot,
+                      isDelivered
+                        ? styles.stepDotDone
+                        : isInTransit
+                        ? { backgroundColor: theme.accent }
+                        : { backgroundColor: theme.cardElevated },
+                    ]}
+                  >
+                    {isDelivered ? (
+                      <CheckCircle2 size={14} color="#FFFFFF" />
+                    ) : (
+                      <Truck size={14} color={isInTransit ? '#09090B' : theme.textMuted} />
+                    )}
                   </View>
                   <View style={styles.stepContent}>
-                    <Text style={[styles.stepTitle, { color: theme.accent }]}>Out for Delivery</Text>
+                    <Text
+                      style={[
+                        styles.stepTitle,
+                        {
+                          color: isDelivered
+                            ? theme.text
+                            : isInTransit
+                            ? theme.accent
+                            : theme.textMuted,
+                        },
+                      ]}
+                    >
+                      Out for Delivery
+                    </Text>
                     <Text style={[styles.stepDesc, { color: theme.textMuted }]}>
-                      Partner courier is en route with cold-chain storage
+                      {isDelivered
+                        ? 'Partner courier completed cold-chain transit'
+                        : isInTransit
+                        ? 'Partner courier is en route with cold-chain storage'
+                        : 'Waiting for courier pickup from pharmacy'}
                     </Text>
                   </View>
                 </View>
 
                 {/* Line */}
-                <View style={[styles.stepLine, { backgroundColor: theme.border }]} />
+                <View
+                  style={[
+                    styles.stepLine,
+                    { backgroundColor: isDelivered ? '#10B981' : theme.border },
+                  ]}
+                />
 
                 {/* Step 3: Delivered */}
                 <View style={styles.timelineStep}>
-                  <View style={[styles.stepDot, { backgroundColor: theme.cardElevated }]}>
-                    <MapPin size={14} color={theme.textMuted} />
+                  <View
+                    style={[
+                      styles.stepDot,
+                      isDelivered ? styles.stepDotDone : { backgroundColor: theme.cardElevated },
+                    ]}
+                  >
+                    {isDelivered ? (
+                      <CheckCircle2 size={14} color="#FFFFFF" />
+                    ) : (
+                      <MapPin size={14} color={theme.textMuted} />
+                    )}
                   </View>
                   <View style={styles.stepContent}>
-                    <Text style={[styles.stepTitle, { color: theme.textMuted }]}>Delivered & Handed Over</Text>
-                    <Text style={[styles.stepDesc, { color: theme.textMuted }]}>Contactless delivery at patient address</Text>
+                    <Text
+                      style={[
+                        styles.stepTitle,
+                        { color: isDelivered ? '#10B981' : theme.textMuted },
+                      ]}
+                    >
+                      Delivered & Handed Over
+                    </Text>
+                    <Text style={[styles.stepDesc, { color: theme.textMuted }]}>
+                      {isDelivered
+                        ? effectiveAddress || 'Delivery confirmed at patient address'
+                        : 'Contactless delivery at patient address'}
+                    </Text>
                   </View>
                 </View>
               </View>
 
               {/* Pharmacy Info Card */}
               <View style={[styles.partnerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Store size={20} color={theme.accent} />
+                <Store size={20} color={isDelivered ? '#10B981' : theme.accent} />
                 <View style={{ marginLeft: 10, flex: 1 }}>
                   <Text style={[styles.partnerTitle, { color: theme.text }]}>
-                    {activeDelivery?.pharmacy_name || 'MedSync Network Pharmacy'}
+                    {resolvedPharmacyName}
                   </Text>
                   <Text style={[styles.partnerSub, { color: theme.textMuted }]}>Authorized Dispensary Partner</Text>
                 </View>
@@ -197,7 +372,9 @@ export function DeliveryTrackingModal({
             onPress={onClose}
             activeOpacity={0.88}
           >
-            <Text style={[styles.doneBtnText, { color: theme.primaryButtonText }]}>Close Tracking</Text>
+            <Text style={[styles.doneBtnText, { color: theme.primaryButtonText }]}>
+              {isDelivered ? 'Done' : 'Close Tracking'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -141,11 +141,8 @@ async def authorize_prescription_download(
         
     if rx.patient_id != current_user.id and rx.doctor_id != current_user.id and str(current_user.role).upper() != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="Unauthorized to download this prescription")
-        
-    if not rx.pdf_url:
-        raise HTTPException(status_code=404, detail="PDF not generated for this prescription")
 
-    # If the user is the patient, enforce MFA
+    # If the user is the patient, enforce MFA (PDF is fetched or reconstructed on download if pdf_url is empty)
     if str(current_user.role).upper() == UserRole.PATIENT.value:
         from app.models.user import User
         from app.services.security_service import validate_patient_pin, create_download_authorization
