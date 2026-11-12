@@ -5,10 +5,10 @@ import {
   View,
   Modal,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { Pill, X, ShieldCheck, CheckCircle2 } from 'lucide-react-native';
+import { Pill, X, ShieldCheck } from 'lucide-react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 interface PrescriptionQRModalProps {
   visible: boolean;
@@ -21,6 +21,8 @@ export function PrescriptionQRModal({
   onClose,
   prescription,
 }: PrescriptionQRModalProps) {
+  const { theme, isDark } = useTheme();
+
   if (!prescription) return null;
 
   const qrPayload = JSON.stringify({
@@ -41,36 +43,46 @@ export function PrescriptionQRModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalBackdrop}>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
           {/* Header */}
           <View style={styles.headerRow}>
-            <View style={styles.iconCircle}>
-              <Pill size={22} color="#2563EB" />
+            <View
+              style={[
+                styles.iconCircle,
+                {
+                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.14)' : '#F0F9FF',
+                  borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
+                },
+              ]}
+            >
+              <Pill size={22} color={theme.accent} />
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color="#64748B" />
+              <X size={20} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.title}>Prescription QR Code</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: theme.text }]}>Prescription QR Code</Text>
+          <Text style={[styles.subtitle, { color: theme.textMuted }]}>
             Show this digital QR code to any verified MedSync pharmacist for counter dispensing.
           </Text>
 
-          {/* QR Code */}
-          <View style={styles.qrWrapper}>
+          {/* QR Code (Always white quiet zone for reliable camera scanning) */}
+          <View style={[styles.qrWrapper, { borderColor: theme.border }]}>
             <QRCode
               value={qrPayload}
-              size={210}
-              color="#0F172A"
+              size={200}
+              color="#09090B"
               backgroundColor="#FFFFFF"
             />
           </View>
 
           {/* Details */}
           <View style={styles.detailsBox}>
-            <Text style={styles.detailTitle}>{prescription.diagnosis || 'Prescription'}</Text>
-            <Text style={styles.detailSub}>
+            <Text style={[styles.detailTitle, { color: theme.text }]}>
+              {prescription.diagnosis || 'Prescription'}
+            </Text>
+            <Text style={[styles.detailSub, { color: theme.textMuted }]}>
               Issued: {new Date(prescription.created_at).toLocaleDateString()}
             </Text>
             <View style={styles.statusRow}>
@@ -80,11 +92,11 @@ export function PrescriptionQRModal({
           </View>
 
           <TouchableOpacity
-            style={styles.doneBtn}
+            style={[styles.doneBtn, { backgroundColor: theme.primaryButton }]}
             onPress={onClose}
             activeOpacity={0.88}
           >
-            <Text style={styles.doneBtnText}>Done</Text>
+            <Text style={[styles.doneBtnText, { color: theme.primaryButtonText }]}>Done</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -95,21 +107,21 @@ export function PrescriptionQRModal({
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 26,
+    borderRadius: 24,
+    borderWidth: 1,
     padding: 24,
     width: '100%',
     maxWidth: 360,
     alignItems: 'center',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.28,
     shadowRadius: 28,
     elevation: 8,
   },
@@ -123,8 +135,8 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 44,
     height: 44,
-    borderRadius: 16,
-    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+    borderRadius: 14,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -134,12 +146,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 19,
     fontWeight: '800',
-    color: '#0F172A',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 12.5,
-    color: '#64748B',
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 18,
@@ -148,14 +158,8 @@ const styles = StyleSheet.create({
   qrWrapper: {
     padding: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    borderRadius: 18,
+    borderWidth: 1,
     marginBottom: 16,
   },
   detailsBox: {
@@ -165,17 +169,15 @@ const styles = StyleSheet.create({
   detailTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0F172A',
   },
   detailSub: {
     fontSize: 12,
-    color: '#64748B',
     marginTop: 2,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -188,7 +190,6 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   doneBtn: {
-    backgroundColor: '#2563EB',
     width: '100%',
     height: 48,
     borderRadius: 14,
@@ -198,6 +199,5 @@ const styles = StyleSheet.create({
   doneBtnText: {
     fontSize: 14.5,
     fontWeight: '700',
-    color: '#FFFFFF',
   },
 });

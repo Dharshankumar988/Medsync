@@ -19,6 +19,7 @@ import {
   Stethoscope
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeScanBoxes } from "@/lib/scan-box-utils";
 import { DetectionFinding } from "./MedicalScanViewerModal";
 
 interface DetectionCardProps {
@@ -36,6 +37,7 @@ export function DetectionCard({
   const [isExpanded, setIsExpanded] = useState(true);
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [clientBoxes, setClientBoxes] = useState<any[]>([]);
 
   const explicitBoxes = detection.boxes || [];
@@ -43,6 +45,12 @@ export function DetectionCard({
   const topPredictions = detection.top_predictions || [];
 
   const isSkinScan = (detection.scan_type || "").toLowerCase().includes("skin");
+  const normalizedBoxes = normalizeScanBoxes(
+    activeBoxes,
+    naturalSize.width,
+    naturalSize.height,
+    isSkinScan ? "Detected Lesion" : detection.diagnosis || "Detected ROI"
+  );
 
   // Client-side lesion detection fallback if no bounding boxes were returned
   const detectLesionOnImage = useCallback((imgElement: HTMLImageElement) => {
@@ -114,8 +122,13 @@ export function DetectionCard({
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     setImgLoaded(true);
-    if (explicitBoxes.length === 0) {
-      const detected = detectLesionOnImage(e.currentTarget);
+    const imgEl = e.currentTarget;
+    setNaturalSize({
+      width: imgEl.naturalWidth || 0,
+      height: imgEl.naturalHeight || 0,
+    });
+    if (explicitBoxes.length === 0 && isSkinScan) {
+      const detected = detectLesionOnImage(imgEl);
       if (detected && detected.length > 0) {
         setClientBoxes(detected);
       }
@@ -270,57 +283,49 @@ export function DetectionCard({
                   </div>
                 )}
 
-                <div className="relative inline-flex items-center justify-center max-h-72">
+                <div className="relative inline-block max-h-72">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={imageUrl}
                     alt={scanMeta.label}
                     onLoad={handleImageLoad}
                     onError={() => setImgError(true)}
-                    className="max-h-72 w-auto object-contain cursor-pointer transition-transform duration-200 group-hover:scale-[1.01]"
+                    className="block max-h-72 w-auto h-auto cursor-pointer transition-transform duration-200 group-hover:scale-[1.01]"
                     onClick={onInspectImage}
                   />
 
-                  {/* Bounding Box Overlay tightly fitted to image */}
-                  {showAnnotations && activeBoxes.length > 0 && imgLoaded && (
-                    <svg
-                      className="absolute inset-0 w-full h-full pointer-events-none"
-                      viewBox="0 0 100 100"
-                      preserveAspectRatio="none"
-                    >
-                      {activeBoxes.map((rawBox, i) => {
-                        const box = Array.isArray(rawBox) 
-                          ? rawBox 
-                          : (rawBox?.coordinates || rawBox?.bbox || [0, 0, 0, 0]);
-                        
-                        const isNormalized = box[0] <= 1.05 && box[2] <= 1.05;
-                        const x = isNormalized ? box[0] * 100 : box[0];
-                        const y = isNormalized ? box[1] * 100 : box[1];
-                        const width = isNormalized ? (box[2] - box[0]) * 100 : box[2] - box[0];
-                        const height = isNormalized ? (box[3] - box[1]) * 100 : box[3] - box[1];
-
+                  {/* Solid Bounding Box Overlay tightly fitted to image */}
+                  {showAnnotations && normalizedBoxes.length > 0 && imgLoaded && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      {normalizedBoxes.map((b, i) => {
+                        const labelInside = b.topPct < 12;
                         return (
-                          <g key={i}>
-                            <rect
-                              x={`${Math.max(0, x)}%`}
-                              y={`${Math.max(0, y)}%`}
-                              width={`${Math.max(3, width)}%`}
-                              height={`${Math.max(3, height)}%`}
-                              fill="rgba(239, 68, 68, 0.16)"
-                              stroke="#ef4444"
-                              strokeWidth="2.5"
-                              strokeDasharray="4"
-                              className="drop-shadow-md animate-pulse"
-                            />
-                            {/* Corner marks */}
-                            <line x1={`${x}%`} y1={`${y}%`} x2={`${x + Math.min(width * 0.25, 4)}%`} y2={`${y}%`} stroke="#ef4444" strokeWidth="3" />
-                            <line x1={`${x}%`} y1={`${y}%`} x2={`${x}%`} y2={`${y + Math.min(height * 0.25, 4)}%`} stroke="#ef4444" strokeWidth="3" />
-                            <line x1={`${x + width}%`} y1={`${y + height}%`} x2={`${x + width - Math.min(width * 0.25, 4)}%`} y2={`${y + height}%`} stroke="#ef4444" strokeWidth="3" />
-                            <line x1={`${x + width}%`} y1={`${y + height}%`} x2={`${x + width}%`} y2={`${y + height - Math.min(height * 0.25, 4)}%`} stroke="#ef4444" strokeWidth="3" />
-                          </g>
+                          <div
+                            key={i}
+                            style={{
+                              left: `${b.leftPct}%`,
+                              top: `${b.topPct}%`,
+                              width: `${b.widthPct}%`,
+                              height: `${b.heightPct}%`,
+                            }}
+                            className="absolute border-2 border-solid border-rose-500 bg-rose-500/15"
+                          >
+                            <span className="absolute -top-0.5 -left-0.5 w-2 h-2 border-t-[3px] border-l-[3px] border-rose-400" />
+                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 border-t-[3px] border-r-[3px] border-rose-400" />
+                            <span className="absolute -bottom-0.5 -left-0.5 w-2 h-2 border-b-[3px] border-l-[3px] border-rose-400" />
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 border-b-[3px] border-r-[3px] border-rose-400" />
+                            <span
+                              className={cn(
+                                "absolute left-0 px-1.5 py-0.5 rounded bg-zinc-950/90 border border-rose-500/80 text-[10px] font-bold text-rose-300 whitespace-nowrap shadow",
+                                labelInside ? "top-0.5 left-0.5" : "-top-5"
+                              )}
+                            >
+                              {b.label}
+                            </span>
+                          </div>
                         );
                       })}
-                    </svg>
+                    </div>
                   )}
                 </div>
 

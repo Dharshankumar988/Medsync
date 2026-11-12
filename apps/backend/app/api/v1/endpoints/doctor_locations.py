@@ -147,7 +147,7 @@ async def verify_location(
     await db.commit()
     await db.refresh(location)
 
-    # Notify doctor
+    # Notify doctor & sync affiliation update to DoctorRegistry
     from app.services.notification import NotificationService
     from app.models.doctor import Doctor
     doc_res = await db.execute(select(Doctor).where(Doctor.id == location.doctor_id))
@@ -161,6 +161,27 @@ async def verify_location(
             message=f"Your affiliation with '{loc_display}' has been verified and authorized by MedSync Administration.",
             type="FACILITY"
         )
+        if location.hospital_id:
+            try:
+                from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
+                from app.models.blockchain import SyncEntityType, SyncActionType
+                from app.blockchain.client import blockchain_client
+                task = await BlockchainSyncService.enqueue_sync_task(
+                    db=db,
+                    entity_type=SyncEntityType.DOCTOR,
+                    entity_id=doc.user_id,
+                    action_type=SyncActionType.UPDATE,
+                    payload={
+                        "doctor_id": str(doc.user_id),
+                        "license_number": doc.license_number or str(doc.user_id),
+                        "hospital_id": str(location.hospital_id),
+                        "wallet_address": blockchain_client.wallet_address,
+                    },
+                )
+                await db.commit()
+                trigger_background_sync(task.id)
+            except Exception:
+                pass
 
     return APIResponse(message="Doctor location verified successfully", data=location)
 
@@ -222,18 +243,26 @@ async def affiliate_pharmacy(
     from app.models.doctor_pharmacy_affiliation import DoctorPharmacyAffiliation
     from app.services.notification import NotificationService
 
-    # Check pharmacy exists and has role PHARMACY
-    pharm_user_res = await db.execute(
-        select(User).where((User.id == req.pharmacy_id) & (User.role == UserRole.PHARMACY))
+    # Resolve pharmacy by user_id or pharmacy record id
+    from sqlalchemy import or_
+    pharm_res = await db.execute(
+        select(Pharmacy, User)
+        .join(User, Pharmacy.user_id == User.id)
+        .where(
+            or_(Pharmacy.user_id == req.pharmacy_id, Pharmacy.id == req.pharmacy_id),
+            User.role == UserRole.PHARMACY,
+        )
     )
-    pharm_user = pharm_user_res.scalar_one_or_none()
-    if not pharm_user:
+    pharm_row = pharm_res.first()
+    if not pharm_row:
         raise HTTPException(status_code=404, detail="Selected pharmacy user is not a registered MedSync dispensing pharmacy.")
+    pharm_obj, pharm_user = pharm_row
+    target_pharmacy_user_id = pharm_user.id
 
     # Check existing affiliation
     affil_stmt = select(DoctorPharmacyAffiliation).where(
         (DoctorPharmacyAffiliation.doctor_id == current_user.id) &
-        (DoctorPharmacyAffiliation.pharmacy_id == req.pharmacy_id)
+        (DoctorPharmacyAffiliation.pharmacy_id == target_pharmacy_user_id)
     )
     affil_res = await db.execute(affil_stmt)
     affil = affil_res.scalar_one_or_none()
@@ -246,7 +275,7 @@ async def affiliate_pharmacy(
         affil = DoctorPharmacyAffiliation(
             id=uuid.uuid4(),
             doctor_id=current_user.id,
-            pharmacy_id=req.pharmacy_id,
+            pharmacy_id=target_pharmacy_user_id,
             clinic_name=req.clinic_name,
             status="ACTIVE"
         )
@@ -262,7 +291,7 @@ async def affiliate_pharmacy(
 
     await NotificationService.send_notification(
         db,
-        user_id=req.pharmacy_id,
+        user_id=target_pharmacy_user_id,
         title="New Doctor Practice Affiliation",
         message=f"Dr. {doc_name} added your pharmacy as a linked partner for their practice.",
         type="FACILITY"

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { patientService } from '../../services/patient.service';
-import { Colors } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 import { Button } from '../common/Button';
 import { MedicalLoadingIndicator } from '../common/MedicalLoadingIndicator';
 import { formatErrorMessage } from '../../lib/api';
@@ -37,6 +37,7 @@ export function UploadRecordModal({
   onClose,
   onSuccess,
 }: UploadRecordModalProps) {
+  const { theme, isDark } = useTheme();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [pin, setPin] = useState('');
@@ -133,20 +134,28 @@ export function UploadRecordModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.sheetContainer}>
+        <View style={[styles.sheetContainer, { backgroundColor: theme.card, borderColor: theme.border, borderTopWidth: 1 }]}>
           {/* Header */}
-          <View style={styles.headerRow}>
+          <View style={[styles.headerRow, { borderBottomColor: theme.border }]}>
             <View style={styles.headerTitleBox}>
-              <View style={styles.iconCircle}>
-                <FileUp size={20} color={Colors.roles.patient.primary} />
+              <View
+                style={[
+                  styles.iconCircle,
+                  { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.14)' : '#F0F9FF' },
+                ]}
+              >
+                <FileUp size={20} color={theme.accent} />
               </View>
               <View>
-                <Text style={styles.headerTitle}>Add Medical Record</Text>
-                <Text style={styles.headerSubtitle}>Encrypted Clinical File Upload</Text>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>Add Medical Record</Text>
+                <Text style={[styles.headerSubtitle, { color: theme.textMuted }]}>Encrypted Clinical File Upload</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color="#64748B" />
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.closeBtn, { backgroundColor: theme.cardElevated }]}
+            >
+              <X size={20} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -155,13 +164,21 @@ export function UploadRecordModal({
               <MedicalLoadingIndicator
                 message="Encrypting & Uploading File..."
                 subMessage="Hashing document and generating cryptographic proof"
-                color={Colors.roles.patient.primary}
+                color={theme.accent}
               />
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.scrollContent}>
               {error ? (
-                <View style={styles.errorBox}>
+                <View
+                  style={[
+                    styles.errorBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.14)' : '#FEF2F2',
+                      borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FECACA',
+                    },
+                  ]}
+                >
                   <AlertCircle size={16} color="#EF4444" />
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
@@ -169,11 +186,18 @@ export function UploadRecordModal({
 
               {/* Title */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Record Title *</Text>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Record Title *</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.inputBg,
+                      borderColor: theme.inputBorder,
+                      color: theme.text,
+                    },
+                  ]}
                   placeholder="e.g. Complete Blood Count, Chest X-Ray"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={theme.inputPlaceholder}
                   value={title}
                   onChangeText={setTitle}
                 />
@@ -181,11 +205,18 @@ export function UploadRecordModal({
 
               {/* Description */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Clinical Notes / Summary (Optional)</Text>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Clinical Notes / Summary (Optional)</Text>
                 <TextInput
-                  style={styles.textArea}
+                  style={[
+                    styles.textArea,
+                    {
+                      backgroundColor: theme.inputBg,
+                      borderColor: theme.inputBorder,
+                      color: theme.text,
+                    },
+                  ]}
                   placeholder="Brief diagnostic findings or doctor notes"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={theme.inputPlaceholder}
                   value={description}
                   onChangeText={setDescription}
                   multiline
@@ -195,49 +226,73 @@ export function UploadRecordModal({
 
               {/* File Picker */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Diagnostic Document (PDF / Image) *</Text>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Diagnostic Document (PDF / Image) *</Text>
                 {selectedFile ? (
-                  <View style={styles.fileSelectedBox}>
-                    <View style={styles.fileIconBox}>
-                      <FileCheck size={22} color="#059669" />
+                  <View
+                    style={[
+                      styles.fileSelectedBox,
+                      {
+                        backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5',
+                        borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#A7F3D0',
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.fileIconBox,
+                        { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5' },
+                      ]}
+                    >
+                      <FileCheck size={22} color="#10B981" />
                     </View>
                     <View style={styles.fileMetaBox}>
-                      <Text style={styles.fileName} numberOfLines={1}>
+                      <Text style={[styles.fileName, { color: isDark ? '#34D399' : '#065F46' }]} numberOfLines={1}>
                         {selectedFile.name}
                       </Text>
-                      <Text style={styles.fileSize}>
+                      <Text style={[styles.fileSize, { color: isDark ? '#6EE7B7' : '#047857' }]}>
                         {formatFileSize(selectedFile.size)} • Ready for upload
                       </Text>
                     </View>
                     <TouchableOpacity
-                      style={styles.removeFileBtn}
+                      style={[styles.removeFileBtn, { backgroundColor: theme.cardElevated }]}
                       onPress={() => setSelectedFile(null)}
                     >
-                      <X size={16} color="#64748B" />
+                      <X size={16} color={theme.textMuted} />
                     </TouchableOpacity>
                   </View>
                 ) : (
                   <TouchableOpacity
-                    style={styles.pickerBtn}
+                    style={[
+                      styles.pickerBtn,
+                      {
+                        borderColor: isDark ? 'rgba(56, 189, 248, 0.4)' : '#93C5FD',
+                        backgroundColor: isDark ? 'rgba(56, 189, 248, 0.08)' : '#EFF6FF',
+                      },
+                    ]}
                     onPress={handlePickDocument}
                     activeOpacity={0.8}
                   >
-                    <Upload size={22} color={Colors.roles.patient.primary} />
-                    <Text style={styles.pickerBtnText}>Choose File from Device</Text>
-                    <Text style={styles.pickerHint}>Supports PDF, PNG, JPG (up to 25MB)</Text>
+                    <Upload size={22} color={theme.accent} />
+                    <Text style={[styles.pickerBtnText, { color: theme.accent }]}>Choose File from Device</Text>
+                    <Text style={[styles.pickerHint, { color: theme.textMuted }]}>Supports PDF, PNG, JPG (up to 25MB)</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
               {/* PIN Input */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Authorization PIN (6 digits) *</Text>
-                <View style={styles.pinWrapper}>
-                  <Lock size={18} color="#64748B" style={styles.pinIcon} />
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Authorization PIN (6 digits) *</Text>
+                <View
+                  style={[
+                    styles.pinWrapper,
+                    { backgroundColor: theme.inputBg, borderColor: theme.inputBorder },
+                  ]}
+                >
+                  <Lock size={18} color={theme.textMuted} style={styles.pinIcon} />
                   <TextInput
-                    style={styles.pinInput}
+                    style={[styles.pinInput, { color: theme.text }]}
                     placeholder="Enter 6-digit PIN to sign upload"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={theme.inputPlaceholder}
                     value={pin}
                     onChangeText={setPin}
                     keyboardType="numeric"
@@ -245,7 +300,7 @@ export function UploadRecordModal({
                     secureTextEntry
                   />
                 </View>
-                <Text style={styles.pinHint}>
+                <Text style={[styles.pinHint, { color: theme.textMuted }]}>
                   Your Authorization PIN is required to generate the verifiable cryptographic signature.
                 </Text>
               </View>
@@ -456,6 +511,5 @@ const styles = StyleSheet.create({
   },
   submitBtn: {
     marginTop: 6,
-    backgroundColor: '#2563EB',
   },
 });

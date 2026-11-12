@@ -65,7 +65,7 @@ export default function PharmaciesManagementPage() {
     }
     setIsSubmitting(true);
     try {
-      await api.post('/api/v1/pharmacies/admin', newPharmacy); // Need to implement in backend
+      await api.post('/api/v1/admin/pharmacies', newPharmacy);
       setIsAddOpen(false);
       loadPharmacies();
     } catch (error) {
@@ -160,6 +160,7 @@ export default function PharmaciesManagementPage() {
                     <label className="text-sm font-medium">Email</label>
                     <Input 
                       type="email"
+                      required
                       value={newPharmacy.email} 
                       onChange={e => setNewPharmacy({...newPharmacy, email: e.target.value})} 
                     />

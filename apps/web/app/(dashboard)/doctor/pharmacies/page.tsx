@@ -184,35 +184,9 @@ export default function DoctorPharmaciesPage() {
               linkedInfo = facilityIdMap.get(pHospitalId)!;
             } else if (pClinicName && facilityNameMap.has(pClinicName)) {
               linkedInfo = facilityNameMap.get(pClinicName)!;
-            } else {
-              for (const [facKey, facInfo] of facilityNameMap.entries()) {
-                if (facKey && (
-                  pBusinessName.toLowerCase().includes(facKey) || 
-                  facKey.includes(pBusinessName.toLowerCase()) ||
-                  (pClinicName && (pClinicName.includes(facKey) || facKey.includes(pClinicName)))
-                )) {
-                  linkedInfo = facInfo;
-                  break;
-                }
-              }
             }
 
-            if (!linkedInfo && facilitiesList.length > 0) {
-              const defaultFac = facilitiesList[0];
-              linkedInfo = {
-                name: defaultFac.name,
-                type: defaultFac.type,
-                status: defaultFac.status,
-              };
-            } else if (!linkedInfo) {
-              linkedInfo = {
-                name: "MedSync Network Facility",
-                type: "Network Facility",
-                status: "APPROVED",
-              };
-            }
-
-            const isLinked = true;
+            const isLinked = Boolean(linkedInfo);
 
             return {
               ...extraProfile,
@@ -226,7 +200,11 @@ export default function DoctorPharmaciesPage() {
               status: pharm.status || "ACTIVE",
               is_verified: true,
               isLinked,
-              linkedFacility: linkedInfo,
+              linkedFacility: linkedInfo || {
+                name: pClinicName ? (pharm.clinic_name || extraProfile.clinic_name) : "Independent Pharmacy",
+                type: pHospitalId ? "Facility" : "Independent",
+                status: "APPROVED",
+              },
               isDirectAffiliate: linkedInfo?.isDirect || false,
             };
           })
@@ -292,6 +270,20 @@ export default function DoctorPharmaciesPage() {
 
 
 
+  // Handle linking a direct partner pharmacy
+  const handleLinkDirectPharmacy = async (pharmacyUserId: string) => {
+    setActionLoadingId(pharmacyUserId);
+    try {
+      await api.post("/api/v1/doctor-locations/affiliate-pharmacy", { pharmacy_id: pharmacyUserId });
+      toast.success("Pharmacy linked to your practice partners.");
+      await loadPharmacies();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Failed to link pharmacy");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   // Handle unlinking a direct partner pharmacy
   const handleUnlinkDirectPharmacy = async (pharmacyUserId: string) => {
     setActionLoadingId(pharmacyUserId);
@@ -307,6 +299,7 @@ export default function DoctorPharmaciesPage() {
   };
 
   const linkedPharmacies = pharmacies.filter(p => p.isLinked);
+  const availablePharmacies = pharmacies.filter(p => !p.isLinked);
 
   const filterList = (list: any[]) => list.filter(p => 
     (p.full_name || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -316,6 +309,7 @@ export default function DoctorPharmaciesPage() {
   );
 
   const filteredLinked = filterList(linkedPharmacies);
+  const filteredAvailable = filterList(availablePharmacies);
 
   return (
     <div className="relative space-y-8 pb-12 max-w-6xl mx-auto">
@@ -490,6 +484,71 @@ export default function DoctorPharmaciesPage() {
           </motion.div>
         )}
       </div>
+
+      {/* ─── SECTION 2: Available MedSync Network Pharmacies (Direct Linking) ─── */}
+      {filteredAvailable.length > 0 && (
+        <div className="space-y-4 pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/60 pb-3 gap-2">
+            <div className="flex items-center gap-2">
+              <Store className="w-5 h-5 text-blue-500" />
+              <h2 className="text-xl font-bold text-foreground">
+                Available MedSync Network Pharmacies
+              </h2>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {filteredAvailable.length} available to link directly
+            </span>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredAvailable.map((pharmacy) => (
+              <Card key={pharmacy.id} className="group overflow-hidden rounded-2xl border border-border/70 bg-card hover:border-blue-500/50 transition-all hover:shadow-md h-full flex flex-col">
+                <CardHeader className="pb-3 border-b border-border/50">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500 mb-2">
+                      <Store className="h-5 w-5" />
+                    </div>
+                    <Badge variant="outline" className="text-[11px]">
+                      {pharmacy.linkedFacility?.type || "Independent"}
+                    </Badge>
+                  </div>
+                  <CardTitle className="text-base line-clamp-1">{pharmacy.full_name || "Network Pharmacy"}</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4 flex flex-col flex-1 justify-between">
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                      <span className="line-clamp-2">
+                        {[pharmacy.address, pharmacy.city, pharmacy.state].filter(Boolean).join(", ") || "Address on file"}
+                      </span>
+                    </div>
+                    {pharmacy.contact_number && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        <span>{pharmacy.contact_number}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-border/50 flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground">License: {pharmacy.license_number || "Verified"}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionLoadingId === pharmacy.user_id}
+                      onClick={() => handleLinkDirectPharmacy(pharmacy.user_id)}
+                      className="h-7 text-[11px] border-blue-500/40 text-blue-600 hover:bg-blue-500/10 px-2.5 gap-1"
+                    >
+                      {actionLoadingId === pharmacy.user_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                      Link Partner
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ─── MODAL 1: Add Workplace Facility ─── */}
       <Dialog open={isAddWorkplaceModalOpen} onOpenChange={setIsAddWorkplaceModalOpen}>

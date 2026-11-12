@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { useRole } from '../../providers/role-provider';
-import { getRoleTheme } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 interface LoadingScreenProps {
   message?: string;
@@ -10,16 +9,23 @@ interface LoadingScreenProps {
 export const LoadingScreen = React.memo(function LoadingScreen({
   message = 'Loading MedSync...',
 }: LoadingScreenProps) {
-  const { role } = useRole();
-  const theme = getRoleTheme(role);
+  const { theme, isDark } = useTheme();
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.logoBadge, { backgroundColor: theme.bg, borderColor: theme.badgeBorder }]}>
-        <Text style={[styles.logoText, { color: theme.primary }]}>M</Text>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View
+        style={[
+          styles.logoBadge,
+          {
+            backgroundColor: isDark ? '#18181B' : '#09090B',
+            borderColor: theme.border,
+          },
+        ]}
+      >
+        <Text style={[styles.logoText, { color: '#38BDF8' }]}>M</Text>
       </View>
-      <ActivityIndicator size="large" color={theme.primary} style={styles.indicator} />
-      <Text style={styles.message}>{message}</Text>
+      <ActivityIndicator size="large" color={theme.accent} style={styles.indicator} />
+      <Text style={[styles.message, { color: theme.textMuted }]}>{message}</Text>
     </View>
   );
 });
@@ -27,7 +33,6 @@ export const LoadingScreen = React.memo(function LoadingScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -51,7 +56,6 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#64748B',
     textAlign: 'center',
   },
 });

@@ -21,6 +21,7 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import api from '../../lib/api';
+import { useTheme } from '../../context/ThemeContext';
 
 interface DeliveryTrackingModalProps {
   visible: boolean;
@@ -35,6 +36,7 @@ export function DeliveryTrackingModal({
   orderId,
   trackingNumber,
 }: DeliveryTrackingModalProps) {
+  const { theme, isDark } = useTheme();
   const [deliveries, setDeliveries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -70,45 +72,58 @@ export function DeliveryTrackingModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalBackdrop}>
-        <View style={styles.sheetCard}>
+        <View style={[styles.sheetCard, { backgroundColor: theme.card, borderTopColor: theme.border, borderWidth: 1 }]}>
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.titleRow}>
-              <View style={styles.iconCircle}>
-                <Truck size={22} color="#2563EB" />
+              <View
+                style={[
+                  styles.iconCircle,
+                  { backgroundColor: isDark ? 'rgba(56, 189, 248, 0.14)' : '#F0F9FF' },
+                ]}
+              >
+                <Truck size={22} color={theme.accent} />
               </View>
               <View style={{ marginLeft: 12 }}>
-                <Text style={styles.title}>Live Delivery Tracking</Text>
-                <Text style={styles.subtitle}>
+                <Text style={[styles.title, { color: theme.text }]}>Live Delivery Tracking</Text>
+                <Text style={[styles.subtitle, { color: theme.textMuted }]}>
                   {trackingNumber || (orderId ? `Order #${orderId.substring(0, 8)}` : 'Prescription Express')}
                 </Text>
               </View>
             </View>
 
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={20} color="#64748B" />
+              <X size={20} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
 
           {loading && !activeDelivery ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#2563EB" />
-              <Text style={styles.loadingText}>Connecting to Courier GPS...</Text>
+              <ActivityIndicator size="small" color={theme.accent} />
+              <Text style={[styles.loadingText, { color: theme.textMuted }]}>Connecting to Courier GPS...</Text>
             </View>
           ) : (
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Delivery ETA Badge */}
-              <View style={styles.etaCard}>
+              <View
+                style={[
+                  styles.etaCard,
+                  {
+                    backgroundColor: isDark ? 'rgba(56, 189, 248, 0.08)' : '#F0F9FF',
+                    borderColor: isDark ? 'rgba(56, 189, 248, 0.22)' : '#BAE6FD',
+                  },
+                ]}
+              >
                 <View style={styles.etaHeader}>
-                  <Clock size={18} color="#2563EB" />
-                  <Text style={styles.etaLabel}>Estimated Arrival</Text>
+                  <Clock size={18} color={theme.accent} />
+                  <Text style={[styles.etaLabel, { color: theme.accent }]}>Estimated Arrival</Text>
                 </View>
-                <Text style={styles.etaTime}>
+                <Text style={[styles.etaTime, { color: theme.text }]}>
                   {activeDelivery?.estimated_delivery_minutes
                     ? `${activeDelivery.estimated_delivery_minutes} Mins`
                     : '18 - 25 Mins'}
                 </Text>
-                <Text style={styles.etaSub}>
+                <Text style={[styles.etaSub, { color: theme.textMuted }]}>
                   Courier is currently navigating to your address
                 </Text>
               </View>
@@ -121,9 +136,9 @@ export function DeliveryTrackingModal({
                     <CheckCircle2 size={14} color="#FFFFFF" />
                   </View>
                   <View style={styles.stepContent}>
-                    <Text style={styles.stepTitle}>Prescription Verified & Packed</Text>
-                    <Text style={styles.stepDesc}>
-                      {activeDelivery?.pharmacy_name || 'Apex City Pharmacy'} — Sealed in tamper-evident pouch
+                    <Text style={[styles.stepTitle, { color: theme.text }]}>Prescription Verified & Packed</Text>
+                    <Text style={[styles.stepDesc, { color: theme.textMuted }]}>
+                      {activeDelivery?.pharmacy_name || 'Verified Network Pharmacy'} — Sealed in tamper-evident pouch
                     </Text>
                   </View>
                 </View>
@@ -133,40 +148,40 @@ export function DeliveryTrackingModal({
 
                 {/* Step 2: In Transit */}
                 <View style={styles.timelineStep}>
-                  <View style={[styles.stepDot, styles.stepDotActive]}>
-                    <Truck size={14} color="#FFFFFF" />
+                  <View style={[styles.stepDot, { backgroundColor: theme.accent }]}>
+                    <Truck size={14} color="#09090B" />
                   </View>
                   <View style={styles.stepContent}>
-                    <Text style={[styles.stepTitle, { color: '#2563EB' }]}>Out for Delivery</Text>
-                    <Text style={styles.stepDesc}>
+                    <Text style={[styles.stepTitle, { color: theme.accent }]}>Out for Delivery</Text>
+                    <Text style={[styles.stepDesc, { color: theme.textMuted }]}>
                       Partner courier is en route with cold-chain storage
                     </Text>
                   </View>
                 </View>
 
                 {/* Line */}
-                <View style={[styles.stepLine, { backgroundColor: '#E2E8F0' }]} />
+                <View style={[styles.stepLine, { backgroundColor: theme.border }]} />
 
                 {/* Step 3: Delivered */}
                 <View style={styles.timelineStep}>
-                  <View style={[styles.stepDot, styles.stepDotPending]}>
-                    <MapPin size={14} color="#94A3B8" />
+                  <View style={[styles.stepDot, { backgroundColor: theme.cardElevated }]}>
+                    <MapPin size={14} color={theme.textMuted} />
                   </View>
                   <View style={styles.stepContent}>
-                    <Text style={[styles.stepTitle, { color: '#64748B' }]}>Delivered & Handed Over</Text>
-                    <Text style={styles.stepDesc}>Contactless delivery at patient address</Text>
+                    <Text style={[styles.stepTitle, { color: theme.textMuted }]}>Delivered & Handed Over</Text>
+                    <Text style={[styles.stepDesc, { color: theme.textMuted }]}>Contactless delivery at patient address</Text>
                   </View>
                 </View>
               </View>
 
               {/* Pharmacy Info Card */}
-              <View style={styles.partnerCard}>
-                <Store size={20} color="#2563EB" />
+              <View style={[styles.partnerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Store size={20} color={theme.accent} />
                 <View style={{ marginLeft: 10, flex: 1 }}>
-                  <Text style={styles.partnerTitle}>
+                  <Text style={[styles.partnerTitle, { color: theme.text }]}>
                     {activeDelivery?.pharmacy_name || 'MedSync Network Pharmacy'}
                   </Text>
-                  <Text style={styles.partnerSub}>Authorized Dispensary Partner</Text>
+                  <Text style={[styles.partnerSub, { color: theme.textMuted }]}>Authorized Dispensary Partner</Text>
                 </View>
                 <View style={styles.verifiedBadge}>
                   <ShieldCheck size={14} color="#10B981" />
@@ -178,11 +193,11 @@ export function DeliveryTrackingModal({
 
           {/* Bottom Button */}
           <TouchableOpacity
-            style={styles.doneBtn}
+            style={[styles.doneBtn, { backgroundColor: theme.primaryButton }]}
             onPress={onClose}
             activeOpacity={0.88}
           >
-            <Text style={styles.doneBtnText}>Close Tracking</Text>
+            <Text style={[styles.doneBtnText, { color: theme.primaryButtonText }]}>Close Tracking</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -7,7 +7,7 @@ import {
   Platform,
 } from 'react-native';
 import { QrCode, Sparkles } from 'lucide-react-native';
-import { useRouter, usePathname } from 'expo-router';
+import { useRouter, usePathname, useSegments } from 'expo-router';
 import { useRole } from '../../providers/role-provider';
 import { useTheme } from '../../context/ThemeContext';
 import { PaymentStyleQRScanner } from '../patient/PaymentStyleQRScanner';
@@ -17,9 +17,13 @@ export function FloatingQuickActions() {
   const { theme, isDark } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
+  const segments = useSegments();
   const [scannerVisible, setScannerVisible] = useState(false);
 
-  const isPulseScreen = pathname?.includes('pulse-ai');
+  // Hide on Pulse AI screen - use both pathname and segments for reliability
+  const isPulseScreen =
+    pathname?.includes('pulse-ai') ||
+    segments?.some((s) => s === 'pulse-ai');
 
   // Hide completely on Pulse AI screen or if not a patient, so chat input is never obstructed
   if (role !== 'patient' || isPulseScreen) {
@@ -108,7 +112,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: Platform.OS === 'ios' ? 96 : 76,
+    bottom: Platform.OS === 'ios' ? 104 : 80,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',

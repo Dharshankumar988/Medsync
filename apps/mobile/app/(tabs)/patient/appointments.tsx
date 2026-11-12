@@ -1204,12 +1204,12 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: 110,
+    paddingBottom: 145,
     gap: 12,
   },
   discoveryScroll: {
     padding: 16,
-    paddingBottom: 110,
+    paddingBottom: 145,
   },
   errorBanner: {
     flexDirection: 'row',

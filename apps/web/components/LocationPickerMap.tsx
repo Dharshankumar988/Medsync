@@ -241,13 +241,19 @@ export default function LocationPickerMap({
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
       {/* Search Bar & Actions */}
-      <div className="relative">
-        <form onSubmit={handleSearchSubmit} className="flex gap-2">
+      <div className="relative z-20">
+        <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
               value={searchQuery}
               onChange={handleSearchInputChange}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSearchSubmit(e);
+                }
+              }}
               onFocus={() => {
                 if (searchResults.length > 0) setShowDropdown(true);
               }}
@@ -286,13 +292,14 @@ export default function LocationPickerMap({
           </Button>
 
           <Button
-            type="submit"
+            type="button"
+            onClick={handleSearchSubmit}
             disabled={isSearching}
             className="h-11 px-4 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-xl shrink-0"
           >
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
           </Button>
-        </form>
+        </div>
 
         {/* Search Results Autocomplete Dropdown */}
         {showDropdown && searchResults.length > 0 && (
@@ -319,7 +326,7 @@ export default function LocationPickerMap({
       </div>
 
       {/* Map Canvas */}
-      <div className="h-[280px] w-full rounded-2xl overflow-hidden border border-border/80 relative bg-muted/20 shadow-inner">
+      <div className="h-[280px] w-full rounded-2xl overflow-hidden border border-border/80 relative z-0 isolate bg-muted/20 shadow-inner">
         <MapContainer
           center={position || defaultCenter}
           zoom={position ? 16 : 12}

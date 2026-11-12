@@ -29,6 +29,7 @@ class ResponseFormatter:
                 "diagnosis": diagnosis,
                 "confidence": round(confidence, 4),
                 "confidence_percent": round(confidence * 100, 1),
+                "boxes": prediction.get("boxes", []),
                 "details": prediction,
             },
             "clinical_summary": clinical_summary,

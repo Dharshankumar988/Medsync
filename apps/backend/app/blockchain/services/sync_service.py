@@ -296,13 +296,29 @@ class BlockchainSyncService:
 
             elif task.entity_type == SyncEntityType.DOCTOR:
                 contract_called = "DoctorRegistry"
-                doc_h = self._to_bytes32(task.payload.get("doctor_id") or task.payload.get("doctor_hash") or task.entity_id)
+                doc_lic = task.payload.get("license_hash") or task.payload.get("license_number")
+                doc_hosp = task.payload.get("hospital_hash") or task.payload.get("hospital_id")
+                doc_uid = task.payload.get("doctor_id") or task.payload.get("doctor_hash")
+
+                if not doc_lic or not doc_hosp or not doc_uid:
+                    from app.models.doctor import Doctor
+                    from sqlalchemy import or_
+                    d_res = await self.db.execute(
+                        select(Doctor).filter(or_(Doctor.user_id == task.entity_id, Doctor.id == task.entity_id))
+                    )
+                    d_obj = d_res.scalars().first()
+                    if d_obj:
+                        doc_uid = doc_uid or str(d_obj.user_id)
+                        doc_lic = doc_lic or d_obj.license_number or str(d_obj.user_id)
+                        doc_hosp = doc_hosp or str(d_obj.hospital_id or d_obj.clinic_name or d_obj.user_id)
+
+                doc_h = self._to_bytes32(doc_uid or task.entity_id)
                 owner = str(task.payload.get("owner") or task.payload.get("wallet_address") or "").strip()
                 if not owner or owner == "0x0000000000000000000000000000000000000000" or not blockchain_client.w3.is_address(owner):
                     owner = default_wallet
                 owner = blockchain_client.w3.to_checksum_address(owner)
-                lic_h = self._to_bytes32(task.payload.get("license_hash") or task.payload.get("license_number") or task.id)
-                hosp_h = self._to_bytes32(task.payload.get("hospital_hash") or task.payload.get("hospital_id") or task.id)
+                lic_h = self._to_bytes32(doc_lic or task.entity_id)
+                hosp_h = self._to_bytes32(doc_hosp or task.entity_id)
 
                 if task.action_type == SyncActionType.CREATE:
                     try:
@@ -353,6 +369,32 @@ class BlockchainSyncService:
                             blockchain_gateway.write_contract,
                             "DoctorRegistry", "verifyDoctor", doc_h
                         )
+                elif task.action_type == SyncActionType.UPDATE:
+                    try:
+                        doc_rec = await asyncio.to_thread(
+                            blockchain_gateway.read_contract,
+                            "DoctorRegistry", "doctors", doc_h
+                        )
+                        is_registered = isinstance(doc_rec, (list, tuple)) and len(doc_rec) > 3 and doc_rec[3] != 0
+                        if not is_registered:
+                            receipt = await asyncio.to_thread(
+                                blockchain_gateway.write_contract,
+                                "DoctorRegistry", "registerDoctor",
+                                doc_h, lic_h, hosp_h, owner
+                            )
+                        else:
+                            receipt = await asyncio.to_thread(
+                                blockchain_gateway.write_contract,
+                                "DoctorRegistry", "updateAffiliation",
+                                doc_h, hosp_h
+                            )
+                    except Exception as u_err:
+                        logger.warning(f"Doctor affiliation update error: {u_err}")
+                        receipt = await asyncio.to_thread(
+                            blockchain_gateway.write_contract,
+                            "DoctorRegistry", "updateAffiliation",
+                            doc_h, hosp_h
+                        )
                 elif str(task.action_type) in ("REVOKE", "SUSPEND", "SyncActionType.REVOKE"):
                     receipt = await asyncio.to_thread(
                         blockchain_gateway.write_contract,
@@ -361,12 +403,26 @@ class BlockchainSyncService:
 
             elif task.entity_type == SyncEntityType.PHARMACY:
                 contract_called = "PharmacyRegistry"
-                phm_h = self._to_bytes32(task.payload.get("pharmacy_id") or task.payload.get("pharmacy_hash") or task.entity_id)
+                phm_lic = task.payload.get("license_hash") or task.payload.get("license_number")
+                phm_uid = task.payload.get("pharmacy_id") or task.payload.get("pharmacy_hash")
+
+                if not phm_lic or not phm_uid:
+                    from app.models.pharmacy import Pharmacy
+                    from sqlalchemy import or_
+                    p_res = await self.db.execute(
+                        select(Pharmacy).filter(or_(Pharmacy.user_id == task.entity_id, Pharmacy.id == task.entity_id))
+                    )
+                    p_obj = p_res.scalars().first()
+                    if p_obj:
+                        phm_uid = phm_uid or str(p_obj.user_id)
+                        phm_lic = phm_lic or p_obj.license_number or str(p_obj.user_id)
+
+                phm_h = self._to_bytes32(phm_uid or task.entity_id)
                 owner = str(task.payload.get("owner") or task.payload.get("wallet_address") or "").strip()
                 if not owner or owner == "0x0000000000000000000000000000000000000000" or not blockchain_client.w3.is_address(owner):
                     owner = default_wallet
                 owner = blockchain_client.w3.to_checksum_address(owner)
-                lic_h = self._to_bytes32(task.payload.get("license_hash") or task.payload.get("license_number") or task.id)
+                lic_h = self._to_bytes32(phm_lic or task.entity_id)
 
                 if task.action_type == SyncActionType.CREATE:
                     try:

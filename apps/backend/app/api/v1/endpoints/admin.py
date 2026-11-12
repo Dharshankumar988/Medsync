@@ -58,6 +58,50 @@ async def get_supabase_client():
     }
     return httpx.AsyncClient(base_url=f"{settings.SUPABASE_URL}/auth/v1", headers=headers)
 
+
+async def _insert_auth_user_fallback(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    email: str,
+    password: str,
+    role_name: str,
+) -> None:
+    """Insert a confirmed auth.users record directly when Supabase Admin API is unavailable."""
+    import json
+
+    app_meta = json.dumps({"provider": "email", "providers": ["email"], "role": role_name})
+    user_meta = json.dumps({"role": role_name})
+    params = {"id": user_id, "email": email, "pwd": password, "app_meta": app_meta, "user_meta": user_meta}
+
+    for fn_prefix in ("extensions.", ""):
+        try:
+            async with db.begin_nested():
+                await db.execute(
+                    text(
+                        f"""
+                        INSERT INTO auth.users (
+                            id, instance_id, email, encrypted_password, aud, role,
+                            raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
+                        )
+                        VALUES (
+                            :id, '00000000-0000-0000-0000-000000000000', :email,
+                            {fn_prefix}crypt(:pwd, {fn_prefix}gen_salt('bf')),
+                            'authenticated', 'authenticated',
+                            CAST(:app_meta AS jsonb),
+                            CAST(:user_meta AS jsonb),
+                            now(), now(), now()
+                        )
+                        """
+                    ),
+                    params,
+                )
+            await db.commit()
+            return
+        except Exception:
+            continue
+    # If auth.users schema doesn't exist (e.g. SQLite unit tests), roll back cleanly and continue.
+    await db.rollback()
+
 @router.get("/verifications/pending", response_model=APIResponse[list[PendingVerificationItem]])
 async def get_pending_verifications(
     db: AsyncSession = Depends(get_db),
@@ -320,7 +364,7 @@ async def approve_verification(
         await db.commit()
         await db.refresh(location)
 
-        # Notify doctor
+        # Notify doctor & sync affiliation update to DoctorRegistry
         doc_res = await db.execute(select(Doctor).where(Doctor.id == location.doctor_id))
         doc = doc_res.scalar_one_or_none()
         if doc:
@@ -332,6 +376,27 @@ async def approve_verification(
                 message=f"Your practice affiliation with '{loc_display}' has been verified and authorized by MedSync Administration.",
                 type="FACILITY"
             )
+            if location.hospital_id:
+                try:
+                    from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
+                    from app.models.blockchain import SyncEntityType, SyncActionType
+                    from app.blockchain.client import blockchain_client
+                    task = await BlockchainSyncService.enqueue_sync_task(
+                        db=db,
+                        entity_type=SyncEntityType.DOCTOR,
+                        entity_id=doc.user_id,
+                        action_type=SyncActionType.UPDATE,
+                        payload={
+                            "doctor_id": str(doc.user_id),
+                            "license_number": doc.license_number or str(doc.user_id),
+                            "hospital_id": str(location.hospital_id),
+                            "wallet_address": blockchain_client.wallet_address,
+                        },
+                    )
+                    await db.commit()
+                    trigger_background_sync(task.id)
+                except Exception:
+                    pass
 
         return APIResponse(
             message="Doctor workplace affiliation approved successfully",
@@ -613,26 +678,7 @@ async def create_doctor(
     # 2. Fallback to direct SQL insert into auth.users if Supabase unreachable
     if not auth_user_id:
         auth_user_id = uuid.uuid4()
-        try:
-            await db.execute(
-                text("""
-                INSERT INTO auth.users (
-                    id, instance_id, email, encrypted_password, aud, role,
-                    raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
-                )
-                VALUES (
-                    :id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')),
-                    'authenticated', 'authenticated',
-                    '{"provider":"email","providers":["email"],"role":"DOCTOR"}',
-                    '{"role":"DOCTOR"}',
-                    now(), now(), now()
-                )
-                """),
-                {"id": auth_user_id, "email": clean_email, "pwd": payload.password}
-            )
-            await db.commit()
-        except Exception:
-            await db.rollback()
+        await _insert_auth_user_fallback(db, auth_user_id, clean_email, payload.password, "DOCTOR")
 
     try:
         new_user = User(
@@ -652,6 +698,7 @@ async def create_doctor(
         facility_type: Optional[str] = None
         clinic_name_val: Optional[str] = None
         hospital_name_val: Optional[str] = None
+        facility_obj: Optional[Hospital] = None
 
         if payload.new_facility and payload.new_facility.name.strip():
             nf = payload.new_facility
@@ -674,6 +721,7 @@ async def create_doctor(
             )
             db.add(new_fac)
             await db.flush()
+            facility_obj = new_fac
             assigned_hospital_id = new_fac.id
             facility_name = new_fac.name
             facility_type = fac_type
@@ -691,6 +739,7 @@ async def create_doctor(
                 h_res = await db.execute(h_stmt)
                 existing_hosp = h_res.scalar_one_or_none()
                 if existing_hosp:
+                    facility_obj = existing_hosp
                     facility_name = existing_hosp.name
                     facility_type = (existing_hosp.type or "hospital").lower()
                     if facility_type == "clinic":
@@ -705,7 +754,13 @@ async def create_doctor(
             specialization=payload.specialization,
             hospital_id=assigned_hospital_id,
             hospital_name=hospital_name_val,
+            hospital_address=facility_obj.address if (facility_obj and facility_type != "clinic") else None,
             clinic_name=clinic_name_val,
+            clinic_address=facility_obj.address if (facility_obj and facility_type == "clinic") else None,
+            city=facility_obj.city if facility_obj else None,
+            state=facility_obj.state if facility_obj else None,
+            country=facility_obj.country if facility_obj else None,
+            pincode=facility_obj.pincode if facility_obj else None,
             clinic_phone=payload.clinic_phone,
             experience_years=payload.experience_years or 0,
             consultation_fee=payload.consultation_fee or 0,
@@ -722,6 +777,15 @@ async def create_doctor(
                 location_type=loc_type.value,
                 location_name=facility_name,
                 hospital_id=assigned_hospital_id,
+                address=facility_obj.address if facility_obj else None,
+                city=facility_obj.city if facility_obj else None,
+                state=facility_obj.state if facility_obj else None,
+                country=facility_obj.country if facility_obj else None,
+                pincode=facility_obj.pincode if facility_obj else None,
+                phone=facility_obj.phone_number if facility_obj else payload.clinic_phone,
+                latitude=float(facility_obj.latitude) if facility_obj and facility_obj.latitude is not None else None,
+                longitude=float(facility_obj.longitude) if facility_obj and facility_obj.longitude is not None else None,
+                google_maps_url=facility_obj.google_maps_url if facility_obj else None,
                 is_primary=True,
                 is_active=True,
                 verification_status="APPROVED"
@@ -730,17 +794,25 @@ async def create_doctor(
 
         await db.commit()
 
-        # Try Enqueue Blockchain Sync
+        # Enqueue & trigger DoctorRegistry sync (registers & verifies doctor on-chain)
         try:
-            from app.services.blockchain_sync import BlockchainSyncService
+            from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
             from app.models.blockchain import SyncEntityType, SyncActionType
-            await BlockchainSyncService.enqueue_sync_task(
+            from app.blockchain.client import blockchain_client
+            task = await BlockchainSyncService.enqueue_sync_task(
                 db=db,
                 entity_type=SyncEntityType.DOCTOR,
                 entity_id=new_user.id,
-                action_type=SyncActionType.CREATE
+                action_type=SyncActionType.VERIFY,
+                payload={
+                    "doctor_id": str(new_user.id),
+                    "license_number": new_doc.license_number or str(new_user.id),
+                    "hospital_id": str(assigned_hospital_id or clinic_name_val or new_user.id),
+                    "wallet_address": blockchain_client.wallet_address,
+                }
             )
             await db.commit()
+            trigger_background_sync(task.id)
         except Exception:
             pass
 
@@ -831,28 +903,7 @@ async def create_admin(
     # Fallback to direct SQL insert into auth.users if Supabase API was unreachable or unconfigured
     if not user_id:
         user_id = uuid.uuid4()
-        try:
-            from sqlalchemy import text
-            await db.execute(
-                text("""
-                INSERT INTO auth.users (
-                    id, instance_id, email, encrypted_password, aud, role,
-                    raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
-                )
-                VALUES (
-                    :id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')),
-                    'authenticated', 'authenticated',
-                    '{"provider":"email","providers":["email"],"role":"ADMIN"}',
-                    '{"role":"ADMIN"}',
-                    now(), now(), now()
-                )
-                """),
-                {"id": user_id, "email": clean_email, "pwd": payload.password}
-            )
-            await db.commit()
-        except Exception:
-            # If auth.users doesn't exist (e.g. SQLite test DB), rollback and continue
-            await db.rollback()
+        await _insert_auth_user_fallback(db, user_id, clean_email, payload.password, "ADMIN")
 
     try:
         # Create local DB user record
@@ -950,80 +1001,99 @@ async def create_pharmacy_admin(
     # Fallback to direct SQL insert into auth.users if Supabase API is unreachable
     if not user_id:
         user_id = uuid.uuid4()
-        try:
-            await db.execute(
-                text("""
-                INSERT INTO auth.users (
-                    id, instance_id, email, encrypted_password, aud, role,
-                    raw_app_meta_data, raw_user_meta_data, email_confirmed_at, created_at, updated_at
-                )
-                VALUES (
-                    :id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')),
-                    'authenticated', 'authenticated',
-                    '{"provider":"email","providers":["email"],"role":"PHARMACY"}',
-                    '{"role":"PHARMACY"}',
-                    now(), now(), now()
-                )
-                """),
-                {"id": user_id, "email": clean_email, "pwd": req.password or "Pharmacy@123"}
-            )
-            await db.commit()
-        except Exception:
-            await db.rollback()
+        await _insert_auth_user_fallback(db, user_id, clean_email, req.password or "Pharmacy@123", "PHARMACY")
 
-    new_user = User(
-        id=user_id,
-        email=clean_email,
-        password_hash="supabase_managed",
-        role=UserRole.PHARMACY,
-        status=UserStatus.ACTIVE,
-        is_verified=True,
-        profile_completion_percentage=100
-    )
-    db.add(new_user)
-    
-    loc_dict = None
-    if req.latitude is not None and req.longitude is not None:
-        loc_dict = {"latitude": req.latitude, "longitude": req.longitude}
-
-    hosp_uuid = None
-    if req.hospital_id and req.hospital_id.strip():
-        try:
-            hosp_uuid = uuid.UUID(req.hospital_id.strip())
-        except ValueError:
-            hosp_uuid = None
-
-    new_pharmacy = Pharmacy(
-        id=uuid.uuid4(),
-        user_id=user_id,
-        business_name=req.business_name,
-        license_number=req.license_number,
-        address=req.address,
-        city=req.city,
-        state=req.state,
-        country=req.country,
-        pincode=req.pincode,
-        contact_number=req.contact_number,
-        hospital_id=hosp_uuid,
-        clinic_name=req.clinic_name,
-        location=loc_dict,
-        qr_identifier=f"pharm_{uuid.uuid4().hex[:12]}",
-        qr_status="ACTIVE",
-        blockchain_status="PENDING"
-    )
-    db.add(new_pharmacy)
-    await db.commit()
-    
     try:
-        from app.services.blockchain_sync import BlockchainSyncService
+        hosp_uuid = None
+        linked_hosp = None
+        if req.hospital_id and req.hospital_id.strip():
+            try:
+                hosp_uuid = uuid.UUID(req.hospital_id.strip())
+                h_res = await db.execute(select(Hospital).where(Hospital.id == hosp_uuid))
+                linked_hosp = h_res.scalar_one_or_none()
+            except ValueError:
+                hosp_uuid = None
+
+        resolved_address = (linked_hosp.address if linked_hosp and linked_hosp.address else None) or req.address
+        if not resolved_address:
+            raise HTTPException(status_code=400, detail="Pharmacy address or affiliated hospital/clinic is required")
+
+        resolved_city = req.city or (linked_hosp.city if linked_hosp else None)
+        resolved_state = req.state or (linked_hosp.state if linked_hosp else None)
+        resolved_country = req.country or (linked_hosp.country if linked_hosp else None)
+        resolved_pincode = req.pincode or (linked_hosp.pincode if linked_hosp else None)
+        resolved_clinic_name = req.clinic_name or (linked_hosp.name if linked_hosp and (linked_hosp.type or "").lower() == "clinic" else None)
+
+        loc_dict = None
+        if req.latitude is not None and req.longitude is not None:
+            loc_dict = {"lat": req.latitude, "lng": req.longitude, "latitude": req.latitude, "longitude": req.longitude}
+        elif linked_hosp and linked_hosp.latitude is not None and linked_hosp.longitude is not None:
+            loc_dict = {
+                "lat": float(linked_hosp.latitude),
+                "lng": float(linked_hosp.longitude),
+                "latitude": float(linked_hosp.latitude),
+                "longitude": float(linked_hosp.longitude),
+                "google_maps_url": linked_hosp.google_maps_url,
+            }
+
+        new_user = User(
+            id=user_id,
+            email=clean_email,
+            password_hash="supabase_managed",
+            role=UserRole.PHARMACY,
+            status=UserStatus.ACTIVE,
+            is_verified=True,
+            profile_completion_percentage=100
+        )
+        db.add(new_user)
+
+        from app.api.v1.endpoints.pharmacy import _generate_qr_identifier
+        new_pharmacy = Pharmacy(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            business_name=req.business_name,
+            license_number=req.license_number,
+            address=resolved_address,
+            city=resolved_city,
+            state=resolved_state,
+            country=resolved_country,
+            pincode=resolved_pincode,
+            contact_number=req.contact_number,
+            hospital_id=hosp_uuid,
+            clinic_name=resolved_clinic_name,
+            location=loc_dict,
+            qr_identifier=_generate_qr_identifier(user_id),
+            qr_status="ACTIVE",
+            blockchain_status="PENDING"
+        )
+        db.add(new_pharmacy)
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
         from app.models.blockchain import SyncEntityType, SyncActionType
-        await BlockchainSyncService.enqueue_sync_task(
+        from app.blockchain.client import blockchain_client
+        task = await BlockchainSyncService.enqueue_sync_task(
             db=db,
             entity_type=SyncEntityType.PHARMACY,
             entity_id=new_user.id,
-            action_type=SyncActionType.CREATE
+            action_type=SyncActionType.VERIFY,
+            payload={
+                "pharmacy_id": str(new_user.id),
+                "license_number": new_pharmacy.license_number,
+                "business_name": new_pharmacy.business_name,
+                "hospital_id": str(hosp_uuid) if hosp_uuid else None,
+                "wallet_address": blockchain_client.wallet_address,
+            }
         )
         await db.commit()
+        trigger_background_sync(task.id)
     except Exception:
         pass
         

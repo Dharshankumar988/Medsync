@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   Image,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -70,6 +71,8 @@ export default function PatientDashboard() {
 
   // Notifications
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [notificationsList, setNotificationsList] = useState<any[]>([]);
+  const [notifModalVisible, setNotifModalVisible] = useState(false);
 
   // Appointments & Orders Overview
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
@@ -129,14 +132,16 @@ export default function PatientDashboard() {
       const [sumData, profData, notifs, appts, orderList] = await Promise.all([
         patientService.getDashboardSummary(),
         user?.id ? patientService.getProfile(user.id).catch(() => null) : null,
-        patientService.getNotifications(true).catch(() => []),
+        patientService.getNotifications(false).catch(() => []),
         patientService.getAppointments().catch(() => []),
         patientService.getMedicineOrders().catch(() => []),
       ]);
 
       setSummary(sumData);
       setProfile(profData);
-      setUnreadNotifCount(Array.isArray(notifs) ? notifs.length : 0);
+      const notifArray = Array.isArray(notifs) ? notifs : [];
+      setNotificationsList(notifArray);
+      setUnreadNotifCount(notifArray.filter((n: any) => !n.is_read).length);
       setAppointments(appts || []);
       setOrders(orderList || []);
 
@@ -233,8 +238,9 @@ export default function PatientDashboard() {
                 styles.iconButton,
                 { backgroundColor: theme.card, borderColor: theme.border },
               ]}
-              onPress={() => router.push('/(tabs)/patient/profile')}
+              onPress={() => setNotifModalVisible(true)}
               activeOpacity={0.8}
+              accessibilityLabel="Notifications"
             >
               <Bell size={18} color={theme.text} />
               {unreadNotifCount > 0 && (
@@ -599,9 +605,103 @@ export default function PatientDashboard() {
             patient_id: profile?.id,
             doctor_name: 'MedSync Sovereign Protocol',
             created_at: new Date().toISOString(),
-            medications: [],
+          medications: [],
           }}
         />
+
+        {/* ── Notifications Inbox Modal ── */}
+        <Modal
+          visible={notifModalVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setNotifModalVisible(false)}
+        >
+          <View style={styles.notifBackdrop}>
+            <View
+              style={[
+                styles.notifSheet,
+                {
+                  backgroundColor: theme.card,
+                  borderTopColor: theme.border,
+                  borderTopWidth: 1,
+                },
+              ]}
+            >
+              <View style={[styles.notifHeader, { borderBottomColor: theme.border }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Bell size={18} color={theme.accent} />
+                  <Text style={[styles.notifHeaderTitle, { color: theme.text }]}>
+                    Notifications ({unreadNotifCount} unread)
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setNotifModalVisible(false)} style={{ padding: 6 }}>
+                  <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 13 }}>Done</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ padding: 16, gap: 10 }}>
+                {notificationsList.length === 0 ? (
+                  <View style={{ alignItems: 'center', paddingVertical: 36 }}>
+                    <Bell size={32} color={theme.textMuted} />
+                    <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15, marginTop: 10 }}>
+                      All Caught Up
+                    </Text>
+                    <Text style={{ color: theme.textMuted, fontSize: 12.5, marginTop: 4 }}>
+                      Appointment updates and delivery alerts appear here.
+                    </Text>
+                  </View>
+                ) : (
+                  notificationsList.map((n: any) => (
+                    <TouchableOpacity
+                      key={n.id}
+                      style={[
+                        styles.notifItem,
+                        {
+                          backgroundColor: n.is_read
+                            ? theme.surface
+                            : isDark
+                            ? 'rgba(56, 189, 248, 0.1)'
+                            : '#F0F9FF',
+                          borderColor: theme.border,
+                        },
+                      ]}
+                      onPress={async () => {
+                        if (!n.is_read) {
+                          try {
+                            await patientService.markNotificationRead(n.id);
+                            setNotificationsList((prev) =>
+                              prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item))
+                            );
+                            setUnreadNotifCount((c) => Math.max(0, c - 1));
+                          } catch {}
+                        }
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <View
+                        style={[
+                          styles.notifStatusDot,
+                          { backgroundColor: n.is_read ? theme.textMuted : theme.accent },
+                        ]}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.text, fontWeight: '700', fontSize: 13.5 }}>
+                          {n.title || 'Health Alert'}
+                        </Text>
+                        <Text style={{ color: theme.textSecondary, fontSize: 12.5, marginTop: 3, lineHeight: 18 }}>
+                          {n.message || n.body || ''}
+                        </Text>
+                        <Text style={{ color: theme.textMuted, fontSize: 11, marginTop: 4 }}>
+                          {n.created_at ? new Date(n.created_at).toLocaleString() : 'Just now'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </View>
     </RoleGuard>
   );
@@ -684,7 +784,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 18,
-    paddingBottom: 40,
+    paddingBottom: 145,
   },
   errorBox: {
     flexDirection: 'row',
@@ -975,5 +1075,44 @@ const styles = StyleSheet.create({
   hubDesc: {
     fontSize: 12,
     fontWeight: '500',
+  },
+
+  /* ── Notifications Modal ── */
+  notifBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  notifSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    maxHeight: '78%',
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  notifHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  notifItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  notifStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 5,
   },
 });

@@ -219,7 +219,7 @@ class AdminPharmacyCreate(BaseModel):
 
     business_name: str
     license_number: str
-    address: str
+    address: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
     country: Optional[str] = None

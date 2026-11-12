@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, desc
 from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, get_current_user_optional, RoleChecker
 from app.models.user import User, UserRole
@@ -171,7 +171,7 @@ async def verify_pharmacy_blockchain(
         tx_stmt = select(BlockchainTransaction).join(
             BlockchainSyncTask, BlockchainTransaction.transaction_hash == BlockchainSyncTask.transaction_hash
         ).where(
-            BlockchainSyncTask.entity_id == pharmacy.id,
+            BlockchainSyncTask.entity_id.in_([pharmacy.user_id, pharmacy.id]),
             BlockchainSyncTask.entity_type == SyncEntityType.PHARMACY
         ).order_by(desc(BlockchainTransaction.created_at))
         tx_res = await db.execute(tx_stmt)
@@ -198,21 +198,20 @@ async def verify_pharmacy_blockchain(
             except Exception:
                 pass
 
-            # Check on-chain pharmacy registry contract
+            # Check on-chain pharmacy registry contract (matching sync_service._to_bytes32(user_id))
             try:
-                canonical_payload = {
-                    "pharmacy_id": str(pharmacy.user_id),
-                    "email": str(user.email) if hasattr(user, 'email') else ""
-                }
-                data_hash_hex = generate_canonical_hash(canonical_payload)
-                pharmacy_hash = bytes.fromhex(data_hash_hex)
+                raw_hex = str(pharmacy.user_id).replace("-", "").strip()
+                if len(raw_hex) == 32:
+                    pharmacy_hash = bytes.fromhex(raw_hex.ljust(64, "0"))
+                else:
+                    pharmacy_hash = hashlib.sha256(str(pharmacy.user_id).encode("utf-8")).digest()
                 res = blockchain_gateway.read_contract("PharmacyRegistry", "getPharmacy", pharmacy_hash)
                 if isinstance(res, (tuple, list)) and len(res) >= 6:
                     is_verified = res[4]
                     is_suspended = res[5]
-                    verified_on_blockchain = is_verified and not is_suspended
+                    verified_on_blockchain = bool(is_verified and not is_suspended)
                 elif res is True:
-                    verified_on_blockchain = True
+                    verified_on_blockchain = bool(user.is_verified and pharmacy.qr_status == "ACTIVE")
             except Exception:
                 pass
         else:

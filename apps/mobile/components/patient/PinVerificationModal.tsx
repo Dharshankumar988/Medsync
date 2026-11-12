@@ -147,8 +147,8 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
           style={[
             styles.dialog,
             {
-              backgroundColor: theme.card,
-              borderColor: theme.border,
+              backgroundColor: isDark ? '#18181B' : '#FFFFFF',
+              borderColor: isDark ? '#27272A' : '#E2E8F0',
             },
           ]}
         >

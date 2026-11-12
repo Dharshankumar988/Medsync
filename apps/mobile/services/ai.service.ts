@@ -103,7 +103,7 @@ export const aiService = {
           fallbackToDirectChat();
         };
 
-        xhr.timeout = 30000;
+        xhr.timeout = 45000;
         xhr.send(JSON.stringify({ message, session_id: sessionId || null }));
       })
       .catch((err) => {
@@ -133,7 +133,25 @@ export const aiService = {
         }
       );
 
-      return JSON.parse(response.body);
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(response.body || '{}');
+      } catch {
+        parsed = { detail: response.body };
+      }
+
+      if (response.status >= 400) {
+        const msg =
+          parsed?.error?.message ||
+          parsed?.detail ||
+          parsed?.message ||
+          `Server returned status ${response.status}`;
+        const err: any = new Error(msg);
+        err.status = response.status;
+        throw err;
+      }
+
+      return parsed;
     } catch (e) {
       console.error('Image analysis error:', e);
       throw e;

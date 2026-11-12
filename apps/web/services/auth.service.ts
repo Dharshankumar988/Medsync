@@ -99,6 +99,11 @@ export const authService = {
     hospital_address?: string;
     clinic_name?: string;
     clinic_address?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    pincode?: string;
     latitude?: number;
     longitude?: number;
     license_number?: string;
@@ -192,6 +197,11 @@ export const authService = {
         hospital_address: data.hospital_address,
         clinic_name: data.clinic_name,
         clinic_address: data.clinic_address,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        country: data.country,
+        pincode: data.pincode,
         latitude: data.latitude,
         longitude: data.longitude,
         license_number: data.license_number,

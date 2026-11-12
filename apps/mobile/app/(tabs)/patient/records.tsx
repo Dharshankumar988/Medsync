@@ -818,7 +818,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: 120,
+    paddingBottom: 145,
     gap: 12,
   },
   errorBanner: {

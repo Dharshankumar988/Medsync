@@ -22,6 +22,7 @@ import {
   Stethoscope
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeScanBoxes } from "@/lib/scan-box-utils";
 
 export interface DetectionFinding {
   diagnosis: string;
@@ -61,6 +62,7 @@ export function MedicalScanViewerModal({
   const [isPanning, setIsPanning] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [clientBoxes, setClientBoxes] = useState<any[]>([]);
   const startPanRef = useRef({ x: 0, y: 0 });
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -183,26 +185,35 @@ export function MedicalScanViewerModal({
 
   const handleMouseUp = () => setIsPanning(false);
 
-  // Active boxes priority: detection.boxes -> props.boxes -> client auto-detected boxes
+  const isSkinScan = (detection?.scan_type || "").toLowerCase().includes("skin");
+
+  // Active boxes priority: detection.boxes -> props.boxes -> client auto-detected boxes (skin only)
   const explicitBoxes = (detection?.boxes && detection.boxes.length > 0) 
     ? detection.boxes 
     : (boxes && boxes.length > 0 ? boxes : []);
   const activeBoxes = explicitBoxes.length > 0 ? explicitBoxes : clientBoxes;
+  const normalizedBoxes = normalizeScanBoxes(
+    activeBoxes,
+    naturalSize.width,
+    naturalSize.height,
+    isSkinScan ? "Detected Lesion" : detection?.diagnosis || "Detected ROI"
+  );
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     setImageLoaded(true);
     const imgElement = e.currentTarget;
     imgRef.current = imgElement;
-    if (explicitBoxes.length === 0) {
+    setNaturalSize({
+      width: imgElement.naturalWidth || 0,
+      height: imgElement.naturalHeight || 0,
+    });
+    if (explicitBoxes.length === 0 && isSkinScan) {
       const detected = detectLesionOnImage(imgElement);
       if (detected && detected.length > 0) {
         setClientBoxes(detected);
       }
     }
   };
-
-  const isSkinScan = (detection?.scan_type || "").toLowerCase().includes("skin") || 
-                     (imageName.toLowerCase().includes(".jpg") && !detection?.scan_type?.match(/bone|brain|kidney/i));
 
   const isAbnormal = detection?.diagnosis && 
     !detection.diagnosis.toLowerCase().includes("no fracture") &&
@@ -358,7 +369,7 @@ export function MedicalScanViewerModal({
                         transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                       }}
                     >
-                      <div className="relative inline-flex items-center justify-center">
+                      <div className="relative inline-block">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           ref={imgRef}
@@ -368,85 +379,51 @@ export function MedicalScanViewerModal({
                           onLoad={handleImageLoad}
                           onError={() => setImageError(true)}
                           className={cn(
-                            "max-h-[75vh] max-w-[75vw] object-contain rounded-lg shadow-2xl border border-zinc-800/80 transition-opacity duration-200",
+                            "block max-h-[75vh] max-w-[75vw] w-auto h-auto rounded-lg shadow-2xl border border-zinc-800/80 transition-opacity duration-200",
                             imageLoaded ? "opacity-100" : "opacity-0"
                           )}
                         />
 
-                        {/* SVG Bounding Boxes Overlay aligned directly over the image */}
-                        {showAnnotations && activeBoxes.length > 0 && imageLoaded && (
-                          <svg
-                            className="absolute inset-0 w-full h-full pointer-events-none"
-                            viewBox="0 0 100 100"
-                            preserveAspectRatio="none"
-                          >
-                            {activeBoxes.map((rawBox, i) => {
-                              const box = Array.isArray(rawBox) 
-                                ? rawBox 
-                                : (rawBox?.coordinates || rawBox?.bbox || [0, 0, 0, 0]);
-                              
-                              const isNormalized = box[0] <= 1.05 && box[2] <= 1.05;
-                              const x = isNormalized ? box[0] * 100 : box[0];
-                              const y = isNormalized ? box[1] * 100 : box[1];
-                              const width = isNormalized ? (box[2] - box[0]) * 100 : box[2] - box[0];
-                              const height = isNormalized ? (box[3] - box[1]) * 100 : box[3] - box[1];
-
-                              const boxLabel = rawBox?.class || 
-                                (isSkinScan ? "Detected Lesion / Mole" : detection?.diagnosis || `ROI #${i + 1}`);
-
+                        {/* Solid Bounding Boxes Overlay aligned directly over the rendered image */}
+                        {showAnnotations && normalizedBoxes.length > 0 && imageLoaded && (
+                          <div className="absolute inset-0 pointer-events-none">
+                            {normalizedBoxes.map((b, i) => {
+                              const labelInside = b.topPct < 9;
                               return (
-                                <g key={i}>
-                                  {/* Lesion Highlight Region */}
-                                  <rect
-                                    x={`${Math.max(0, x)}%`}
-                                    y={`${Math.max(0, y)}%`}
-                                    width={`${Math.max(3, width)}%`}
-                                    height={`${Math.max(3, height)}%`}
-                                    fill="rgba(239, 68, 68, 0.16)"
-                                    stroke="#ef4444"
-                                    strokeWidth="2.0"
-                                    strokeDasharray="4"
-                                    className="animate-pulse"
-                                  />
+                                <div
+                                  key={i}
+                                  style={{
+                                    left: `${b.leftPct}%`,
+                                    top: `${b.topPct}%`,
+                                    width: `${b.widthPct}%`,
+                                    height: `${b.heightPct}%`,
+                                  }}
+                                  className="absolute border-2 border-solid border-rose-500 bg-rose-500/15 shadow-[0_0_12px_rgba(244,63,94,0.28)]"
+                                >
+                                  {/* Crisp corner markers */}
+                                  <span className="absolute -top-0.5 -left-0.5 w-2.5 h-2.5 border-t-[3px] border-l-[3px] border-rose-400" />
+                                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 border-t-[3px] border-r-[3px] border-rose-400" />
+                                  <span className="absolute -bottom-0.5 -left-0.5 w-2.5 h-2.5 border-b-[3px] border-l-[3px] border-rose-400" />
+                                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-b-[3px] border-r-[3px] border-rose-400" />
 
-                                  {/* Medical Targeting Corner Accents */}
-                                  <line x1={`${x}%`} y1={`${y}%`} x2={`${x + Math.min(width * 0.25, 4)}%`} y2={`${y}%`} stroke="#ef4444" strokeWidth="3" />
-                                  <line x1={`${x}%`} y1={`${y}%`} x2={`${x}%`} y2={`${y + Math.min(height * 0.25, 4)}%`} stroke="#ef4444" strokeWidth="3" />
-
-                                  <line x1={`${x + width}%`} y1={`${y}%`} x2={`${x + width - Math.min(width * 0.25, 4)}%`} y2={`${y}%`} stroke="#ef4444" strokeWidth="3" />
-                                  <line x1={`${x + width}%`} y1={`${y}%`} x2={`${x + width}%`} y2={`${y + Math.min(height * 0.25, 4)}%`} stroke="#ef4444" strokeWidth="3" />
-
-                                  <line x1={`${x}%`} y1={`${y + height}%`} x2={`${x + Math.min(width * 0.25, 4)}%`} y2={`${y + height}%`} stroke="#ef4444" strokeWidth="3" />
-                                  <line x1={`${x}%`} y1={`${y + height}%`} x2={`${x}%`} y2={`${y + height - Math.min(height * 0.25, 4)}%`} stroke="#ef4444" strokeWidth="3" />
-
-                                  <line x1={`${x + width}%`} y1={`${y + height}%`} x2={`${x + width - Math.min(width * 0.25, 4)}%`} y2={`${y + height}%`} stroke="#ef4444" strokeWidth="3" />
-                                  <line x1={`${x + width}%`} y1={`${y + height}%`} x2={`${x + width}%`} y2={`${y + height - Math.min(height * 0.25, 4)}%`} stroke="#ef4444" strokeWidth="3" />
-
-                                  {/* Annotation Tag */}
-                                  <rect
-                                    x={`${Math.max(0, x)}%`}
-                                    y={`${Math.max(0, y - 5.5)}%`}
-                                    width={`${Math.min(50, Math.max(22, boxLabel.length * 2.2))}%`}
-                                    height="4.8%"
-                                    rx="1"
-                                    fill="rgba(15, 23, 42, 0.9)"
-                                    stroke="#ef4444"
-                                    strokeWidth="1"
-                                  />
-                                  <text
-                                    x={`${Math.max(1, x + 1)}%`}
-                                    y={`${Math.max(3.6, y - 2)}%`}
-                                    fill="#f87171"
-                                    fontSize="2.8"
-                                    fontWeight="bold"
-                                    className="select-none"
+                                  {/* Anatomical / Diagnosis Label Badge */}
+                                  <div
+                                    className={cn(
+                                      "absolute left-0 flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-950/90 border border-rose-500/80 text-[11px] font-bold text-rose-300 whitespace-nowrap shadow-md",
+                                      labelInside ? "top-1 left-1" : "-top-6"
+                                    )}
                                   >
-                                    🎯 {boxLabel}
-                                  </text>
-                                </g>
+                                    <span>{b.label}</span>
+                                    {b.confidence !== undefined && (
+                                      <span className="text-rose-400/90 font-mono text-[10px]">
+                                        {Math.round(b.confidence * 100)}%
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               );
                             })}
-                          </svg>
+                          </div>
                         )}
                       </div>
                     </div>

@@ -31,9 +31,11 @@ import asyncio
 from datetime import datetime
 import json
 import hashlib
+import logging
 
 from app.dependencies.rate_limit import limiter
 
+logger = logging.getLogger("blockchain.endpoints")
 router = APIRouter()
 
 async def _execute_sync_task_bg(task_id: uuid.UUID):
@@ -141,7 +143,10 @@ async def verify_doctor_on_blockchain(
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
     """Admin verifies a doctor on the blockchain."""
-    stmt = select(Doctor).where(Doctor.id == doctor_id)
+    from sqlalchemy import or_
+    from app.blockchain.client import blockchain_client
+
+    stmt = select(Doctor).where(or_(Doctor.id == doctor_id, Doctor.user_id == doctor_id))
     result = await db.execute(stmt)
     doctor = result.scalar_one_or_none()
     if not doctor:
@@ -149,9 +154,14 @@ async def verify_doctor_on_blockchain(
         
     task = BlockchainSyncTask(
         entity_type=SyncEntityType.DOCTOR,
-        entity_id=doctor.id,
+        entity_id=doctor.user_id,
         action_type=SyncActionType.VERIFY,
-        payload={"doctor_id": str(doctor.id), "license_number": doctor.license_number},
+        payload={
+            "doctor_id": str(doctor.user_id),
+            "license_number": doctor.license_number or str(doctor.user_id),
+            "hospital_id": str(doctor.hospital_id or doctor.clinic_name or doctor.user_id),
+            "wallet_address": blockchain_client.wallet_address,
+        },
         status=SyncStatus.PENDING
     )
     db.add(task)
@@ -334,7 +344,10 @@ async def verify_pharmacy_on_blockchain(
     current_user: AuthenticatedPrincipal = Depends(RoleChecker(["ADMIN"]))
 ):
     """Admin verifies a pharmacy on the blockchain."""
-    stmt = select(Pharmacy).where(Pharmacy.id == pharmacy_id)
+    from sqlalchemy import or_
+    from app.blockchain.client import blockchain_client
+
+    stmt = select(Pharmacy).where(or_(Pharmacy.id == pharmacy_id, Pharmacy.user_id == pharmacy_id))
     result = await db.execute(stmt)
     pharmacy = result.scalar_one_or_none()
     if not pharmacy:
@@ -342,9 +355,14 @@ async def verify_pharmacy_on_blockchain(
         
     task = BlockchainSyncTask(
         entity_type=SyncEntityType.PHARMACY,
-        entity_id=pharmacy.id,
+        entity_id=pharmacy.user_id,
         action_type=SyncActionType.VERIFY,
-        payload={"pharmacy_id": str(pharmacy.id), "license_number": pharmacy.license_number},
+        payload={
+            "pharmacy_id": str(pharmacy.user_id),
+            "license_number": pharmacy.license_number or str(pharmacy.user_id),
+            "business_name": pharmacy.business_name,
+            "wallet_address": blockchain_client.wallet_address,
+        },
         status=SyncStatus.PENDING
     )
     db.add(task)
@@ -1173,30 +1191,36 @@ KNOWN_CONTRACT_ABIS = {
     },
     "DoctorRegistry": {
         "events": [
-            "DoctorRegistered(bytes32 indexed doctorHash, bytes32 licenseHash, bytes32 hospitalHash, address indexed wallet)",
-            "DoctorVerified(bytes32 indexed doctorHash, uint256 verifiedAt)",
-            "DoctorSuspended(bytes32 indexed doctorHash, uint256 suspendedAt)"
+            "DoctorRegistered(bytes32 indexed doctorHash, bytes32 indexed licenseHash, address indexed wallet, uint256 timestamp)",
+            "DoctorVerified(bytes32 indexed doctorHash, uint256 timestamp)",
+            "DoctorSuspended(bytes32 indexed doctorHash, uint256 timestamp)",
+            "DoctorReactivated(bytes32 indexed doctorHash, uint256 timestamp)",
+            "DoctorAffiliationUpdated(bytes32 indexed doctorHash, bytes32 indexed newHospitalHash, uint256 timestamp)"
         ],
         "functions": [
             "registerDoctor(bytes32 doctorHash, bytes32 licenseHash, bytes32 hospitalHash, address wallet)",
             "verifyDoctor(bytes32 doctorHash)",
             "suspendDoctor(bytes32 doctorHash)",
-            "isDoctorVerified(bytes32 doctorHash) view returns (bool)",
-            "getDoctor(bytes32 doctorHash) view returns (bytes32, bytes32, address, uint256, bool, bool)"
+            "reactivateDoctor(bytes32 doctorHash)",
+            "updateAffiliation(bytes32 doctorHash, bytes32 newHospitalHash)",
+            "doctors(bytes32 doctorHash) view returns (bytes32, bytes32, address, uint40, uint40, bool, bool)",
+            "getDoctor(bytes32 doctorHash) view returns (bytes32, bytes32, address, uint40, uint40, bool, bool)"
         ]
     },
     "PharmacyRegistry": {
         "events": [
-            "PharmacyRegistered(bytes32 indexed pharmacyHash, bytes32 licenseHash, address indexed owner)",
-            "PharmacyVerified(bytes32 indexed pharmacyHash, uint256 verifiedAt)",
-            "PharmacySuspended(bytes32 indexed pharmacyHash, uint256 suspendedAt)"
+            "PharmacyRegistered(bytes32 indexed pharmacyHash, bytes32 indexed licenseHash, address indexed owner, uint256 timestamp)",
+            "PharmacyVerified(bytes32 indexed pharmacyHash, uint256 timestamp)",
+            "PharmacySuspended(bytes32 indexed pharmacyHash, uint256 timestamp)",
+            "PharmacyReactivated(bytes32 indexed pharmacyHash, uint256 timestamp)"
         ],
         "functions": [
             "registerPharmacy(bytes32 pharmacyHash, bytes32 licenseHash, address owner)",
             "verifyPharmacy(bytes32 pharmacyHash)",
             "suspendPharmacy(bytes32 pharmacyHash)",
-            "isPharmacyVerified(bytes32 pharmacyHash) view returns (bool)",
-            "getPharmacy(bytes32 pharmacyHash) view returns (bytes32, address, uint256, bool, bool)"
+            "reactivatePharmacy(bytes32 pharmacyHash)",
+            "pharmacies(bytes32 pharmacyHash) view returns (bytes32, address, uint40, uint40, bool, bool)",
+            "getPharmacy(bytes32 pharmacyHash) view returns (bytes32, address, uint40, uint40, bool, bool)"
         ]
     },
     "MedicalRecordRegistry": {
@@ -1286,8 +1310,11 @@ async def get_contract_details(
         abi_path = project_root / "apps" / "blockchain" / "abis" / f"{canonical_name}.json"
         
         if not abi_path.exists():
+            local_abi_path = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "abi" / f"{canonical_name}.json"
             docker_abi_path = Path(__file__).resolve().parent.parent.parent.parent / "blockchain" / "artifacts" / "abis" / f"{canonical_name}.json"
-            if docker_abi_path.exists():
+            if local_abi_path.exists():
+                abi_path = local_abi_path
+            elif docker_abi_path.exists():
                 abi_path = docker_abi_path
         
         if abi_path.exists():

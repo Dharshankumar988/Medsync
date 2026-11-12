@@ -517,3 +517,34 @@ def test_skin_lesion_detection_and_bounding_box():
     # Mole center is approx x=0.46, y=0.50
     assert coords[0] <= 0.46 <= coords[2]
     assert coords[1] <= 0.50 <= coords[3]
+
+
+def test_pixel_bounding_boxes_normalized_to_unit_range():
+    """Verify pixel [x1, y1, x2, y2] boxes (e.g. from YOLO on 256x256 or 640x640 scans) normalize cleanly to [0, 1]."""
+    import io
+    from PIL import Image
+    from app.ai.services.image_analysis import ImageAnalysisService
+
+    img = Image.new("RGB", (256, 256), color=(20, 20, 20))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    image_bytes = buf.getvalue()
+
+    hf_result = {
+        "success": True,
+        "diagnosis": "glioma",
+        "confidence": 0.89,
+        "boxes": [
+            {"class": "glioma", "confidence": 0.89, "coordinates": [40, 71, 84, 112]}
+        ],
+    }
+
+    pred = ImageAnalysisService._extract_prediction(hf_result, "brain", image_bytes)
+    assert len(pred["boxes"]) == 1
+    coords = pred["boxes"][0]["coordinates"]
+    assert abs(coords[0] - round(40 / 256, 4)) < 1e-4
+    assert abs(coords[1] - round(71 / 256, 4)) < 1e-4
+    assert abs(coords[2] - round(84 / 256, 4)) < 1e-4
+    assert abs(coords[3] - round(112 / 256, 4)) < 1e-4
+    assert all(0.0 <= c <= 1.0 for c in coords)
+

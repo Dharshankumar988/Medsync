@@ -104,17 +104,31 @@ class VerificationService:
             try:
                 from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
                 from app.models.blockchain import SyncEntityType, SyncActionType
-                
+                from app.blockchain.client import blockchain_client
+
                 entity_type = None
                 payload = {}
-                if role == "DOCTOR" or role.value == "DOCTOR":
+                if role == "DOCTOR" or getattr(role, "value", None) == "DOCTOR":
                     entity_type = SyncEntityType.DOCTOR
                     doc_lic = getattr(doctor, "license_number", None) if "doctor" in locals() and doctor else str(user.id)
-                    payload = {"doctor_id": str(user.id), "license_hash": doc_lic, "license_number": doc_lic}
-                elif role == "PHARMACY" or role.value == "PHARMACY":
+                    doc_hosp = getattr(doctor, "hospital_id", None) or getattr(doctor, "clinic_name", None) if "doctor" in locals() and doctor else None
+                    payload = {
+                        "doctor_id": str(user.id),
+                        "license_hash": doc_lic,
+                        "license_number": doc_lic,
+                        "hospital_id": str(doc_hosp or user.id),
+                        "wallet_address": blockchain_client.wallet_address,
+                    }
+                elif role == "PHARMACY" or getattr(role, "value", None) == "PHARMACY":
                     entity_type = SyncEntityType.PHARMACY
                     phm_lic = getattr(pharmacy, "license_number", None) if "pharmacy" in locals() and pharmacy else str(user.id)
-                    payload = {"pharmacy_id": str(user.id), "license_hash": phm_lic, "license_number": phm_lic}
+                    payload = {
+                        "pharmacy_id": str(user.id),
+                        "license_hash": phm_lic,
+                        "license_number": phm_lic,
+                        "business_name": getattr(pharmacy, "business_name", None) if "pharmacy" in locals() and pharmacy else None,
+                        "wallet_address": blockchain_client.wallet_address,
+                    }
                 
                 if entity_type:
                     task = await BlockchainSyncService.enqueue_sync_task(

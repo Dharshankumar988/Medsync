@@ -34,6 +34,7 @@ import {
   Lock,
 } from 'lucide-react-native';
 import { patientService } from '../../services/patient.service';
+import { useTheme } from '../../context/ThemeContext';
 import { OrderMedicinesModal } from './OrderMedicinesModal';
 import { PinVerificationModal } from './PinVerificationModal';
 import { formatErrorMessage } from '../../lib/api';
@@ -57,6 +58,7 @@ export function PaymentStyleQRScanner({
   onClose,
   userProfile,
 }: PaymentStyleQRScannerProps) {
+  const { theme, isDark } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const [activeTab, setActiveTab] = useState<'SCAN' | 'MY_QR'>('SCAN');
   const [torchEnabled, setTorchEnabled] = useState(false);
@@ -336,12 +338,25 @@ export function PaymentStyleQRScanner({
 
             {/* Verification Result Sheet / Modal */}
             {scanned && (
-              <View style={styles.resultSheet}>
+              <View
+                style={[
+                  styles.resultSheet,
+                  {
+                    backgroundColor: theme.card,
+                    borderTopColor: theme.border,
+                    borderTopWidth: 1,
+                  },
+                ]}
+              >
                 {verifying ? (
                   <View style={styles.verifyingContainer}>
-                    <View style={styles.pulseDot} />
-                    <Text style={styles.verifyingText}>Verifying with Polygon Ledger...</Text>
-                    <Text style={styles.verifyingSub}>Validating smart contract hash</Text>
+                    <View style={[styles.pulseDot, { backgroundColor: theme.accent }]} />
+                    <Text style={[styles.verifyingText, { color: theme.text }]}>
+                      Verifying with Polygon Ledger...
+                    </Text>
+                    <Text style={[styles.verifyingSub, { color: theme.textMuted }]}>
+                      Validating smart contract hash
+                    </Text>
                   </View>
                 ) : scanResult ? (
                   <View style={styles.resultContent}>
@@ -360,68 +375,75 @@ export function PaymentStyleQRScanner({
                       )}
 
                       <TouchableOpacity style={styles.rescanIconButton} onPress={resetScanner}>
-                        <RotateCcw size={16} color="#64748B" />
-                        <Text style={styles.rescanIconText}>Scan Again</Text>
+                        <RotateCcw size={16} color={theme.textMuted} />
+                        <Text style={[styles.rescanIconText, { color: theme.textMuted }]}>Scan Again</Text>
                       </TouchableOpacity>
                     </View>
 
                     {/* Pharmacy QR Result */}
                     {scanResult.type === 'PHARMACY' || scanResult.pharmacy_name ? (
-                      <View style={styles.entityCard}>
+                      <View style={[styles.entityCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                         <View style={styles.entityHeader}>
-                          <Store size={22} color="#2563EB" />
+                          <Store size={22} color={theme.accent} />
                           <View style={{ marginLeft: 10, flex: 1 }}>
-                            <Text style={styles.entityTitle}>
+                            <Text style={[styles.entityTitle, { color: theme.text }]}>
                               {scanResult.pharmacy_name || 'Verified MedSync Pharmacy'}
                             </Text>
-                            <Text style={styles.entitySub}>
+                            <Text style={[styles.entitySub, { color: theme.textMuted }]}>
                               {scanResult.address || 'Authorized Dispensing Partner'}
                             </Text>
                           </View>
                         </View>
 
                         <TouchableOpacity
-                          style={styles.actionButtonPrimary}
+                          style={[styles.actionButtonPrimary, { backgroundColor: theme.primaryButton }]}
                           onPress={() => setOrderModalVisible(true)}
                           activeOpacity={0.88}
                         >
-                          <ShoppingBag size={18} color="#FFFFFF" />
-                          <Text style={styles.actionButtonTextPrimary}>Order Medicines Here</Text>
+                          <ShoppingBag size={18} color={theme.primaryButtonText} />
+                          <Text style={[styles.actionButtonTextPrimary, { color: theme.primaryButtonText }]}>
+                            Order Medicines Here
+                          </Text>
                         </TouchableOpacity>
                       </View>
                     ) : scanResult.type === 'BLOCKCHAIN' || scanResult.blockchain_verified ? (
                       /* Blockchain Record Result */
-                      <View style={styles.entityCard}>
+                      <View style={[styles.entityCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                         <View style={styles.entityHeader}>
                           <Blocks size={22} color="#10B981" />
                           <View style={{ marginLeft: 10, flex: 1 }}>
-                            <Text style={styles.entityTitle}>Polygon Amoy Cryptographic Record</Text>
-                            <Text style={styles.entitySub}>
+                            <Text style={[styles.entityTitle, { color: theme.text }]}>
+                              Polygon Amoy Cryptographic Record
+                            </Text>
+                            <Text style={[styles.entitySub, { color: theme.textMuted }]}>
                               Tx: {scanResult.tx_hash ? `${scanResult.tx_hash.substring(0, 16)}...` : '0x7F2a...verified'}
                             </Text>
                           </View>
                         </View>
 
                         <TouchableOpacity
-                          style={styles.actionButtonOutline}
+                          style={[
+                            styles.actionButtonOutline,
+                            { backgroundColor: theme.card, borderColor: theme.border },
+                          ]}
                           onPress={() => handleCopyToken(scanResult.tx_hash || scanResult.raw_token)}
                         >
-                          <Copy size={16} color="#2563EB" />
-                          <Text style={styles.actionButtonTextOutline}>
+                          <Copy size={16} color={theme.accent} />
+                          <Text style={[styles.actionButtonTextOutline, { color: theme.accent }]}>
                             {copied ? 'Copied Hash!' : 'Copy Transaction Proof'}
                           </Text>
                         </TouchableOpacity>
                       </View>
                     ) : (
                       /* General / Prescription Token Result */
-                      <View style={styles.entityCard}>
+                      <View style={[styles.entityCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                         <View style={styles.entityHeader}>
-                          <FileText size={22} color="#2563EB" />
+                          <FileText size={22} color={theme.accent} />
                           <View style={{ marginLeft: 10, flex: 1 }}>
-                            <Text style={styles.entityTitle}>
+                            <Text style={[styles.entityTitle, { color: theme.text }]}>
                               {scanResult.title || 'Health Authorization Token'}
                             </Text>
-                            <Text style={styles.entitySub} numberOfLines={2}>
+                            <Text style={[styles.entitySub, { color: theme.textMuted }]} numberOfLines={2}>
                               {scanResult.message || scanResult.raw_token || 'Token verified against server.'}
                             </Text>
                           </View>
@@ -435,18 +457,18 @@ export function PaymentStyleQRScanner({
           </View>
         ) : (
           /* ── TAB 2: MY HEALTH QR CODE (PATIENT'S UNIQUE ID) ── */
-          <View style={styles.myQrContainer}>
-            <View style={styles.myQrCard}>
+          <View style={[styles.myQrContainer, { backgroundColor: theme.background }]}>
+            <View style={[styles.myQrCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
               <View style={styles.myQrHeader}>
-                <View style={styles.patientAvatar}>
-                  <Text style={styles.patientInitials}>
+                <View style={[styles.patientAvatar, { backgroundColor: theme.primaryButton }]}>
+                  <Text style={[styles.patientInitials, { color: theme.primaryButtonText }]}>
                     {userProfile?.full_name ? userProfile.full_name.substring(0, 2).toUpperCase() : 'PT'}
                   </Text>
                 </View>
-                <Text style={styles.patientName}>
+                <Text style={[styles.patientName, { color: theme.text }]}>
                   {userProfile?.full_name || 'MedSync Patient'}
                 </Text>
-                <Text style={styles.patientSub}>Verified Health Member</Text>
+                <Text style={[styles.patientSub, { color: theme.textMuted }]}>Verified Health Member</Text>
 
                 <View style={styles.bloodBadge}>
                   <Text style={styles.bloodBadgeText}>
@@ -455,29 +477,29 @@ export function PaymentStyleQRScanner({
                 </View>
               </View>
 
-              {/* QR Code Container */}
-              <View style={styles.qrWrapper}>
+              {/* QR Code Container (Always white quiet zone for scanner readability) */}
+              <View style={[styles.qrWrapper, { borderColor: theme.border }]}>
                 <QRCode
                   value={patientQrValue}
                   size={RETICLE_SIZE * 0.8}
-                  color="#0F172A"
+                  color="#09090B"
                   backgroundColor="#FFFFFF"
                 />
               </View>
 
-              <Text style={styles.qrInstructions}>
+              <Text style={[styles.qrInstructions, { color: theme.textMuted }]}>
                 Show this QR to doctors or pharmacies to share your health history or verify prescriptions.
               </Text>
 
               {/* Action Buttons */}
               <View style={styles.qrActionRow}>
                 <TouchableOpacity
-                  style={styles.qrShareButton}
+                  style={[styles.qrShareButton, { backgroundColor: theme.primaryButton }]}
                   onPress={handleShareMyQr}
                   activeOpacity={0.88}
                 >
-                  <Share2 size={18} color="#FFFFFF" />
-                  <Text style={styles.qrShareText}>Share Token</Text>
+                  <Share2 size={18} color={theme.primaryButtonText} />
+                  <Text style={[styles.qrShareText, { color: theme.primaryButtonText }]}>Share Token</Text>
                 </TouchableOpacity>
               </View>
             </View>

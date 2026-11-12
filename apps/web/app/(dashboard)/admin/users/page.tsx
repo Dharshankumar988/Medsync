@@ -422,8 +422,8 @@ export default function AdminUsers() {
   // Add Pharmacy
   const handleAddPharmacy = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPharmacyForm.business_name || !newPharmacyForm.email || !newPharmacyForm.address) {
-      toast.error("Please provide store name, email, and address.");
+    if (!newPharmacyForm.business_name || !newPharmacyForm.email || (!newPharmacyForm.address && !newPharmacyForm.hospital_id)) {
+      toast.error("Please provide store name, email, and address (or select a hospital/clinic).");
       return;
     }
     try {
@@ -1567,9 +1567,9 @@ export default function AdminUsers() {
                               ...newPharmacyForm,
                               hospital_id: val,
                               clinic_name: matched ? matched.name : "",
-                              address: newPharmacyForm.address || (matched?.address || ""),
-                              city: newPharmacyForm.city || (matched?.city || ""),
-                              state: newPharmacyForm.state || (matched?.state || "")
+                              address: matched ? (matched.address || "") : "",
+                              city: matched ? (matched.city || "") : "",
+                              state: matched ? (matched.state || "") : ""
                             });
                           }}
                         >
@@ -1586,13 +1586,17 @@ export default function AdminUsers() {
                           </optgroup>
                         </select>
                         <p className="text-[11px] text-muted-foreground">
-                          Selecting a hospital or clinic automatically links this pharmacy to all doctors practicing at that facility. Multiple pharmacies can register to the same hospital or clinic.
+                          Selecting a hospital or clinic automatically inherits its address and links this pharmacy to all doctors practicing at that facility.
                         </p>
                       </div>
                       <div className="space-y-1 sm:col-span-2">
-                        <label className="text-xs font-semibold text-foreground">Store Physical Address *</label>
+                        <label className="text-xs font-semibold text-foreground">
+                          Store Physical Address {newPharmacyForm.hospital_id ? "(Auto-inherited from Facility)" : "*"}
+                        </label>
                         <Input 
-                          required 
+                          required={!newPharmacyForm.hospital_id}
+                          readOnly={Boolean(newPharmacyForm.hospital_id)}
+                          className={newPharmacyForm.hospital_id ? "bg-muted/50 cursor-not-allowed" : ""}
                           placeholder="Store address..."
                           value={newPharmacyForm.address} 
                           onChange={e => setNewPharmacyForm({ ...newPharmacyForm, address: e.target.value })} 
@@ -1601,6 +1605,8 @@ export default function AdminUsers() {
                       <div className="space-y-1">
                         <label className="text-xs font-semibold text-foreground">City</label>
                         <Input 
+                          readOnly={Boolean(newPharmacyForm.hospital_id)}
+                          className={newPharmacyForm.hospital_id ? "bg-muted/50 cursor-not-allowed" : ""}
                           placeholder="City"
                           value={newPharmacyForm.city} 
                           onChange={e => setNewPharmacyForm({ ...newPharmacyForm, city: e.target.value })} 

@@ -925,6 +925,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 145,
     gap: 14,
   },
   cardBox: {

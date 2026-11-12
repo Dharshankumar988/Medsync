@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
 import { hospitalService, Hospital } from "@/services/hospital.service";
@@ -11,7 +11,7 @@ import { formatDoctorName } from "@/lib/formatDoctorName";
 import { 
   Activity, Loader2, UserPlus, LockKeyhole, Mail, User, 
   Eye, EyeOff, Shield, Heart, Stethoscope, Pill, 
-  CheckCircle2, AlertTriangle, Building2, Building, Phone, BriefcaseMedical, Brain 
+  CheckCircle2, AlertTriangle, Building2, Building, Phone, BriefcaseMedical, Brain, MapPin 
 } from "lucide-react";
 import { Alert, AlertDescription } from "@medsync/ui";
 import Link from "next/link";
@@ -91,6 +91,39 @@ export default function RegisterPage() {
   const [contactNumber, setContactNumber] = useState("");
   const [pharmacyAddress, setPharmacyAddress] = useState("");
   const [pharmacyGmapsUrl, setPharmacyGmapsUrl] = useState("");
+  const facilityDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedFacility = useMemo(
+    () => hospitals.find((h) => h.id === selectedHospitalId) || null,
+    [hospitals, selectedHospitalId]
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (facilityDropdownRef.current && !facilityDropdownRef.current.contains(event.target as Node)) {
+        setShowHospitalDropdown(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowHospitalDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    setSelectedHospitalId("");
+    setHospitalSearch("");
+    setClinicName("");
+    setIsRegisteringNewHospital(false);
+    setShowHospitalDropdown(false);
+  }, [role, doctorPracticeType, pharmacyPracticeType]);
 
   useEffect(() => {
     if (role === "DOCTOR" || role === "PHARMACY") {
@@ -191,24 +224,30 @@ export default function RegisterPage() {
       }
     }
     if (role === "PHARMACY") {
-      if (!businessName || !licenseNumber || !contactNumber || !latitude) {
-        setError("Business Name, License Number, Contact Number, and Map Location are required for pharmacies.");
+      if (!businessName || !licenseNumber || !contactNumber) {
+        setError("Business Name, License Number, and Contact Number are required for pharmacies.");
         return;
+      }
+      if (pharmacyPracticeType === "INDEPENDENT") {
+        if (!latitude || !pharmacyAddress.trim()) {
+          setError("Please select your independent pharmacy location on the map and provide its address.");
+          return;
+        }
       }
       if (pharmacyPracticeType === "HOSPITAL") {
         if (!selectedHospitalId) {
-          setError("Please select a hospital facility.");
+          setError("Please select a hospital facility. Your pharmacy will automatically inherit the hospital's address.");
           return;
         }
       }
       if (pharmacyPracticeType === "CLINIC") {
         if (isRegisteringNewHospital) {
-          if (!newHospitalName) {
-            setError("Please provide the clinic name.");
+          if (!newHospitalName.trim() || !newHospitalLatitude || !newHospitalAddress.trim()) {
+            setError("Please provide the new clinic name, map location, and complete address.");
             return;
           }
-        } else if (!clinicName && !selectedHospitalId && !hospitalSearch) {
-          setError("Please select or specify the private clinic to link with, or choose 'Independent' if you are a standalone pharmacy.");
+        } else if (!selectedHospitalId && !clinicName && !hospitalSearch) {
+          setError("Please select an existing clinic or register a new one, or choose 'Independent' if you are a standalone pharmacy.");
           return;
         }
       }
@@ -220,6 +259,35 @@ export default function RegisterPage() {
       const isHospitalMode = (role === "DOCTOR" && doctorPracticeType === "HOSPITAL") || (role === "PHARMACY" && pharmacyPracticeType === "HOSPITAL");
       const isClinicMode = (role === "DOCTOR" && doctorPracticeType === "CLINIC") || (role === "PHARMACY" && pharmacyPracticeType === "CLINIC");
       const isFacilityMode = isHospitalMode || isClinicMode;
+      const isIndependentPharmacy = role === "PHARMACY" && pharmacyPracticeType === "INDEPENDENT";
+
+      const resolvedAddress = isIndependentPharmacy
+        ? pharmacyAddress.trim()
+        : isRegisteringNewHospital
+          ? newHospitalAddress.trim()
+          : selectedFacility?.address || undefined;
+
+      const resolvedLatitude = isFacilityMode && isRegisteringNewHospital
+        ? newHospitalLatitude
+        : isIndependentPharmacy
+          ? latitude
+          : selectedFacility?.latitude !== undefined && selectedFacility?.latitude !== null
+            ? Number(selectedFacility.latitude)
+            : undefined;
+
+      const resolvedLongitude = isFacilityMode && isRegisteringNewHospital
+        ? newHospitalLongitude
+        : isIndependentPharmacy
+          ? longitude
+          : selectedFacility?.longitude !== undefined && selectedFacility?.longitude !== null
+            ? Number(selectedFacility.longitude)
+            : undefined;
+
+      const resolvedGmapsUrl = isRegisteringNewHospital
+        ? newHospitalGmapsUrl
+        : isIndependentPharmacy
+          ? pharmacyGmapsUrl
+          : selectedFacility?.google_maps_url || undefined;
 
       // Perform registration using Auth service which integrates with Supabase
       const processedFullName = role === "DOCTOR" ? formatDoctorName(fullName) : fullName.trim();
@@ -233,12 +301,17 @@ export default function RegisterPage() {
         hospital_id: isFacilityMode && !isRegisteringNewHospital ? selectedHospitalId : undefined,
         hospital_name: isHospitalMode && isRegisteringNewHospital ? newHospitalName : undefined,
         hospital_address: isHospitalMode && isRegisteringNewHospital ? newHospitalAddress : undefined,
-        clinic_name: isClinicMode ? (isRegisteringNewHospital ? newHospitalName : (clinicName || hospitalSearch)) : undefined,
-        clinic_address: isClinicMode && isRegisteringNewHospital ? newHospitalAddress : undefined,
+        clinic_name: isClinicMode ? (isRegisteringNewHospital ? newHospitalName : (selectedFacility?.name || clinicName || hospitalSearch)) : undefined,
+        clinic_address: isClinicMode ? (isRegisteringNewHospital ? newHospitalAddress : selectedFacility?.address) : undefined,
+        address: resolvedAddress,
+        city: !isRegisteringNewHospital ? selectedFacility?.city : undefined,
+        state: !isRegisteringNewHospital ? selectedFacility?.state : undefined,
+        country: !isRegisteringNewHospital ? selectedFacility?.country : undefined,
+        pincode: !isRegisteringNewHospital ? selectedFacility?.pincode : undefined,
         facility_type: isRegisteringNewHospital ? (isClinicMode ? "clinic" : "hospital") : undefined,
-        google_maps_url: isRegisteringNewHospital ? newHospitalGmapsUrl : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? pharmacyGmapsUrl : undefined),
-        latitude: isFacilityMode && isRegisteringNewHospital ? newHospitalLatitude : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? latitude : undefined),
-        longitude: isFacilityMode && isRegisteringNewHospital ? newHospitalLongitude : (role === "PHARMACY" && !isClinicMode && !isHospitalMode ? longitude : undefined),
+        google_maps_url: resolvedGmapsUrl,
+        latitude: resolvedLatitude,
+        longitude: resolvedLongitude,
         business_name: role === "PHARMACY" ? businessName : undefined,
         contact_number: role === "PHARMACY" ? contactNumber : undefined,
         blood_group: role === "PATIENT" ? bloodGroup : undefined,
@@ -564,7 +637,7 @@ export default function RegisterPage() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="space-y-2 relative">
+                      <div ref={facilityDropdownRef} className="space-y-2 relative z-40">
                         <label className="text-sm font-medium text-foreground/80">Search & Select {doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</label>
                         {!isRegisteringNewHospital ? (
                           <div className="relative">
@@ -585,12 +658,12 @@ export default function RegisterPage() {
                         ) : (
                           <div className="flex items-center justify-between p-3 border border-blue-500/30 rounded-lg bg-blue-500/10">
                             <span className="text-sm font-medium text-blue-700 dark:text-blue-400">Registering New {doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</span>
-                            <Button variant="ghost" size="sm" className="h-8 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20" onClick={() => { setIsRegisteringNewHospital(false); setHospitalSearch(""); }}>Cancel</Button>
+                            <Button type="button" variant="ghost" size="sm" className="h-8 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20" onClick={() => { setIsRegisteringNewHospital(false); setHospitalSearch(""); }}>Cancel</Button>
                           </div>
                         )}
                         
                         {!isRegisteringNewHospital && showHospitalDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
+                          <div className="absolute left-0 right-0 z-[1000] w-full mt-1 bg-popover border border-border rounded-md shadow-2xl max-h-60 overflow-auto">
                             {hospitals.filter(h => h.name.toLowerCase().includes(hospitalSearch.toLowerCase())).map(h => (
                               <div 
                                 key={h.id} 
@@ -631,7 +704,7 @@ export default function RegisterPage() {
                       </div>
 
                       {isRegisteringNewHospital && (
-                        <div className="space-y-4 p-4 border border-blue-500/30 rounded-xl bg-blue-500/5">
+                        <div className="relative z-0 space-y-4 p-4 border border-blue-500/30 rounded-xl bg-blue-500/5">
                           <h4 className="text-sm font-semibold text-blue-600">New {doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"} Details</h4>
                           <div className="space-y-2">
                             <label className="text-sm font-medium text-foreground/80">{doctorPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"} Name</label>
@@ -773,12 +846,12 @@ export default function RegisterPage() {
                       {pharmacyPracticeType === "HOSPITAL" || pharmacyPracticeType === "CLINIC" ? (
                         <motion.div
                           key="hospital-clinic-select"
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="space-y-4"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="space-y-4 relative z-40 overflow-visible"
                         >
-                          <div className="space-y-2 relative">
+                          <div ref={facilityDropdownRef} className="space-y-2 relative z-40">
                             <label className="text-sm font-medium text-foreground/80">Search & Select {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</label>
                             {!isRegisteringNewHospital ? (
                               <div className="relative">
@@ -799,12 +872,12 @@ export default function RegisterPage() {
                             ) : (
                               <div className="flex items-center justify-between p-3 border border-blue-500/30 rounded-lg bg-blue-500/10">
                                 <span className="text-sm font-medium text-blue-700 dark:text-blue-400">Registering New {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}</span>
-                                <Button variant="ghost" size="sm" className="h-8 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20" onClick={() => { setIsRegisteringNewHospital(false); setHospitalSearch(""); }}>Cancel</Button>
+                                <Button type="button" variant="ghost" size="sm" className="h-8 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20" onClick={() => { setIsRegisteringNewHospital(false); setHospitalSearch(""); }}>Cancel</Button>
                               </div>
                             )}
                             
                             {!isRegisteringNewHospital && showHospitalDropdown && (
-                              <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
+                              <div className="absolute left-0 right-0 z-[1000] w-full mt-1 bg-popover border border-border rounded-md shadow-2xl max-h-60 overflow-auto">
                                 {hospitals.filter(h => h.name.toLowerCase().includes(hospitalSearch.toLowerCase())).map(h => (
                                   <div 
                                     key={h.id} 
@@ -844,8 +917,21 @@ export default function RegisterPage() {
                             )}
                           </div>
 
+                          {!isRegisteringNewHospital && selectedFacility && (
+                            <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 space-y-1">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                                Address Auto-Inherited from {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"}
+                              </div>
+                              <p className="text-sm font-medium text-foreground">{selectedFacility.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {[selectedFacility.address, selectedFacility.city, selectedFacility.state].filter(Boolean).join(", ") || "Facility address on file"}
+                              </p>
+                            </div>
+                          )}
+
                           {isRegisteringNewHospital && (
-                            <div className="space-y-4 p-4 border border-blue-500/30 rounded-xl bg-blue-500/5">
+                            <div className="relative z-0 space-y-4 p-4 border border-blue-500/30 rounded-xl bg-blue-500/5">
                               <h4 className="text-sm font-semibold text-blue-600">New {pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"} Details</h4>
                               <div className="space-y-2">
                                 <label className="text-sm font-medium text-foreground/80">{pharmacyPracticeType === "HOSPITAL" ? "Hospital" : "Clinic"} Name</label>
@@ -872,21 +958,25 @@ export default function RegisterPage() {
                       ) : null}
                     </AnimatePresence>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground/80">Pharmacy Location (Map)</label>
-                      <LocationPickerMap 
-                        onLocationSelect={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} 
-                        onAddressFound={(addr) => { setPharmacyAddress(addr); }}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground/80">Pharmacy Address</label>
-                      <Input value={pharmacyAddress} onChange={e => setPharmacyAddress(e.target.value)} placeholder="123 Pharma St" className="h-12 bg-background border-input" required disabled={isLoading} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground/80">Google Maps URL (Optional)</label>
-                      <Input value={pharmacyGmapsUrl} onChange={e => setPharmacyGmapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 bg-background border-input" disabled={isLoading} />
-                    </div>
+                    {pharmacyPracticeType === "INDEPENDENT" && (
+                      <div className="relative z-0 space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground/80">Pharmacy Location (Map)</label>
+                          <LocationPickerMap 
+                            onLocationSelect={(lat, lng) => { setLatitude(lat); setLongitude(lng); }} 
+                            onAddressFound={(addr) => { setPharmacyAddress(addr); }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground/80">Pharmacy Address</label>
+                          <Input value={pharmacyAddress} onChange={e => setPharmacyAddress(e.target.value)} placeholder="123 Pharma St" className="h-12 bg-background border-input" required disabled={isLoading} />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground/80">Google Maps URL (Optional)</label>
+                          <Input value={pharmacyGmapsUrl} onChange={e => setPharmacyGmapsUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 bg-background border-input" disabled={isLoading} />
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

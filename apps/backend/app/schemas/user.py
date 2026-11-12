@@ -36,6 +36,11 @@ class UserSyncRequest(BaseModel):
     hospital_address: Optional[str] = None
     clinic_name: Optional[str] = None
     clinic_address: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    pincode: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     license_number: Optional[str] = None

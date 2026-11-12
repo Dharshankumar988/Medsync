@@ -222,6 +222,72 @@ class ImageAnalysisService:
             return []
 
     @staticmethod
+    def _normalize_boxes(boxes: list, image_bytes: Optional[bytes]) -> list:
+        """
+        Normalize bounding boxes to [0.0, 1.0] [x1, y1, x2, y2] using original image dimensions.
+        Prevents pixel-coordinate boxes from rendering off-screen or at wrong scale on clients.
+        """
+        if not boxes:
+            return []
+
+        img_w, img_h = None, None
+        if image_bytes:
+            try:
+                import io
+                from PIL import Image, ImageOps
+
+                pil_img = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes)))
+                img_w, img_h = pil_img.size
+            except Exception as e:
+                logger.warning(f"Could not read image dimensions for box normalization: {e}")
+
+        normalized = []
+        for raw_box in boxes:
+            if isinstance(raw_box, (list, tuple)) and len(raw_box) >= 4:
+                coords = list(raw_box[:4])
+                box_obj: Dict[str, Any] = {"coordinates": coords}
+            elif isinstance(raw_box, dict):
+                coords = list(raw_box.get("coordinates") or raw_box.get("bbox") or [])
+                if len(coords) < 4:
+                    continue
+                box_obj = dict(raw_box)
+            else:
+                continue
+
+            try:
+                x1, y1, x2, y2 = float(coords[0]), float(coords[1]), float(coords[2]), float(coords[3])
+            except (TypeError, ValueError):
+                continue
+
+            max_val = max(x1, y1, x2, y2)
+            # If coordinates are in pixels (> 1.05), scale down to [0.0, 1.0]
+            if max_val > 1.05:
+                ref_w = float(img_w) if img_w and img_w > 0 else max(640.0, x1, x2)
+                ref_h = float(img_h) if img_h and img_h > 0 else max(640.0, y1, y2)
+                # Guard against boxes slightly exceeding image size
+                denom_w = max(ref_w, x1, x2)
+                denom_h = max(ref_h, y1, y2)
+                x1, x2 = x1 / denom_w, x2 / denom_w
+                y1, y2 = y1 / denom_h, y2 / denom_h
+
+            # Clamp to [0.0, 1.0] and enforce x1 < x2, y1 < y2
+            nx1 = max(0.0, min(1.0, min(x1, x2)))
+            nx2 = max(0.0, min(1.0, max(x1, x2)))
+            ny1 = max(0.0, min(1.0, min(y1, y2)))
+            ny2 = max(0.0, min(1.0, max(y1, y2)))
+
+            if nx2 - nx1 <= 0.001 or ny2 - ny1 <= 0.001:
+                continue
+
+            norm_coords = [round(nx1, 4), round(ny1, 4), round(nx2, 4), round(ny2, 4)]
+            box_obj["coordinates"] = norm_coords
+            if "bbox" in box_obj:
+                box_obj["bbox"] = norm_coords
+            normalized.append(box_obj)
+
+        return normalized
+
+    @staticmethod
     def _extract_prediction(hf_result: Dict[str, Any], scan_type: str, image_bytes: Optional[bytes] = None) -> Dict[str, Any]:
         """Normalize HF model output into a consistent prediction structure with validation."""
         from app.schemas.ai import HFInferenceOutput
@@ -235,8 +301,10 @@ class ImageAnalysisService:
         if not validated_output.success:
             return {"diagnosis": "Analysis Failed", "confidence": 0.0, "raw": hf_result}
 
+        normalized_boxes = ImageAnalysisService._normalize_boxes(validated_output.boxes or [], image_bytes)
+
         if scan_type == "skin":
-            boxes = validated_output.boxes or []
+            boxes = normalized_boxes
             if not boxes and image_bytes:
                 boxes = ImageAnalysisService._detect_skin_lesion_box(
                     image_bytes=image_bytes,
@@ -267,5 +335,5 @@ class ImageAnalysisService:
             return {
                 "diagnosis": validated_output.diagnosis or "Unknown",
                 "confidence": validated_output.confidence,
-                "boxes": validated_output.boxes or [],
+                "boxes": normalized_boxes,
             }
