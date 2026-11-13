@@ -2,6 +2,7 @@
 # MedSync Portable Runner Installer
 # ========================================
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " MedSync Portable Runner Installer" -ForegroundColor Cyan
@@ -129,33 +130,66 @@ if ($openEnv -match "^[yY]") {
     notepad "$envPath"
 }
 
-# 8. Final Install Output
+# 8. Check Docker Prerequisites & Offer Assistance
+Write-Host "`nChecking container prerequisites..." -ForegroundColor Cyan
+$dockerFound = Get-Command "docker" -ErrorAction SilentlyContinue
+
+if (-not $dockerFound) {
+    Write-Host "WARNING: Docker is not installed or not in your system PATH." -ForegroundColor Yellow
+    Write-Host "Docker Desktop is required to run the MedSync container on Windows." -ForegroundColor Yellow
+    $getDocker = Read-Host "Would you like to open the Docker Desktop download page in your browser? [Y/N] (Default: Y)"
+    if ($getDocker -notmatch "^[nN]") {
+        Start-Process "https://www.docker.com/products/docker-desktop/"
+        Write-Host "Please complete Docker Desktop installation and start it before launching MedSync." -ForegroundColor Yellow
+    }
+} else {
+    try {
+        $null = docker info 2>&1
+        Write-Host "Docker is installed and running." -ForegroundColor Green
+    } catch {
+        Write-Host "NOTICE: Docker is installed, but the Docker daemon is not running." -ForegroundColor Yellow
+        $dockerApp = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+        if (Test-Path $dockerApp) {
+            Write-Host "Attempting to launch Docker Desktop..." -ForegroundColor Cyan
+            Start-Process $dockerApp
+            Write-Host "Docker Desktop is starting up. Please allow it a moment to initialize." -ForegroundColor Yellow
+        } else {
+            Write-Host "Please start Docker Desktop manually before launching MedSync." -ForegroundColor Yellow
+        }
+    }
+}
+
+# 9. Final Install Output & Auto-Launch
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " MedSync Installation Complete" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Installation directory:"
-Write-Host $installPath
+Write-Host "Installation directory: $installPath"
+Write-Host "Portable runner:       $portableRunnerPath"
+Write-Host "Configuration file:    $envPath"
 Write-Host ""
-Write-Host "Portable runner:"
-Write-Host $portableRunnerPath
-Write-Host ""
-Write-Host "Configuration:"
-Write-Host $envPath
-Write-Host ""
-Write-Host "Next steps:"
-Write-Host ""
-Write-Host "1. Configure .env:"
-Write-Host ""
-Write-Host "   notepad `"$envPath`""
-Write-Host ""
-Write-Host "2. Start MedSync:"
-Write-Host ""
-Write-Host "   cd `"$portableRunnerPath`""
-Write-Host "   .\start-medsync.bat"
-Write-Host ""
-Write-Host "   (If you prefer PowerShell, you can use .\start-medsync.ps1 instead)"
-Write-Host ""
-Write-Host ""
+
+$launchNow = Read-Host "Would you like to start MedSync Portable Runner now? [Y/N] (Default: Y)"
+if ($launchNow -notmatch "^[nN]") {
+    Write-Host "`nSelect Runner Mode:" -ForegroundColor Cyan
+    Write-Host "  1. Desktop Runner (Interactive with live tunnel status) [Default]"
+    Write-Host "  2. Remote / Headless Server Mode (-Remote -Headless)"
+    $modeChoice = Read-Host "Enter option [1 or 2] (Default: 1)"
+
+    Set-Location -LiteralPath $portableRunnerPath
+    if ($modeChoice -eq "2") {
+        Write-Host "Starting MedSync in Remote Server Mode..." -ForegroundColor Magenta
+        powershell.exe -ExecutionPolicy Bypass -File ".\start-medsync.ps1" -Remote -Headless
+    } else {
+        Write-Host "Starting MedSync Desktop Runner..." -ForegroundColor Green
+        & ".\start-medsync.bat"
+    }
+} else {
+    Write-Host ""
+    Write-Host "To start MedSync at any time later, run:" -ForegroundColor Yellow
+    Write-Host "   cd `"$portableRunnerPath`""
+    Write-Host "   .\start-medsync.bat"
+    Write-Host ""
+}
 Write-Host "========================================" -ForegroundColor Cyan
