@@ -367,13 +367,23 @@ export default function CreatePrescriptionPage() {
 
       const apiUrl = getApiUrl();
 
-      await axios.post(`${apiUrl}/prescriptions/`, payload, {
+      const createRes = await axios.post(`${apiUrl}/prescriptions/`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       toast.success("Prescription finalized and signed securely");
       setIsPinModalOpen(false);
-      router.push('/doctor/prescriptions');
+
+      const returnTo = searchParams.get('return_to');
+      if (returnTo) {
+        const presId = createRes?.data?.data?.id || createRes?.data?.id;
+        const targetUrl = presId
+          ? `${returnTo}${returnTo.includes('?') ? '&' : '?'}prescription_id=${presId}&prescription_created=true`
+          : returnTo;
+        router.push(targetUrl);
+      } else {
+        router.push('/doctor/prescriptions');
+      }
     } catch (err: any) {
       console.error(err);
       if (pinMode === "create") {
@@ -393,7 +403,7 @@ export default function CreatePrescriptionPage() {
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild className="rounded-full">
-            <Link href="/doctor/prescriptions"><ArrowLeft className="w-5 h-5" /></Link>
+            <Link href={searchParams.get('return_to') || "/doctor/prescriptions"}><ArrowLeft className="w-5 h-5" /></Link>
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">New Prescription</h1>

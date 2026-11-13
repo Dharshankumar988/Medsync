@@ -23,7 +23,7 @@ function NavigationStack() {
   const { theme, isDark } = useTheme();
 
   useEffect(() => {
-    const subscription = Linking.addEventListener('url', ({ url }) => {
+    const handleUrl = (url: string | null) => {
       if (url && (url.includes('auth/callback') || url.includes('callback'))) {
         if (!claimOAuthCallbackUrl(url)) return;
         router.replace({
@@ -31,7 +31,13 @@ function NavigationStack() {
           params: { rawUrl: url },
         });
       }
-    });
+    };
+
+    // 1. Handle cold launch via deep link
+    Linking.getInitialURL().then(handleUrl).catch(() => {});
+
+    // 2. Handle warm launch via deep link
+    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => subscription.remove();
   }, [router]);
 

@@ -86,10 +86,18 @@ export default function AdminSettings() {
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/api/v1/admin/settings');
-      if (res.data?.data) {
-        setMaintenanceMode(Boolean(res.data.data.maintenance_mode));
-        setStrictVerification(Boolean(res.data.data.strict_verification));
+      let data: any = null;
+      try {
+        const res = await api.get('/api/v1/admin/settings');
+        data = res.data?.data;
+      } catch {
+        const publicRes = await api.get('/api/v1/health/system-config');
+        data = publicRes.data?.data;
+      }
+
+      if (data) {
+        setMaintenanceMode(Boolean(data.maintenance_mode));
+        setStrictVerification(Boolean(data.strict_verification));
         setLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       }
       if (typeof window !== "undefined") {
@@ -99,8 +107,7 @@ export default function AdminSettings() {
         if (savedBlockchain) setBlockchainEnforced(savedBlockchain === "true");
       }
     } catch (err) {
-      console.error("Failed to load settings", err);
-      toast.error("Failed to load platform settings");
+      console.warn("Failed to load settings from primary endpoint, using cached state", err);
     } finally {
       setLoading(false);
     }

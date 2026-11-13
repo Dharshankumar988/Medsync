@@ -1075,16 +1075,16 @@ function PatientDetailContent() {
         {/* Right Column: Unified Tabs for All Clinical Features */}
         <div className="flex-1 min-w-0">
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="w-full justify-start bg-transparent border-b border-border/60 rounded-none h-12 p-0 space-x-6 overflow-x-auto scrollbar-none">
+            <TabsList className="w-full justify-start bg-transparent border-b border-border/60 rounded-none h-12 p-0 gap-4 sm:gap-6 overflow-x-auto scrollbar-none flex flex-nowrap">
               <TabsTrigger
                 value="overview"
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-1 font-semibold text-sm transition-all"
+                className="shrink-0 whitespace-nowrap data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-2 font-semibold text-sm transition-all"
               >
                 Overview
               </TabsTrigger>
               <TabsTrigger
                 value="records"
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-1 font-semibold text-sm transition-all flex items-center gap-1.5"
+                className="shrink-0 whitespace-nowrap data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-2 font-semibold text-sm transition-all flex items-center gap-1.5"
               >
                 Medical Records
                 <Badge variant="secondary" className="h-5 px-1.5 text-[11px] font-medium bg-muted">
@@ -1093,7 +1093,7 @@ function PatientDetailContent() {
               </TabsTrigger>
               <TabsTrigger
                 value="prescriptions"
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-1 font-semibold text-sm transition-all flex items-center gap-1.5"
+                className="shrink-0 whitespace-nowrap data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-2 font-semibold text-sm transition-all flex items-center gap-1.5"
               >
                 Prescriptions
                 <Badge variant="secondary" className="h-5 px-1.5 text-[11px] font-medium bg-muted">
@@ -1102,7 +1102,7 @@ function PatientDetailContent() {
               </TabsTrigger>
               <TabsTrigger
                 value="appointments"
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-1 font-semibold text-sm transition-all flex items-center gap-1.5"
+                className="shrink-0 whitespace-nowrap data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-2 font-semibold text-sm transition-all flex items-center gap-1.5"
               >
                 Appointments
                 <Badge variant="secondary" className="h-5 px-1.5 text-[11px] font-medium bg-muted">
@@ -1111,7 +1111,7 @@ function PatientDetailContent() {
               </TabsTrigger>
               <TabsTrigger
                 value="referrals"
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-1 font-semibold text-sm transition-all flex items-center gap-1.5"
+                className="shrink-0 whitespace-nowrap data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-full bg-transparent px-2 font-semibold text-sm transition-all flex items-center gap-1.5"
               >
                 Referrals
                 <Badge variant="secondary" className="h-5 px-1.5 text-[11px] font-medium bg-muted">

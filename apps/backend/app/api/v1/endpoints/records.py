@@ -607,6 +607,7 @@ async def get_patient_doctor_access(
     perm_rows = res.all()
 
     active_perms: List[PatientDoctorPermissionItem] = []
+    existing_doctor_ids = set()
     for perm, rec, doc in perm_rows:
         active_perms.append(
             PatientDoctorPermissionItem(
@@ -622,6 +623,94 @@ async def get_patient_doctor_access(
                 is_revoked=perm.is_revoked,
             )
         )
+        existing_doctor_ids.add(doc.user_id)
+
+    # 1b. Include doctors with active vault-level access (approved RecordRequest or ConsentHistory)
+    from app.models.doctor_collaboration import RecordRequest, RecordRequestStatus
+    from app.models.consent import ConsentHistory
+
+    req_stmt = (
+        select(RecordRequest, Doctor)
+        .join(Doctor, Doctor.user_id == RecordRequest.requesting_doctor_id)
+        .where(
+            RecordRequest.patient_id == current_user.id,
+            RecordRequest.status == RecordRequestStatus.APPROVED,
+        )
+        .order_by(RecordRequest.created_at.desc())
+    )
+    req_res = await db.execute(req_stmt)
+    for req_item, doc in req_res.all():
+        if doc.user_id in existing_doctor_ids:
+            continue
+        # Ensure not subsequently revoked
+        revoked_check = await db.execute(
+            select(ConsentHistory)
+            .where(
+                ConsentHistory.patient_id == current_user.id,
+                ConsentHistory.doctor_id == doc.user_id,
+                ConsentHistory.action == "REVOKED",
+                ConsentHistory.created_at >= req_item.created_at,
+            )
+        )
+        if revoked_check.scalar_one_or_none():
+            continue
+
+        active_perms.append(
+            PatientDoctorPermissionItem(
+                permission_id=req_item.id,
+                record_id=req_item.record_id,
+                record_title=req_item.reason or "Medical Records Vault (All Records)",
+                doctor_id=doc.user_id,
+                doctor_name=doc.full_name,
+                doctor_specialization=doc.specialization,
+                hospital_name=doc.hospital_name,
+                access_level="READ",
+                granted_at=req_item.created_at,
+                is_revoked=False,
+            )
+        )
+        existing_doctor_ids.add(doc.user_id)
+
+    # Also check ConsentHistory for direct grants
+    consent_stmt = (
+        select(ConsentHistory, Doctor)
+        .join(Doctor, Doctor.user_id == ConsentHistory.doctor_id)
+        .where(
+            ConsentHistory.patient_id == current_user.id,
+            ConsentHistory.action == "GRANTED",
+        )
+        .order_by(ConsentHistory.created_at.desc())
+    )
+    consent_res = await db.execute(consent_stmt)
+    for c_hist, doc in consent_res.all():
+        if doc.user_id in existing_doctor_ids:
+            continue
+        rev_check = await db.execute(
+            select(ConsentHistory)
+            .where(
+                ConsentHistory.patient_id == current_user.id,
+                ConsentHistory.doctor_id == doc.user_id,
+                ConsentHistory.action == "REVOKED",
+                ConsentHistory.created_at >= c_hist.created_at,
+            )
+        )
+        if rev_check.scalar_one_or_none():
+            continue
+        active_perms.append(
+            PatientDoctorPermissionItem(
+                permission_id=c_hist.id,
+                record_id=None,
+                record_title="Medical Records Vault (All Records)",
+                doctor_id=doc.user_id,
+                doctor_name=doc.full_name,
+                doctor_specialization=doc.specialization,
+                hospital_name=doc.hospital_name,
+                access_level="READ",
+                granted_at=c_hist.created_at,
+                is_revoked=False,
+            )
+        )
+        existing_doctor_ids.add(doc.user_id)
 
     # 2. Fetch doctor access audit logs for records owned by this patient
     log_stmt = (
@@ -693,15 +782,26 @@ async def revoke_doctor_access(
             for perm in perm_res.scalars().all():
                 perm.is_revoked = True
 
-            # Log ConsentHistory
-            consent_log = ConsentHistory(
-                id=uuid.uuid4(),
-                patient_id=current_user.id,
-                doctor_id=req.doctor_id,
-                action="REVOKED",
-            )
-            db.add(consent_log)
-            await db.commit()
+        # Also update any approved RecordRequest for this doctor
+        from app.models.doctor_collaboration import RecordRequest, RecordRequestStatus
+        req_upd_stmt = select(RecordRequest).where(
+            RecordRequest.patient_id == current_user.id,
+            RecordRequest.requesting_doctor_id == req.doctor_id,
+            RecordRequest.status == RecordRequestStatus.APPROVED,
+        )
+        upd_res = await db.execute(req_upd_stmt)
+        for r in upd_res.scalars().all():
+            r.status = RecordRequestStatus.REJECTED
+
+        # Log ConsentHistory
+        consent_log = ConsentHistory(
+            id=uuid.uuid4(),
+            patient_id=current_user.id,
+            doctor_id=req.doctor_id,
+            action="REVOKED",
+        )
+        db.add(consent_log)
+        await db.commit()
 
     return APIResponse(
         message="Access permission successfully revoked",

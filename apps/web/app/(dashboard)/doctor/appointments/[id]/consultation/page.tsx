@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Input, Badge
 } from "@medsync/ui";
@@ -20,6 +20,7 @@ const API_PREFIX = "/api/v1";
 export default function ConsultationPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const appointmentId = id as string;
 
   const [loading, setLoading] = useState(true);
@@ -30,6 +31,8 @@ export default function ConsultationPage() {
   const [appointment, setAppointment] = useState<any>(null);
   const [patient, setPatient] = useState<any>(null);
   const [consultation, setConsultation] = useState<any>(null);
+  const [linkedPrescription, setLinkedPrescription] = useState<any>(null);
+  const [createdPrescriptionId, setCreatedPrescriptionId] = useState<string | null>(null);
   const [userId, setUserId] = useState("");
 
   // Consultation form fields
@@ -43,11 +46,52 @@ export default function ConsultationPage() {
     follow_up_notes: "",
   });
 
+  const isRestoredDraftRef = useRef(false);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setUserId(data.user.id);
     });
   }, []);
+
+  // Restore draft from sessionStorage on initial load
+  useEffect(() => {
+    if (typeof window === "undefined" || !appointmentId) return;
+    try {
+      const savedDraft = sessionStorage.getItem(`medsync_consultation_draft_${appointmentId}`);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        setFormData((prev) => ({
+          ...prev,
+          ...Object.fromEntries(
+            Object.entries(parsed).filter(([, v]) => v !== undefined && v !== "")
+          ),
+        }));
+        isRestoredDraftRef.current = true;
+      }
+    } catch (e) {
+      console.warn("Failed to restore consultation draft:", e);
+    }
+  }, [appointmentId]);
+
+  // Persist formData changes to sessionStorage
+  useEffect(() => {
+    if (typeof window === "undefined" || !appointmentId) return;
+    const hasValues = Object.values(formData).some((v) => Boolean(v && v.trim()));
+    if (hasValues) {
+      sessionStorage.setItem(`medsync_consultation_draft_${appointmentId}`, JSON.stringify(formData));
+    }
+  }, [formData, appointmentId]);
+
+  // Check if returning from prescription creation
+  useEffect(() => {
+    const presId = searchParams.get("prescription_id");
+    const presCreated = searchParams.get("prescription_created");
+    if (presCreated === "true" || presId) {
+      if (presId) setCreatedPrescriptionId(presId);
+      toast.success("Prescription successfully created and attached to consultation!");
+    }
+  }, [searchParams]);
 
   const fetchConsultationData = useCallback(async () => {
     try {
@@ -69,20 +113,40 @@ export default function ConsultationPage() {
         .single();
       setPatient(patientData);
 
+      // Check for existing prescription for this appointment
+      try {
+        const { data: presData } = await supabase
+          .from("prescriptions")
+          .select("id, status, created_at, diagnosis")
+          .eq("appointment_id", appointmentId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (presData) {
+          setLinkedPrescription(presData);
+        }
+      } catch (presErr) {
+        console.warn("Prescription check notice:", presErr);
+      }
+
       // Load existing consultation via API
       try {
         const res = await api.get(`${API_PREFIX}/consultations/appointment/${appointmentId}`);
         const consultData = res.data?.data;
         if (consultData) {
           setConsultation(consultData);
-          setFormData({
-            symptoms: consultData.symptoms || "",
-            observations: consultData.observations || "",
-            diagnosis: consultData.diagnosis || "",
-            treatment_plan: consultData.treatment_plan || "",
-            clinical_notes: consultData.clinical_notes || "",
-            follow_up_date: consultData.follow_up_date || "",
-            follow_up_notes: consultData.follow_up_notes || "",
+          setFormData((prev) => {
+            // Keep draft edits if user already entered them, otherwise use loaded data
+            return {
+              symptoms: prev.symptoms || consultData.symptoms || "",
+              observations: prev.observations || consultData.observations || "",
+              diagnosis: prev.diagnosis || consultData.diagnosis || "",
+              treatment_plan: prev.treatment_plan || consultData.treatment_plan || "",
+              clinical_notes: prev.clinical_notes || consultData.clinical_notes || "",
+              follow_up_date: prev.follow_up_date || consultData.follow_up_date || "",
+              follow_up_notes: prev.follow_up_notes || consultData.follow_up_notes || "",
+            };
           });
         }
       } catch {
@@ -125,6 +189,9 @@ export default function ConsultationPage() {
         setConsultation(res.data?.data);
         toast.success("Consultation created");
       }
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(`medsync_consultation_draft_${appointmentId}`);
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.message || "Failed to save";
       toast.error(msg);
@@ -136,6 +203,19 @@ export default function ConsultationPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCreatePrescription = () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(`medsync_consultation_draft_${appointmentId}`, JSON.stringify(formData));
+    }
+    const returnUrl = `/doctor/appointments/${appointmentId}/consultation`;
+    const targetPatientId = appointment?.patient_id || patient?.user_id || "";
+    router.push(
+      `/doctor/prescriptions/new?appointment_id=${appointmentId}&patient_id=${targetPatientId}&return_to=${encodeURIComponent(
+        returnUrl
+      )}`
+    );
   };
 
   const handleComplete = async () => {
@@ -168,6 +248,10 @@ export default function ConsultationPage() {
         });
       }
 
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(`medsync_consultation_draft_${appointmentId}`);
+      }
+
       toast.success("Consultation completed!");
       router.push("/doctor/appointments");
     } catch (err: any) {
@@ -178,6 +262,9 @@ export default function ConsultationPage() {
         .from("appointments")
         .update({ status: "COMPLETED", notes: formData.clinical_notes || formData.diagnosis })
         .eq("id", appointmentId);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(`medsync_consultation_draft_${appointmentId}`);
+      }
       toast.success("Consultation completed (fallback)");
       router.push("/doctor/appointments");
     } finally {
@@ -433,13 +520,42 @@ export default function ConsultationPage() {
               <CardDescription>Issue a prescription for this consultation.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full rounded-xl" variant="outline" asChild>
-                <Link
-                  href={`/doctor/prescriptions/new?appointment_id=${appointmentId}&patient_id=${appointment?.patient_id}`}
+              {linkedPrescription || createdPrescriptionId ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-600">Prescription Linked</p>
+                        <p className="text-[10px] text-muted-foreground truncate max-w-[150px]">
+                          ID: {(linkedPrescription?.id || createdPrescriptionId)?.slice(0, 8)}...
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] bg-emerald-500/20 text-emerald-700 border-emerald-500/30">
+                      Active
+                    </Badge>
+                  </div>
+                  <Button
+                    className="w-full rounded-xl"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreatePrescription}
+                    disabled={isCompleted}
+                  >
+                    <Pill className="w-3.5 h-3.5 mr-1.5" /> Issue Another Prescription
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  className="w-full rounded-xl"
+                  variant="outline"
+                  onClick={handleCreatePrescription}
+                  disabled={isCompleted}
                 >
                   <Pill className="w-4 h-4 mr-2" /> Create Prescription
-                </Link>
-              </Button>
+                </Button>
+              )}
             </CardContent>
           </Card>
 

@@ -110,7 +110,7 @@ class ConsultationService:
         if follow_up_notes is not None:
             consultation.follow_up_notes = follow_up_notes
 
-        consultation.completed_at = datetime.now(timezone.utc)
+        consultation.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # Also mark the appointment as COMPLETED
         appt_stmt = select(Appointment).where(
@@ -194,12 +194,18 @@ class ConsultationService:
         res = await db.execute(stmt)
         consultations = res.scalars().all()
 
+        # Batch lookup all doctors to eliminate N+1 latency
+        doc_user_ids = {c.doctor_id for c in consultations if c.doctor_id}
+        doc_map = {}
+        if doc_user_ids:
+            doc_stmt = select(Doctor).where(Doctor.user_id.in_(doc_user_ids))
+            doc_res = await db.execute(doc_stmt)
+            for d in doc_res.scalars().all():
+                doc_map[d.user_id] = d
+
         enriched = []
         for c in consultations:
-            doc_stmt = select(Doctor).where(Doctor.user_id == c.doctor_id)
-            doc_res = await db.execute(doc_stmt)
-            doc = doc_res.scalar_one_or_none()
-
+            doc = doc_map.get(c.doctor_id)
             enriched.append(
                 ConsultationResponse(
                     id=c.id,
@@ -217,7 +223,7 @@ class ConsultationService:
                     prescription_id=c.prescription_id,
                     completed_at=c.completed_at,
                     created_at=c.created_at,
-                    doctor_name=f"Dr. {doc.full_name}" if doc else "Attending Doctor",
+                    doctor_name=f"Dr. {doc.full_name}" if doc and doc.full_name else "Attending Doctor",
                     doctor_specialization=doc.specialization if doc else None,
                     clinic_or_hospital=doc.clinic_name or doc.hospital_name if doc else None,
                 )
@@ -286,7 +292,7 @@ class ConsultationService:
             doctor_id=doctor_id,
             clinical_notes=appointment.notes,
             diagnosis=appointment.notes,
-            completed_at=datetime.now(timezone.utc)
+            completed_at=datetime.now(timezone.utc).replace(tzinfo=None)
             if appointment.status == AppointmentStatus.COMPLETED
             else None,
         )

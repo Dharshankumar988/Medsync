@@ -112,7 +112,7 @@ export const Header = memo(function Header({ role }: { role: string }) {
 
       <div className="flex items-center gap-3 md:gap-4">
         {/* Notifications */}
-        <NotificationBell />
+        <NotificationBell role={role} />
 
         {/* Profile */}
         <div className="pl-1 md:pl-2 border-l border-border/40">

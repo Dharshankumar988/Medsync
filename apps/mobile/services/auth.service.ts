@@ -213,8 +213,8 @@ export const authService = {
     }
 
     if (data?.url) {
-      // In-app authentication sheet (Custom Tab) - stays completely inside MedSync
-      const authResult = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      // In-app authentication sheet (Custom Tab) - intercepts medsync:// scheme to return smoothly
+      const authResult = await WebBrowser.openAuthSessionAsync(data.url, 'medsync://');
       if (authResult.type === 'success' && authResult.url) {
         return { url: authResult.url };
       }

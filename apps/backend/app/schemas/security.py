@@ -19,3 +19,12 @@ class SecurityActionResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     status: str = "success"
     message: str
+
+class VerifyPinRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    pin: str
+
+class VerifyPinResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    valid: bool
+    message: str

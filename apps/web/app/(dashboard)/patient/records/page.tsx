@@ -195,32 +195,20 @@ export default function MedicalRecordsPage() {
     setConsultationsLoading(true);
     try {
       const res = await api.get("/api/v1/consultations/patient/history");
-      if (res.data?.data) {
+      if (res.data?.data && Array.isArray(res.data.data)) {
         setConsultations(res.data.data);
         return;
       }
-    } catch {
-      // Fallback directly to Supabase
-    }
 
-    try {
+      // Fallback directly to Supabase if API returned empty/falsy
       const { data, error } = await supabase
         .from("consultations")
-        .select(`
-          *,
-          doctor:doctors!doctor_id(full_name, specialization, hospital_name, clinic_name)
-        `)
+        .select("*")
         .eq("patient_id", userId)
         .order("created_at", { ascending: false });
 
       if (!error && data) {
-        const enriched = data.map((c: any) => ({
-          ...c,
-          doctor_name: c.doctor?.full_name ? `Dr. ${c.doctor.full_name}` : "Attending Doctor",
-          doctor_specialization: c.doctor?.specialization || "General Medicine",
-          clinic_or_hospital: c.doctor?.clinic_name || c.doctor?.hospital_name || "Medical Center",
-        }));
-        setConsultations(enriched);
+        setConsultations(data);
       }
     } catch (err) {
       console.error("Error loading consultations:", err);

@@ -89,9 +89,17 @@ export default function BackendArchitectureSwitcher() {
 
   const fetchSystemSettings = async () => {
     try {
-      const res = await api.get('/api/v1/admin/settings');
-      if (res.data?.data) {
-        const { active_backend_mode, portable_tunnel_url, auto_failover: dbAutoFailover } = res.data.data;
+      let data: any = null;
+      try {
+        const res = await api.get('/api/v1/admin/settings');
+        data = res.data?.data;
+      } catch {
+        const publicRes = await api.get('/api/v1/health/system-config');
+        data = publicRes.data?.data;
+      }
+
+      if (data) {
+        const { active_backend_mode, portable_tunnel_url, auto_failover: dbAutoFailover } = data;
         if (dbAutoFailover !== undefined) {
           setAutoFailover(dbAutoFailover);
           localStorage.setItem("medsync_auto_failover", dbAutoFailover ? "true" : "false");

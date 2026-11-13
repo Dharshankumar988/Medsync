@@ -7,7 +7,9 @@ param (
     [switch]$NoNgrok,
     [string]$Port = "",
     [switch]$FollowLogs,
-    [switch]$Daemon
+    [switch]$Daemon,
+    [string]$Image = "",
+    [switch]$Update
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,7 +72,7 @@ if (-not (Test-Path -LiteralPath $ENV_FILE)) {
 }
 
 # Configuration
-$BACKEND_REGISTRY_IMAGE = "ghcr.io/dharshankumar988/medsync-backend:latest"
+$BACKEND_REGISTRY_IMAGE = if ($Image) { $Image } elseif ($env:BACKEND_IMAGE) { $env:BACKEND_IMAGE } else { "ghcr.io/dharshankumar988/medsync-backend:latest" }
 $BACKEND_LOCAL_IMAGE = "medsync-backend:local"
 $BACKEND_CONTAINER = "medsync-backend"
 $BACKEND_PORT = if ($Port) { [int]$Port } elseif ($env:PORT) { [int]$env:PORT } else { 8000 }
@@ -84,14 +86,14 @@ function Start-Backend {
     Write-Host "`n--- Starting Full Backend ---" -ForegroundColor Cyan
     
     $BACKEND_IMAGE = $null
-    Write-Host "Checking for existing Backend image..." -ForegroundColor Cyan
-    $localReg = docker images -q $BACKEND_REGISTRY_IMAGE
-    $localBlt = docker images -q $BACKEND_LOCAL_IMAGE
+    Write-Host "Target Image: $BACKEND_REGISTRY_IMAGE" -ForegroundColor Cyan
+    $localReg = if (-not $Update) { docker images -q $BACKEND_REGISTRY_IMAGE } else { $null }
+    $localBlt = if (-not $Update) { docker images -q $BACKEND_LOCAL_IMAGE } else { $null }
     
-    if ($localReg) {
+    if ($localReg -and -not $Update) {
         $BACKEND_IMAGE = $BACKEND_REGISTRY_IMAGE
         Write-Host "Found registry image locally: $BACKEND_IMAGE" -ForegroundColor Green
-    } elseif ($localBlt) {
+    } elseif ($localBlt -and -not $Update) {
         $BACKEND_IMAGE = $BACKEND_LOCAL_IMAGE
         Write-Host "Found locally built image: $BACKEND_IMAGE" -ForegroundColor Green
     } else {

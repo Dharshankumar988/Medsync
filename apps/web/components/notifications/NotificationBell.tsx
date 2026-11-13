@@ -43,6 +43,10 @@ export interface NotificationItem {
   created_at: string;
 }
 
+interface NotificationBellProps {
+  role?: string;
+}
+
 function formatRelativeTime(dateString: string): string {
   try {
     const date = new Date(dateString);
@@ -87,11 +91,67 @@ function getTypeIcon(type: string) {
   return { icon: Info, color: "text-primary", bg: "bg-primary/10 border-primary/20" };
 }
 
-export function NotificationBell() {
+export function NotificationBell({ role }: NotificationBellProps = {}) {
   const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+
+  const resolveNotificationRoute = useCallback((notif: NotificationItem): string => {
+    if (notif.link && notif.link.startsWith("/")) {
+      return notif.link;
+    }
+    const currentRole = (role || "").toLowerCase();
+    const type = (notif.type || "").toUpperCase();
+    const title = (notif.title || "").toLowerCase();
+    const msg = (notif.message || "").toLowerCase();
+
+    // 1. Consent / Record Access
+    if (
+      type === "CONSENT" ||
+      title.includes("record access") ||
+      title.includes("consent") ||
+      msg.includes("consent") ||
+      msg.includes("access to your private")
+    ) {
+      if (currentRole === "doctor") return "/doctor/consent";
+      return "/patient/records?tab=privacy";
+    }
+
+    // 2. Appointment notifications
+    if (type === "APPOINTMENT" || title.includes("appointment") || msg.includes("appointment")) {
+      if (currentRole === "doctor") return "/doctor/appointments";
+      if (currentRole === "hospital") return "/hospital/appointments";
+      return "/patient/appointments";
+    }
+
+    // 3. Prescription notifications
+    if (type === "PRESCRIPTION" || title.includes("prescription") || msg.includes("prescription")) {
+      if (currentRole === "doctor") return "/doctor/prescriptions";
+      if (currentRole === "pharmacy") return "/pharmacy/inventory";
+      return "/patient/prescriptions";
+    }
+
+    // 4. Medicine Order / Delivery notifications
+    if (
+      type === "ORDER" ||
+      type === "DELIVERY" ||
+      title.includes("order") ||
+      msg.includes("dispens") ||
+      msg.includes("order")
+    ) {
+      if (currentRole === "pharmacy") return "/pharmacy/orders";
+      return "/patient/orders";
+    }
+
+    // 5. Medical Records notifications
+    if (type === "RECORD" || title.includes("record") || msg.includes("record")) {
+      if (currentRole === "doctor") return "/doctor/records";
+      return "/patient/records";
+    }
+
+    return currentRole ? `/${currentRole}/dashboard` : "/patient/dashboard";
+  }, [role]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -225,8 +285,9 @@ export function NotificationBell() {
       handleMarkAsRead(notif.id);
     }
     setIsOpen(false);
-    if (notif.link) {
-      router.push(notif.link);
+    const targetUrl = resolveNotificationRoute(notif);
+    if (targetUrl) {
+      router.push(targetUrl);
     }
   };
 

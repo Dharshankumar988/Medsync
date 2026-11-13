@@ -62,6 +62,21 @@ function CallbackHandler() {
 
     async function handleAuthCallback() {
       try {
+        // Fast-path for mobile: If implicit flow returned tokens in hash, immediately bounce to mobile app
+        if (typeof window !== "undefined") {
+          const isMobile =
+            /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+            searchParams.get("source") === "mobile";
+          const hash = window.location.hash;
+          if (isMobile && hash && hash.includes("access_token=")) {
+            const appDeepLink = `medsync://auth/callback${hash}`;
+            setMobileDeepLink(appDeepLink);
+            try {
+              window.location.replace(appDeepLink);
+            } catch {}
+          }
+        }
+
         // Exchange code for session (Supabase handles hash or code automatically)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -153,18 +168,22 @@ function CallbackHandler() {
 
         const { data: { session: activeSession } } = await supabase.auth.getSession();
 
-        if (isMobileDevice && activeSession?.access_token && activeSession?.refresh_token) {
-          const appDeepLink = `medsync://auth/callback?access_token=${encodeURIComponent(
-            activeSession.access_token
-          )}&refresh_token=${encodeURIComponent(activeSession.refresh_token)}`;
+        if (isMobileDevice) {
+          const token = activeSession?.access_token;
+          const refresh = activeSession?.refresh_token;
+          if (token) {
+            const appDeepLink = `medsync://auth/callback?access_token=${encodeURIComponent(
+              token
+            )}${refresh ? `&refresh_token=${encodeURIComponent(refresh)}` : ""}`;
 
-          if (isMounted) {
-            setMobileDeepLink(appDeepLink);
+            if (isMounted) {
+              setMobileDeepLink(appDeepLink);
+            }
+            try {
+              window.location.replace(appDeepLink);
+              return;
+            } catch {}
           }
-          try {
-            window.location.href = appDeepLink;
-            return;
-          } catch {}
         }
 
         // Check if user has already configured an account password

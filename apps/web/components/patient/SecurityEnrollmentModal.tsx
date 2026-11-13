@@ -172,6 +172,12 @@ export default function SecurityEnrollmentModal() {
         setConfirmPin('');
         if (cb) {
           cb();
+        } else {
+          if (normalizedRole === 'doctor') {
+            router.push('/doctor/profile');
+          } else if (normalizedRole === 'pharmacy') {
+            router.push('/pharmacy/settings');
+          }
         }
       }, 950);
     } catch (err: any) {

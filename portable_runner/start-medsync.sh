@@ -50,6 +50,8 @@ MODE=""
 DAEMON=false
 FOLLOW_LOGS=false
 CUSTOM_PORT=""
+CUSTOM_IMAGE=""
+FORCE_UPDATE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -69,6 +71,14 @@ while [[ $# -gt 0 ]]; do
             CUSTOM_PORT="$2"
             shift 2
             ;;
+        -i|--image)
+            CUSTOM_IMAGE="$2"
+            shift 2
+            ;;
+        -u|--update)
+            FORCE_UPDATE=true
+            shift
+            ;;
         *)
             shift
             ;;
@@ -77,17 +87,18 @@ done
 
 # Launch Full Backend directly
 MODE="full"
-BACKEND_REGISTRY_IMAGE="ghcr.io/dharshankumar988/medsync-backend:latest"
+BACKEND_REGISTRY_IMAGE="${CUSTOM_IMAGE:-${BACKEND_IMAGE:-ghcr.io/dharshankumar988/medsync-backend:latest}}"
 BACKEND_LOCAL_IMAGE="medsync-backend:local"
 BACKEND_CONTAINER="medsync-backend"
 BACKEND_PORT="${CUSTOM_PORT:-8000}"
 
 echo -e "\033[36m--- Starting MedSync Full Backend on port $BACKEND_PORT ---\033[0m"
+echo -e "\033[36mTarget Image: $BACKEND_REGISTRY_IMAGE\033[0m"
 
     BACKEND_IMAGE=""
-    if docker images -q "$BACKEND_REGISTRY_IMAGE" >/dev/null 2>&1 && [ -n "$(docker images -q "$BACKEND_REGISTRY_IMAGE")" ]; then
+    if [ "$FORCE_UPDATE" = false ] && docker images -q "$BACKEND_REGISTRY_IMAGE" >/dev/null 2>&1 && [ -n "$(docker images -q "$BACKEND_REGISTRY_IMAGE")" ]; then
         BACKEND_IMAGE="$BACKEND_REGISTRY_IMAGE"
-    elif docker images -q "$BACKEND_LOCAL_IMAGE" >/dev/null 2>&1 && [ -n "$(docker images -q "$BACKEND_LOCAL_IMAGE")" ]; then
+    elif [ "$FORCE_UPDATE" = false ] && docker images -q "$BACKEND_LOCAL_IMAGE" >/dev/null 2>&1 && [ -n "$(docker images -q "$BACKEND_LOCAL_IMAGE")" ]; then
         BACKEND_IMAGE="$BACKEND_LOCAL_IMAGE"
     else
         echo -e "\033[36mPulling Backend image from registry: $BACKEND_REGISTRY_IMAGE...\033[0m"

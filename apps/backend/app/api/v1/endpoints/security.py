@@ -12,9 +12,44 @@ from app.services.security_service import enroll_patient_pin, validate_patient_p
 from app.models.audit_log import AuditLog
 from app.schemas.response import APIResponse
 
-from app.schemas.security import SecurityStatusResponse, SecurityStatusData, SecurityActionResponse
+from app.schemas.security import (
+    SecurityStatusResponse,
+    SecurityStatusData,
+    SecurityActionResponse,
+    VerifyPinRequest,
+    VerifyPinResponse,
+)
 
 router = APIRouter()
+
+@router.post("/verify-pin", response_model=APIResponse[VerifyPinResponse])
+async def verify_auth_pin(
+    req: VerifyPinRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedPrincipal = Depends(get_current_user),
+):
+    """Verifies a 6-digit Authorization PIN for patient, doctor, or pharmacy."""
+    if not req.pin or len(req.pin) != 6 or not req.pin.isdigit():
+        raise HTTPException(status_code=400, detail="PIN must be exactly 6 digits.")
+
+    role_upper = str(current_user.role).upper()
+    is_valid = False
+    if role_upper == UserRole.PATIENT.value:
+        is_valid = await validate_patient_pin(db, current_user.id, req.pin)
+    elif role_upper == UserRole.DOCTOR.value:
+        is_valid = await validate_doctor_pin(db, current_user.id, req.pin)
+    elif role_upper == UserRole.PHARMACY.value:
+        is_valid = await validate_pharmacy_pin(db, current_user.id, req.pin)
+    else:
+        raise HTTPException(status_code=403, detail="Role does not support PIN verification.")
+
+    if not is_valid:
+        raise HTTPException(status_code=401, detail="Invalid Authorization PIN.")
+
+    return APIResponse(
+        message="Authorization PIN verified",
+        data=VerifyPinResponse(valid=True, message="PIN verified successfully.")
+    )
 
 @router.get("/status", response_model=SecurityStatusResponse)
 async def get_status(

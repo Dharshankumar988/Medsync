@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -27,7 +27,12 @@ import {
   Clock,
   ArrowRight,
   Stethoscope,
-  Send
+  Send,
+  Filter,
+  X,
+  SlidersHorizontal,
+  Droplet,
+  Users
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import api from "@/lib/api";
@@ -49,6 +54,9 @@ export default function DoctorPatientsPage() {
   const [loading, setLoading] = useState(true);
   const [referralsLoading, setReferralsLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [genderFilter, setGenderFilter] = useState<string>("ALL");
+  const [bloodGroupFilter, setBloodGroupFilter] = useState<string>("ALL");
+  const [sortBy, setSortBy] = useState<string>("name-asc");
   const [processingReferralId, setProcessingReferralId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -238,9 +246,55 @@ export default function DoctorPatientsPage() {
     (r) => r.status === "PENDING"
   ).length;
 
-  const filteredPatients = patients.filter((p) =>
-    (p.full_name || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredPatients = useMemo(() => {
+    return patients
+      .filter((p) => {
+        // 1. Name & metadata search
+        if (search.trim()) {
+          const q = search.toLowerCase();
+          const nameMatch = (p.full_name || "").toLowerCase().includes(q);
+          const phoneMatch = (p.phone_number || p.contact_number || "").includes(q);
+          const bloodMatch = (p.blood_group || "").toLowerCase().includes(q);
+          const alertMatch = (p.medical_alerts || "").toLowerCase().includes(q);
+          if (!nameMatch && !phoneMatch && !bloodMatch && !alertMatch) return false;
+        }
+
+        // 2. Gender filter
+        if (genderFilter !== "ALL") {
+          const g = (p.gender || "").toUpperCase();
+          if (genderFilter === "MALE" && g !== "MALE") return false;
+          if (genderFilter === "FEMALE" && g !== "FEMALE") return false;
+          if (genderFilter === "OTHER" && g !== "OTHER" && g !== "NON-BINARY") return false;
+        }
+
+        // 3. Blood group filter
+        if (bloodGroupFilter !== "ALL") {
+          const b = (p.blood_group || "").toUpperCase().replace(/\s+/g, "");
+          if (b !== bloodGroupFilter) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === "name-asc") {
+          return (a.full_name || "").localeCompare(b.full_name || "");
+        }
+        if (sortBy === "name-desc") {
+          return (b.full_name || "").localeCompare(a.full_name || "");
+        }
+        return 0;
+      });
+  }, [patients, search, genderFilter, bloodGroupFilter, sortBy]);
+
+  const hasActiveFilters =
+    search.trim() !== "" || genderFilter !== "ALL" || bloodGroupFilter !== "ALL";
+
+  const resetFilters = () => {
+    setSearch("");
+    setGenderFilter("ALL");
+    setBloodGroupFilter("ALL");
+    setSortBy("name-asc");
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -276,17 +330,115 @@ export default function DoctorPatientsPage() {
         {/* Tab 1: My Patients */}
         <TabsContent value="patients" className="pt-4 space-y-4">
           <Card className="rounded-2xl border border-border/60">
-            <CardHeader className="pb-3 border-b border-border/40">
-              <div className="flex items-center justify-between gap-4">
+            <CardHeader className="pb-4 border-b border-border/40 space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* Search Bar */}
                 <div className="relative flex-1 max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search patients by name..."
-                    className="pl-9 bg-muted/30 border-border/60 focus-visible:border-primary rounded-xl"
+                    placeholder="Search by patient name, phone, or blood group..."
+                    className="pl-9 bg-muted/30 border-border/60 focus-visible:border-primary rounded-xl text-sm h-10"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
+                  {search && (
+                    <button
+                      onClick={() => setSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
+
+                {/* Filter Controls Row */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {/* Gender Filter */}
+                  <div className="flex items-center gap-1.5 bg-muted/40 border border-border/60 rounded-xl px-2.5 py-1.5 text-xs">
+                    <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                    <select
+                      value={genderFilter}
+                      onChange={(e) => setGenderFilter(e.target.value)}
+                      className="bg-transparent font-medium text-foreground outline-none cursor-pointer text-xs"
+                    >
+                      <option value="ALL">All Genders</option>
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+
+                  {/* Blood Group Filter */}
+                  <div className="flex items-center gap-1.5 bg-muted/40 border border-border/60 rounded-xl px-2.5 py-1.5 text-xs">
+                    <Droplet className="w-3.5 h-3.5 text-rose-500" />
+                    <select
+                      value={bloodGroupFilter}
+                      onChange={(e) => setBloodGroupFilter(e.target.value)}
+                      className="bg-transparent font-medium text-foreground outline-none cursor-pointer text-xs"
+                    >
+                      <option value="ALL">All Blood Groups</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                    </select>
+                  </div>
+
+                  {/* Sort Order */}
+                  <div className="flex items-center gap-1.5 bg-muted/40 border border-border/60 rounded-xl px-2.5 py-1.5 text-xs">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="bg-transparent font-medium text-foreground outline-none cursor-pointer text-xs"
+                    >
+                      <option value="name-asc">Name (A-Z)</option>
+                      <option value="name-desc">Name (Z-A)</option>
+                    </select>
+                  </div>
+
+                  {/* Clear Filters */}
+                  {hasActiveFilters && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={resetFilters}
+                      className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground rounded-lg"
+                    >
+                      <X className="w-3 h-3 mr-1" /> Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Status and Active Filter Chips */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                <span className="font-medium">
+                  Showing {filteredPatients.length} of {patients.length} patients
+                </span>
+                {hasActiveFilters && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {search && (
+                      <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                        Search: {search}
+                      </Badge>
+                    )}
+                    {genderFilter !== "ALL" && (
+                      <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                        Gender: {genderFilter}
+                      </Badge>
+                    )}
+                    {bloodGroupFilter !== "ALL" && (
+                      <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-500 border-rose-500/20">
+                        Blood: {bloodGroupFilter}
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -301,10 +453,20 @@ export default function DoctorPatientsPage() {
                   </div>
                   <h3 className="text-lg font-medium text-foreground">No authorized patients</h3>
                   <p className="text-muted-foreground max-w-sm mt-1 text-sm">
-                    {search
-                      ? "No patients match your search query."
+                    {hasActiveFilters
+                      ? "No patients match your search or filter criteria."
                       : "Patients will appear here automatically once an appointment is scheduled or a doctor referral is accepted."}
                   </p>
+                  {hasActiveFilters && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={resetFilters}
+                      className="mt-4 rounded-xl text-xs"
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" /> Reset All Filters
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <motion.div

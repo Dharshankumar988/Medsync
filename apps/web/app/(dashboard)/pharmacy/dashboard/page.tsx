@@ -13,7 +13,8 @@ import {
   FileCheck,
   TrendingUp,
   MapPin,
-  Brain
+  Brain,
+  Store
 } from "lucide-react";
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Input } from "@medsync/ui";
 import { pharmacyService, PharmacyInventoryItem, PharmacyOrder } from "@/services/pharmacy.service";
@@ -44,6 +45,7 @@ export default function PharmacyDashboardPage() {
   const [dispensingOrderId, setDispensingOrderId] = useState<string | null>(null);
   const [verifiedRxHash, setVerifiedRxHash] = useState<string | null>(null);
   const [userId, setUserId] = useState<string>("");
+  const [profileIncomplete, setProfileIncomplete] = useState(false);
 
   const { data: inventory = [], isLoading: isLoadingInventory } = useQuery({
     queryKey: ["pharmacyInventory"],
@@ -63,8 +65,23 @@ export default function PharmacyDashboardPage() {
   };
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUserId(data.user.id);
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (data.user) {
+        setUserId(data.user.id);
+        try {
+          const { data: phData } = await supabase
+            .from("pharmacies")
+            .select("name, address, contact_number, license_number")
+            .eq("user_id", data.user.id)
+            .maybeSingle();
+
+          if (!phData?.address || !phData?.contact_number || !phData?.license_number) {
+            setProfileIncomplete(true);
+          }
+        } catch (e) {
+          console.warn("Pharmacy profile check notice:", e);
+        }
+      }
     });
   }, []);
 
@@ -199,6 +216,28 @@ export default function PharmacyDashboardPage() {
           </Button>
         </motion.div>
       </motion.div>
+
+      {/* ─── Profile Setup Prompt ─── */}
+      {profileIncomplete && (
+        <Card className="rounded-2xl border-amber-500/30 bg-amber-500/10 p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+                <Store className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm text-foreground">Complete Your Pharmacy Profile</h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Update your operating address, pharmacy license number, and contact details to manage dispensing and delivery.
+                </p>
+              </div>
+            </div>
+            <Button asChild size="sm" className="bg-amber-600 hover:bg-amber-500 text-white rounded-xl shrink-0 shadow-sm">
+              <Link href="/pharmacy/settings">Complete Profile &rarr;</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* ─── Stat Cards ─── */}
       <motion.div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4" initial="hidden" animate="visible" variants={stagger}>

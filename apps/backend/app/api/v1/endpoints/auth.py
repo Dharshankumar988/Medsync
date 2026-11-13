@@ -72,7 +72,6 @@ async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depen
     from sqlalchemy import text
     import uuid
     import json
-    user_id = uuid.uuid4()
     clean_email = payload.email.strip().lower()
 
     # Determine requested role (default to ADMIN if not specified or unknown)
@@ -84,21 +83,96 @@ async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depen
 
     try:
         # Check if user already exists in public.users
-        existing = await db.execute(select(User).where(func.lower(User.email) == clean_email))
-        if existing.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
+        existing_res = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+        existing_user = existing_res.scalar_one_or_none()
         
         # Check if user already exists in auth.users
+        auth_user_id = None
         try:
             async with db.begin_nested():
-                auth_existing = await db.execute(text("SELECT id FROM auth.users WHERE lower(email) = :email"), {"email": clean_email})
-                if auth_existing.scalar_one_or_none():
-                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
-        except HTTPException:
-            raise
+                auth_res = await db.execute(text("SELECT id FROM auth.users WHERE lower(email) = :email"), {"email": clean_email})
+                auth_row = auth_res.first()
+                if auth_row:
+                    auth_user_id = auth_row[0]
         except Exception:
             pass
 
+        if existing_user:
+            # If the user is fully active or already verified, reject registration as duplicate
+            if existing_user.status == UserStatus.ACTIVE or existing_user.is_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="An account with this email already exists."
+                )
+            # If user exists but is PENDING and unverified (prior incomplete registration or retry):
+            # Refresh password in auth.users and return user ID so client can complete profile sync
+            user_id = existing_user.id
+            app_meta = json.dumps({"role": target_role, "provider": "email"})
+            user_meta = json.dumps({"role": target_role})
+            params = {"id": user_id, "email": clean_email, "pwd": payload.password, "app_meta": app_meta, "user_meta": user_meta}
+            try:
+                async with db.begin_nested():
+                    await db.execute(
+                        text("""
+                        UPDATE auth.users 
+                        SET encrypted_password = extensions.crypt(:pwd, extensions.gen_salt('bf')),
+                            raw_app_meta_data = CAST(:app_meta AS jsonb),
+                            raw_user_meta_data = CAST(:user_meta AS jsonb),
+                            email_confirmed_at = now()
+                        WHERE id = :id OR lower(email) = :email
+                        """),
+                        params
+                    )
+            except Exception:
+                await db.execute(
+                    text("""
+                    UPDATE auth.users 
+                    SET encrypted_password = crypt(:pwd, gen_salt('bf')),
+                        raw_app_meta_data = CAST(:app_meta AS jsonb),
+                        raw_user_meta_data = CAST(:user_meta AS jsonb),
+                        email_confirmed_at = now()
+                    WHERE id = :id OR lower(email) = :email
+                    """),
+                    params
+                )
+            await db.commit()
+            return APIResponse(message="Pending registration refreshed", data=AdminRegisterResponseData(id=str(user_id)))
+
+        elif auth_user_id:
+            # User exists in auth.users but not in public.users yet
+            user_id = auth_user_id
+            app_meta = json.dumps({"role": target_role, "provider": "email"})
+            user_meta = json.dumps({"role": target_role})
+            params = {"id": user_id, "email": clean_email, "pwd": payload.password, "app_meta": app_meta, "user_meta": user_meta}
+            try:
+                async with db.begin_nested():
+                    await db.execute(
+                        text("""
+                        UPDATE auth.users 
+                        SET encrypted_password = extensions.crypt(:pwd, extensions.gen_salt('bf')),
+                            raw_app_meta_data = CAST(:app_meta AS jsonb),
+                            raw_user_meta_data = CAST(:user_meta AS jsonb),
+                            email_confirmed_at = now()
+                        WHERE id = :id OR lower(email) = :email
+                        """),
+                        params
+                    )
+            except Exception:
+                await db.execute(
+                    text("""
+                    UPDATE auth.users 
+                    SET encrypted_password = crypt(:pwd, gen_salt('bf')),
+                        raw_app_meta_data = CAST(:app_meta AS jsonb),
+                        raw_user_meta_data = CAST(:user_meta AS jsonb),
+                        email_confirmed_at = now()
+                    WHERE id = :id OR lower(email) = :email
+                    """),
+                    params
+                )
+            await db.commit()
+            return APIResponse(message="Auth registration refreshed", data=AdminRegisterResponseData(id=str(user_id)))
+
+        user_id = uuid.uuid4()
         app_meta = json.dumps({"role": target_role, "provider": "email"})
         user_meta = json.dumps({"role": target_role})
         params = {"id": user_id, "email": clean_email, "pwd": payload.password, "app_meta": app_meta, "user_meta": user_meta}
@@ -430,149 +504,45 @@ async def _ensure_pending_verification_request(db: AsyncSession, user: User, rol
 @router.post("/sync", response_model=APIResponse[SyncUserResponseData])
 async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)):
     """
-    Called by the frontend immediately after Supabase signup to create the corresponding
-    backend records and profiles, along with VerificationRequests if needed.
+    Called by the frontend immediately after Supabase signup to create or update the corresponding
+    backend records and profiles, along with VerificationRequests and Polygon Amoy BlockchainSyncTasks.
     """
     try:
         clean_email = payload.email.strip().lower()
 
-        # 1. Check if user already exists by ID
-        existing = await db.execute(select(User).where(User.id == payload.id))
-        existing_user_id = existing.scalar_one_or_none()
-        if existing_user_id:
-            # Sync / update any profile fields provided in registration payload
-            if payload.role == UserRole.PATIENT:
-                # If verified via OAuth e.g. Google or explicitly verified, ensure active & verified status
-                if payload.is_verified is True or (payload.auth_provider and payload.auth_provider.lower() == "google"):
-                    existing_user_id.is_verified = True
-                    existing_user_id.status = UserStatus.ACTIVE
-                pat_res = await db.execute(select(Patient).where(Patient.user_id == existing_user_id.id))
-                pat = pat_res.scalar_one_or_none()
-                if pat:
-                    if payload.full_name:
-                        pat.full_name = payload.full_name
-                    if payload.blood_group:
-                        pat.blood_group = payload.blood_group
-                    if payload.gender:
-                        pat.gender = payload.gender
-                    if payload.date_of_birth:
-                        pat.date_of_birth = payload.date_of_birth
-                    if payload.profile_picture_url:
-                        pat.profile_picture_url = payload.profile_picture_url
-                        existing_user_id.profile_image_url = payload.profile_picture_url
-                    elif not pat.profile_picture_url and not existing_user_id.profile_image_url:
-                        gender = (payload.gender or pat.gender or "").strip().upper()
-                        allotted = random.choice(FEMALE_PATIENT_AVATARS) if gender == "FEMALE" else random.choice(MALE_PATIENT_AVATARS)
-                        pat.profile_picture_url = allotted
-                        existing_user_id.profile_image_url = allotted
-                else:
-                    gender = (payload.gender or "").strip().upper()
-                    allotted = random.choice(FEMALE_PATIENT_AVATARS) if gender == "FEMALE" else random.choice(MALE_PATIENT_AVATARS)
-                    pat = Patient(
-                        user_id=existing_user_id.id,
-                        full_name=payload.full_name,
-                        blood_group=payload.blood_group,
-                        gender=payload.gender,
-                        date_of_birth=payload.date_of_birth,
-                        profile_picture_url=payload.profile_picture_url or existing_user_id.profile_image_url or allotted
-                    )
-                    db.add(pat)
-                await db.commit()
-            elif payload.role == UserRole.DOCTOR:
-                doc_res = await db.execute(select(Doctor).where(Doctor.user_id == existing_user_id.id))
-                doc = doc_res.scalar_one_or_none()
-                if doc:
-                    if payload.full_name:
-                        doc.full_name = payload.full_name
-                    if payload.license_number:
-                        doc.license_number = payload.license_number
-                    if payload.hospital_name:
-                        doc.hospital_name = payload.hospital_name
-                    if payload.clinic_name:
-                        doc.clinic_name = payload.clinic_name
-                    if payload.hospital_id:
-                        doc.hospital_id = payload.hospital_id
-                await _ensure_pending_verification_request(db, existing_user_id, UserRole.DOCTOR)
-                await db.commit()
-            elif payload.role == UserRole.PHARMACY:
-                phm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == existing_user_id.id))
-                phm = phm_res.scalar_one_or_none()
-                if phm:
-                    if payload.business_name or payload.full_name:
-                        phm.business_name = payload.business_name or payload.full_name
-                    if payload.license_number:
-                        phm.license_number = payload.license_number
-                    if payload.gst_number:
-                        phm.gst_number = payload.gst_number
-                    if payload.contact_number:
-                        phm.contact_number = payload.contact_number
-                    if payload.address:
-                        phm.address = payload.address
-                    if payload.city:
-                        phm.city = payload.city
-                    if payload.state:
-                        phm.state = payload.state
-                    if payload.country:
-                        phm.country = payload.country
-                    if payload.pincode:
-                        phm.pincode = payload.pincode
-                    if payload.hospital_id:
-                        phm.hospital_id = payload.hospital_id
-                else:
-                    phm = Pharmacy(
-                        user_id=existing_user_id.id,
-                        business_name=payload.business_name or payload.full_name or "Pharmacy Partner",
-                        license_number=payload.license_number or f"LIC-PHM-{str(existing_user_id.id)[:8]}",
-                        gst_number=payload.gst_number,
-                        contact_number=payload.contact_number,
-                        address=payload.address,
-                        city=payload.city,
-                        state=payload.state,
-                        country=payload.country,
-                        pincode=payload.pincode,
-                        hospital_id=payload.hospital_id,
-                        clinic_name=payload.clinic_name,
-                    )
-                    db.add(phm)
-                await _ensure_pending_verification_request(db, existing_user_id, UserRole.PHARMACY)
-                await db.commit()
+        # 1. Resolve target user by ID or Email
+        target_user = None
+        existing_res = await db.execute(select(User).where(User.id == payload.id))
+        target_user = existing_res.scalar_one_or_none()
 
-            return APIResponse(message="User already synced", data=SyncUserResponseData(id=str(payload.id)))
-
-        # 2. Check if user already exists by Email
-        existing_email_res = await db.execute(select(User).where(func.lower(User.email) == clean_email))
-        existing_user_email = existing_email_res.scalar_one_or_none()
-        if existing_user_email:
-            # Check if payload.id is the authoritative Supabase auth user for this email
-            auth_user = None
-            try:
-                auth_check = await db.execute(
-                    text("SELECT id FROM auth.users WHERE id = :id AND lower(email) = :email"),
-                    {"id": payload.id, "email": clean_email}
-                )
-                auth_user = auth_check.scalar_one_or_none()
-            except Exception:
+        if not target_user:
+            existing_email_res = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+            existing_user_email = existing_email_res.scalar_one_or_none()
+            if existing_user_email:
+                # Check if payload.id is the authoritative Supabase auth user for this email or account is pending
                 auth_user = None
+                try:
+                    auth_check = await db.execute(
+                        text("SELECT id FROM auth.users WHERE id = :id AND lower(email) = :email"),
+                        {"id": payload.id, "email": clean_email}
+                    )
+                    auth_user = auth_check.scalar_one_or_none()
+                except Exception:
+                    auth_user = None
 
-            if auth_user:
-                # Update user ID to match new authoritative Supabase auth ID (cascades to profile tables)
-                existing_user_email.id = payload.id
-                await _ensure_pending_verification_request(db, existing_user_email, payload.role)
-                await db.commit()
-                return APIResponse(message="User already synced and ID updated", data=SyncUserResponseData(id=str(payload.id)))
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="An account with this email already exists. Please log in instead."
-                )
+                if auth_user or existing_user_email.status == UserStatus.PENDING:
+                    existing_user_email.id = payload.id
+                    target_user = existing_user_email
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="An account with this email already exists. Please log in instead."
+                    )
 
         if payload.role == UserRole.ADMIN:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin creation is not allowed publicly.")
 
-        # Determine status and verification per role lifecycle contract:
-        # - Patient: PENDING until email OTP is verified (unless OAuth provider e.g. Google where email is already verified)
-        # - Doctor / Pharmacy / Hospital: PENDING until administrator review and approval
-        # - Admin: ACTIVE and pre-verified immediately
+        # Determine status and verification per role lifecycle contract
         if payload.role == UserRole.PATIENT:
             if payload.is_verified is True or (payload.auth_provider and payload.auth_provider.lower() == "google"):
                 new_status = UserStatus.ACTIVE
@@ -583,19 +553,14 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
         elif payload.role in [UserRole.DOCTOR, UserRole.PHARMACY, UserRole.HOSPITAL]:
             new_status = UserStatus.PENDING
             is_verified = False
-        elif payload.role == UserRole.ADMIN:
-            new_status = UserStatus.ACTIVE
-            is_verified = True
         else:
             new_status = UserStatus.PENDING
             is_verified = False
-
 
         # Determine default avatar based on role and gender
         default_avatar = payload.profile_picture_url
         if not default_avatar:
             gender = (payload.gender or "").strip().upper()
-            
             if payload.role == UserRole.PATIENT:
                 if gender == "FEMALE":
                     default_avatar = random.choice(FEMALE_PATIENT_AVATARS)
@@ -611,58 +576,118 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
             elif payload.role == UserRole.HOSPITAL:
                 default_avatar = "https://api.dicebear.com/7.x/shapes/svg?seed=" + str(payload.id) + "&backgroundColor=c0aede"
 
-        # Create base user
-        new_user = User(
-            id=payload.id,
-            email=payload.email,
-            password_hash="supabase_managed",
-            role=payload.role,
-            status=new_status,
-            is_verified=is_verified,
-            profile_completion_percentage=100,
-            profile_image_url=default_avatar
-        )
-        db.add(new_user)
-        await db.flush()
+        is_existing_user = target_user is not None
 
-        # Create profile
+        if target_user:
+            # Update user attributes
+            if payload.role == UserRole.PATIENT:
+                if payload.is_verified is True or (payload.auth_provider and payload.auth_provider.lower() == "google"):
+                    target_user.is_verified = True
+                    target_user.status = UserStatus.ACTIVE
+            if default_avatar and not target_user.profile_image_url:
+                target_user.profile_image_url = default_avatar
+            target_user.profile_completion_percentage = 100
+        else:
+            target_user = User(
+                id=payload.id,
+                email=payload.email,
+                password_hash="supabase_managed",
+                role=payload.role,
+                status=new_status,
+                is_verified=is_verified,
+                profile_completion_percentage=100,
+                profile_image_url=default_avatar
+            )
+            db.add(target_user)
+            await db.flush()
+
+        doc_profile = None
+        phm_profile = None
+
         if payload.role == UserRole.PATIENT:
-            profile = Patient(
-                user_id=new_user.id, 
-                full_name=payload.full_name,
-                blood_group=payload.blood_group,
-                gender=payload.gender,
-                date_of_birth=payload.date_of_birth,
-                profile_picture_url=default_avatar
-            )
-            db.add(profile)
-        elif payload.role == UserRole.DOCTOR:
-            profile = Doctor(
-                user_id=new_user.id,
-                full_name=payload.full_name,
-                hospital_name=payload.hospital_name,
-                hospital_address=payload.hospital_address,
-                hospital_id=payload.hospital_id,
-                clinic_name=payload.clinic_name,
-                clinic_address=payload.clinic_address,
-                city=payload.city,
-                state=payload.state,
-                country=payload.country,
-                pincode=payload.pincode,
-                license_number=(payload.license_number or f"LIC-{str(new_user.id)[:8]}") + (f" | GST: {payload.gst_number}" if payload.gst_number else ""),
-                experience_years=1,
-                consultation_fee=500,
-                doctor_status="PENDING",
-                profile_picture_url=default_avatar
-            )
-            db.add(profile)
-            await db.flush() # flush to get doctor profile id
+            pat = None
+            if is_existing_user:
+                pat_res = await db.execute(select(Patient).where(Patient.user_id == target_user.id))
+                pat = pat_res.scalar_one_or_none()
+            if pat:
+                if payload.full_name:
+                    pat.full_name = payload.full_name
+                if payload.blood_group:
+                    pat.blood_group = payload.blood_group
+                if payload.gender:
+                    pat.gender = payload.gender
+                if payload.date_of_birth:
+                    pat.date_of_birth = payload.date_of_birth
+                if default_avatar:
+                    pat.profile_picture_url = default_avatar
+            else:
+                pat = Patient(
+                    user_id=target_user.id,
+                    full_name=payload.full_name,
+                    blood_group=payload.blood_group,
+                    gender=payload.gender,
+                    date_of_birth=payload.date_of_birth,
+                    profile_picture_url=default_avatar
+                )
+                db.add(pat)
 
-            # Add location if private clinic
+        elif payload.role == UserRole.DOCTOR:
+            doc = None
+            if is_existing_user:
+                doc_res = await db.execute(select(Doctor).where(Doctor.user_id == target_user.id))
+                doc = doc_res.scalar_one_or_none()
+            if doc:
+                if payload.full_name:
+                    doc.full_name = payload.full_name
+                if payload.license_number:
+                    doc.license_number = (payload.license_number or doc.license_number) + (f" | GST: {payload.gst_number}" if payload.gst_number and "GST:" not in (payload.license_number or "") else "")
+                if payload.hospital_name:
+                    doc.hospital_name = payload.hospital_name
+                if payload.hospital_address:
+                    doc.hospital_address = payload.hospital_address
+                if payload.clinic_name:
+                    doc.clinic_name = payload.clinic_name
+                if payload.clinic_address:
+                    doc.clinic_address = payload.clinic_address
+                if payload.city:
+                    doc.city = payload.city
+                if payload.state:
+                    doc.state = payload.state
+                if payload.country:
+                    doc.country = payload.country
+                if payload.pincode:
+                    doc.pincode = payload.pincode
+                if payload.hospital_id:
+                    doc.hospital_id = payload.hospital_id
+                if default_avatar and not doc.profile_picture_url:
+                    doc.profile_picture_url = default_avatar
+                doc_profile = doc
+            else:
+                doc_profile = Doctor(
+                    user_id=target_user.id,
+                    full_name=payload.full_name,
+                    hospital_name=payload.hospital_name,
+                    hospital_address=payload.hospital_address,
+                    hospital_id=payload.hospital_id,
+                    clinic_name=payload.clinic_name,
+                    clinic_address=payload.clinic_address,
+                    city=payload.city,
+                    state=payload.state,
+                    country=payload.country,
+                    pincode=payload.pincode,
+                    license_number=(payload.license_number or f"LIC-{str(target_user.id)[:8]}") + (f" | GST: {payload.gst_number}" if payload.gst_number else ""),
+                    experience_years=1,
+                    consultation_fee=500,
+                    doctor_status="PENDING",
+                    profile_picture_url=default_avatar
+                )
+                db.add(doc_profile)
+                await db.flush()
+
+            # Clinic & Hospital Location resolution for Doctor
             if payload.clinic_name and payload.latitude and payload.longitude and not payload.hospital_id:
-                # Create a Hospital record for the clinic so it appears on the map
                 new_hospital = Hospital(
-                    user_id=new_user.id,
+                    user_id=target_user.id,
                     name=payload.clinic_name,
                     address=payload.clinic_address or payload.address or "Unknown",
                     city=payload.city,
@@ -679,34 +704,44 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                 db.add(new_hospital)
                 await db.flush()
                 
-                profile.hospital_id = new_hospital.id
-                profile.clinic_address = profile.clinic_address or new_hospital.address
+                doc_profile.hospital_id = new_hospital.id
+                doc_profile.clinic_address = doc_profile.clinic_address or new_hospital.address
 
-                location = DoctorLocation(
-                    doctor_id=profile.id,
-                    location_type="CLINIC",
-                    location_name=payload.clinic_name,
-                    hospital_id=new_hospital.id,
-                    address=profile.clinic_address,
-                    city=new_hospital.city,
-                    state=new_hospital.state,
-                    latitude=payload.latitude,
-                    longitude=payload.longitude,
-                    google_maps_url=payload.google_maps_url,
-                    is_primary=True,
-                    is_active=True
-                )
-                db.add(location)
+                loc_res = await db.execute(select(DoctorLocation).where(DoctorLocation.doctor_id == doc_profile.id, DoctorLocation.is_primary == True))
+                loc = loc_res.scalar_one_or_none()
+                if loc:
+                    loc.location_name = payload.clinic_name
+                    loc.hospital_id = new_hospital.id
+                    loc.address = doc_profile.clinic_address
+                    loc.latitude = payload.latitude
+                    loc.longitude = payload.longitude
+                    loc.google_maps_url = payload.google_maps_url
+                else:
+                    location = DoctorLocation(
+                        doctor_id=doc_profile.id,
+                        location_type="CLINIC",
+                        location_name=payload.clinic_name,
+                        hospital_id=new_hospital.id,
+                        address=doc_profile.clinic_address,
+                        city=new_hospital.city,
+                        state=new_hospital.state,
+                        latitude=payload.latitude,
+                        longitude=payload.longitude,
+                        google_maps_url=payload.google_maps_url,
+                        is_primary=True,
+                        is_active=True
+                    )
+                    db.add(location)
+
             elif payload.hospital_name and payload.latitude and payload.longitude and not payload.hospital_id:
-                # If facility_type is clinic, allow registering as clinic
                 is_clinic = (payload.facility_type or "").lower() == "clinic"
                 existing_hosp = await db.execute(select(Hospital).where(Hospital.name.ilike(payload.hospital_name)))
                 hosp = existing_hosp.scalars().first()
                 if hosp:
-                    profile.hospital_id = hosp.id
+                    doc_profile.hospital_id = hosp.id
                 elif is_clinic:
                     new_hospital = Hospital(
-                        user_id=new_user.id,
+                        user_id=target_user.id,
                         name=payload.hospital_name,
                         address=payload.hospital_address or payload.address or "Unknown",
                         city=payload.city,
@@ -722,61 +757,86 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                     )
                     db.add(new_hospital)
                     await db.flush()
-                    profile.hospital_id = new_hospital.id
-                    profile.clinic_name = payload.hospital_name
-                    profile.clinic_address = payload.hospital_address or new_hospital.address
+                    doc_profile.hospital_id = new_hospital.id
+                    doc_profile.clinic_name = payload.hospital_name
+                    doc_profile.clinic_address = payload.hospital_address or new_hospital.address
 
-                if profile.hospital_id:
-                    location = DoctorLocation(
-                        doctor_id=profile.id,
-                        location_type="CLINIC" if is_clinic else "HOSPITAL",
-                        hospital_id=profile.hospital_id,
-                        location_name=payload.hospital_name,
-                        address=payload.hospital_address or payload.clinic_address,
-                        latitude=payload.latitude,
-                        longitude=payload.longitude,
-                        google_maps_url=payload.google_maps_url,
-                        is_primary=True,
-                        is_active=True
-                    )
-                    db.add(location)
+                if doc_profile.hospital_id:
+                    loc_res = await db.execute(select(DoctorLocation).where(DoctorLocation.doctor_id == doc_profile.id, DoctorLocation.is_primary == True))
+                    loc = loc_res.scalar_one_or_none()
+                    if loc:
+                        loc.location_name = payload.hospital_name
+                        loc.address = payload.hospital_address or payload.clinic_address
+                        loc.latitude = payload.latitude
+                        loc.longitude = payload.longitude
+                        loc.google_maps_url = payload.google_maps_url
+                    else:
+                        location = DoctorLocation(
+                            doctor_id=doc_profile.id,
+                            location_type="CLINIC" if is_clinic else "HOSPITAL",
+                            hospital_id=doc_profile.hospital_id,
+                            location_name=payload.hospital_name,
+                            address=payload.hospital_address or payload.clinic_address,
+                            latitude=payload.latitude,
+                            longitude=payload.longitude,
+                            google_maps_url=payload.google_maps_url,
+                            is_primary=True,
+                            is_active=True
+                        )
+                        db.add(location)
+
             elif payload.hospital_id:
                 h_res = await db.execute(select(Hospital).where(Hospital.id == payload.hospital_id))
                 h_obj = h_res.scalar_one_or_none()
                 is_clinic = bool(h_obj and (h_obj.type or "").lower() == "clinic")
                 if h_obj:
                     if is_clinic:
-                        profile.clinic_name = profile.clinic_name or h_obj.name
-                        profile.clinic_address = profile.clinic_address or h_obj.address
+                        doc_profile.clinic_name = doc_profile.clinic_name or h_obj.name
+                        doc_profile.clinic_address = doc_profile.clinic_address or h_obj.address
                     else:
-                        profile.hospital_name = profile.hospital_name or h_obj.name
-                        profile.hospital_address = profile.hospital_address or h_obj.address
-                    profile.city = profile.city or h_obj.city
-                    profile.state = profile.state or h_obj.state
-                    profile.country = profile.country or h_obj.country
-                    profile.pincode = profile.pincode or h_obj.pincode
-                location = DoctorLocation(
-                    doctor_id=profile.id,
-                    location_type="CLINIC" if is_clinic else "HOSPITAL",
-                    hospital_id=payload.hospital_id,
-                    location_name=h_obj.name if h_obj else (payload.clinic_name or payload.hospital_name),
-                    address=h_obj.address if h_obj else (payload.clinic_address or payload.hospital_address),
-                    city=h_obj.city if h_obj else payload.city,
-                    state=h_obj.state if h_obj else payload.state,
-                    latitude=float(h_obj.latitude) if h_obj and h_obj.latitude is not None else payload.latitude,
-                    longitude=float(h_obj.longitude) if h_obj and h_obj.longitude is not None else payload.longitude,
-                    google_maps_url=h_obj.google_maps_url if h_obj else payload.google_maps_url,
-                    is_primary=True,
-                    is_active=True
+                        doc_profile.hospital_name = doc_profile.hospital_name or h_obj.name
+                        doc_profile.hospital_address = doc_profile.hospital_address or h_obj.address
+                    doc_profile.city = doc_profile.city or h_obj.city
+                    doc_profile.state = doc_profile.state or h_obj.state
+                    doc_profile.country = doc_profile.country or h_obj.country
+                    doc_profile.pincode = doc_profile.pincode or h_obj.pincode
+
+                loc_res = await db.execute(select(DoctorLocation).where(DoctorLocation.doctor_id == doc_profile.id, DoctorLocation.is_primary == True))
+                loc = loc_res.scalar_one_or_none()
+                if loc:
+                    loc.hospital_id = payload.hospital_id
+                    loc.location_name = h_obj.name if h_obj else (payload.clinic_name or payload.hospital_name)
+                    loc.address = h_obj.address if h_obj else (payload.clinic_address or payload.hospital_address)
+                    loc.latitude = float(h_obj.latitude) if h_obj and h_obj.latitude is not None else payload.latitude
+                    loc.longitude = float(h_obj.longitude) if h_obj and h_obj.longitude is not None else payload.longitude
+                    loc.google_maps_url = h_obj.google_maps_url if h_obj else payload.google_maps_url
+                else:
+                    location = DoctorLocation(
+                        doctor_id=doc_profile.id,
+                        location_type="CLINIC" if is_clinic else "HOSPITAL",
+                        hospital_id=payload.hospital_id,
+                        location_name=h_obj.name if h_obj else (payload.clinic_name or payload.hospital_name),
+                        address=h_obj.address if h_obj else (payload.clinic_address or payload.hospital_address),
+                        city=h_obj.city if h_obj else payload.city,
+                        state=h_obj.state if h_obj else payload.state,
+                        latitude=float(h_obj.latitude) if h_obj and h_obj.latitude is not None else payload.latitude,
+                        longitude=float(h_obj.longitude) if h_obj and h_obj.longitude is not None else payload.longitude,
+                        google_maps_url=h_obj.google_maps_url if h_obj else payload.google_maps_url,
+                        is_primary=True,
+                        is_active=True
+                    )
+                    db.add(location)
+
+            if is_existing_user:
+                await _ensure_pending_verification_request(db, target_user, UserRole.DOCTOR)
+            else:
+                vreq = VerificationRequest(
+                    user_id=target_user.id,
+                    role_type=RoleType.DOCTOR,
+                    status=VerificationStatus.PENDING
                 )
-                db.add(location)
-            # Create verification request
-            vreq = VerificationRequest(
-                user_id=new_user.id,
-                role_type=RoleType.DOCTOR,
-                status=VerificationStatus.PENDING
-            )
-            db.add(vreq)
+                db.add(vreq)
+
         elif payload.role == UserRole.PHARMACY:
             location_data = None
             if payload.latitude is not None or payload.google_maps_url is not None:
@@ -805,7 +865,7 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                     resolved_hospital_id = linked_facility.id
                 elif (payload.facility_type or "").lower() == "clinic" and payload.latitude and payload.longitude:
                     new_clinic = Hospital(
-                        user_id=new_user.id,
+                        user_id=target_user.id,
                         name=resolved_clinic_name,
                         address=payload.clinic_address or payload.address or payload.hospital_address or "Unknown",
                         city=payload.city,
@@ -824,7 +884,6 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                     resolved_hospital_id = new_clinic.id
                     linked_facility = new_clinic
 
-            # Automatically inherit hospital/clinic address & coordinates when affiliated
             if linked_facility:
                 resolved_address = linked_facility.address or payload.address or payload.clinic_address or payload.hospital_address
                 resolved_city = linked_facility.city or payload.city
@@ -844,103 +903,207 @@ async def sync_user(payload: UserSyncRequest, db: AsyncSession = Depends(get_db)
                 resolved_country = payload.country
                 resolved_pincode = payload.pincode
 
-            profile = Pharmacy(
-                user_id=new_user.id,
-                business_name=payload.business_name or payload.full_name,
-                license_number=payload.license_number or f"LIC-PHM-{str(new_user.id)[:8]}",
-                gst_number=payload.gst_number,
-                contact_number=payload.contact_number,
-                address=resolved_address,
-                city=resolved_city,
-                state=resolved_state,
-                country=resolved_country,
-                pincode=resolved_pincode,
-                hospital_id=resolved_hospital_id,
-                clinic_name=resolved_clinic_name,
-                location=location_data
-            )
-            db.add(profile)
-            # Create verification request
-            vreq = VerificationRequest(
-                user_id=new_user.id,
-                role_type=RoleType.PHARMACY,
-                status=VerificationStatus.PENDING
-            )
-            db.add(vreq)
+            phm = None
+            if is_existing_user:
+                phm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == target_user.id))
+                phm = phm_res.scalar_one_or_none()
+            if phm:
+                if payload.business_name or payload.full_name:
+                    phm.business_name = payload.business_name or payload.full_name
+                if payload.license_number:
+                    phm.license_number = payload.license_number
+                if payload.gst_number:
+                    phm.gst_number = payload.gst_number
+                if payload.contact_number:
+                    phm.contact_number = payload.contact_number
+                if resolved_address:
+                    phm.address = resolved_address
+                if resolved_city:
+                    phm.city = resolved_city
+                if resolved_state:
+                    phm.state = resolved_state
+                if resolved_country:
+                    phm.country = resolved_country
+                if resolved_pincode:
+                    phm.pincode = resolved_pincode
+                if resolved_hospital_id:
+                    phm.hospital_id = resolved_hospital_id
+                if resolved_clinic_name:
+                    phm.clinic_name = resolved_clinic_name
+                if location_data:
+                    phm.location = location_data
+                phm_profile = phm
+            else:
+                phm_profile = Pharmacy(
+                    user_id=target_user.id,
+                    business_name=payload.business_name or payload.full_name or "Pharmacy Partner",
+                    license_number=payload.license_number or f"LIC-PHM-{str(target_user.id)[:8]}",
+                    gst_number=payload.gst_number,
+                    contact_number=payload.contact_number,
+                    address=resolved_address,
+                    city=resolved_city,
+                    state=resolved_state,
+                    country=resolved_country,
+                    pincode=resolved_pincode,
+                    hospital_id=resolved_hospital_id,
+                    clinic_name=resolved_clinic_name,
+                    location=location_data
+                )
+                db.add(phm_profile)
+
+            if is_existing_user:
+                await _ensure_pending_verification_request(db, target_user, UserRole.PHARMACY)
+            else:
+                vreq = VerificationRequest(
+                    user_id=target_user.id,
+                    role_type=RoleType.PHARMACY,
+                    status=VerificationStatus.PENDING
+                )
+                db.add(vreq)
+
+        elif payload.role == UserRole.HOSPITAL:
+            hosp = None
+            if is_existing_user:
+                hosp_res = await db.execute(select(Hospital).where(Hospital.user_id == target_user.id))
+                hosp = hosp_res.scalar_one_or_none()
+            if hosp:
+                if payload.hospital_name or payload.full_name:
+                    hosp.name = payload.hospital_name or payload.full_name
+                if payload.address:
+                    hosp.address = payload.address
+                if payload.city:
+                    hosp.city = payload.city
+                if payload.state:
+                    hosp.state = payload.state
+                if payload.country:
+                    hosp.country = payload.country
+                if payload.pincode:
+                    hosp.pincode = payload.pincode
+                if payload.latitude:
+                    hosp.latitude = payload.latitude
+                if payload.longitude:
+                    hosp.longitude = payload.longitude
+                if payload.google_maps_url:
+                    hosp.google_maps_url = payload.google_maps_url
+            else:
+                hosp = Hospital(
+                    user_id=target_user.id,
+                    name=payload.hospital_name or payload.full_name or "Hospital Partner",
+                    address=payload.address or payload.hospital_address or "Unknown",
+                    city=payload.city,
+                    state=payload.state,
+                    country=payload.country,
+                    pincode=payload.pincode,
+                    latitude=payload.latitude,
+                    longitude=payload.longitude,
+                    is_active=True,
+                    is_verified=False,
+                    type="hospital",
+                    google_maps_url=payload.google_maps_url
+                )
+                db.add(hosp)
 
         await db.commit()
-        
+
         # Enqueue Blockchain Sync (PatientRegistry / DoctorRegistry / PharmacyRegistry)
-        if payload.role in [UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY]:
+        if target_user.role in [UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY]:
             try:
                 from app.services.blockchain_sync import BlockchainSyncService, trigger_background_sync
                 from app.models.blockchain import SyncEntityType, SyncActionType
                 from app.blockchain.client import blockchain_client
+
+                entity_type_map = {
+                    UserRole.PATIENT: SyncEntityType.PATIENT,
+                    UserRole.DOCTOR: SyncEntityType.DOCTOR,
+                    UserRole.PHARMACY: SyncEntityType.PHARMACY,
+                }
+                ent_type = entity_type_map[target_user.role]
+                existing_task = None
+                if is_existing_user:
+                    existing_task = await BlockchainSyncService.get_task_by_entity(db, ent_type, target_user.id)
                 task = None
-                if payload.role == UserRole.PATIENT:
-                    task = await BlockchainSyncService.enqueue_sync_task(
-                        db=db,
-                        entity_type=SyncEntityType.PATIENT,
-                        entity_id=new_user.id,
-                        action_type=SyncActionType.CREATE,
-                        payload={
-                            "patient_id": str(new_user.id),
-                            "email": payload.email,
-                            "full_name": payload.full_name,
-                            "wallet_address": blockchain_client.wallet_address
-                        }
-                    )
-                elif payload.role == UserRole.DOCTOR:
-                    task = await BlockchainSyncService.enqueue_sync_task(
-                        db=db,
-                        entity_type=SyncEntityType.DOCTOR,
-                        entity_id=new_user.id,
-                        action_type=SyncActionType.CREATE,
-                        payload={
-                            "doctor_id": str(new_user.id),
-                            "license_number": profile.license_number,
-                            "hospital_id": str(profile.hospital_id or profile.clinic_name or new_user.id),
-                            "wallet_address": blockchain_client.wallet_address
-                        }
-                    )
-                elif payload.role == UserRole.PHARMACY:
-                    task = await BlockchainSyncService.enqueue_sync_task(
-                        db=db,
-                        entity_type=SyncEntityType.PHARMACY,
-                        entity_id=new_user.id,
-                        action_type=SyncActionType.CREATE,
-                        payload={
-                            "pharmacy_id": str(new_user.id),
-                            "license_number": profile.license_number,
-                            "business_name": profile.business_name,
-                            "hospital_id": str(profile.hospital_id) if profile.hospital_id else None,
-                            "wallet_address": blockchain_client.wallet_address
-                        }
-                    )
-                if task:
-                    await db.commit()
-                    trigger_background_sync(task.id)
+
+                if not existing_task:
+                    if target_user.role == UserRole.PATIENT:
+                        task = await BlockchainSyncService.enqueue_sync_task(
+                            db=db,
+                            entity_type=SyncEntityType.PATIENT,
+                            entity_id=target_user.id,
+                            action_type=SyncActionType.CREATE,
+                            payload={
+                                "patient_id": str(target_user.id),
+                                "email": clean_email,
+                                "full_name": payload.full_name or "Patient",
+                                "wallet_address": blockchain_client.wallet_address
+                            }
+                        )
+                    elif target_user.role == UserRole.DOCTOR:
+                        doc_lic = doc_profile.license_number if doc_profile else (payload.license_number or str(target_user.id))
+                        doc_hosp_id = str((doc_profile.hospital_id if doc_profile else payload.hospital_id) or (doc_profile.clinic_name if doc_profile else payload.clinic_name) or target_user.id)
+                        task = await BlockchainSyncService.enqueue_sync_task(
+                            db=db,
+                            entity_type=SyncEntityType.DOCTOR,
+                            entity_id=target_user.id,
+                            action_type=SyncActionType.CREATE,
+                            payload={
+                                "doctor_id": str(target_user.id),
+                                "license_number": doc_lic,
+                                "hospital_id": doc_hosp_id,
+                                "wallet_address": blockchain_client.wallet_address
+                            }
+                        )
+                    elif target_user.role == UserRole.PHARMACY:
+                        phm_lic = phm_profile.license_number if phm_profile else (payload.license_number or str(target_user.id))
+                        phm_bname = phm_profile.business_name if phm_profile else (payload.business_name or payload.full_name or "Pharmacy")
+                        phm_hosp = str(phm_profile.hospital_id) if (phm_profile and phm_profile.hospital_id) else (str(payload.hospital_id) if payload.hospital_id else None)
+                        task = await BlockchainSyncService.enqueue_sync_task(
+                            db=db,
+                            entity_type=SyncEntityType.PHARMACY,
+                            entity_id=target_user.id,
+                            action_type=SyncActionType.CREATE,
+                            payload={
+                                "pharmacy_id": str(target_user.id),
+                                "license_number": phm_lic,
+                                "business_name": phm_bname,
+                                "hospital_id": phm_hosp,
+                                "wallet_address": blockchain_client.wallet_address
+                            }
+                        )
+                    if task:
+                        await db.commit()
+                        trigger_background_sync(task.id)
             except Exception as e:
                 import logging
-                logging.getLogger("medsync.auth").error(f"Error enqueueing blockchain task for {payload.role}: {e}")
+                logging.getLogger("medsync.auth").error(f"Error enqueueing blockchain task for {target_user.role}: {e}")
 
-        return APIResponse(message="User synced successfully", data=SyncUserResponseData(id=str(new_user.id)))
+        sync_msg = "User already synced" if is_existing_user else "User synced successfully"
+        return APIResponse(message=sync_msg, data=SyncUserResponseData(id=str(target_user.id)))
     except HTTPException:
+        await db.rollback()
         raise
     except IntegrityError as ie:
         await db.rollback()
         err_msg = str(ie).lower()
-        if "users_email_key" in err_msg or "unique constraint" in err_msg:
+        if "users_email_key" in err_msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="An account with this email already exists. Please log in instead."
             )
-        import logging
-        logging.getLogger("medsync.auth").error(f"IntegrityError syncing user: {ie}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Database integrity error during synchronization."
-        )
+        elif "license_number" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A provider with this license number already exists. Please check your license number."
+            )
+        elif "contact_number" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this phone number already exists."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A conflicting record already exists in the system."
+            )
     except Exception as e:
         import logging
         logging.getLogger("medsync.auth").error(f"Failed to sync user: {e}", exc_info=True)

@@ -26,6 +26,7 @@ import { dashboardService } from "@/services/dashboard.service";
 export default function DoctorDashboard() {
   const [userId, setUserId] = useState<string>("");
   const [doctorName, setDoctorName] = useState<string>("");
+  const [profileIncomplete, setProfileIncomplete] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -41,22 +42,26 @@ export default function DoctorDashboard() {
 
       if (googleName) {
         setDoctorName(googleName);
-      } else {
-        try {
-          const { data: docData } = await supabase
-            .from("doctors")
-            .select("full_name")
-            .eq("user_id", user.id)
-            .maybeSingle();
+      }
 
-          if (docData?.full_name) {
-            setDoctorName(docData.full_name);
-          } else if (user.email) {
-            setDoctorName(user.email.split("@")[0]);
-          }
-        } catch (e) {
-          if (user.email) setDoctorName(user.email.split("@")[0]);
+      try {
+        const { data: docData } = await supabase
+          .from("doctors")
+          .select("full_name, specialization, license_number")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (docData?.full_name && !googleName) {
+          setDoctorName(docData.full_name);
+        } else if (!googleName && user.email) {
+          setDoctorName(user.email.split("@")[0]);
         }
+
+        if (!docData?.specialization || !docData?.license_number) {
+          setProfileIncomplete(true);
+        }
+      } catch (e) {
+        if (!googleName && user.email) setDoctorName(user.email.split("@")[0]);
       }
     });
   }, []);
@@ -171,6 +176,28 @@ export default function DoctorDashboard() {
           </Button>
         </motion.div>
       </motion.div>
+
+      {/* ─── Profile Setup Prompt ─── */}
+      {profileIncomplete && (
+        <Card className="rounded-2xl border-emerald-500/30 bg-emerald-500/10 p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
+                <Stethoscope className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm text-foreground">Complete Your Clinical Profile</h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Finish setting up your medical credentials, specialization, and practice location to start accepting patient consultations.
+                </p>
+              </div>
+            </div>
+            <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shrink-0 shadow-sm">
+              <Link href="/doctor/profile">Complete Profile &rarr;</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* ─── Stat Cards ─── */}
       {!userId || isLoading ? (

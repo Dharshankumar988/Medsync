@@ -246,7 +246,93 @@ export const patientService = {
     const res = await api.post('/records', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return res.data?.data;
+    const created = res.data?.data;
+    if (created?.id && payload.file.uri) {
+      try {
+        await FileSystem.makeDirectoryAsync(RECORD_CACHE_DIR, { intermediates: true });
+        const extMatch = (payload.file.name || '').match(/\.(pdf|png|jpe?g|webp|txt)$/i);
+        const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.pdf';
+        const localUri = `${RECORD_CACHE_DIR}record_${created.id}${ext}`;
+        await FileSystem.copyAsync({
+          from: payload.file.uri,
+          to: localUri,
+        });
+      } catch (cacheErr) {
+        console.warn('Could not cache uploaded record locally:', cacheErr);
+      }
+    }
+    return created;
+  },
+
+  validatePin: async (pin: string): Promise<boolean> => {
+    try {
+      const res = await api.post('/security/verify-pin', { pin });
+      return Boolean(res.data?.data?.valid ?? (res.status === 200));
+    } catch {
+      return false;
+    }
+  },
+
+  // ── Consultations ──
+  getConsultationsHistory: async (): Promise<any[]> => {
+    try {
+      const res = await api.get('/consultations/patient/history');
+      if (Array.isArray(res.data?.data)) return res.data.data;
+      if (Array.isArray(res.data)) return res.data;
+    } catch (e) {
+      console.warn('API /consultations/patient/history failed, fallback to Supabase:', e);
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    try {
+      const { data } = await supabase
+        .from('consultations')
+        .select('*, appointments(doctor_id, doctors(full_name, specialization, hospital_name))')
+        .eq('patient_id', user.id)
+        .order('completed_at', { ascending: false });
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  // ── Privacy & Doctor Access ──
+  getDoctorAccess: async (): Promise<{ active_permissions: any[]; access_logs: any[] }> => {
+    try {
+      const res = await api.get('/records/patient/doctor-access');
+      return res.data?.data || { active_permissions: [], access_logs: [] };
+    } catch (e) {
+      console.warn('Failed to fetch doctor access overview:', e);
+      return { active_permissions: [], access_logs: [] };
+    }
+  },
+
+  getPendingRecordRequests: async (): Promise<any[]> => {
+    try {
+      const res = await api.get('/doctor-collaboration/patient/record-requests');
+      return res.data?.data || [];
+    } catch (e) {
+      console.warn('Failed to fetch pending record requests:', e);
+      return [];
+    }
+  },
+
+  approveRecordRequest: async (requestId: string): Promise<any> => {
+    const res = await api.post(`/doctor-collaboration/patient/record-requests/${requestId}/approve`);
+    return res.data;
+  },
+
+  rejectRecordRequest: async (requestId: string): Promise<any> => {
+    const res = await api.post(`/doctor-collaboration/patient/record-requests/${requestId}/reject`);
+    return res.data;
+  },
+
+  revokeDoctorAccess: async (doctorId: string, recordId?: string | null): Promise<any> => {
+    const res = await api.post('/records/patient/revoke-doctor-access', {
+      doctor_id: doctorId,
+      record_id: recordId || undefined,
+    });
+    return res.data;
   },
 
   // ── Appointments ──

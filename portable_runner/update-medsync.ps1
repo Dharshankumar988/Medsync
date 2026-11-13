@@ -1,4 +1,7 @@
 # MedSync Backend Update Script (PowerShell)
+param (
+    [string]$Image = ""
+)
 $ErrorActionPreference = "Stop"
 
 Write-Host "Updating MedSync backend..." -ForegroundColor Cyan
@@ -18,7 +21,7 @@ if (-not (Test-Path -LiteralPath $ENV_FILE)) {
 }
 
 # Image configuration
-$IMAGE_NAME = "ghcr.io/dharshankumar988/medsync-backend:latest"
+$IMAGE_NAME = if ($Image) { $Image } elseif ($env:BACKEND_IMAGE) { $env:BACKEND_IMAGE } else { "ghcr.io/dharshankumar988/medsync-backend:latest" }
 $CONTAINER_NAME = "medsync-backend"
 $PORT = 8000
 

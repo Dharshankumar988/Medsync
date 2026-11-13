@@ -11,6 +11,7 @@ from app.dependencies.auth import RoleChecker
 from app.dependencies.db import get_db
 from app.models.blockchain import BlockchainSyncTask, SyncActionType, SyncEntityType, SyncStatus
 from app.models.doctor import Doctor
+from app.models.doctor_location import DoctorLocation
 from app.models.hospital import Hospital
 from app.models.pharmacy import Pharmacy
 from app.models.user import User, UserRole, UserStatus
@@ -322,4 +323,301 @@ async def test_contract_detail_endpoints_for_pharmacy_and_doctor_registries():
     assert any("verifyPharmacy(" in f for f in phm_fns)
     assert any("registerDoctor(" in f for f in doc_fns)
     assert any("updateAffiliation(" in f for f in doc_fns)
+
+
+@pytest.mark.asyncio
+async def test_admin_register_pending_provider_refreshes_password():
+    """Any provider with PENDING status can refresh password on retry without 409 lockout."""
+    user_id = uuid.uuid4()
+    pending_user = User(
+        id=user_id,
+        email="pending.pharm@example.com",
+        role=UserRole.PHARMACY,
+        status=UserStatus.PENDING,
+        is_verified=False
+    )
+
+    class ScalarResult:
+        def __init__(self, obj):
+            self._obj = obj
+        def scalar_one_or_none(self):
+            return self._obj
+        def first(self):
+            return (self._obj,) if self._obj else None
+
+    class FakeBeginNested:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    executed_sql = []
+    async def fake_execute(stmt, params=None):
+        executed_sql.append(str(stmt))
+        return ScalarResult(pending_user)
+
+    mock_db = AsyncMock()
+    mock_db.begin_nested = MagicMock(return_value=FakeBeginNested())
+    mock_db.execute = AsyncMock(side_effect=fake_execute)
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            resp = await client.post(
+                "/api/v1/auth/admin-register",
+                json={"email": "pending.pharm@example.com", "password": "NewSecretPassword123", "role": "PHARMACY"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["data"]["id"] == str(user_id)
+    assert any("UPDATE auth.users" in q for q in executed_sql)
+
+
+@pytest.mark.asyncio
+async def test_admin_register_active_verified_user_rejects_with_409():
+    """An ACTIVE and verified user attempting re-registration is rejected with 409 Conflict."""
+    user_id = uuid.uuid4()
+    active_user = User(
+        id=user_id,
+        email="active.pharm@example.com",
+        role=UserRole.PHARMACY,
+        status=UserStatus.ACTIVE,
+        is_verified=True
+    )
+
+    class ScalarResult:
+        def __init__(self, obj):
+            self._obj = obj
+        def scalar_one_or_none(self):
+            return self._obj
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=ScalarResult(active_user))
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            resp = await client.post(
+                "/api/v1/auth/admin-register",
+                json={"email": "active.pharm@example.com", "password": "SomePassword123", "role": "PHARMACY"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 409
+    assert "already exists" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_pharmacy_sync_for_trigger_stub_enqueues_blockchain_and_enriches():
+    """When trigger created a pharmacy stub, /sync enriches location & enqueues PharmacyRegistry task."""
+    user_id = uuid.uuid4()
+    existing_user = User(
+        id=user_id,
+        email="stub.pharm@example.com",
+        role=UserRole.PHARMACY,
+        status=UserStatus.PENDING,
+        is_verified=False
+    )
+    existing_phm_stub = Pharmacy(
+        user_id=user_id,
+        business_name="New Pharmacy",
+        license_number=None
+    )
+
+    class ScalarResult:
+        def __init__(self, obj):
+            self._obj = obj
+        def scalar_one_or_none(self):
+            return self._obj
+        def scalars(self):
+            m = MagicMock()
+            m.first.return_value = None
+            return m
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(side_effect=[
+        ScalarResult(existing_user),      # User by id
+        ScalarResult(existing_phm_stub),  # Pharmacy by user_id
+        ScalarResult(None),              # VerificationRequest check
+        ScalarResult(None),              # BlockchainSyncTask check
+    ])
+
+    added_objects = []
+    mock_db.add = MagicMock(side_effect=lambda o: added_objects.append(o))
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    with patch("app.services.blockchain_sync.trigger_background_sync") as mock_trigger:
+        try:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                resp = await client.post(
+                    "/api/v1/auth/sync",
+                    json={
+                        "id": str(user_id),
+                        "email": "stub.pharm@example.com",
+                        "role": "PHARMACY",
+                        "full_name": "Dr. Owner",
+                        "business_name": "Apex Care Pharmacy",
+                        "license_number": "PHA-APEX-991",
+                        "contact_number": "9123456789",
+                        "address": "45 Park Street",
+                        "latitude": 22.5512,
+                        "longitude": 88.3533,
+                    },
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+    assert resp.status_code == 200, resp.text
+    # Profile was updated
+    assert existing_phm_stub.business_name == "Apex Care Pharmacy"
+    assert existing_phm_stub.license_number == "PHA-APEX-991"
+    assert existing_phm_stub.location["lat"] == pytest.approx(22.5512)
+    assert existing_phm_stub.location["lng"] == pytest.approx(88.3533)
+
+    # BlockchainSyncTask for PharmacyRegistry was enqueued!
+    tasks = [o for o in added_objects if isinstance(o, BlockchainSyncTask)]
+    assert len(tasks) == 1
+    assert tasks[0].entity_type == SyncEntityType.PHARMACY
+    assert tasks[0].action_type == SyncActionType.CREATE
+    assert tasks[0].payload["license_number"] == "PHA-APEX-991"
+    assert mock_trigger.called
+
+
+@pytest.mark.asyncio
+async def test_doctor_sync_for_trigger_stub_enqueues_blockchain_and_creates_location():
+    """When trigger created a doctor stub, /sync enriches doctor, creates DoctorLocation & queues DoctorRegistry task."""
+    user_id = uuid.uuid4()
+    existing_user = User(
+        id=user_id,
+        email="stub.doc@example.com",
+        role=UserRole.DOCTOR,
+        status=UserStatus.PENDING,
+        is_verified=False
+    )
+    existing_doc_stub = Doctor(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        full_name="New Doctor",
+        license_number=None
+    )
+
+    class ScalarResult:
+        def __init__(self, obj):
+            self._obj = obj
+        def scalar_one_or_none(self):
+            return self._obj
+        def scalars(self):
+            m = MagicMock()
+            m.first.return_value = None
+            return m
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(side_effect=[
+        ScalarResult(existing_user),      # User by id
+        ScalarResult(existing_doc_stub),  # Doctor by user_id
+        ScalarResult(None),              # DoctorLocation check
+        ScalarResult(None),              # VerificationRequest check
+        ScalarResult(None),              # BlockchainSyncTask check
+    ])
+
+    added_objects = []
+    mock_db.add = MagicMock(side_effect=lambda o: added_objects.append(o))
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    with patch("app.services.blockchain_sync.trigger_background_sync") as mock_trigger:
+        try:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                resp = await client.post(
+                    "/api/v1/auth/sync",
+                    json={
+                        "id": str(user_id),
+                        "email": "stub.doc@example.com",
+                        "role": "DOCTOR",
+                        "full_name": "Dr. Sarah Connor",
+                        "clinic_name": "Connor Family Clinic",
+                        "clinic_address": "77 Sunset Blvd",
+                        "license_number": "DOC-LIC-777",
+                        "latitude": 34.0928,
+                        "longitude": -118.3287,
+                    },
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+    assert resp.status_code == 200, resp.text
+    assert existing_doc_stub.full_name == "Dr. Sarah Connor"
+    assert "DOC-LIC-777" in existing_doc_stub.license_number
+
+    # DoctorLocation was created
+    doc_locations = [o for o in added_objects if isinstance(o, DoctorLocation)]
+    assert len(doc_locations) == 1
+    assert doc_locations[0].location_name == "Connor Family Clinic"
+    assert doc_locations[0].latitude == pytest.approx(34.0928)
+
+    # BlockchainSyncTask for DoctorRegistry was enqueued!
+    tasks = [o for o in added_objects if isinstance(o, BlockchainSyncTask)]
+    assert len(tasks) == 1
+    assert tasks[0].entity_type == SyncEntityType.DOCTOR
+    assert tasks[0].action_type == SyncActionType.CREATE
+    assert mock_trigger.called
+
+
+@pytest.mark.asyncio
+async def test_patient_sync_enqueues_patient_registry_blockchain_task():
+    """Patient registration sync creates Patient and queues PatientRegistry task."""
+    user_id = uuid.uuid4()
+
+    class ScalarResult:
+        def __init__(self, obj):
+            self._obj = obj
+        def scalar_one_or_none(self):
+            return self._obj
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(side_effect=[
+        ScalarResult(None),  # User by id
+        ScalarResult(None),  # User by email
+    ])
+
+    added_objects = []
+    mock_db.add = MagicMock(side_effect=lambda o: added_objects.append(o))
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    with patch("app.services.blockchain_sync.trigger_background_sync") as mock_trigger:
+        try:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                resp = await client.post(
+                    "/api/v1/auth/sync",
+                    json={
+                        "id": str(user_id),
+                        "email": "new.patient@example.com",
+                        "role": "PATIENT",
+                        "full_name": "Alice Wonderland",
+                        "gender": "FEMALE",
+                        "blood_group": "O+"
+                    },
+                )
+        finally:
+            app.dependency_overrides.clear()
+
+    assert resp.status_code == 200, resp.text
+    tasks = [o for o in added_objects if isinstance(o, BlockchainSyncTask)]
+    assert len(tasks) == 1
+    assert tasks[0].entity_type == SyncEntityType.PATIENT
+    assert tasks[0].action_type == SyncActionType.CREATE
+    assert tasks[0].payload["patient_id"] == str(user_id)
+    assert mock_trigger.called
+
 

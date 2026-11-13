@@ -103,7 +103,7 @@ class DoctorAccessibleRecordResponse(BaseModel):
 
 class PatientDoctorPermissionItem(BaseModel):
     permission_id: uuid.UUID
-    record_id: uuid.UUID
+    record_id: Optional[uuid.UUID] = None
     record_title: str
     doctor_id: uuid.UUID
     doctor_name: str
