@@ -300,7 +300,28 @@ export default function PatientRecordsScreen() {
       setSelectedEntityId(null);
       setSelectedCachedUri(null);
 
-      const opened = await patientService.openLocalFile(cachedUri);
+      let opened = await patientService.openLocalFile(cachedUri);
+      if (!opened) {
+        // Fallback: If local file viewer failed, fetch the official verified signed URL from backend
+        try {
+          if (selectedEntityType === 'RECORD') {
+            const data = await patientService.downloadRecordWithPin(entityId, pin);
+            const downloadUrl = data?.url || data?.signed_url || data?.download_url;
+            if (downloadUrl) {
+              opened = await patientService.openDocument(data?.localUri || cachedUri, downloadUrl);
+            }
+          } else {
+            const data = await patientService.authorizePrescriptionDownload(entityId, pin);
+            const downloadUrl = data?.download_url || data?.url || data?.signed_url || data?.pdf_url;
+            if (downloadUrl) {
+              opened = await patientService.openDocument(data?.localUri || cachedUri, downloadUrl);
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('Fallback remote fetch failed:', fetchErr);
+        }
+      }
+
       if (!opened) {
         try {
           await FileSystem.deleteAsync(cachedUri, { idempotent: true });
@@ -312,7 +333,7 @@ export default function PatientRecordsScreen() {
         } catch {}
         Alert.alert(
           'Viewer Unavailable',
-          'Could not open document. Local cache has been cleared; please ensure a PDF viewer is installed and tap Download to re-fetch.'
+          'Could not open document. Local cache has been cleared; please tap Download to re-fetch and view via secure viewer.'
         );
       }
       return;

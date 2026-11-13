@@ -331,6 +331,7 @@ class QRPdfService:
             c.drawString(40, y, line[:110])
             y -= 14
             
+        c.showPage()
         c.save()
         packet.seek(0)
         return packet.read()

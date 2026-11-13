@@ -7,18 +7,32 @@ import { supabase } from '../lib/supabase';
 const PRESCRIPTION_CACHE_DIR = `${FileSystem.documentDirectory}prescriptions/`;
 const RECORD_CACHE_DIR = `${FileSystem.documentDirectory}records/`;
 
-const resolveBackendDownloadUrl = (rawUrl: string): { url: string; needsAuthHeader: boolean } => {
+const resolveBackendDownloadUrl = async (rawUrl: string): Promise<{ url: string; needsAuthHeader: boolean }> => {
   const trimmed = String(rawUrl || '').trim();
+  const apiBase = String(api.defaults.baseURL || '').replace(/\/api\/v1\/?$/, '');
+  let resolved = trimmed;
+  let needsAuth = false;
+
   if (/^https?:\/\//i.test(trimmed)) {
-    const apiBase = String(api.defaults.baseURL || '').replace(/\/api\/v1\/?$/, '');
-    return {
-      url: trimmed,
-      needsAuthHeader: Boolean(apiBase && trimmed.startsWith(apiBase)),
-    };
+    needsAuth = Boolean(apiBase && trimmed.startsWith(apiBase));
+  } else {
+    const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    resolved = `${apiBase}${path}`;
+    needsAuth = true;
   }
-  const base = String(api.defaults.baseURL || '').replace(/\/api\/v1\/?$/, '');
-  const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-  return { url: `${base}${path}`, needsAuthHeader: true };
+
+  if (needsAuth) {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (token && !resolved.includes('token=')) {
+        const separator = resolved.includes('?') ? '&' : '?';
+        resolved = `${resolved}${separator}token=${encodeURIComponent(token)}`;
+      }
+    } catch {}
+  }
+
+  return { url: resolved, needsAuthHeader: needsAuth };
 };
 
 export interface PatientDashboardSummary {
@@ -195,7 +209,7 @@ export const patientService = {
         const extMatch = String(rawUrl).split('?')[0].match(/\.(pdf|png|jpe?g|webp|txt)$/i);
         const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.pdf';
         const localUri = `${RECORD_CACHE_DIR}record_${recordId}${ext}`;
-        const { url: resolvedUrl, needsAuthHeader } = resolveBackendDownloadUrl(rawUrl);
+        const { url: resolvedUrl, needsAuthHeader } = await resolveBackendDownloadUrl(rawUrl);
         let headers: Record<string, string> | undefined;
         if (needsAuthHeader) {
           const { data: sessionData } = await supabase.auth.getSession();
@@ -255,20 +269,9 @@ export const patientService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     const created = res.data?.data;
-    if (created?.id && payload.file.uri) {
-      try {
-        await FileSystem.makeDirectoryAsync(RECORD_CACHE_DIR, { intermediates: true });
-        const extMatch = (cleanFileName || '').match(/\.(pdf|png|jpe?g|webp|txt)$/i);
-        const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : defaultExt;
-        const localUri = `${RECORD_CACHE_DIR}record_${created.id}${ext}`;
-        await FileSystem.copyAsync({
-          from: payload.file.uri,
-          to: localUri,
-        });
-      } catch (cacheErr) {
-        console.warn('Could not cache uploaded record locally:', cacheErr);
-      }
-    }
+    // Note: The backend converts images into official A4 PDFs with QR stamps.
+    // We intentionally avoid copying the unconverted raw local image as record_{id}.pdf
+    // so that opening the record always renders the official converted PDF.
     return created;
   },
 
@@ -472,6 +475,18 @@ export const patientService = {
       const localUri = `${PRESCRIPTION_CACHE_DIR}prescription_${prescriptionId}.pdf`;
       const info = await FileSystem.getInfoAsync(localUri);
       if (info.exists && (info.size ?? 0) > 100) {
+        try {
+          const head = await FileSystem.readAsStringAsync(localUri, {
+            length: 5,
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          if (!head.startsWith('%PDF')) {
+            await FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => {});
+            return null;
+          }
+        } catch {
+          return null;
+        }
         return localUri;
       }
       return null;
@@ -491,6 +506,21 @@ export const patientService = {
         const localUri = `${RECORD_CACHE_DIR}record_${recordId}${ext}`;
         const info = await FileSystem.getInfoAsync(localUri);
         if (info.exists && (info.size ?? 0) > 100) {
+          if (ext === '.pdf') {
+            try {
+              const head = await FileSystem.readAsStringAsync(localUri, {
+                length: 5,
+                encoding: FileSystem.EncodingType.UTF8,
+              });
+              if (!head.startsWith('%PDF')) {
+                // If it is an unconverted image or corrupted cached PDF, clean it up
+                await FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => {});
+                continue;
+              }
+            } catch {
+              continue;
+            }
+          }
           return localUri;
         }
       }
@@ -527,15 +557,13 @@ export const patientService = {
           await Linking.openURL(localUri);
           return true;
         }
-        await WebBrowser.openBrowserAsync(localUri);
-        return true;
       } catch (err) {
         console.warn('Local file viewer open failed:', err);
       }
     }
 
     // 3. Last fallback: try Linking.openURL on remote URL
-    if (remoteUrl) {
+    if (remoteUrl && /^https?:\/\//i.test(remoteUrl)) {
       try {
         await Linking.openURL(remoteUrl);
         return true;
@@ -573,7 +601,7 @@ export const patientService = {
     const localUri = `${PRESCRIPTION_CACHE_DIR}prescription_${prescriptionId}.pdf`;
 
     const tryDownload = async (rawTarget: string) => {
-      const { url: resolvedUrl, needsAuthHeader } = resolveBackendDownloadUrl(rawTarget);
+      const { url: resolvedUrl, needsAuthHeader } = await resolveBackendDownloadUrl(rawTarget);
       let headers: Record<string, string> | undefined;
       if (needsAuthHeader) {
         const { data: sessionData } = await supabase.auth.getSession();

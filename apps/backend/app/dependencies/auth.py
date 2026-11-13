@@ -2,7 +2,7 @@ import uuid
 import logging
 import httpx
 
-from fastapi import Depends
+from fastapi import Depends, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError, jwk
 from jose.utils import base64url_decode
@@ -17,6 +17,7 @@ from app.schemas.session import AuthenticatedPrincipal
 logger = logging.getLogger("medsync.auth")
 
 security = HTTPBearer()
+security_optional = HTTPBearer(auto_error=False)
 
 # ── JWKS Cache ──
 # Cache the JWKS keys in-memory so we don't hit the endpoint on every request.
@@ -73,14 +74,26 @@ def _get_signing_key(token: str) -> tuple[dict, str]:
 
 
 async def get_current_user(
-    token: HTTPAuthorizationCredentials = Depends(security),
+    token: HTTPAuthorizationCredentials | None = Depends(security_optional),
+    token_query: str | None = Query(None, alias="token"),
     db: AsyncSession = Depends(get_db)
 ) -> AuthenticatedPrincipal:
+    raw_token: str | None = None
+    if isinstance(token, HTTPAuthorizationCredentials):
+        raw_token = token.credentials
+    elif isinstance(token, str):
+        raw_token = token
+    elif token_query:
+        raw_token = token_query
+
+    if not raw_token:
+        raise UnauthorizedException("Not authenticated")
+
     try:
-        signing_key, algorithm = _get_signing_key(token.credentials)
+        signing_key, algorithm = _get_signing_key(raw_token)
 
         payload = jwt.decode(
-            token.credentials,
+            raw_token,
             signing_key,
             algorithms=[algorithm],
             audience="authenticated",
@@ -167,17 +180,24 @@ async def get_current_user(
         user_metadata=user_metadata,
     )
 
-security_optional = HTTPBearer(auto_error=False)
-
 async def get_current_user_optional(
     token: HTTPAuthorizationCredentials | None = Depends(security_optional),
+    token_query: str | None = Query(None, alias="token"),
     db: AsyncSession = Depends(get_db)
 ) -> AuthenticatedPrincipal | None:
     """Optional authentication: returns AuthenticatedPrincipal if valid token provided, else None."""
-    if not token or not token.credentials:
+    raw_token: str | None = None
+    if isinstance(token, HTTPAuthorizationCredentials):
+        raw_token = token.credentials
+    elif isinstance(token, str):
+        raw_token = token
+    elif token_query:
+        raw_token = token_query
+
+    if not raw_token:
         return None
     try:
-        return await get_current_user(token, db)
+        return await get_current_user(token, token_query, db)
     except Exception:
         return None
 
