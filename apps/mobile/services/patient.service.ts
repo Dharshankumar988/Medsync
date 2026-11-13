@@ -846,10 +846,10 @@ export const patientService = {
       .from('patients')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      const { data: userData } = await supabase.from('users').select('*').eq('id', userId).single();
+    if (error || !data) {
+      const { data: userData } = await supabase.from('users').select('*').eq('id', userId).maybeSingle();
       return userData ?? null;
     }
     return data;

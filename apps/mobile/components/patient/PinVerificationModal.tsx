@@ -166,7 +166,16 @@ export const PinVerificationModal: React.FC<PinVerificationModalProps> = ({
     setLoading(true);
 
     try {
-      await patientService.enrollPin(newPin, accountPassword.trim());
+      try {
+        await patientService.enrollPin(newPin, accountPassword.trim());
+      } catch (enrollErr: any) {
+        const msg = String(enrollErr?.response?.data?.detail || enrollErr?.message || '').toLowerCase();
+        if (msg.includes('already') || enrollErr?.response?.status === 400 || enrollErr?.response?.status === 409) {
+          await patientService.resetPinWithPassword(accountPassword.trim(), newPin);
+        } else {
+          throw enrollErr;
+        }
+      }
       setSuccessMsg('Authorization PIN configured successfully!');
 
       // Automatically attempt authorization with newly created PIN
