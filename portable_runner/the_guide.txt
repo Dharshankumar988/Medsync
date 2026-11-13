@@ -61,12 +61,6 @@ Never:
 
 Only .env.example should be committed to GitHub.
 
-### Face Verification Service
-MedSync now uses a separate, lightweight architecture. Heavy biometric face verification is hosted on a separate service.
-You must configure the face verification service in your `.env` file:
-- `FACE_VERIFICATION_URL`: The URL of your deployed face service.
-- `FACE_VERIFICATION_AUTH_TOKEN`: The secure token to authenticate with the face service.
-
 ---
 
 ## Start MedSync

@@ -199,5 +199,4 @@ MedSync deploys 6 core registries on Polygon Amoy for decentralized verification
 
 © 2026 Dharshankumar988. All rights reserved.
 
-- **Face Recognition Notice**: The face verification service utilizes InsightFace `buffalo_l`. Use is restricted to research and non-commercial evaluation under InsightFace terms.
 - Commercial redistribution or unauthorized copying requires express written consent from the copyright holder.
