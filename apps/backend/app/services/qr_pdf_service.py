@@ -254,8 +254,8 @@ class QRPdfService:
     @staticmethod
     def convert_to_pdf(raw_bytes: bytes, filename: str = "") -> bytes:
         """Converts any uploaded file (image, text, pdf) into a clean A4 PDF."""
-        # 1. Check if it's already a valid PDF
-        if raw_bytes.startswith(b"%PDF") or (filename and filename.lower().endswith(".pdf")):
+        # 1. Check if it's already a valid PDF (validate magic bytes, do not rely on filename extension)
+        if raw_bytes.startswith(b"%PDF"):
             return raw_bytes
 
         # 2. Check if it's an image
@@ -298,6 +298,7 @@ class QRPdfService:
             display_title = filename or "Medical Record Attachment"
             c.drawString(margin, height - 16, display_title)
             
+            c.showPage()
             c.save()
             packet.seek(0)
             return packet.read()

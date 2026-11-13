@@ -10,6 +10,7 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
+import Svg, { Rect, Path, Circle, Line, G, Text as SvgText } from 'react-native-svg';
 import {
   MapPin,
   Search,
@@ -177,8 +178,16 @@ export function DeliveryLocationPickerModal({
     onClose();
   };
 
-  // Generate OpenStreetMap static tile preview URL
-  const mapPreviewUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${selectedLocation.lat},${selectedLocation.lng}&zoom=15&size=600x320&maptype=mapnik`;
+  // Calculate dynamic OpenStreetMap tile coordinate
+  const z = 15;
+  const nTile = Math.pow(2, z);
+  const tileX = Math.floor(((selectedLocation.lng + 180) / 360) * nTile);
+  const latRad = (selectedLocation.lat * Math.PI) / 180;
+  const tileY = Math.floor(
+    ((1 - Math.asinh(Math.tan(latRad)) / Math.PI) / 2) * nTile
+  );
+  const mapPreviewUrl = `https://tile.openstreetmap.org/${z}/${tileX}/${tileY}.png`;
+  const [tileError, setTileError] = useState(false);
 
   return (
     <Modal
@@ -292,11 +301,84 @@ export function DeliveryLocationPickerModal({
                 { borderColor: isDark ? '#27272A' : '#E4E4E7' },
               ]}
             >
-              <Image
-                source={{ uri: mapPreviewUrl }}
-                style={styles.mapImage}
-                resizeMode="cover"
-              />
+              {/* Dynamic Styled Vector Map Background (Guarantees map is never blank) */}
+              <Svg width="100%" height="100%" viewBox="0 0 400 220" style={StyleSheet.absoluteFillObject}>
+                <Rect width="400" height="220" fill={isDark ? '#11141A' : '#EAEFF5'} />
+                
+                {/* City Blocks */}
+                <Rect x="15" y="15" width="75" height="55" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="105" y="15" width="80" height="55" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="215" y="15" width="95" height="55" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="325" y="15" width="60" height="55" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+
+                <Rect x="15" y="85" width="75" height="55" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="105" y="85" width="80" height="55" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="215" y="85" width="95" height="55" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="325" y="85" width="60" height="55" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+
+                <Rect x="15" y="155" width="75" height="50" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="105" y="155" width="80" height="50" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="215" y="155" width="95" height="50" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+                <Rect x="325" y="155" width="60" height="50" rx="6" fill={isDark ? '#1A1E27' : '#F4F7FB'} />
+
+                {/* Green Park Zones */}
+                <Path d="M 220 20 Q 260 15 295 35 Q 305 55 285 62 Q 230 62 220 20 Z" fill={isDark ? '#16281E' : '#DCF0E2'} />
+                <Path d="M 25 160 Q 50 155 75 170 Q 80 195 50 200 Q 25 195 25 160 Z" fill={isDark ? '#16281E' : '#DCF0E2'} />
+
+                {/* River / Water Channel */}
+                <Path
+                  d="M 0 135 C 80 145 120 115 200 120 C 290 125 340 100 400 105 L 400 116 C 340 111 290 136 200 131 C 120 126 80 156 0 146 Z"
+                  fill={isDark ? '#132435' : '#CFE6F8'}
+                />
+
+                {/* Local Grid Streets */}
+                <Line x1="0" y1="75" x2="400" y2="75" stroke={isDark ? '#1A1E27' : '#E2E8F0'} strokeWidth="12" />
+                <Line x1="0" y1="75" x2="400" y2="75" stroke={isDark ? '#232936' : '#FFFFFF'} strokeWidth="10" />
+
+                <Line x1="0" y1="145" x2="400" y2="145" stroke={isDark ? '#1A1E27' : '#E2E8F0'} strokeWidth="12" />
+                <Line x1="0" y1="145" x2="400" y2="145" stroke={isDark ? '#232936' : '#FFFFFF'} strokeWidth="10" />
+
+                <Line x1="95" y1="0" x2="95" y2="220" stroke={isDark ? '#1A1E27' : '#E2E8F0'} strokeWidth="12" />
+                <Line x1="95" y1="0" x2="95" y2="220" stroke={isDark ? '#232936' : '#FFFFFF'} strokeWidth="10" />
+
+                <Line x1="315" y1="0" x2="315" y2="220" stroke={isDark ? '#1A1E27' : '#E2E8F0'} strokeWidth="12" />
+                <Line x1="315" y1="0" x2="315" y2="220" stroke={isDark ? '#232936' : '#FFFFFF'} strokeWidth="10" />
+
+                {/* Central Main Avenue */}
+                <Line x1="200" y1="0" x2="200" y2="220" stroke={isDark ? '#242936' : '#E2E8F0'} strokeWidth="18" />
+                <Line x1="200" y1="0" x2="200" y2="220" stroke={isDark ? '#3D3425' : '#FED7AA'} strokeWidth="15" />
+                <Line x1="200" y1="0" x2="200" y2="220" stroke={isDark ? '#F59E0B' : '#FFFFFF'} strokeWidth="1.5" strokeDasharray="6,6" />
+
+                {/* GPS Radar Pulse & Targeting Rings */}
+                <Circle cx="200" cy="110" r="30" stroke="rgba(239, 68, 68, 0.45)" strokeWidth="1.5" fill="rgba(239, 68, 68, 0.08)" />
+                <Circle cx="200" cy="110" r="60" stroke="rgba(59, 130, 246, 0.25)" strokeWidth="1" strokeDasharray="4,4" fill="none" />
+                <Circle cx="200" cy="110" r="90" stroke="rgba(59, 130, 246, 0.15)" strokeWidth="1" strokeDasharray="3,6" fill="none" />
+
+                {/* Map Labels */}
+                <SvgText x="206" y="45" fill={isDark ? '#64748B' : '#94A3B8'} fontSize="9" fontWeight="bold" letterSpacing="1">
+                  MAIN ROAD
+                </SvgText>
+                <SvgText x="12" y="70" fill={isDark ? '#64748B' : '#94A3B8'} fontSize="8" fontWeight="600">
+                  CROSS 1
+                </SvgText>
+                <SvgText x="12" y="140" fill={isDark ? '#64748B' : '#94A3B8'} fontSize="8" fontWeight="600">
+                  AVENUE 2
+                </SvgText>
+              </Svg>
+
+              {/* Real-time Tile layer (if available from OSM) */}
+              {!tileError && (
+                <Image
+                  source={{
+                    uri: mapPreviewUrl,
+                    headers: { 'User-Agent': 'MedSync-Mobile-Patient/1.0' },
+                  }}
+                  style={[styles.mapImage, { position: 'absolute', inset: 0, opacity: 0.85 }]}
+                  resizeMode="cover"
+                  onError={() => setTileError(true)}
+                  onLoad={() => setTileError(false)}
+                />
+              )}
 
               {/* Center Floating Pin Marker */}
               <View style={styles.centerPinWrapper} pointerEvents="none">

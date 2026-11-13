@@ -59,6 +59,7 @@ import { Avatar } from "@medsync/ui/components/avatar";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
 import { useSecurityStore } from "@/store/useSecurityStore";
+import ResetPinModal from "@/components/security/ResetPinModal";
 
 interface DoctorItem {
   id: string;
@@ -126,6 +127,8 @@ export default function MedicalRecordsPage() {
   const [downloadRecordId, setDownloadRecordId] = useState<string | null>(null);
   const [downloadPin, setDownloadPin] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isResetPinOpen, setIsResetPinOpen] = useState(false);
+  const [resetPinTarget, setResetPinTarget] = useState<"upload" | "download">("download");
 
   // Toggling Consultation Consent State
   const [togglingConsultationId, setTogglingConsultationId] = useState<string | null>(null);
@@ -738,6 +741,10 @@ export default function MedicalRecordsPage() {
         url = url.replace(".supabase.co/object/sign/", ".supabase.co/storage/v1/object/sign/");
       }
       if (url) {
+        if (url.startsWith("/")) {
+          const apiBase = getApiUrl().replace(/\/api\/v1\/?$/, "");
+          url = `${apiBase}${url}`;
+        }
         window.open(url, "_blank");
         toast.success("Download started (PDF with verified QR code)");
       } else {
@@ -912,13 +919,25 @@ export default function MedicalRecordsPage() {
               </div>
 
               <div className="space-y-1.5 border-t border-border/40 pt-3">
-                <label className="text-xs font-semibold uppercase tracking-wider text-primary">
-                  Authorization PIN *
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-primary">
+                    Authorization PIN *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetPinTarget("upload");
+                      setIsResetPinOpen(true);
+                    }}
+                    className="text-xs text-primary hover:underline font-medium"
+                  >
+                    Forgot / Reset PIN?
+                  </button>
+                </div>
                 <Input
                   type="password"
                   value={pin}
-                  onChange={(e) => setPin(e.target.value)}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                   placeholder="• • • • • •"
                   maxLength={6}
                   className="rounded-xl tracking-widest text-center font-mono"
@@ -1751,13 +1770,25 @@ export default function MedicalRecordsPage() {
           </DialogHeader>
           <form onSubmit={handleDownload} className="space-y-4 pt-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Authorization PIN *
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wider text-primary">
+                  Authorization PIN *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetPinTarget("download");
+                    setIsResetPinOpen(true);
+                  }}
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  Forgot / Reset PIN?
+                </button>
+              </div>
               <Input
                 type="password"
                 value={downloadPin}
-                onChange={(e) => setDownloadPin(e.target.value)}
+                onChange={(e) => setDownloadPin(e.target.value.replace(/\D/g, ''))}
                 placeholder="• • • • • •"
                 maxLength={6}
                 className="rounded-xl tracking-widest text-center font-mono"
@@ -1777,6 +1808,22 @@ export default function MedicalRecordsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Universal Reset PIN Dialog */}
+      <ResetPinModal
+        open={isResetPinOpen}
+        onOpenChange={setIsResetPinOpen}
+        role="patient"
+        title="Reset Patient Authorization PIN"
+        description="Verify your patient account password to set a new 6-digit authorization PIN."
+        onSuccess={(newPin) => {
+          if (resetPinTarget === "upload") {
+            setPin(newPin);
+          } else {
+            setDownloadPin(newPin);
+          }
+        }}
+      />
     </div>
   );
 }

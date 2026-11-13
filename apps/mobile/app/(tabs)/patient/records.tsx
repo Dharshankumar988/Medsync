@@ -301,9 +301,17 @@ export default function PatientRecordsScreen() {
 
       const opened = await patientService.openLocalFile(cachedUri);
       if (!opened) {
+        try {
+          await FileSystem.deleteAsync(cachedUri, { idempotent: true });
+          setDownloadedRecordUris((prev) => {
+            const next = { ...prev };
+            delete next[entityId];
+            return next;
+          });
+        } catch {}
         Alert.alert(
           'Viewer Unavailable',
-          'Could not open document. Please ensure a PDF or image viewer application is installed.'
+          'Could not open document. Local cache has been cleared; please ensure a PDF viewer is installed and tap Download to re-fetch.'
         );
       }
       return;
@@ -317,22 +325,20 @@ export default function PatientRecordsScreen() {
         setSelectedEntityId(null);
         setSelectedCachedUri(null);
 
-        if (data?.localUri) {
-          setDownloadedRecordUris((prev) => ({ ...prev, [entityId]: data.localUri }));
-          const opened = await patientService.openLocalFile(data.localUri);
-          if (opened) return;
+        const downloadUrl = data?.url || data?.signed_url || data?.download_url;
+        const localUri = data?.localUri;
+
+        if (localUri) {
+          setDownloadedRecordUris((prev) => ({ ...prev, [entityId]: localUri }));
         }
 
-        const downloadUrl = data?.url || data?.signed_url || data?.download_url;
-        if (downloadUrl) {
-          const supported = await Linking.canOpenURL(downloadUrl).catch(() => false);
-          if (supported) {
-            await Linking.openURL(downloadUrl);
-          } else {
+        const opened = await patientService.openDocument(localUri, downloadUrl);
+        if (!opened) {
+          if (downloadUrl) {
             Alert.alert('Download Ready', `File link generated: ${downloadUrl}`);
+          } else {
+            Alert.alert('Notice', 'Authorized download URL could not be resolved.');
           }
-        } else {
-          Alert.alert('Notice', 'Authorized download URL could not be resolved.');
         }
       } catch (err: any) {
         throw new Error(formatErrorMessage(err) || 'Download failed. Please check your PIN.');
@@ -344,22 +350,20 @@ export default function PatientRecordsScreen() {
         setSelectedEntityId(null);
         setSelectedCachedUri(null);
 
-        if (data?.localUri) {
-          setDownloadedRxUris((prev) => ({ ...prev, [entityId]: data.localUri }));
-          const opened = await patientService.openLocalFile(data.localUri);
-          if (opened) return;
+        const downloadUrl = data?.download_url || data?.url || data?.signed_url || data?.pdf_url;
+        const localUri = data?.localUri;
+
+        if (localUri) {
+          setDownloadedRxUris((prev) => ({ ...prev, [entityId]: localUri }));
         }
 
-        const downloadUrl = data?.download_url || data?.url || data?.signed_url || data?.pdf_url;
-        if (downloadUrl) {
-          const supported = await Linking.canOpenURL(downloadUrl).catch(() => false);
-          if (supported) {
-            await Linking.openURL(downloadUrl);
+        const opened = await patientService.openDocument(localUri, downloadUrl);
+        if (!opened) {
+          if (downloadUrl) {
+            Alert.alert('Prescription Ready', `Saved locally or open at: ${downloadUrl}`);
           } else {
-            Alert.alert('Prescription PDF Ready', `Saved locally or open at: ${downloadUrl}`);
+            Alert.alert('Download Incomplete', 'PIN verified, but the prescription PDF could not be retrieved.');
           }
-        } else {
-          Alert.alert('Download Incomplete', 'PIN verified, but the prescription PDF could not be retrieved.');
         }
       } catch (err: any) {
         throw new Error(formatErrorMessage(err) || 'Authorization failed. Please check your PIN.');

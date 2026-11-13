@@ -110,11 +110,13 @@ export function NotificationBell({ role }: NotificationBellProps = {}) {
     if (
       type === "CONSENT" ||
       title.includes("record access") ||
+      title.includes("record request") ||
       title.includes("consent") ||
       msg.includes("consent") ||
-      msg.includes("access to your private")
+      msg.includes("access to your private") ||
+      msg.includes("granted you access")
     ) {
-      if (currentRole === "doctor") return "/doctor/consent";
+      if (currentRole === "doctor") return "/doctor/patients";
       return "/patient/records?tab=privacy";
     }
 
@@ -292,7 +294,7 @@ export function NotificationBell({ role }: NotificationBellProps = {}) {
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -353,8 +355,18 @@ export function NotificationBell({ role }: NotificationBellProps = {}) {
               return (
                 <div
                   key={notif.id}
+                  role="button"
+                  tabIndex={0}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
                   onClick={() => handleNotificationClick(notif)}
-                  className={`group relative flex items-start gap-3 p-3.5 cursor-pointer transition-colors hover:bg-muted/40 ${
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      handleNotificationClick(notif);
+                    }
+                  }}
+                  className={`group relative flex items-start gap-3 p-3.5 cursor-pointer transition-colors hover:bg-muted/40 select-none ${
                     isUnread ? "bg-primary/[0.03]" : ""
                   }`}
                 >

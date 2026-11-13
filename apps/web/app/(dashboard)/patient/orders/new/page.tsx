@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
 import api from "@/lib/api";
+import ResetPinModal from "@/components/security/ResetPinModal";
 
 const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), { ssr: false });
 
@@ -27,6 +28,7 @@ export default function NewOnlineOrderPage() {
   const [longitude, setLongitude] = useState(0);
   const [loading, setLoading] = useState(false);
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
+  const [isResetPinOpen, setIsResetPinOpen] = useState(false);
 
   useEffect(() => {
     fetchPharmacies();
@@ -280,12 +282,22 @@ export default function NewOnlineOrderPage() {
                   </div>
                 </div>
 
-                <div className="max-w-xs mx-auto space-y-4 pt-4 border-t border-border/50 text-center">
+                <div className="max-w-xs mx-auto space-y-2 pt-4 border-t border-border/50">
+                  <div className="flex items-center justify-between text-left">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Authorization PIN</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsResetPinOpen(true)}
+                      className="text-xs text-emerald-600 hover:underline font-medium"
+                    >
+                      Forgot PIN?
+                    </button>
+                  </div>
                   <Input 
                     type="password" 
                     placeholder="Enter 6-digit PIN" 
                     value={authPin}
-                    onChange={(e) => setAuthPin(e.target.value)}
+                    onChange={(e) => setAuthPin(e.target.value.replace(/\D/g, ''))}
                     className="text-center text-xl tracking-widest h-12 rounded-xl"
                     maxLength={6}
                   />
@@ -374,6 +386,16 @@ export default function NewOnlineOrderPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Universal Reset PIN Dialog */}
+      <ResetPinModal
+        open={isResetPinOpen}
+        onOpenChange={setIsResetPinOpen}
+        role="patient"
+        title="Reset Patient Authorization PIN"
+        description="Verify your patient account password to set a new 6-digit authorization PIN."
+        onSuccess={(newPin) => setAuthPin(newPin)}
+      />
     </div>
   );
 }

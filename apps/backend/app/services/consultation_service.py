@@ -225,7 +225,7 @@ class ConsultationService:
                     created_at=c.created_at,
                     doctor_name=f"Dr. {doc.full_name}" if doc and doc.full_name else "Attending Doctor",
                     doctor_specialization=doc.specialization if doc else None,
-                    clinic_or_hospital=doc.clinic_name or doc.hospital_name if doc else None,
+                    clinic_or_hospital=(doc.clinic_name or doc.hospital_name) if doc else None,
                 )
             )
         return enriched
@@ -265,7 +265,7 @@ class ConsultationService:
             created_at=consultation.created_at,
             doctor_name=f"Dr. {doc.full_name}" if doc else "Attending Doctor",
             doctor_specialization=doc.specialization if doc else None,
-            clinic_or_hospital=doc.clinic_name or doc.hospital_name if doc else None,
+            clinic_or_hospital=(doc.clinic_name or doc.hospital_name) if doc else None,
         )
 
     @staticmethod

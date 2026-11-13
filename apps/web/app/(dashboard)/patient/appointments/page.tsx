@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { useSecurityEnrollment } from "@/hooks/useSecurityEnrollment";
 import { useSecurityStore } from "@/store/useSecurityStore";
 import { formatDoctorName, deduplicateDoctors } from "@/lib/formatDoctorName";
+import ResetPinModal from "@/components/security/ResetPinModal";
 
 const HospitalMap = dynamic(() => import("@/components/HospitalMap"), { ssr: false, loading: () => <div className="h-[300px] w-full rounded-xl bg-card/50 animate-pulse border border-border flex items-center justify-center text-sm text-muted-foreground">Loading Map...</div> });
 
@@ -73,6 +74,7 @@ export default function AppointmentsPage() {
   });
   const [isBooking, setIsBooking] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isResetPinOpen, setIsResetPinOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -656,13 +658,23 @@ export default function AppointmentsPage() {
                             Set up PIN now
                           </button>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => openEnrollmentModal()}
-                            className="text-xs text-muted-foreground hover:text-primary transition-colors hover:underline"
-                          >
-                            Change PIN
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsResetPinOpen(true)}
+                              className="text-xs text-primary hover:underline font-medium"
+                            >
+                              Reset PIN
+                            </button>
+                            <span className="text-muted-foreground text-xs">•</span>
+                            <button
+                              type="button"
+                              onClick={() => openEnrollmentModal()}
+                              className="text-xs text-muted-foreground hover:text-primary transition-colors hover:underline"
+                            >
+                              Change PIN
+                            </button>
+                          </div>
                         )}
                       </div>
 
@@ -821,6 +833,17 @@ export default function AppointmentsPage() {
           ))}
         </motion.div>
       )}
+      {/* Universal Reset PIN Dialog */}
+      <ResetPinModal
+        open={isResetPinOpen}
+        onOpenChange={setIsResetPinOpen}
+        role="patient"
+        title="Reset Patient Authorization PIN"
+        description="Verify your patient account password to set a new 6-digit authorization PIN."
+        onSuccess={(newPin) => {
+          setBookingData((prev) => ({ ...prev, pin: newPin }));
+        }}
+      />
     </div>
   );
 }

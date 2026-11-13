@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import api from "@/lib/api";
 import { getApiUrl } from "@/lib/backend-config";
+import ResetPinModal from "@/components/security/ResetPinModal";
 
 export default function CreatePrescriptionPage() {
   const router = useRouter();
@@ -48,6 +49,7 @@ export default function CreatePrescriptionPage() {
   const [pinMode, setPinMode] = useState<"create" | "verify">("verify");
   const [hasPin, setHasPin] = useState<boolean | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
+  const [isResetPinOpen, setIsResetPinOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -649,9 +651,20 @@ export default function CreatePrescriptionPage() {
               )}
 
               <div className="space-y-1 text-left">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  {pinMode === "create" ? "Enter 6-Digit PIN" : "Enter Doctor PIN"}
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {pinMode === "create" ? "Enter 6-Digit PIN" : "Enter Doctor PIN"}
+                  </label>
+                  {pinMode !== "create" && (
+                    <button
+                      type="button"
+                      onClick={() => setIsResetPinOpen(true)}
+                      className="text-xs text-primary hover:underline font-medium"
+                    >
+                      Forgot / Reset PIN?
+                    </button>
+                  )}
+                </div>
                 <Input
                   type="password"
                   placeholder="••••••"
@@ -703,6 +716,18 @@ export default function CreatePrescriptionPage() {
         </div>
       )}
 
+      {/* Universal Reset PIN Dialog */}
+      <ResetPinModal
+        open={isResetPinOpen}
+        onOpenChange={setIsResetPinOpen}
+        role="doctor"
+        title="Reset Doctor Authorization PIN"
+        description="Verify your doctor account password to reset your 6-digit prescription signing PIN."
+        onSuccess={(newPin) => {
+          setPin(newPin);
+          setPinMode("verify");
+        }}
+      />
     </div>
   );
 }

@@ -9,9 +9,12 @@ from app.models.mixins import UUIDMixin, TimestampMixin
 class OrderStatus(str, enum.Enum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
+    PROCESSING = "PROCESSING"
     PACKED = "PACKED"
+    SHIPPED = "SHIPPED"
     OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
     DELIVERED = "DELIVERED"
+    RECEIVED_BY_PATIENT = "RECEIVED_BY_PATIENT"
     CANCELLED = "CANCELLED"
     RETURNED = "RETURNED"
 

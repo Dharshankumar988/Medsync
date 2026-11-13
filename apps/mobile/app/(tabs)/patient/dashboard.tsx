@@ -216,6 +216,45 @@ export default function PatientDashboard() {
     return `${h12}:${mm.slice(0, 2)} ${period}`;
   };
 
+  const handleNotificationClick = async (n: any) => {
+    if (!n.is_read) {
+      try {
+        await patientService.markNotificationRead(n.id);
+        setNotificationsList((prev) =>
+          prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item))
+        );
+        setUnreadNotifCount((c) => Math.max(0, c - 1));
+      } catch {}
+    }
+    setNotifModalVisible(false);
+
+    const type = (n.type || '').toUpperCase();
+    const title = (n.title || '').toLowerCase();
+    const msg = (n.message || n.body || '').toLowerCase();
+
+    if (type === 'APPOINTMENT' || title.includes('appointment') || msg.includes('appointment')) {
+      router.push('/(tabs)/patient/appointments');
+      return;
+    }
+    if (type === 'PRESCRIPTION' || title.includes('prescription') || msg.includes('prescription')) {
+      router.push('/(tabs)/patient/records?tab=PRESCRIPTIONS');
+      return;
+    }
+    if (type === 'ORDER' || type === 'DELIVERY' || title.includes('order') || msg.includes('order') || msg.includes('dispens') || msg.includes('delivery')) {
+      router.push('/(tabs)/patient/records?tab=ORDERS');
+      return;
+    }
+    if (type === 'CONSULTATION' || title.includes('consultation') || msg.includes('consultation')) {
+      router.push('/(tabs)/patient/records?tab=CONSULTATIONS');
+      return;
+    }
+    if (type === 'CONSENT' || title.includes('consent') || title.includes('privacy') || msg.includes('consent') || msg.includes('permission') || title.includes('record request')) {
+      router.push('/(tabs)/patient/records?tab=PRIVACY');
+      return;
+    }
+    router.push('/(tabs)/patient/records?tab=RECORDS');
+  };
+
   return (
     <RoleGuard allowedRole="patient">
       <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -781,17 +820,7 @@ export default function PatientDashboard() {
                           borderColor: theme.border,
                         },
                       ]}
-                      onPress={async () => {
-                        if (!n.is_read) {
-                          try {
-                            await patientService.markNotificationRead(n.id);
-                            setNotificationsList((prev) =>
-                              prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item))
-                            );
-                            setUnreadNotifCount((c) => Math.max(0, c - 1));
-                          } catch {}
-                        }
-                      }}
+                      onPress={() => handleNotificationClick(n)}
                       activeOpacity={0.85}
                     >
                       <View

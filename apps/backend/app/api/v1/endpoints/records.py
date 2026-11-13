@@ -502,10 +502,16 @@ async def download_record(
                 version_number=1,
             )
         except Exception:
-            storage_path = f"patients/{record.patient_id}/records/{record.id}/v1/{record.id}.pdf"
+            storage_path = None
             file_hash = None
 
-    signed_url = await StorageService.create_signed_download_url(storage_path, expires_in=300)
+    if storage_path:
+        try:
+            signed_url = await StorageService.create_signed_download_url(storage_path, expires_in=300)
+        except Exception:
+            signed_url = f"/api/v1/records/{record_id}/raw"
+    else:
+        signed_url = f"/api/v1/records/{record_id}/raw"
     
     # Log download event
     try:
@@ -651,8 +657,9 @@ async def get_patient_doctor_access(
                 ConsentHistory.action == "REVOKED",
                 ConsentHistory.created_at >= req_item.created_at,
             )
+            .limit(1)
         )
-        if revoked_check.scalar_one_or_none():
+        if revoked_check.scalars().first():
             continue
 
         active_perms.append(
@@ -693,8 +700,9 @@ async def get_patient_doctor_access(
                 ConsentHistory.action == "REVOKED",
                 ConsentHistory.created_at >= c_hist.created_at,
             )
+            .limit(1)
         )
-        if rev_check.scalar_one_or_none():
+        if rev_check.scalars().first():
             continue
         active_perms.append(
             PatientDoctorPermissionItem(
@@ -713,33 +721,37 @@ async def get_patient_doctor_access(
         existing_doctor_ids.add(doc.user_id)
 
     # 2. Fetch doctor access audit logs for records owned by this patient
-    log_stmt = (
-        select(DownloadAuditLog, MedicalRecord, Doctor)
-        .join(MedicalRecord, MedicalRecord.id == DownloadAuditLog.entity_id)
-        .join(Doctor, Doctor.user_id == DownloadAuditLog.user_id)
-        .where(
-            MedicalRecord.patient_id == current_user.id,
-            DownloadAuditLog.entity_type == "MEDICAL_RECORD",
-        )
-        .order_by(DownloadAuditLog.created_at.desc())
-        .limit(50)
-    )
-    log_res = await db.execute(log_stmt)
-    log_rows = log_res.all()
-
     access_logs: List[PatientAccessLogItem] = []
-    for log, rec, doc in log_rows:
-        access_logs.append(
-            PatientAccessLogItem(
-                id=log.id,
-                record_id=rec.id,
-                record_title=rec.title,
-                doctor_id=doc.user_id,
-                doctor_name=doc.full_name,
-                doctor_specialization=doc.specialization,
-                accessed_at=log.created_at,
+    try:
+        log_stmt = (
+            select(DownloadAuditLog, MedicalRecord, Doctor)
+            .join(MedicalRecord, MedicalRecord.id == DownloadAuditLog.entity_id)
+            .join(Doctor, Doctor.user_id == DownloadAuditLog.user_id)
+            .where(
+                MedicalRecord.patient_id == current_user.id,
+                DownloadAuditLog.entity_type == "MEDICAL_RECORD",
             )
+            .order_by(DownloadAuditLog.created_at.desc())
+            .limit(50)
         )
+        log_res = await db.execute(log_stmt)
+        log_rows = log_res.all()
+
+        for log, rec, doc in log_rows:
+            access_logs.append(
+                PatientAccessLogItem(
+                    id=log.id,
+                    record_id=rec.id,
+                    record_title=rec.title,
+                    doctor_id=doc.user_id,
+                    doctor_name=doc.full_name,
+                    doctor_specialization=doc.specialization,
+                    accessed_at=log.created_at,
+                )
+            )
+    except Exception as log_err:
+        import logging
+        logging.getLogger("medsync.records").warning(f"Error fetching doctor access logs: {log_err}")
 
     return APIResponse(
         message="Patient doctor access overview fetched",

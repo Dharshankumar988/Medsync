@@ -430,9 +430,14 @@ async def dispense_prescription(
     rx_items = rx_items_res.scalars().all()
 
     # 3. Check or create MedicineOrder for this fulfillment (links patient & pharmacy)
-    order_stmt = select(MedicineOrder).where(MedicineOrder.prescription_id == id)
+    order_stmt = (
+        select(MedicineOrder)
+        .where(MedicineOrder.prescription_id == id)
+        .order_by(MedicineOrder.created_at.desc())
+    )
     order_res = await db.execute(order_stmt)
-    order = order_res.scalar_one_or_none()
+    all_orders = order_res.scalars().all()
+    order = all_orders[0] if all_orders else None
 
     order_status_val = OrderStatus.OUT_FOR_DELIVERY if is_delivery else OrderStatus.RECEIVED_BY_PATIENT
     order_type_val = "ONLINE_DELIVERY" if is_delivery else "WALK_IN_PICKUP"
@@ -453,6 +458,11 @@ async def dispense_prescription(
     else:
         order.status = order_status_val
         order.order_type = order_type_val
+        if not order.pharmacy_id:
+            order.pharmacy_id = current_user.id
+        for other_ord in all_orders[1:]:
+            if other_ord.status in (OrderStatus.PENDING, OrderStatus.PROCESSING):
+                other_ord.status = order_status_val
 
     # 4. Inventory Decrement & Line Item Sales
     total_order_amount = 0.0
@@ -571,6 +581,81 @@ async def dispense_prescription(
         notes=f"Fulfillment: {'Dispensed & Delivered' if is_delivery else 'Received by Patient (Walk-in Counter)'}"
     )
     db.add(dispensing_log)
+
+    # 6b. Create or update DeliveryTracking for live patient order tracking
+    try:
+        from app.models.pharmacy_system import DeliveryTracking
+        import random
+        from datetime import timedelta
+
+        trk_stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order.id)
+        trk_res = await db.execute(trk_stmt)
+        tracking = trk_res.scalar_one_or_none()
+
+        if is_delivery:
+            drivers = [
+                ("Rahul Kumar", "https://api.dicebear.com/7.x/avataaars/svg?seed=Rahul", "KA-01-AB-1234", "Electric Bike"),
+                ("Amit Singh", "https://api.dicebear.com/7.x/avataaars/svg?seed=Amit", "KA-03-CD-5678", "Scooter"),
+                ("Kiran Desai", "https://api.dicebear.com/7.x/avataaars/svg?seed=Kiran", "KA-05-EF-9012", "Bike"),
+                ("Arjun Reddy", "https://api.dicebear.com/7.x/avataaars/svg?seed=Arjun", "KA-02-GH-3456", "Electric Scooter")
+            ]
+            driver = random.choice(drivers)
+            if not tracking:
+                tracking = DeliveryTracking(
+                    order_id=order.id,
+                    tracking_number=f"TRK-BLR-{random.randint(1000, 9999)}",
+                    current_status="OUT_FOR_DELIVERY",
+                    delivery_partner="MedSync Express",
+                    delivery_started_at=datetime.utcnow(),
+                    delivery_eta=datetime.utcnow() + timedelta(minutes=estimated_minutes or 15),
+                    driver_name=driver[0],
+                    driver_avatar=driver[1],
+                    vehicle_number=driver[2],
+                    vehicle_type=driver[3],
+                    delivery_speed=40,
+                    start_latitude=12.9229,
+                    start_longitude=77.6175,
+                    end_latitude=12.9716,
+                    end_longitude=77.5946,
+                    current_latitude=12.9229,
+                    current_longitude=77.6175,
+                    delivery_progress=25,
+                )
+                db.add(tracking)
+            else:
+                tracking.current_status = "OUT_FOR_DELIVERY"
+                tracking.delivery_started_at = datetime.utcnow()
+                tracking.delivery_eta = datetime.utcnow() + timedelta(minutes=estimated_minutes or 15)
+                tracking.delivery_progress = max(25, tracking.delivery_progress or 0)
+        else:
+            if tracking:
+                tracking.current_status = "DELIVERED"
+                tracking.delivery_completed_at = datetime.utcnow()
+                tracking.delivery_progress = 100
+    except Exception as trk_err:
+        import logging
+        logging.getLogger("medsync.dispense").warning(f"Error updating DeliveryTracking: {trk_err}")
+
+    # 6c. Send notification to patient about dispense / delivery
+    try:
+        from app.services.notification import NotificationService
+        notif_msg = (
+            f"Your prescription #{str(rx.id)[:8]} has been dispensed and is out for delivery! Track your order live."
+            if is_delivery
+            else f"Your prescription #{str(rx.id)[:8]} has been dispensed and collected at the pharmacy counter."
+        )
+        await NotificationService.send_notification(
+            db,
+            user_id=rx.patient_id,
+            title="Order Out for Delivery" if is_delivery else "Prescription Dispensed",
+            message=notif_msg,
+            type="ORDER",
+            link=f"/patient/tracking/{order.id}" if is_delivery else "/patient/records"
+        )
+    except Exception as n_err:
+        import logging
+        logging.getLogger("medsync.dispense").warning(f"Notification error: {n_err}")
+
     await db.commit()
     
     # 7. Broadcast state-changing dispensing event to PrescriptionRegistry on Polygon Amoy

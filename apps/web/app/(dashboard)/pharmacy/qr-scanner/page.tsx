@@ -15,6 +15,8 @@ import { BlockchainVerificationCard } from "@/components/blockchain/BlockchainVe
 import { QRScanner } from "@/components/ui/QRScanner";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import api from "@/lib/api";
+import ResetPinModal from "@/components/security/ResetPinModal";
 
 type FlowType = "IDLE" | "PRESCRIPTION" | "BLOCKCHAIN" | "URL" | "TEXT";
 type PrescriptionStep = "PAYMENT" | "SUCCESS" | "CONFIRMED";
@@ -37,6 +39,7 @@ export default function PharmacyQRScannerPage() {
   const [pin, setPin] = useState("");
   const [authPin, setAuthPin] = useState("");
   const [faceImage, setFaceImage] = useState<File | null>(null);
+  const [isResetPinOpen, setIsResetPinOpen] = useState(false);
   const [fulfillmentType, setFulfillmentType] = useState<"DISPENSED_AND_DELIVERED" | "RECEIVED_BY_PATIENT">("RECEIVED_BY_PATIENT");
   const [fulfillmentResult, setFulfillmentResult] = useState<any>(null);
 
@@ -48,8 +51,25 @@ export default function PharmacyQRScannerPage() {
     setError(null);
 
     let cleanToken = data.trim();
+
+    // Parse JSON QR codes if scanned as JSON payload
+    if (cleanToken.startsWith("{") && cleanToken.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(cleanToken);
+        cleanToken = parsed.token || parsed.prescription_id || parsed.qr_token || parsed.id || cleanToken;
+      } catch {}
+    }
+
     if (cleanToken.includes("/verify/prescription/")) {
       cleanToken = cleanToken.split("/verify/prescription/")[1]?.split("?")[0]?.split("/")[0] || cleanToken;
+    } else if (cleanToken.includes("/verify/pharmacy/")) {
+      cleanToken = cleanToken.split("/verify/pharmacy/")[1]?.split("?")[0]?.split("/")[0] || cleanToken;
+    } else if (cleanToken.includes("code=")) {
+      const match = cleanToken.match(/code=([^&]+)/);
+      if (match) cleanToken = decodeURIComponent(match[1]);
+    } else if (cleanToken.includes("token=")) {
+      const match = cleanToken.match(/token=([^&]+)/);
+      if (match) cleanToken = decodeURIComponent(match[1]);
     }
 
     if (cleanToken.startsWith("0x") || cleanToken.startsWith("QR-REC-")) {
@@ -77,7 +97,7 @@ export default function PharmacyQRScannerPage() {
     }
     
     // If it looks like an unrelated external URL
-    if ((cleanToken.startsWith("http://") || cleanToken.startsWith("https://")) && !cleanToken.includes("/prescription")) {
+    if ((cleanToken.startsWith("http://") || cleanToken.startsWith("https://")) && !cleanToken.includes("/prescription") && !cleanToken.includes("/verify/")) {
       const isMedsync = cleanToken.includes("medsync-web.vercel.app") || cleanToken.includes("localhost:3000");
       if (isMedsync) {
         window.location.href = cleanToken;
@@ -127,24 +147,22 @@ export default function PharmacyQRScannerPage() {
       if (pin) formData.append("pin", pin);
       if (faceImage) formData.append("face_image", faceImage);
 
-      const res = await fetch(`/api/v1/prescriptions/${basicData.prescription_id}/verify`, {
-        method: 'POST',
+      const res = await api.post(`/api/v1/prescriptions/${basicData.prescription_id}/verify`, formData, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Content-Type': 'multipart/form-data',
         },
-        body: formData
       });
       
-      const data = await res.json();
-      
-      if (res.ok && data.success) {
-        setFullPrescriptionData(data.data);
+      const resData = res.data;
+      if (res.status === 200 && resData.success !== false) {
+        setFullPrescriptionData(resData.data || resData);
         setStep("SUCCESS");
       } else {
-        setError(data.detail || data.message || "Invalid Authorization PIN.");
+        setError(resData?.detail || resData?.message || "Invalid Authorization PIN.");
       }
     } catch (err: any) {
-      setError("Failed to verify PIN. Please try again.");
+      console.error("PIN verification error:", err);
+      setError(err.response?.data?.detail || err.response?.data?.message || err.message || "Failed to verify PIN. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -479,12 +497,21 @@ export default function PharmacyQRScannerPage() {
                     </div>
 
                     <div className="bg-muted/30 p-5 rounded-2xl border border-border/60">
-                      <h4 className="font-semibold mb-3 border-b border-border/60 pb-2">Pharmacy Authorization</h4>
+                      <div className="flex items-center justify-between mb-3 border-b border-border/60 pb-2">
+                        <h4 className="font-semibold">Pharmacy Authorization</h4>
+                        <button
+                          type="button"
+                          onClick={() => setIsResetPinOpen(true)}
+                          className="text-xs text-amber-500 hover:underline font-medium"
+                        >
+                          Forgot / Reset PIN?
+                        </button>
+                      </div>
                       <p className="text-sm text-muted-foreground mb-4">Enter your 6-digit Pharmacy PIN to authorize dispensing.</p>
                       <Input
                         type="password"
                         value={authPin}
-                        onChange={(e) => setAuthPin(e.target.value)}
+                        onChange={(e) => setAuthPin(e.target.value.replace(/\D/g, ''))}
                         placeholder="• • • • • •"
                         maxLength={6}
                         className="text-center tracking-[0.5em] rounded-xl text-lg h-12"
@@ -601,6 +628,16 @@ export default function PharmacyQRScannerPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Universal Reset PIN Dialog */}
+      <ResetPinModal
+        open={isResetPinOpen}
+        onOpenChange={setIsResetPinOpen}
+        role="pharmacy"
+        title="Reset Pharmacy Authorization PIN"
+        description="Verify your pharmacy account password to reset your 6-digit dispensing PIN."
+        onSuccess={(newPin) => setAuthPin(newPin)}
+      />
     </div>
   );
 }

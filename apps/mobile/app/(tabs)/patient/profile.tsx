@@ -294,6 +294,38 @@ export default function PatientProfileScreen() {
     }
   };
 
+  const handleNotificationClick = async (notif: any) => {
+    if (!notif.is_read && notif.id) {
+      await handleMarkNotificationRead(notif.id);
+    }
+
+    const type = (notif.type || '').toUpperCase();
+    const title = (notif.title || '').toLowerCase();
+    const msg = (notif.message || notif.body || '').toLowerCase();
+
+    if (type === 'APPOINTMENT' || title.includes('appointment') || msg.includes('appointment')) {
+      router.push('/(tabs)/patient/appointments');
+      return;
+    }
+    if (type === 'PRESCRIPTION' || title.includes('prescription') || msg.includes('prescription')) {
+      router.push('/(tabs)/patient/records?tab=PRESCRIPTIONS');
+      return;
+    }
+    if (type === 'ORDER' || type === 'DELIVERY' || title.includes('order') || msg.includes('order') || msg.includes('dispens') || msg.includes('delivery')) {
+      router.push('/(tabs)/patient/records?tab=ORDERS');
+      return;
+    }
+    if (type === 'CONSULTATION' || title.includes('consultation') || msg.includes('consultation')) {
+      router.push('/(tabs)/patient/records?tab=CONSULTATIONS');
+      return;
+    }
+    if (type === 'CONSENT' || title.includes('consent') || title.includes('privacy') || msg.includes('consent') || msg.includes('permission') || title.includes('record request')) {
+      router.push('/(tabs)/patient/records?tab=PRIVACY');
+      return;
+    }
+    router.push('/(tabs)/patient/records?tab=RECORDS');
+  };
+
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out of MedSync Vault?', [
       { text: 'Cancel', style: 'cancel' },
@@ -756,7 +788,7 @@ export default function PatientProfileScreen() {
                     { borderBottomColor: theme.border },
                     idx === Math.min(notifications.length, 5) - 1 && styles.notifRowLast,
                   ]}
-                  onPress={() => !notif.is_read && handleMarkNotificationRead(notif.id)}
+                  onPress={() => handleNotificationClick(notif)}
                 >
                   <View
                     style={[

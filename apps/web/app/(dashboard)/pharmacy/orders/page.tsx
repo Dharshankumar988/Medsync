@@ -10,6 +10,7 @@ import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { getBackendBaseUrl } from "@/lib/backend-config";
 import { toast } from "sonner";
+import ResetPinModal from "@/components/security/ResetPinModal";
 
 const DeliveryMap = dynamic(() => import("@/components/pharmacy/DeliveryMap").then(m => m.DeliveryMap), { ssr: false });
 
@@ -49,6 +50,7 @@ export default function PharmacyOrdersPage() {
   const [dispensingOrder, setDispensingOrder] = useState<string | null>(null);
   const [authPinInput, setAuthPinInput] = useState("");
   const [isDispensing, setIsDispensing] = useState(false);
+  const [isResetPinOpen, setIsResetPinOpen] = useState(false);
 
   const handleDispenseWithPin = async () => {
     if (!dispensingRxId) return;
@@ -297,11 +299,21 @@ export default function PharmacyOrdersPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground">Authorization PIN</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsResetPinOpen(true)}
+                    className="text-xs text-amber-500 hover:underline font-medium"
+                  >
+                    Forgot / Reset PIN?
+                  </button>
+                </div>
                 <Input 
                   type="password"
                   placeholder="• • • • • •" 
                   value={authPinInput}
-                  onChange={(e) => setAuthPinInput(e.target.value)}
+                  onChange={(e) => setAuthPinInput(e.target.value.replace(/\D/g, ''))}
                   maxLength={6}
                   className="text-center text-xl tracking-[0.5em] font-mono h-12 rounded-xl"
                 />
@@ -320,6 +332,16 @@ export default function PharmacyOrdersPage() {
           </Card>
         </div>
       )}
+
+      {/* Universal Reset PIN Dialog */}
+      <ResetPinModal
+        open={isResetPinOpen}
+        onOpenChange={setIsResetPinOpen}
+        role="pharmacy"
+        title="Reset Pharmacy Authorization PIN"
+        description="Verify your pharmacy account password to reset your 6-digit dispensing PIN."
+        onSuccess={(pin) => setAuthPinInput(pin)}
+      />
 
       {dispensingOrderId && !dispensingRxId && (
         <div className="fixed bottom-4 right-4 z-50 w-[450px]">

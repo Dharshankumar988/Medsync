@@ -67,9 +67,13 @@ async def get_active_deliveries(
         seen_prescription_ids.add(str(log.prescription_id))
 
         # Check corresponding MedicineOrder to provide order_id
-        order_match_stmt = select(MedicineOrder).where(MedicineOrder.prescription_id == log.prescription_id)
+        order_match_stmt = (
+            select(MedicineOrder)
+            .where(MedicineOrder.prescription_id == log.prescription_id)
+            .order_by(MedicineOrder.created_at.desc())
+        )
         order_match_res = await db.execute(order_match_stmt)
-        matched_order = order_match_res.scalar_one_or_none()
+        matched_order = order_match_res.scalars().first()
         
         active_deliveries.append(ActiveDeliveryItem(
             dispensing_log_id=str(log.id),
