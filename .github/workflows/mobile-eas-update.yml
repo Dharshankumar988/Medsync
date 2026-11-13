@@ -26,7 +26,7 @@ jobs:
       - name: 📦 Setup pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 9
+          version: 10
 
       - name: 🚀 Setup Expo and EAS
         uses: expo/expo-github-action@v8
@@ -45,11 +45,12 @@ jobs:
         working-directory: apps/mobile
         run: npx tsc --noEmit
 
-      - name: 📲 Publish Over-The-Air Update to Production
+      - name: 📲 Publish Over-The-Air Update to Preview and Production
         working-directory: apps/mobile
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
             echo "::warning title=Missing EXPO_TOKEN::EXPO_TOKEN secret is not configured in GitHub repository secrets. Skipping EAS Over-The-Air update. To enable automatic OTA updates, generate a token at https://expo.dev/accounts/[your-username]/settings/access-tokens and add it as EXPO_TOKEN in GitHub Repo Settings -> Secrets and variables -> Actions."
             exit 0
           fi
-          eas update --auto --channel production
+          eas update --auto --channel preview --message "Auto OTA update from commit ${{ github.sha }}"
+          eas update --auto --channel production --message "Auto OTA update from commit ${{ github.sha }}"

@@ -60,11 +60,6 @@
         }
       ]
     ],
-    "updates": {
-      "enabled": true,
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/f28125c2-8e9e-4413-96b8-d74f3d6c6662"
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -73,8 +68,12 @@
         "origin": false
       },
       "eas": {
-        "projectId": "f28125c2-8e9e-4413-96b8-d74f3d6c6662"
+        "projectId": "a9b080e1-e001-417f-859e-0ce29dfb04ce"
       }
+    },
+    "owner": "dharshan.kumar",
+    "updates": {
+      "url": "https://u.expo.dev/a9b080e1-e001-417f-859e-0ce29dfb04ce"
     }
   }
 }
