@@ -373,7 +373,7 @@ export function DeliveryLocationPickerModal({
                     uri: mapPreviewUrl,
                     headers: { 'User-Agent': 'MedSync-Mobile-Patient/1.0' },
                   }}
-                  style={[styles.mapImage, { position: 'absolute', inset: 0, opacity: 0.85 }]}
+                  style={[styles.mapImage, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.85 }]}
                   resizeMode="cover"
                   onError={() => setTileError(true)}
                   onLoad={() => setTileError(false)}

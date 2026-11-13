@@ -57,6 +57,7 @@ import {
 } from '../../../services/patient.service';
 import { formatErrorMessage } from '../../../lib/api';
 import { useTheme } from '../../../context/ThemeContext';
+import * as FileSystem from 'expo-file-system';
 
 export type ViewTab = 'RECORDS' | 'PRESCRIPTIONS' | 'ORDERS' | 'CONSULTATIONS' | 'PRIVACY';
 
