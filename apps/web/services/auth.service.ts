@@ -4,10 +4,34 @@ import { clearAllPulseChats } from '@/lib/storage/pulse-chat-storage';
 
 export const authService = {
   login: async (credentials: { email: string; password: string }) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    let { data, error } = await supabase.auth.signInWithPassword({
       email: credentials.email,
       password: credentials.password,
     });
+
+    if (error) {
+      // If sign in fails (e.g. Invalid login credentials), check if this is an approved provider
+      // whose Supabase auth identity or credentials need transparent reconciliation
+      try {
+        const { default: api } = await import('@/lib/api');
+        const reconcileRes = await api.post('/api/v1/auth/reconcile-provider-auth', {
+          email: credentials.email,
+          password: credentials.password,
+        });
+        if (reconcileRes.data?.data?.reconciled) {
+          const retryRes = await supabase.auth.signInWithPassword({
+            email: credentials.email,
+            password: credentials.password,
+          });
+          if (!retryRes.error && retryRes.data) {
+            data = retryRes.data;
+            error = null;
+          }
+        }
+      } catch (recErr) {
+        // Fall back to original error if reconciliation is not applicable
+      }
+    }
 
     if (error) {
       throw error;

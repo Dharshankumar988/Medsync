@@ -21,6 +21,7 @@ router = APIRouter()
 require_doctor = RoleChecker([UserRole.DOCTOR])
 
 DOWNLOAD_PIN_CACHE: dict[str, str] = {}
+DOWNLOAD_BYTES_CACHE: dict[str, bytes] = {}
 
 @router.get("/", response_model=APIResponse[list[PrescriptionListItem]])
 async def list_prescriptions(
@@ -232,8 +233,8 @@ async def download_prescription_file(
     if rx.patient_id != current_user.id and rx.doctor_id != current_user.id and str(current_user.role).upper() != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="Unauthorized to download this prescription")
 
-    pdf_content = None
-    if rx.pdf_url:
+    pdf_content = DOWNLOAD_BYTES_CACHE.pop(str(rx.id), None)
+    if not pdf_content and rx.pdf_url:
         try:
             pdf_content = await StorageService.download_record_file(rx.pdf_url)
         except Exception as e:
@@ -250,13 +251,24 @@ async def download_prescription_file(
         pat_res = await db.execute(pat_stmt)
         pat_prof = pat_res.scalar_one_or_none()
 
-        doctor_data = {"name": doc_prof.full_name if doc_prof else "Doctor", "profile_image_url": rx.doctor_profile_image_url}
+        doctor_data = {
+            "name": doc_prof.full_name if doc_prof else "Doctor",
+            "profile_image_url": rx.doctor_profile_image_url or (getattr(doc_prof, "profile_image", None) if doc_prof else None),
+            "medical_council_reg_number": getattr(doc_prof, "medical_council_reg_number", None) or getattr(doc_prof, "license_number", "N/A"),
+            "clinic_name": getattr(doc_prof, "clinic_name", None) or getattr(doc_prof, "hospital_name", "MedSync Hospital"),
+        }
         patient_data = {"name": pat_prof.full_name if pat_prof else "Patient", "id": str(rx.patient_id)}
 
         items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == rx.id)
         items_res = await db.execute(items_stmt)
         items_list = [
-            {"medicine_name": i.medicine_name, "dosage": i.dosage, "frequency": i.frequency, "duration_days": i.duration_days, "special_instructions": i.special_instructions}
+            {
+                "medicine_name": i.medicine_name,
+                "dosage": i.dosage,
+                "frequency": i.frequency,
+                "duration_days": i.duration_days,
+                "instructions": getattr(i, "instructions", None) or getattr(i, "special_instructions", None) or "",
+            }
             for i in items_res.scalars().all()
         ]
 
@@ -335,13 +347,24 @@ async def download_prescription_by_ref(
         pat_res = await db.execute(pat_stmt)
         pat_prof = pat_res.scalar_one_or_none()
 
-        doctor_data = {"name": doc_prof.full_name if doc_prof else "Doctor", "profile_image_url": rx.doctor_profile_image_url}
+        doctor_data = {
+            "name": doc_prof.full_name if doc_prof else "Doctor",
+            "profile_image_url": rx.doctor_profile_image_url or (getattr(doc_prof, "profile_image", None) if doc_prof else None),
+            "medical_council_reg_number": getattr(doc_prof, "medical_council_reg_number", None) or getattr(doc_prof, "license_number", "N/A"),
+            "clinic_name": getattr(doc_prof, "clinic_name", None) or getattr(doc_prof, "hospital_name", "MedSync Hospital"),
+        }
         patient_data = {"name": pat_prof.full_name if pat_prof else "Patient", "id": str(rx.patient_id)}
 
         items_stmt = select(PrescriptionItem).where(PrescriptionItem.prescription_id == rx.id)
         items_res = await db.execute(items_stmt)
         items_list = [
-            {"medicine_name": i.medicine_name, "dosage": i.dosage, "frequency": i.frequency, "duration_days": i.duration_days, "special_instructions": i.special_instructions}
+            {
+                "medicine_name": i.medicine_name,
+                "dosage": i.dosage,
+                "frequency": i.frequency,
+                "duration_days": i.duration_days,
+                "instructions": getattr(i, "instructions", None) or getattr(i, "special_instructions", None) or "",
+            }
             for i in items_res.scalars().all()
         ]
 
@@ -362,6 +385,9 @@ async def download_prescription_by_ref(
         except Exception as e:
             import logging
             logging.getLogger("medsync.prescriptions").error(f"Error encrypting PDF with PIN: {e}", exc_info=True)
+
+    # Cache bytes temporarily so download_prescription_file can immediately stream them if accessed directly
+    DOWNLOAD_BYTES_CACHE[str(rx.id)] = final_pdf_bytes
 
     # Try storing and generating signed URL, or fallback to direct download URL
     try:

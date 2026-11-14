@@ -8,7 +8,7 @@ from app.models.pharmacy import Pharmacy
 from app.models.appointment import Appointment, AppointmentStatus, DoctorAvailability, AppointmentStatusHistory
 from app.models.prescription import Prescription
 from app.models.prescription_transfer import PrescriptionTransfer
-from app.models.record import MedicalRecord, MedicalRecordVersion, RecordPermission
+from app.models.record import MedicalRecord, MedicalRecordVersion, RecordPermission, ConsentHistory
 from app.models.ai_chat import AIChatSession, AIChatMessage
 from app.models.payment import Payment, PaymentStatus, PaymentMethod
 from app.models.pharmacy_system import Medicine, MedicineInventory, MedicineOrder, MedicineOrderItem, PharmacyRestockOrder
@@ -56,6 +56,7 @@ __all__ = [
     "MedicalRecord",
     "MedicalRecordVersion",
     "RecordPermission",
+    "ConsentHistory",
     "AIChatSession",
     "AIChatMessage",
     "Payment",

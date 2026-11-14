@@ -448,21 +448,21 @@ function PatientDetailContent() {
   const handleDownloadPrescription = async (presId: string) => {
     try {
       setDownloadingPrescriptionId(presId);
-      const apiUrl = getApiUrl();
-      const response = await axios.get(`${apiUrl}/prescriptions/${presId}/download`, {
+      const response = await api.get(`/api/v1/prescriptions/${presId}/download`, {
         responseType: "blob",
       });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute("download", `prescription-${presId}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       toast.success("Prescription PDF downloaded");
     } catch (err: any) {
       console.error("Prescription download error:", err);
-      toast.error("Failed to download prescription PDF");
+      toast.error(err?.response?.data?.detail || "Failed to download prescription PDF");
     } finally {
       setDownloadingPrescriptionId(null);
     }

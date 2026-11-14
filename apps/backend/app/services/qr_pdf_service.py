@@ -99,7 +99,7 @@ class QRPdfService:
             try:
                 import urllib.request
                 req = urllib.request.Request(profile_img_url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req) as response:
+                with urllib.request.urlopen(req, timeout=4.0) as response:
                     img_data = response.read()
                 profile_image = ImageReader(io.BytesIO(img_data))
                 c.drawImage(profile_image, width - 80, height - 100, width=50, height=50)

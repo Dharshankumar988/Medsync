@@ -42,3 +42,12 @@ class PrescriptionItem(Base, UUIDMixin, TimestampMixin):
     frequency: Mapped[str] = mapped_column(String(100), nullable=False)
     duration_days: Mapped[int] = mapped_column(Integer, nullable=False)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Defensive property alias to prevent naming confusion between instructions and special_instructions
+    @property
+    def special_instructions(self) -> str | None:
+        return self.instructions
+
+    @special_instructions.setter
+    def special_instructions(self, value: str | None) -> None:
+        self.instructions = value

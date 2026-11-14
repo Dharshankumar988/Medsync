@@ -89,23 +89,22 @@ export default function DoctorPrescriptionsPage() {
 
   const handleDownload = async (id: string) => {
     try {
-      const apiUrl = getApiUrl();
-      
-      const response = await axios.get(`${apiUrl}/prescriptions/${id}/download`, {
+      const response = await api.get(`/api/v1/prescriptions/${id}/download`, {
         responseType: 'blob'
       });
       
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `prescription-${id}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       toast.success("Download started");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Download error", err);
-      toast.error("Failed to download prescription");
+      toast.error(err?.response?.data?.detail || "Failed to download prescription");
     }
   };
 

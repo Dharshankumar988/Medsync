@@ -633,7 +633,7 @@ async def get_patient_doctor_access(
 
     # 1b. Include doctors with active vault-level access (approved RecordRequest or ConsentHistory)
     from app.models.doctor_collaboration import RecordRequest, RecordRequestStatus
-    from app.models.consent import ConsentHistory
+    from app.models.record import ConsentHistory
 
     req_stmt = (
         select(RecordRequest, Doctor)
@@ -769,7 +769,7 @@ async def revoke_doctor_access(
     current_user: AuthenticatedPrincipal = Depends(require_patient),
 ):
     from app.services.permission import PermissionService
-    from app.models.consent import ConsentHistory
+    from app.models.record import ConsentHistory
     from app.models.record import RecordPermission
 
     if req.record_id:
@@ -831,7 +831,7 @@ async def grant_doctor_access(
     current_user: AuthenticatedPrincipal = Depends(require_patient),
 ):
     from app.services.permission import PermissionService
-    from app.models.consent import ConsentHistory
+    from app.models.record import ConsentHistory
     from app.models.record import RecordPermission
 
     if req.pin:

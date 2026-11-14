@@ -137,3 +137,15 @@ class AdminCreateResponseData(BaseModel):
     id: str
     email: str
 
+class ReconcileAuthRequest(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    email: EmailStr
+    password: str
+
+class ReconcileAuthResponseData(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    reconciled: bool
+    email: str
+    role: str
+    message: str
+

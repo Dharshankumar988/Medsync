@@ -35,6 +35,18 @@ export default function SecureDownloadModal({ prescriptionId, open, onOpenChange
     }
   }, [open]);
 
+  const triggerBlobDownload = (data: any, filename: string) => {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/pdf' });
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+  };
+
   const handleDownloadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prescriptionId || pin.length !== 6) return;
@@ -50,11 +62,45 @@ export default function SecureDownloadModal({ prescriptionId, open, onOpenChange
         const ref = res.data.data.authorization_reference;
         const dlRes = await api.get(`/api/v1/prescriptions/download/${ref}`);
 
-        if (dlRes.data?.data?.url) {
-          window.open(dlRes.data.data.url, '_blank');
-          toast.success("Download authorized successfully.");
-          onOpenChange(false);
+        const url = dlRes.data?.data?.url;
+        const filename = `prescription-${prescriptionId}.pdf`;
+
+        if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+          // Full URL (e.g. Supabase signed URL)
+          try {
+            const fileResp = await fetch(url);
+            if (fileResp.ok) {
+              const fileBlob = await fileResp.blob();
+              triggerBlobDownload(fileBlob, filename);
+            } else {
+              const link = document.createElement('a');
+              link.href = url;
+              link.setAttribute('download', filename);
+              link.setAttribute('target', '_blank');
+              link.setAttribute('rel', 'noopener noreferrer');
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+            }
+          } catch {
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+          }
+        } else {
+          // Relative backend stream endpoint (e.g. /api/v1/prescriptions/{id}/download)
+          const target = url && url.startsWith('/') ? url : `/api/v1/prescriptions/${prescriptionId}/download`;
+          const fileResp = await api.get(target, { responseType: 'blob' });
+          triggerBlobDownload(fileResp.data, filename);
         }
+
+        toast.success("Prescription downloaded successfully.");
+        onOpenChange(false);
       }
     } catch (err: any) {
       toast.error(err.response?.data?.detail || err.response?.data?.message || "Authorization failed.");

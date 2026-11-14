@@ -54,6 +54,8 @@ from app.schemas.auth import (
     LoginGuardRequest,
     LoginGuardResponseData,
     SetOAuthPasswordRequest,
+    ReconcileAuthRequest,
+    ReconcileAuthResponseData,
 )
 from app.utils.reset_token import (
     create_patient_reset_token,
@@ -97,6 +99,8 @@ async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depen
         except Exception:
             pass
 
+        from app.services.supabase_auth_service import SupabaseAuthService
+
         if existing_user:
             # If the user is fully active or already verified, reject registration as duplicate
             if existing_user.status == UserStatus.ACTIVE or existing_user.is_verified:
@@ -105,95 +109,36 @@ async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depen
                     detail="An account with this email already exists."
                 )
             # If user exists but is PENDING and unverified (prior incomplete registration or retry):
-            # Refresh password in auth.users and return user ID so client can complete profile sync
             user_id = existing_user.id
-            app_meta = json.dumps({"role": target_role, "provider": "email"})
-            user_meta = json.dumps({"role": target_role})
-            params = {"id": user_id, "email": clean_email, "pwd": payload.password, "app_meta": app_meta, "user_meta": user_meta}
-            try:
-                async with db.begin_nested():
-                    await db.execute(
-                        text("""
-                        UPDATE auth.users 
-                        SET encrypted_password = extensions.crypt(:pwd, extensions.gen_salt('bf')),
-                            raw_app_meta_data = CAST(:app_meta AS jsonb),
-                            raw_user_meta_data = CAST(:user_meta AS jsonb),
-                            email_confirmed_at = now()
-                        WHERE id = :id OR lower(email) = :email
-                        """),
-                        params
-                    )
-            except Exception:
-                await db.execute(
-                    text("""
-                    UPDATE auth.users 
-                    SET encrypted_password = crypt(:pwd, gen_salt('bf')),
-                        raw_app_meta_data = CAST(:app_meta AS jsonb),
-                        raw_user_meta_data = CAST(:user_meta AS jsonb),
-                        email_confirmed_at = now()
-                    WHERE id = :id OR lower(email) = :email
-                    """),
-                    params
-                )
-            await db.commit()
+            await SupabaseAuthService.sync_or_create_user(
+                db=db,
+                user_id=user_id,
+                email=clean_email,
+                password=payload.password,
+                role=target_role
+            )
             return APIResponse(message="Pending registration refreshed", data=AdminRegisterResponseData(id=str(user_id)))
 
         elif auth_user_id:
             # User exists in auth.users but not in public.users yet
             user_id = auth_user_id
-            app_meta = json.dumps({"role": target_role, "provider": "email"})
-            user_meta = json.dumps({"role": target_role})
-            params = {"id": user_id, "email": clean_email, "pwd": payload.password, "app_meta": app_meta, "user_meta": user_meta}
-            try:
-                async with db.begin_nested():
-                    await db.execute(
-                        text("""
-                        UPDATE auth.users 
-                        SET encrypted_password = extensions.crypt(:pwd, extensions.gen_salt('bf')),
-                            raw_app_meta_data = CAST(:app_meta AS jsonb),
-                            raw_user_meta_data = CAST(:user_meta AS jsonb),
-                            email_confirmed_at = now()
-                        WHERE id = :id OR lower(email) = :email
-                        """),
-                        params
-                    )
-            except Exception:
-                await db.execute(
-                    text("""
-                    UPDATE auth.users 
-                    SET encrypted_password = crypt(:pwd, gen_salt('bf')),
-                        raw_app_meta_data = CAST(:app_meta AS jsonb),
-                        raw_user_meta_data = CAST(:user_meta AS jsonb),
-                        email_confirmed_at = now()
-                    WHERE id = :id OR lower(email) = :email
-                    """),
-                    params
-                )
-            await db.commit()
+            await SupabaseAuthService.sync_or_create_user(
+                db=db,
+                user_id=user_id,
+                email=clean_email,
+                password=payload.password,
+                role=target_role
+            )
             return APIResponse(message="Auth registration refreshed", data=AdminRegisterResponseData(id=str(user_id)))
 
         user_id = uuid.uuid4()
-        app_meta = json.dumps({"role": target_role, "provider": "email"})
-        user_meta = json.dumps({"role": target_role})
-        params = {"id": user_id, "email": clean_email, "pwd": payload.password, "app_meta": app_meta, "user_meta": user_meta}
-
-        try:
-            async with db.begin_nested():
-                await db.execute(
-                    text("""
-                    INSERT INTO auth.users (id, instance_id, email, encrypted_password, aud, role, raw_app_meta_data, raw_user_meta_data, email_confirmed_at)
-                    VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, extensions.crypt(:pwd, extensions.gen_salt('bf')), 'authenticated', 'authenticated', CAST(:app_meta AS jsonb), CAST(:user_meta AS jsonb), now())
-                    """),
-                    params
-                )
-        except Exception:
-            await db.execute(
-                text("""
-                INSERT INTO auth.users (id, instance_id, email, encrypted_password, aud, role, raw_app_meta_data, raw_user_meta_data, email_confirmed_at)
-                VALUES (:id, '00000000-0000-0000-0000-000000000000', :email, crypt(:pwd, gen_salt('bf')), 'authenticated', 'authenticated', CAST(:app_meta AS jsonb), CAST(:user_meta AS jsonb), now())
-                """),
-                params
-            )
+        await SupabaseAuthService.sync_or_create_user(
+            db=db,
+            user_id=user_id,
+            email=clean_email,
+            password=payload.password,
+            role=target_role
+        )
         
         # Only create public.users entry if target_role is ADMIN.
         # For DOCTOR, PHARMACY, HOSPITAL, or PATIENT, the client immediately calls
@@ -227,18 +172,33 @@ async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depen
 
 @router.post("/force-reset-password", response_model=APIResponse[ForceResetResponseData])
 async def force_reset_password(payload: ForceResetRequest, db: AsyncSession = Depends(get_db)):
-    from sqlalchemy import text
-    try:
-        result = await db.execute(text("UPDATE auth.users SET encrypted_password = crypt(:pwd, gen_salt('bf')) WHERE email = :email"), {"pwd": payload.new_password, "email": payload.email})
-        await db.commit()
-        if result.rowcount == 0:
-            raise HTTPException(status_code=404, detail="User not found")
-        return APIResponse(message="Password reset successfully", data=ForceResetResponseData(email=payload.email))
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+    from app.services.supabase_auth_service import SupabaseAuthService
+    clean_email = payload.email.strip().lower()
+    user_res = await db.execute(select(User).where(func.lower(User.email) == clean_email))
+    user = user_res.scalar_one_or_none()
+    user_id = user.id if user else None
+
+    if not user_id:
+        try:
+            auth_res = await db.execute(text("SELECT id FROM auth.users WHERE lower(email) = :email"), {"email": clean_email})
+            auth_row = auth_res.first()
+            if auth_row:
+                user_id = auth_row[0]
+        except Exception:
+            pass
+
+    if not user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    target_role = user.role.value if user else "DOCTOR"
+    await SupabaseAuthService.sync_or_create_user(
+        db=db,
+        user_id=user_id,
+        email=clean_email,
+        password=payload.new_password,
+        role=target_role
+    )
+    return APIResponse(message="Password reset successfully", data=ForceResetResponseData(email=payload.email))
 
 @router.post("/forgot-password", response_model=APIResponse[ForgotPasswordResponseData])
 async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
@@ -465,6 +425,18 @@ async def provider_reset_password(payload: ProviderResetPasswordRequest, db: Asy
         await db.commit()
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Auth user not found.")
+
+        try:
+            from app.services.supabase_auth_service import SupabaseAuthService
+            await SupabaseAuthService.sync_or_create_user(
+                db=db,
+                user_id=user.id,
+                email=target_email,
+                password=payload.new_password,
+                role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            )
+        except Exception:
+            pass
             
         return APIResponse(
             message=f"{user.role.value.capitalize()} password updated successfully.",
@@ -1405,6 +1377,18 @@ async def verify_reset_otp(payload: ResetPasswordWithOTPRequest, db: AsyncSessio
         if result.rowcount == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Auth account not found.")
 
+        try:
+            from app.services.supabase_auth_service import SupabaseAuthService
+            await SupabaseAuthService.sync_or_create_user(
+                db=db,
+                user_id=user.id,
+                email=target_email,
+                password=payload.new_password,
+                role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            )
+        except Exception:
+            pass
+
         return APIResponse(
             message="Password reset successfully.",
             data=ResetPasswordSuccessResponseData(
@@ -1475,4 +1459,63 @@ async def set_oauth_password(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/reconcile-provider-auth", response_model=APIResponse[ReconcileAuthResponseData])
+async def reconcile_provider_auth(
+    payload: ReconcileAuthRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Reconciles an approved healthcare provider's Supabase Auth identity and credentials.
+    Called transparently when an approved provider attempts to sign in but GoTrue auth credentials
+    or identities were missing/unsynchronized.
+    """
+    clean_email = payload.email.strip().lower()
+    stmt = select(User).where(func.lower(User.email) == clean_email)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found. Please verify your email address or register."
+        )
+
+    # Only reconcile approved, active users
+    is_active = (user.status == UserStatus.ACTIVE or getattr(user.status, "value", None) == "ACTIVE")
+    if not is_active or not user.is_verified:
+        is_pending = (user.status == UserStatus.PENDING or getattr(user.status, "value", None) == "PENDING")
+        if is_pending or not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="PENDING_ADMIN_APPROVAL: Your registration is currently awaiting administrative approval."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account status is {user.status.value if hasattr(user.status, 'value') else user.status}. Please contact support."
+        )
+
+    from app.services.supabase_auth_service import SupabaseAuthService
+    success = await SupabaseAuthService.reconcile_approved_user(
+        db=db,
+        email=clean_email,
+        password=payload.password
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to synchronize provider authentication credentials."
+        )
+
+    return APIResponse(
+        message="Provider credentials synchronized successfully.",
+        data=ReconcileAuthResponseData(
+            reconciled=True,
+            email=user.email,
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            message="Credentials synchronized. Proceeding with authentication."
+        )
+    )
 

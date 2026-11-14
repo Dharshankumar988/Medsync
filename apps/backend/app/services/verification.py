@@ -103,6 +103,22 @@ class VerificationService:
                     if not pharmacy.qr_identifier:
                         pharmacy.qr_identifier = _generate_qr_identifier(user.id)
                     pharmacy.qr_status = "ACTIVE"
+
+            # Synchronize user with Supabase GoTrue Auth and ensure identities exist
+            try:
+                from app.services.supabase_auth_service import SupabaseAuthService
+                full_name = getattr(doctor, "full_name", None) if "doctor" in locals() and doctor else (
+                    getattr(pharmacy, "business_name", None) if "pharmacy" in locals() and pharmacy else None
+                )
+                await SupabaseAuthService.sync_or_create_user(
+                    db=db,
+                    user_id=user.id,
+                    email=user.email,
+                    role=user.role.value if hasattr(user.role, "value") else str(user.role),
+                    full_name=full_name,
+                )
+            except Exception as auth_sync_err:
+                print(f"Warning: Failed to sync approved user with Supabase Auth: {auth_sync_err}")
             
         await db.commit()
         await db.refresh(req)
