@@ -201,6 +201,32 @@ async def enroll_doctor_pin(db: AsyncSession, doctor_user_id: uuid.UUID, pin: st
         raise ValueError("Doctor profile not found.")
     
     doctor.security_pin_hash = hash_pin(pin)
+
+    # If the doctor's user account was still pending approval or unverified, activate it upon PIN setup
+    # if their workplace was verified or if they have an approved verification request
+    from app.models.user import User, UserStatus
+    user_res = await db.execute(select(User).where(User.id == doctor_user_id))
+    u = user_res.scalar_one_or_none()
+    if u and (u.status == UserStatus.PENDING or not u.is_verified):
+        from app.models.doctor_location import DoctorLocation, LocationVerificationStatus
+        from app.models.verification import VerificationRequest, VerificationStatus
+        loc_check = await db.execute(
+            select(DoctorLocation).where(
+                DoctorLocation.doctor_id == doctor.id,
+                DoctorLocation.verification_status == LocationVerificationStatus.APPROVED
+            )
+        )
+        req_check = await db.execute(
+            select(VerificationRequest).where(
+                VerificationRequest.user_id == doctor_user_id,
+                VerificationRequest.status == VerificationStatus.APPROVED
+            )
+        )
+        if loc_check.scalar_one_or_none() or req_check.scalar_one_or_none() or doctor.doctor_status in ["ACTIVE", "APPROVED", "VERIFIED"]:
+            u.status = UserStatus.ACTIVE
+            u.is_verified = True
+            doctor.doctor_status = "ACTIVE"
+
     await db.commit()
     await log_audit_event(db, doctor_user_id, "DOCTOR_PIN_CREATED", "Doctor", doctor.id)
 

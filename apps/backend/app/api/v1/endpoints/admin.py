@@ -439,6 +439,25 @@ async def approve_verification(
         doc_res = await db.execute(select(Doctor).where(Doctor.id == location.doctor_id))
         doc = doc_res.scalar_one_or_none()
         if doc:
+            doc.doctor_status = "ACTIVE"
+            user_res = await db.execute(select(User).where(User.id == doc.user_id))
+            doc_user = user_res.scalar_one_or_none()
+            if doc_user:
+                doc_user.status = UserStatus.ACTIVE
+                doc_user.is_verified = True
+                try:
+                    from app.services.supabase_auth_service import SupabaseAuthService
+                    await SupabaseAuthService.sync_or_create_user(
+                        db=db,
+                        user_id=doc_user.id,
+                        email=doc_user.email,
+                        role="DOCTOR",
+                        full_name=doc.full_name
+                    )
+                except Exception:
+                    pass
+            await db.commit()
+
             loc_display = location.location_name or location.address or "Practice Facility"
             await NotificationService.send_notification(
                 db,

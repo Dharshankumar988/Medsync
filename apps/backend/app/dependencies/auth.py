@@ -202,8 +202,9 @@ async def get_current_user_optional(
         return None
 
 class RoleChecker:
-    def __init__(self, allowed_roles: list):
+    def __init__(self, allowed_roles: list, allow_pending: bool = False):
         self.allowed_roles = allowed_roles
+        self.allow_pending = allow_pending
         
     def __call__(self, user: AuthenticatedPrincipal = Depends(get_current_user)):
         allowed = {getattr(role, "value", role) for role in self.allowed_roles}
@@ -216,7 +217,7 @@ class RoleChecker:
                     return user
             raise ForbiddenException("Insufficient permissions")
         
-        if user.status.upper() == "PENDING":
+        if not self.allow_pending and user.status.upper() == "PENDING":
             raise ForbiddenException("Account pending approval")
             
         return user

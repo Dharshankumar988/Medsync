@@ -55,7 +55,7 @@ async def verify_auth_pin(
 async def get_status(
     response: Response,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY]))
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY], allow_pending=True))
 ):
     """
     Returns the security enrollment status:
@@ -136,12 +136,13 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
             pass
 
     user_id_str = str(current_user.id)
+    clean_email = current_user.email.strip().lower()
 
     # 2. Direct DB verification via extensions.crypt / crypt in auth.users
     try:
         res = await db.execute(
-            text("SELECT (encrypted_password = extensions.crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
-            {"pwd": password, "user_id": user_id_str}
+            text("SELECT (encrypted_password = extensions.crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id OR lower(email) = :email"),
+            {"pwd": password, "user_id": user_id_str, "email": clean_email}
         )
         match = res.scalar()
         if match:
@@ -149,8 +150,8 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
     except Exception:
         try:
             res = await db.execute(
-                text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id"),
-                {"pwd": password, "user_id": user_id_str}
+                text("SELECT (encrypted_password = crypt(:pwd, encrypted_password)) AS matches FROM auth.users WHERE id = :user_id OR lower(email) = :email"),
+                {"pwd": password, "user_id": user_id_str, "email": clean_email}
             )
             match = res.scalar()
             if match:
@@ -162,8 +163,8 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
     try:
         import bcrypt
         res_hash = await db.execute(
-            text("SELECT encrypted_password FROM auth.users WHERE id = :user_id"),
-            {"user_id": user_id_str}
+            text("SELECT encrypted_password FROM auth.users WHERE id = :user_id OR lower(email) = :email"),
+            {"user_id": user_id_str, "email": clean_email}
         )
         enc_pwd = res_hash.scalar()
         if enc_pwd and isinstance(enc_pwd, str) and bcrypt.checkpw(password.encode('utf-8'), enc_pwd.encode('utf-8')):
@@ -174,8 +175,8 @@ async def _verify_account_password(db: AsyncSession, current_user: Authenticated
     # 4. Fallback for Google OAuth users setting password/PIN for the first time
     try:
         res_provider = await db.execute(
-            text("SELECT encrypted_password, raw_app_meta_data->>'provider' as provider FROM auth.users WHERE id = :user_id"),
-            {"user_id": user_id_str}
+            text("SELECT encrypted_password, raw_app_meta_data->>'provider' as provider FROM auth.users WHERE id = :user_id OR lower(email) = :email"),
+            {"user_id": user_id_str, "email": clean_email}
         )
         row = res_provider.first()
         if row:
@@ -193,7 +194,7 @@ async def enroll_pin(
     pin: str = Form(...),
     password: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
-    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY]))
+    current_user: AuthenticatedPrincipal = Depends(RoleChecker([UserRole.PATIENT, UserRole.DOCTOR, UserRole.PHARMACY], allow_pending=True))
 ):
     """
     Enrolls or updates the 6-digit Authorization PIN.

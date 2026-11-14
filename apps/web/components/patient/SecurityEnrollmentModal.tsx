@@ -181,7 +181,7 @@ export default function SecurityEnrollmentModal() {
         }
       }, 950);
     } catch (err: any) {
-      setPinError(err.response?.data?.detail || err.message || 'Failed to enroll PIN');
+      setPinError(err.response?.data?.message || err.response?.data?.detail || err.message || 'Failed to enroll PIN');
     } finally {
       setIsSubmitting(false);
     }
