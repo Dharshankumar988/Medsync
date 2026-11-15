@@ -159,6 +159,93 @@ async def dispatch_order(
         }
     )
 
+@router.post("/{order_id}/dispense", response_model=APIResponse)
+async def dispense_order(
+    order_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(RoleChecker([UserRole.PHARMACY]))
+):
+    """Dispenses an order. If walk-in, marks RECEIVED_BY_PATIENT; if delivery, dispatches for delivery."""
+    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id).with_for_update()
+    order_res = await db.execute(order_stmt)
+    order = order_res.scalar_one_or_none()
+    
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    pharm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == current_user.id))
+    pharm_row = pharm_res.scalar_one_or_none()
+    valid_pharm_ids = {current_user.id}
+    if pharm_row:
+        valid_pharm_ids.add(pharm_row.id)
+    if order.pharmacy_id not in valid_pharm_ids:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to dispense this order")
+
+    if order.status in [OrderStatus.DELIVERED, OrderStatus.CANCELLED]:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Cannot dispense order currently in state {order.status}")
+
+    # If linked to a prescription, mark prescription as dispensed
+    if order.prescription_id:
+        from app.models.prescription import Prescription
+        rx_stmt = select(Prescription).where(Prescription.id == order.prescription_id)
+        rx_res = await db.execute(rx_stmt)
+        rx = rx_res.scalar_one_or_none()
+        if rx:
+            rx.is_dispensed = True
+
+    is_walk_in = order.order_type == "WALK_IN_PICKUP"
+    if is_walk_in:
+        order.status = OrderStatus.RECEIVED_BY_PATIENT
+    else:
+        order.status = OrderStatus.OUT_FOR_DELIVERY
+
+    # Tracking update / init
+    stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
+    result = await db.execute(stmt)
+    tracking = result.scalar_one_or_none()
+    if not tracking:
+        tracking = DeliveryTracking(
+            order_id=order_id,
+            tracking_number=f"TRK-BLR-{random.randint(1000, 9999)}",
+            current_status="DELIVERED" if is_walk_in else "OUT_FOR_DELIVERY",
+            delivery_progress=100 if is_walk_in else 20
+        )
+        db.add(tracking)
+    else:
+        tracking.current_status = "DELIVERED" if is_walk_in else "OUT_FOR_DELIVERY"
+        if is_walk_in:
+            tracking.delivery_progress = 100
+            tracking.delivery_completed_at = datetime.utcnow()
+
+    await db.commit()
+
+    # Send notification
+    notif_msg = (
+        f"Your medicine Order #{str(order_id)[:8]} has been dispensed and handed over."
+        if is_walk_in
+        else f"Your medicine Order #{str(order_id)[:8]} has been dispensed and is out for delivery."
+    )
+    await NotificationService.send_notification(
+        db,
+        user_id=order.patient_id,
+        title="Order Dispensed",
+        message=notif_msg,
+        type="DELIVERY" if not is_walk_in else "ORDER"
+    )
+
+    if not is_walk_in:
+        background_tasks.add_task(simulate_delivery, order.id)
+
+    return APIResponse(
+        message="Order dispensed successfully.",
+        data={"order_id": str(order_id), "status": str(order.status)}
+    )
+
+
 @router.get("/{order_id}/tracking", response_model=APIResponse)
 async def get_tracking(
     order_id: uuid.UUID,

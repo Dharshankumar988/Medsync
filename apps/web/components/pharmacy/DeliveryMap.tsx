@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, memo, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, Badge } from '@medsync/ui';
+import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '@medsync/ui';
 import { MapPin, CheckCircle, Navigation } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -35,10 +35,11 @@ interface DeliveryMapProps {
   updatedAt?: string;
   onClose: () => void;
   hideCardContainer?: boolean;
+  onDeliverNow?: () => void | Promise<void>;
 }
 
 export const DeliveryMap = memo(function DeliveryMap({ 
-  orderId, patientAddress, patientName, pharmacyAddress, pharmacyId, deliveryLat, deliveryLng, updatedAt, onClose, hideCardContainer = false 
+  orderId, patientAddress, patientName, pharmacyAddress, pharmacyId, deliveryLat, deliveryLng, updatedAt, onClose, hideCardContainer = false, onDeliverNow
 }: DeliveryMapProps) {
   const [status, setStatus] = useState<"PREPARING" | "IN_TRANSIT" | "DELIVERED">("PREPARING");
   const [progress, setProgress] = useState(0);
@@ -273,6 +274,19 @@ export const DeliveryMap = memo(function DeliveryMap({
             </div>
           </div>
         </div>
+
+        {status !== "DELIVERED" && onDeliverNow && (
+          <Button
+            className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 gap-1.5 shadow-sm"
+            onClick={async () => {
+              await onDeliverNow();
+              setStatus("DELIVERED");
+              setProgress(100);
+            }}
+          >
+            <CheckCircle className="h-4 w-4 mr-1 text-white" /> Complete Delivery Now (Skip Timer)
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

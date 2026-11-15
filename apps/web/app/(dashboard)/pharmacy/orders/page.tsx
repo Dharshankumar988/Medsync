@@ -99,6 +99,20 @@ export default function PharmacyOrdersPage() {
     }
   };
 
+  const handleDispense = async (orderId: string) => {
+    try {
+      const res = await api.post(`/api/v1/orders/${orderId}/dispense`);
+      if (res.data) {
+        toast.success("Order dispensed successfully!");
+        const newStatus = res.data.data?.status || "OUT_FOR_DELIVERY";
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      }
+    } catch {
+      // Fallback to dispatch
+      handleDispatch(orderId);
+    }
+  };
+
   const handleDeliverNow = async (orderId: string) => {
     try {
       const res = await api.post(`/api/v1/orders/${orderId}/complete-delivery`);
@@ -282,7 +296,7 @@ export default function PharmacyOrdersPage() {
                               setDispensingRxId(order.prescription_id);
                               setDispensingOrder(order.id);
                             } else {
-                              handleDispatch(order.id);
+                              handleDispense(order.id);
                             }
                           }}
                         >
@@ -301,9 +315,9 @@ export default function PharmacyOrdersPage() {
                       <div className="flex gap-2">
                         <Button 
                           className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-xs h-9" 
-                          onClick={() => handleDispatch(order.id)}
+                          onClick={() => handleDispense(order.id)}
                         >
-                          <Truck className="h-3.5 w-3.5 mr-1" /> Dispatch
+                          <Truck className="h-3.5 w-3.5 mr-1" /> Dispense / Dispatch
                         </Button>
                         <Button 
                           variant="outline"
@@ -427,6 +441,7 @@ export default function PharmacyOrdersPage() {
               patientAddress={order.patient_address || "Unknown Address"}
               pharmacyAddress="MedSync Pharmacy Node #882"
               onClose={() => setDispensingOrderId(null)}
+              onDeliverNow={() => handleDeliverNow(order.id)}
             />
           ))}
         </div>
