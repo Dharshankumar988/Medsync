@@ -39,7 +39,9 @@ import {
   ShieldCheck,
   ShieldAlert,
   ChevronRight,
+  XCircle,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { RoleGuard } from '../../../components/layout/RoleGuard';
 import { ScreenHeader } from '../../../components/layout/ScreenHeader';
 import { Card, CardContent } from '../../../components/common/Card';
@@ -84,6 +86,35 @@ export default function PatientRecordsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [revokingPermissionId, setRevokingPermissionId] = useState<string | null>(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+
+  const handleCancelOrder = (orderId: string) => {
+    Alert.alert(
+      'Cancel Order',
+      'Are you sure you want to cancel this medicine delivery order? Any reserved inventory will be restored.',
+      [
+        { text: 'Keep Order', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setCancellingOrderId(orderId);
+              await patientService.cancelOrder(orderId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
+              loadData();
+            } catch (err: any) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+              Alert.alert('Cancel Notice', formatErrorMessage(err) || 'Could not cancel order.');
+            } finally {
+              setCancellingOrderId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Tab animations
   const tabFadeAnim = useRef(new Animated.Value(1)).current;
@@ -769,7 +800,27 @@ export default function PatientRecordsScreen() {
           )}
 
           {!isCancelled && (
-            <View style={styles.actionsRow}>
+            <View style={[styles.actionsRow, { gap: 8 }]}>
+              {!isDelivered && !isInTransit && (
+                <TouchableOpacity
+                  style={[
+                    styles.cancelOrderRecordBtn,
+                    {
+                      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                      borderColor: isDark ? 'rgba(239, 68, 68, 0.28)' : '#FCA5A5',
+                    },
+                  ]}
+                  onPress={() => handleCancelOrder(item.id)}
+                  disabled={cancellingOrderId === item.id}
+                  activeOpacity={0.8}
+                >
+                  <XCircle size={14} color="#EF4444" style={{ marginRight: 4 }} />
+                  <Text style={styles.cancelOrderRecordBtnText}>
+                    {cancellingOrderId === item.id ? 'Cancelling...' : 'Cancel Order'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 style={[
                   styles.trackDeliveryBtn,
@@ -1785,6 +1836,10 @@ export default function PatientRecordsScreen() {
           trackingNumber={selectedOrderForTracking?.tracking_number}
           orderStatus={selectedOrderForTracking?.status}
           deliveryAddress={selectedOrderForTracking?.delivery_address}
+          onOrderCancelled={() => {
+            setSelectedOrderForTracking(null);
+            loadData();
+          }}
           onClose={() => setSelectedOrderForTracking(null)}
         />
       </View>
@@ -2123,6 +2178,20 @@ const styles = StyleSheet.create({
   trackDeliveryBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  cancelOrderRecordBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  cancelOrderRecordBtnText: {
+    color: '#EF4444',
+    fontSize: 12,
     fontWeight: '700',
   },
   // Consultations styles

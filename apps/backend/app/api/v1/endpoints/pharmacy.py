@@ -61,18 +61,67 @@ async def get_my_qr(
     })
 
 
-@router.get("/resolve-qr/{qr_identifier}")
-async def resolve_pharmacy_qr(qr_identifier: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Resolves a pharmacy QR code to its details."""
-    clean_qr = qr_identifier.strip()
+def _extract_pharmacy_lookup_conditions(raw_data: str):
+    import json
+    import uuid as uuid_pkg
+    from jose import jwt
+
+    clean_qr = (raw_data or "").strip()
     if "/verify/pharmacy/" in clean_qr:
         clean_qr = clean_qr.split("/verify/pharmacy/")[-1].split("?")[0].split("/")[0]
+    elif "/pharmacy/" in clean_qr:
+        clean_qr = clean_qr.split("/pharmacy/")[-1].split("?")[0].split("/")[0]
     elif clean_qr.startswith("http://") or clean_qr.startswith("https://"):
         clean_qr = clean_qr.rstrip("/").split("/")[-1]
 
-    stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).where(
-        (Pharmacy.qr_identifier == clean_qr) | (Pharmacy.qr_identifier == qr_identifier)
-    )
+    candidates = {raw_data.strip(), clean_qr}
+    for prefix in ["PHARM_QR_", "PHARM_", "PHARMACY_", "RX_PHARM_"]:
+        if clean_qr.startswith(prefix):
+            candidates.add(clean_qr[len(prefix):])
+
+    if clean_qr.startswith("{") and clean_qr.endswith("}"):
+        try:
+            data = json.loads(clean_qr)
+            for k in ["pharmacy_id", "pharmacy_user_id", "id", "user_id", "resource_id"]:
+                val = data.get(k)
+                if val:
+                    candidates.add(str(val))
+        except Exception:
+            pass
+
+    if clean_qr.count(".") == 2:
+        try:
+            from app.core.config import settings
+            try:
+                payload = jwt.decode(clean_qr, settings.SECRET_KEY, algorithms=["HS256"])
+            except Exception:
+                payload = jwt.decode(clean_qr, options={"verify_signature": False})
+            for k in ["user_id", "sub", "resource_id", "pharmacy_id"]:
+                val = payload.get(k)
+                if val:
+                    candidates.add(str(val))
+        except Exception:
+            pass
+
+    conditions = []
+    for c in candidates:
+        if not c:
+            continue
+        conditions.append(Pharmacy.qr_identifier == c)
+        try:
+            uid = uuid_pkg.UUID(c)
+            conditions.extend([Pharmacy.id == uid, Pharmacy.user_id == uid])
+        except (ValueError, AttributeError):
+            pass
+
+    return conditions
+
+
+@router.get("/resolve-qr/{qr_identifier}")
+async def resolve_pharmacy_qr(qr_identifier: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Resolves a pharmacy QR code to its details."""
+    conditions = _extract_pharmacy_lookup_conditions(qr_identifier)
+    stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).where(or_(*conditions))
     result = await db.execute(stmt)
     row = result.first()
     
@@ -81,10 +130,10 @@ async def resolve_pharmacy_qr(qr_identifier: str, db: AsyncSession = Depends(get
         
     pharmacy, user = row
     
-    if not user.is_verified or user.status != UserStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Pharmacy account is not verified or active.")
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=403, detail="Pharmacy account is not active.")
         
-    if pharmacy.qr_status != "ACTIVE":
+    if pharmacy.qr_status and pharmacy.qr_status.upper() in ["INACTIVE", "REVOKED"]:
         raise HTTPException(status_code=403, detail="This pharmacy QR code is inactive or revoked.")
         
     return APIResponse(message="Pharmacy resolved successfully", data={
@@ -108,26 +157,10 @@ async def verify_pharmacy_blockchain(
 ):
     """Verifies a pharmacy on the blockchain and resolves its details (supports public & authenticated scans)."""
     raw_data = (req.qr_data if req and req.qr_data else qr_data) or ""
-    clean_qr = raw_data.strip()
-    if not clean_qr:
+    if not raw_data.strip():
         raise HTTPException(status_code=400, detail="Missing QR data or identifier")
 
-    if "/verify/pharmacy/" in clean_qr:
-        clean_qr = clean_qr.split("/verify/pharmacy/")[-1].split("?")[0].split("/")[0]
-    elif clean_qr.startswith("http://") or clean_qr.startswith("https://"):
-        clean_qr = clean_qr.rstrip("/").split("/")[-1]
-
-    conditions = [
-        Pharmacy.qr_identifier == clean_qr,
-        Pharmacy.qr_identifier == raw_data
-    ]
-    try:
-        import uuid as uuid_pkg
-        qr_uuid = uuid_pkg.UUID(clean_qr)
-        conditions.extend([Pharmacy.id == qr_uuid, Pharmacy.user_id == qr_uuid])
-    except (ValueError, AttributeError):
-        pass
-
+    conditions = _extract_pharmacy_lookup_conditions(raw_data)
     stmt = select(Pharmacy, User).join(User, Pharmacy.user_id == User.id).where(or_(*conditions))
     result = await db.execute(stmt)
     row = result.first()
@@ -137,14 +170,14 @@ async def verify_pharmacy_blockchain(
         
     pharmacy, user = row
     
-    if not user.is_verified or user.status != UserStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Pharmacy account is not verified or active.")
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=403, detail="Pharmacy account is not active.")
         
-    if pharmacy.qr_status != "ACTIVE":
+    if pharmacy.qr_status and pharmacy.qr_status.upper() in ["INACTIVE", "REVOKED"]:
         raise HTTPException(status_code=403, detail="This pharmacy QR code is inactive or revoked.")
 
     # Blockchain Verification Logic
-    verified_on_blockchain = bool(user.is_verified and pharmacy.qr_status == "ACTIVE")
+    verified_on_blockchain = bool(pharmacy.qr_status in [None, "ACTIVE", "VERIFIED"])
     blockchain_status = "connected"
     network_name = "Polygon Amoy Testnet"
     contract_used = "PharmacyRegistry"

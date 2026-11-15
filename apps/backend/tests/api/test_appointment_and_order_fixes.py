@@ -379,4 +379,83 @@ def test_generate_consultation_pdf_returns_valid_pdf():
     assert len(raw) > 500
 
 
+@pytest.mark.asyncio
+async def test_patient_can_cancel_pending_order():
+    """A patient can cancel their pending order and status transitions to CANCELLED."""
+    patient_id = uuid.uuid4()
+    pharmacy_id = uuid.uuid4()
+    order_id = uuid.uuid4()
+
+    patient_user = User(
+        id=patient_id,
+        email="patient@medsync.io",
+        role=UserRole.PATIENT,
+        status=UserStatus.ACTIVE,
+    )
+    order_obj = MedicineOrder(
+        id=order_id,
+        patient_id=patient_id,
+        pharmacy_id=pharmacy_id,
+        status=OrderStatus.PENDING,
+        total_amount=399.0,
+    )
+
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = _make_result(scalar=order_obj)
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_current_user] = lambda: patient_user
+
+    with patch("app.services.notification.NotificationService.send_notification", AsyncMock()):
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+                resp = await client.post(f"/api/v1/orders/{order_id}/cancel")
+        finally:
+            app.dependency_overrides.clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["order_id"] == str(order_id)
+    assert data["status"] == "CANCELLED"
+    assert order_obj.status == OrderStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_patient_cannot_cancel_delivered_order():
+    """A delivered order cannot be cancelled."""
+    patient_id = uuid.uuid4()
+    pharmacy_id = uuid.uuid4()
+    order_id = uuid.uuid4()
+
+    patient_user = User(
+        id=patient_id,
+        email="patient@medsync.io",
+        role=UserRole.PATIENT,
+        status=UserStatus.ACTIVE,
+    )
+    order_obj = MedicineOrder(
+        id=order_id,
+        patient_id=patient_id,
+        pharmacy_id=pharmacy_id,
+        status=OrderStatus.DELIVERED,
+        total_amount=399.0,
+    )
+
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = _make_result(scalar=order_obj)
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_current_user] = lambda: patient_user
+
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+            resp = await client.post(f"/api/v1/orders/{order_id}/cancel")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 400
+    assert "delivered" in resp.json()["detail"].lower()
+
+
+
 

@@ -7,6 +7,7 @@ import {
   ScrollView,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
 import {
   Calendar as CalendarIcon,
@@ -21,10 +22,12 @@ import {
   Plus,
   CheckCircle2,
   AlertCircle,
+  XCircle,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
-import { AppointmentItem, MedicineOrderItem } from '../../services/patient.service';
+import { patientService, AppointmentItem, MedicineOrderItem } from '../../services/patient.service';
 
 interface AppointmentsAndOrdersOverviewProps {
   appointments: AppointmentItem[];
@@ -57,9 +60,40 @@ export function AppointmentsAndOrdersOverview({
   onSelectOrderForTracking,
   onBookVisit,
   onOrderMedicines,
+  onRefresh,
 }: AppointmentsAndOrdersOverviewProps) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+
+  const handleCancelOrder = (orderId: string) => {
+    Alert.alert(
+      'Cancel Order',
+      'Are you sure you want to cancel this medicine delivery order? Any reserved inventory will be released.',
+      [
+        { text: 'Keep Order', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setCancellingOrderId(orderId);
+              await patientService.cancelOrder(orderId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              Alert.alert('Order Cancelled', 'Your order has been cancelled successfully.');
+              if (onRefresh) onRefresh();
+            } catch (err: any) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+              Alert.alert('Cancel Notice', err?.message || 'Could not cancel order.');
+            } finally {
+              setCancellingOrderId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Tab switch: 'appointments' | 'orders'
   const [activeTab, setActiveTab] = useState<'appointments' | 'orders'>('appointments');
@@ -913,23 +947,48 @@ export function AppointmentsAndOrdersOverview({
                           Tracking: {order.tracking_number}
                         </Text>
                       </View>
+                    </View>
+                  )}
 
-                      {onSelectOrderForTracking && order.status !== 'CANCELLED' && (
+                  {/* Order Actions Footer */}
+                  <View style={styles.orderActionsFooter}>
+                    {order.status !== 'CANCELLED' &&
+                      order.status !== 'DELIVERED' &&
+                      order.status !== 'OUT_FOR_DELIVERY' && (
                         <TouchableOpacity
                           style={[
-                            styles.trackOrderBtn,
-                            order.status === 'DELIVERED' && { backgroundColor: '#10B981' },
+                            styles.cancelOrderBtn,
+                            {
+                              backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                              borderColor: isDark ? 'rgba(239, 68, 68, 0.28)' : '#FCA5A5',
+                            },
                           ]}
-                          onPress={() => onSelectOrderForTracking(order)}
+                          onPress={() => handleCancelOrder(order.id)}
+                          disabled={cancellingOrderId === order.id}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.trackOrderBtnText}>
-                            {order.status === 'DELIVERED' ? 'Summary' : 'Live Track'}
+                          <XCircle size={13} color="#EF4444" style={{ marginRight: 4 }} />
+                          <Text style={styles.cancelOrderBtnText}>
+                            {cancellingOrderId === order.id ? 'Cancelling...' : 'Cancel Order'}
                           </Text>
                         </TouchableOpacity>
                       )}
-                    </View>
-                  )}
+
+                    {onSelectOrderForTracking && order.status !== 'CANCELLED' && (
+                      <TouchableOpacity
+                        style={[
+                          styles.trackOrderBtn,
+                          order.status === 'DELIVERED' && { backgroundColor: '#10B981' },
+                        ]}
+                        onPress={() => onSelectOrderForTracking(order)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.trackOrderBtnText}>
+                          {order.status === 'DELIVERED' ? 'Summary' : 'Live Track'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               );
             })
@@ -1277,6 +1336,29 @@ const styles = StyleSheet.create({
   },
   trackOrderBtnText: {
     color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  orderActionsFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(150, 150, 150, 0.1)',
+  },
+  cancelOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  cancelOrderBtnText: {
+    color: '#EF4444',
     fontSize: 11,
     fontWeight: '700',
   },

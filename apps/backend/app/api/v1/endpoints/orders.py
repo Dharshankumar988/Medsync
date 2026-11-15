@@ -4,7 +4,7 @@ from app.dependencies.db import get_db
 from app.dependencies.auth import get_current_user, RoleChecker
 from app.models.user import User, UserRole
 from app.schemas.response import APIResponse
-from app.schemas.pharmacy_system import MedicineOrderCreate, MedicineOrderResponse, OrderDetailData
+from app.schemas.pharmacy_system import MedicineOrderCreate, MedicineOrderResponse, OrderDetailData, OrderCancelResponse
 from app.services.pharmacy_system import PharmacyService
 from app.services.notification import NotificationService
 from app.models.pharmacy_system import DeliveryTracking, MedicineOrder, OrderStatus, MedicineOrderItem, MedicineInventory
@@ -424,4 +424,103 @@ async def pay_order(
             "payment_method": "CASH_ON_DELIVERY" if is_cod else "ONLINE"
         }
     )
+
+
+@router.post("/{order_id}/cancel", response_model=APIResponse[OrderCancelResponse])
+async def cancel_order(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Cancels an order if eligible, restores stock inventory, and emits notifications."""
+    order_stmt = select(MedicineOrder).where(MedicineOrder.id == order_id).with_for_update()
+    order_res = await db.execute(order_stmt)
+    order = order_res.scalar_one_or_none()
+
+    if not order:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    user_role = str(current_user.role).upper()
+    if user_role == UserRole.PATIENT.value and order.patient_id != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("Unauthorized to cancel this order")
+    elif user_role == UserRole.PHARMACY.value:
+        pharm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == current_user.id))
+        pharm_row = pharm_res.scalar_one_or_none()
+        valid_pharm_ids = {current_user.id}
+        if pharm_row:
+            valid_pharm_ids.add(pharm_row.id)
+        if order.pharmacy_id not in valid_pharm_ids:
+            from app.core.exceptions import ForbiddenException
+            raise ForbiddenException("Unauthorized to cancel this order")
+
+    # If already cancelled, return idempotent response
+    if order.status == OrderStatus.CANCELLED:
+        return APIResponse(
+            message="Order is already cancelled.",
+            data=OrderCancelResponse(
+                order_id=str(order.id),
+                status=OrderStatus.CANCELLED.value,
+                already_cancelled=True
+            )
+        )
+
+    # Cannot cancel orders that are out for delivery or delivered
+    if order.status == OrderStatus.DELIVERED:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Cannot cancel an order that has already been delivered.")
+
+    if order.status == OrderStatus.OUT_FOR_DELIVERY:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Cannot cancel an order that is already out for delivery.")
+
+    # If stock was previously deducted (ACCEPTED, PROCESSING, PACKED), restore stock
+    if order.status in [OrderStatus.ACCEPTED, OrderStatus.PROCESSING, OrderStatus.PACKED]:
+        items_stmt = select(MedicineOrderItem, MedicineInventory).join(
+            MedicineInventory, MedicineOrderItem.inventory_id == MedicineInventory.id
+        ).where(MedicineOrderItem.order_id == order.id)
+        items_res = await db.execute(items_stmt)
+        items = items_res.all()
+        for item, inv in items:
+            inv.stock_quantity = inv.stock_quantity + item.quantity
+
+    order.status = OrderStatus.CANCELLED
+
+    # Update delivery tracking if active
+    tracking_stmt = select(DeliveryTracking).where(DeliveryTracking.order_id == order_id)
+    tracking_res = await db.execute(tracking_stmt)
+    tracking = tracking_res.scalar_one_or_none()
+    if tracking:
+        tracking.current_status = "CANCELLED"
+        tracking.notes = "Order was cancelled."
+
+    await db.commit()
+
+    # Emit cancellation notifications
+    await NotificationService.send_notification(
+        db,
+        user_id=order.patient_id,
+        title="Order Cancelled",
+        message=f"Your medicine Order #{str(order_id)[:8]} has been cancelled successfully.",
+        type="ORDER"
+    )
+    if order.pharmacy_id:
+        await NotificationService.send_notification(
+            db,
+            user_id=order.pharmacy_id,
+            title="Order Cancelled",
+            message=f"Medicine Order #{str(order_id)[:8]} has been cancelled.",
+            type="ORDER"
+        )
+
+    return APIResponse(
+        message="Order cancelled successfully.",
+        data=OrderCancelResponse(
+            order_id=str(order.id),
+            status=OrderStatus.CANCELLED.value,
+            already_cancelled=False
+        )
+    )
+
 

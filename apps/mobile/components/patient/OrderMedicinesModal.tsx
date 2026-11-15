@@ -95,11 +95,16 @@ export function OrderMedicinesModal({
 
   // Selected Payment Method for Animation
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'UPI' | 'CARD' | 'COD'>('UPI');
+  const [paymentStatus, setPaymentStatus] = useState<'authorizing' | 'success' | 'error'>('authorizing');
+  const [doorFlatDetails, setDoorFlatDetails] = useState('');
+  const [deliveryCoordinates, setDeliveryCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [savedProfileAddress, setSavedProfileAddress] = useState<string>('');
 
   // Animation values
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0.8)).current;
   const textOpacityAnim = useRef(new Animated.Value(0)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
@@ -161,9 +166,9 @@ export function OrderMedicinesModal({
       }
 
       if (profile?.address) {
-        setDeliveryAddress(
-          [profile.address, profile.city, profile.pincode].filter(Boolean).join(', ')
-        );
+        const fullProf = [profile.address, profile.city, profile.pincode].filter(Boolean).join(', ');
+        setSavedProfileAddress(fullProf);
+        setDeliveryAddress(fullProf);
       }
     } catch (err) {
       console.warn('Could not load prescriptions for order modal:', err);
@@ -212,80 +217,105 @@ export function OrderMedicinesModal({
     setStep('payment');
   };
 
-  // Trigger payment animation first, then place order
-  const handleSelectPaymentMethod = (method: 'UPI' | 'CARD' | 'COD') => {
+  // Trigger payment authorization animation, then execute order & payment concurrently
+  const handleSelectPaymentMethod = async (method: 'UPI' | 'CARD' | 'COD') => {
     setSelectedPaymentMethod(method);
     setStep('animating_payment');
+    setPaymentStatus('authorizing');
 
-    // Haptic feedback
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    // Haptic feedback start
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
-    // Start sleek payment animations
-    scaleAnim.setValue(0);
-    pulseAnim.setValue(0.8);
-    textOpacityAnim.setValue(0);
-
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
+    // Spinner animation loop
+    spinAnim.setValue(0);
+    const spinLoop = Animated.loop(
+      Animated.timing(spinAnim, {
         toValue: 1,
-        friction: 5,
-        tension: 40,
+        duration: 1200,
+        easing: Easing.linear,
         useNativeDriver: true,
-      }),
-      Animated.timing(textOpacityAnim, {
-        toValue: 1,
-        duration: 400,
-        delay: 200,
-        useNativeDriver: true,
-      }),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.15,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 0.95,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      ),
-    ]).start();
+      })
+    );
+    spinLoop.start();
 
-    // After animation displays clearly (1.6s), execute backend order placement
-    setTimeout(() => {
-      executeOrderPlacement(method);
-    }, 1600);
-  };
+    // Pulse animation
+    pulseAnim.setValue(0.9);
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.15,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.95,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseLoop.start();
 
-  const executeOrderPlacement = async (method: 'UPI' | 'CARD' | 'COD') => {
-    setIsSubmitting(true);
+    // Concurrently place order and process payment with backend
     try {
-      // 1. Place the order with backend
+      setIsSubmitting(true);
+      const fullDeliveryAddress = [doorFlatDetails.trim(), deliveryAddress.trim()].filter(Boolean).join(', ');
+
       const order = await patientService.placeOrder({
         pharmacy_id: pharmacyId!,
         prescription_id: selectedPrescriptionId!,
-        delivery_address: deliveryAddress.trim(),
+        delivery_address: fullDeliveryAddress,
+        delivery_latitude: deliveryCoordinates?.lat,
+        delivery_longitude: deliveryCoordinates?.lng,
         total_amount: 399.0,
         notes: notes.trim() || undefined,
       });
 
-      // 2. Process the payment record (UPI / CARD / COD)
       const orderId = order.id || order.order_id;
       if (orderId) {
         await patientService.processPayment(orderId, 399.0, method);
       }
 
       setCreatedOrder(order);
-      setStep('success');
 
-      if (onOrderSuccess) onOrderSuccess(order);
-      if (onSuccess) onSuccess(order);
+      // Stop spin & pulse
+      spinLoop.stop();
+      pulseLoop.stop();
+
+      // Transition to Success Checkmark Animation
+      setPaymentStatus('success');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+      scaleAnim.setValue(0);
+      textOpacityAnim.setValue(0);
+
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 4,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+        Animated.timing(textOpacityAnim, {
+          toValue: 1,
+          duration: 350,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Keep confirmed checkmark visible for 1.8 seconds, then move to success summary
+      setTimeout(() => {
+        setStep('success');
+        if (onOrderSuccess) onOrderSuccess(order);
+        if (onSuccess) onSuccess(order);
+      }, 1800);
     } catch (err: any) {
+      spinLoop.stop();
+      pulseLoop.stop();
+      setPaymentStatus('error');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       Alert.alert('Order Placement Notice', formatErrorMessage(err));
       setStep('payment');
     } finally {
@@ -360,84 +390,159 @@ export function OrderMedicinesModal({
               )}
             </View>
 
-            {/* ── STEP: ANIMATING PAYMENT ("PAID" ANIMATION) ── */}
+            {/* ── STEP: ANIMATING PAYMENT (REAL-TIME PROCESS + CONFIRMATION) ── */}
             {step === 'animating_payment' ? (
               <View style={styles.animatingContainer}>
-                {/* Expanding Pulse Ring */}
-                <Animated.View
-                  style={[
-                    styles.animationPulseRing,
-                    {
-                      borderColor:
-                        selectedPaymentMethod === 'COD' ? '#F59E0B' : '#10B981',
-                      transform: [{ scale: pulseAnim }],
-                    },
-                  ]}
-                />
+                {paymentStatus === 'authorizing' ? (
+                  <>
+                    {/* Pulsing Outer Radar Ring */}
+                    <Animated.View
+                      style={[
+                        styles.animationPulseRing,
+                        {
+                          borderColor: selectedPaymentMethod === 'COD' ? '#F59E0B' : '#3B82F6',
+                          transform: [{ scale: pulseAnim }],
+                        },
+                      ]}
+                    />
 
-                {/* Main Checkmark / Currency Badge */}
-                <Animated.View
-                  style={[
-                    styles.animationCircle,
-                    {
-                      backgroundColor:
-                        selectedPaymentMethod === 'COD'
-                          ? isDark
-                            ? 'rgba(245, 158, 11, 0.2)'
-                            : '#FEF3C7'
-                          : isDark
-                          ? 'rgba(16, 185, 129, 0.2)'
-                          : '#D1FAE5',
-                      borderColor:
-                        selectedPaymentMethod === 'COD' ? '#F59E0B' : '#10B981',
-                      transform: [{ scale: scaleAnim }],
-                    },
-                  ]}
-                >
-                  <Check
-                    size={46}
-                    color={selectedPaymentMethod === 'COD' ? '#D97706' : '#059669'}
-                    strokeWidth={3.5}
-                  />
-                </Animated.View>
+                    {/* Rotating Authorization Shield */}
+                    <Animated.View
+                      style={[
+                        styles.animationCircle,
+                        {
+                          backgroundColor:
+                            selectedPaymentMethod === 'COD'
+                              ? isDark
+                                ? 'rgba(245, 158, 11, 0.2)'
+                                : '#FEF3C7'
+                              : isDark
+                              ? 'rgba(59, 130, 246, 0.2)'
+                              : '#DBEAFE',
+                          borderColor: selectedPaymentMethod === 'COD' ? '#F59E0B' : '#3B82F6',
+                          transform: [
+                            {
+                              rotate: spinAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ['0deg', '360deg'],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                    >
+                      <ShieldCheck
+                        size={46}
+                        color={selectedPaymentMethod === 'COD' ? '#D97706' : '#2563EB'}
+                        strokeWidth={2.5}
+                      />
+                    </Animated.View>
 
-                {/* Animated Text: "PAID" */}
-                <Animated.View style={{ opacity: textOpacityAnim, alignItems: 'center' }}>
-                  <Text
-                    style={[
-                      styles.paidTitle,
-                      {
-                        color:
-                          selectedPaymentMethod === 'COD' ? '#D97706' : '#10B981',
-                      },
-                    ]}
-                  >
-                    {selectedPaymentMethod === 'COD' ? 'ORDER CONFIRMED' : 'PAID'}
-                  </Text>
+                    <View style={{ alignItems: 'center', marginTop: 24 }}>
+                      <Text style={[styles.paidTitle, { color: selectedPaymentMethod === 'COD' ? '#D97706' : '#2563EB', fontSize: 20 }]}>
+                        {selectedPaymentMethod === 'COD' ? 'Confirming Order...' : 'Authorizing Payment...'}
+                      </Text>
 
-                  <View
-                    style={[
-                      styles.paidAmountBadge,
-                      {
-                        backgroundColor: isDark ? '#181B22' : '#F1F5F9',
-                        borderColor: isDark ? '#272B36' : '#E2E8F0',
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.paidAmountText, { color: theme.text }]}>
-                      ₹399.00 •{' '}
-                      {selectedPaymentMethod === 'COD'
-                        ? 'Cash on Delivery'
-                        : selectedPaymentMethod === 'UPI'
-                        ? 'UPI Instant'
-                        : 'Card Payment'}
-                    </Text>
-                  </View>
+                      <View
+                        style={[
+                          styles.paidAmountBadge,
+                          {
+                            backgroundColor: isDark ? '#181B22' : '#F1F5F9',
+                            borderColor: isDark ? '#272B36' : '#E2E8F0',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.paidAmountText, { color: theme.text }]}>
+                          ₹399.00 •{' '}
+                          {selectedPaymentMethod === 'COD'
+                            ? 'Cash on Delivery'
+                            : selectedPaymentMethod === 'UPI'
+                            ? 'UPI Instant'
+                            : 'Card Payment'}
+                        </Text>
+                      </View>
 
-                  <Text style={[styles.paidSubtext, { color: theme.textMuted }]}>
-                    Routing encrypted order to {pharmacyName}...
-                  </Text>
-                </Animated.View>
+                      <Text style={[styles.paidSubtext, { color: theme.textMuted }]}>
+                        Connecting securely to {pharmacyName}...
+                      </Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    {/* Expanding Celebration Green Ring */}
+                    <Animated.View
+                      style={[
+                        styles.animationPulseRing,
+                        {
+                          borderColor: selectedPaymentMethod === 'COD' ? '#F59E0B' : '#10B981',
+                          transform: [{ scale: pulseAnim }],
+                        },
+                      ]}
+                    />
+
+                    {/* Main Checkmark / Currency Badge */}
+                    <Animated.View
+                      style={[
+                        styles.animationCircle,
+                        {
+                          backgroundColor:
+                            selectedPaymentMethod === 'COD'
+                              ? isDark
+                                ? 'rgba(245, 158, 11, 0.2)'
+                                : '#FEF3C7'
+                              : isDark
+                              ? 'rgba(16, 185, 129, 0.2)'
+                              : '#D1FAE5',
+                          borderColor: selectedPaymentMethod === 'COD' ? '#F59E0B' : '#10B981',
+                          transform: [{ scale: scaleAnim }],
+                        },
+                      ]}
+                    >
+                      <Check
+                        size={46}
+                        color={selectedPaymentMethod === 'COD' ? '#D97706' : '#059669'}
+                        strokeWidth={3.5}
+                      />
+                    </Animated.View>
+
+                    {/* Animated Text: "PAID" */}
+                    <Animated.View style={{ opacity: textOpacityAnim, alignItems: 'center' }}>
+                      <Text
+                        style={[
+                          styles.paidTitle,
+                          {
+                            color: selectedPaymentMethod === 'COD' ? '#D97706' : '#10B981',
+                          },
+                        ]}
+                      >
+                        {selectedPaymentMethod === 'COD' ? 'ORDER CONFIRMED' : 'PAID'}
+                      </Text>
+
+                      <View
+                        style={[
+                          styles.paidAmountBadge,
+                          {
+                            backgroundColor: isDark ? '#181B22' : '#F1F5F9',
+                            borderColor: isDark ? '#272B36' : '#E2E8F0',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.paidAmountText, { color: theme.text }]}>
+                          ₹399.00 •{' '}
+                          {selectedPaymentMethod === 'COD'
+                            ? 'Cash on Delivery'
+                            : selectedPaymentMethod === 'UPI'
+                            ? 'UPI Instant'
+                            : 'Card Payment'}
+                        </Text>
+                      </View>
+
+                      <Text style={[styles.paidSubtext, { color: theme.textMuted }]}>
+                        Routing encrypted order to {pharmacyName}...
+                      </Text>
+                    </Animated.View>
+                  </>
+                )}
               </View>
             ) : step === 'success' ? (
               /* ── STEP: SUCCESS CONFIRMATION ── */
@@ -897,11 +1002,11 @@ export function OrderMedicinesModal({
                   )}
                 </View>
 
-                {/* Delivery Address with Interactive Map & Pin Selector */}
+                {/* Delivery Drop-off Destination Selector */}
                 <View style={styles.section}>
                   <View style={styles.addressLabelRow}>
                     <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                      Delivery Address *
+                      Drop-off Destination *
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -915,10 +1020,102 @@ export function OrderMedicinesModal({
                       activeOpacity={0.8}
                     >
                       <Compass size={13} color="#3B82F6" style={{ marginRight: 4 }} />
-                      <Text style={styles.mapPinButtonText}>Pin on Map</Text>
+                      <Text style={styles.mapPinButtonText}>Change / Pin on Map</Text>
                     </TouchableOpacity>
                   </View>
 
+                  {/* Quick Preset Delivery Chips */}
+                  <View style={styles.dropOffChipsRow}>
+                    {savedProfileAddress ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.dropOffChip,
+                          {
+                            backgroundColor: deliveryAddress === savedProfileAddress ? (isDark ? '#1E293B' : '#EFF6FF') : (isDark ? '#18181B' : '#F4F4F5'),
+                            borderColor: deliveryAddress === savedProfileAddress ? '#3B82F6' : (isDark ? '#27272A' : '#E4E4E7'),
+                          },
+                        ]}
+                        onPress={() => {
+                          setDeliveryAddress(savedProfileAddress);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                        }}
+                      >
+                        <Text style={[styles.dropOffChipText, { color: deliveryAddress === savedProfileAddress ? '#3B82F6' : theme.text }]}>
+                          🏠 Home
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    <TouchableOpacity
+                      style={[
+                        styles.dropOffChip,
+                        {
+                          backgroundColor: deliveryAddress.includes('Indiranagar') ? (isDark ? '#1E293B' : '#EFF6FF') : (isDark ? '#18181B' : '#F4F4F5'),
+                          borderColor: deliveryAddress.includes('Indiranagar') ? '#3B82F6' : (isDark ? '#27272A' : '#E4E4E7'),
+                        },
+                      ]}
+                      onPress={() => {
+                        setDeliveryAddress('100 Feet Rd, HAL 2nd Stage, Indiranagar, Bengaluru 560038');
+                        setDeliveryCoordinates({ lat: 12.9716, lng: 77.6412 });
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      }}
+                    >
+                      <Text style={[styles.dropOffChipText, { color: deliveryAddress.includes('Indiranagar') ? '#3B82F6' : theme.text }]}>
+                        📍 Indiranagar
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.dropOffChip,
+                        {
+                          backgroundColor: deliveryAddress.includes('Koramangala') ? (isDark ? '#1E293B' : '#EFF6FF') : (isDark ? '#18181B' : '#F4F4F5'),
+                          borderColor: deliveryAddress.includes('Koramangala') ? '#3B82F6' : (isDark ? '#27272A' : '#E4E4E7'),
+                        },
+                      ]}
+                      onPress={() => {
+                        setDeliveryAddress('80 Feet Rd, 4th Block, Koramangala, Bengaluru 560034');
+                        setDeliveryCoordinates({ lat: 12.9352, lng: 77.6245 });
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      }}
+                    >
+                      <Text style={[styles.dropOffChipText, { color: deliveryAddress.includes('Koramangala') ? '#3B82F6' : theme.text }]}>
+                        📍 Koramangala
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Drop-off Point Detailed Card */}
+                  <View
+                    style={[
+                      styles.dropOffCard,
+                      {
+                        backgroundColor: isDark ? '#12141A' : '#F8FAFC',
+                        borderColor: isDark ? '#1F2430' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    <View style={styles.dropOffCardHeader}>
+                      <View style={[styles.dropOffIconBox, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7' }]}>
+                        <MapPin size={16} color="#10B981" />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={[styles.dropOffTitle, { color: theme.text }]}>
+                          {deliveryAddress ? 'Confirmed Drop-off Pin' : 'No drop-off point selected'}
+                        </Text>
+                        <Text style={[styles.dropOffAddress, { color: theme.textMuted }]} numberOfLines={2}>
+                          {deliveryAddress || 'Tap "Change / Pin on Map" to select your drop-off point.'}
+                        </Text>
+                        {deliveryCoordinates && (
+                          <Text style={styles.dropOffCoords}>
+                            GPS: {deliveryCoordinates.lat.toFixed(4)}° N, {deliveryCoordinates.lng.toFixed(4)}° E
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Flat / Door / Building Specifics Input */}
                   <TextInput
                     style={[
                       styles.input,
@@ -926,12 +1123,13 @@ export function OrderMedicinesModal({
                         backgroundColor: isDark ? '#12141A' : '#F8FAFC',
                         borderColor: isDark ? '#1F2430' : '#E2E8F0',
                         color: theme.text,
+                        marginTop: 10,
                       },
                     ]}
-                    placeholder="Enter complete street address, door no, or pin on map"
+                    placeholder="House / Flat / Floor / Landmark (e.g. Flat 302, Opp. Park)"
                     placeholderTextColor={theme.inputPlaceholder}
-                    value={deliveryAddress}
-                    onChangeText={setDeliveryAddress}
+                    value={doorFlatDetails}
+                    onChangeText={setDoorFlatDetails}
                   />
                 </View>
 
@@ -982,8 +1180,9 @@ export function OrderMedicinesModal({
         visible={mapPickerVisible}
         initialAddress={deliveryAddress}
         onClose={() => setMapPickerVisible(false)}
-        onLocationSelected={(address) => {
+        onLocationSelected={(address, coords) => {
           setDeliveryAddress(address);
+          if (coords) setDeliveryCoordinates(coords);
         }}
       />
     </>
@@ -1120,6 +1319,54 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#3B82F6',
+  },
+  dropOffChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  dropOffChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  dropOffChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dropOffCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 2,
+  },
+  dropOffCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dropOffIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dropOffTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dropOffAddress: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  dropOffCoords: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 3,
   },
   rxCard: {
     borderRadius: 14,

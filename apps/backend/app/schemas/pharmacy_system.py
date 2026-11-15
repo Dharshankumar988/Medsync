@@ -210,3 +210,11 @@ class OrderDetailData(BaseModel):
     updated_at: Optional[str] = None
     medication: str
     pharmacies: OrderPharmacyDetail
+
+class OrderCancelResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    order_id: str
+    status: str
+    already_cancelled: Optional[bool] = False
+

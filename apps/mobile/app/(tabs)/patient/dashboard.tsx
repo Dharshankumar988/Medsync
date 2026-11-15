@@ -748,6 +748,10 @@ export default function PatientDashboard() {
           trackingNumber={selectedOrderForTracking?.tracking_number}
           orderStatus={selectedOrderForTracking?.status}
           deliveryAddress={selectedOrderForTracking?.delivery_address}
+          onOrderCancelled={() => {
+            setSelectedOrderForTracking(null);
+            loadDashboardData();
+          }}
           onClose={() => setSelectedOrderForTracking(null)}
         />
 

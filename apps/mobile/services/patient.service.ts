@@ -715,6 +715,8 @@ export const patientService = {
     pharmacy_id: string;
     prescription_id?: string | null;
     delivery_address: string;
+    delivery_latitude?: number;
+    delivery_longitude?: number;
     total_amount?: number;
     items?: Array<{ inventory_id: string; quantity: number }>;
     notes?: string;
@@ -727,6 +729,8 @@ export const patientService = {
         pharmacy_id: payload.pharmacy_id,
         prescription_id: payload.prescription_id || null,
         delivery_address: payload.delivery_address,
+        delivery_latitude: payload.delivery_latitude,
+        delivery_longitude: payload.delivery_longitude,
         total_amount: resolvedTotal,
         items: payload.items || [],
       });
@@ -748,6 +752,8 @@ export const patientService = {
         pharmacy_id: payload.pharmacy_id,
         prescription_id: payload.prescription_id || null,
         delivery_address: payload.delivery_address,
+        delivery_latitude: payload.delivery_latitude,
+        delivery_longitude: payload.delivery_longitude,
         status: 'PENDING',
         order_type: 'ONLINE_DELIVERY',
         total_amount: resolvedTotal,
@@ -774,6 +780,23 @@ export const patientService = {
     }
 
     return data;
+  },
+
+  cancelOrder: async (orderId: string) => {
+    try {
+      const res = await api.post(`/orders/${orderId}/cancel`);
+      return res.data?.data ?? res.data;
+    } catch (apiErr) {
+      console.warn('Backend /orders/cancel failed, attempting direct Supabase fallback:', apiErr);
+      const { data, error } = await supabase
+        .from('medicine_orders')
+        .update({ status: 'CANCELLED' })
+        .eq('id', orderId)
+        .select()
+        .maybeSingle();
+      if (error) throw apiErr;
+      return data || { order_id: orderId, status: 'CANCELLED' };
+    }
   },
 
   processPayment: async (
@@ -946,7 +969,9 @@ export const patientService = {
     const isPharmacy =
       clean.startsWith('PHARM_') ||
       clean.startsWith('PHARM_QR_') ||
-      token.includes('/pharmacy');
+      token.includes('/pharmacy') ||
+      token.includes('pharmacy') ||
+      clean.includes('/pharmacy');
 
     const isBlockchain =
       clean.startsWith('0x') || clean.startsWith('QR-REC-');
@@ -962,12 +987,15 @@ export const patientService = {
         }
 
         const d = res.data?.data;
-        const resolvedId = d?.pharmacy_id || clean;
+        const resolvedId = d?.pharmacy_user_id || d?.pharmacy_id || clean;
+        const pharmName = d?.business_name || d?.name || d?.pharmacy_name || 'Verified Pharmacy';
         return {
           is_valid: true,
           type: 'PHARMACY',
           purpose: 'LICENSED_PHARMACY',
-          business_name: d?.business_name || 'Verified Pharmacy',
+          pharmacy_name: pharmName,
+          business_name: pharmName,
+          name: pharmName,
           address: d?.address,
           city: d?.city,
           phone: d?.phone || d?.contact_number,
@@ -977,12 +1005,36 @@ export const patientService = {
           transaction_hash: d?.transaction_hash,
           resource_id: resolvedId,
           pharmacy_id: resolvedId,
-          pharmacy_user_id: resolvedId,
+          pharmacy_user_id: d?.pharmacy_user_id || resolvedId,
           message: 'Authentic Registered Pharmacy',
           data: d,
         };
       } catch (err: any) {
-        console.warn('Pharmacy direct verification error, continuing:', err);
+        console.warn('Pharmacy direct verification error, trying resolve-qr fallback:', err);
+        try {
+          const resolveRes = await api.get(`/pharmacy/resolve-qr/${encodeURIComponent(clean)}`);
+          const rd = resolveRes.data?.data;
+          if (rd) {
+            const pharmName = rd.business_name || 'Verified Pharmacy';
+            return {
+              is_valid: true,
+              type: 'PHARMACY',
+              purpose: 'LICENSED_PHARMACY',
+              pharmacy_name: pharmName,
+              business_name: pharmName,
+              name: pharmName,
+              address: rd.address,
+              phone: rd.contact_number,
+              resource_id: rd.pharmacy_id || clean,
+              pharmacy_id: rd.pharmacy_id || clean,
+              pharmacy_user_id: rd.pharmacy_id || clean,
+              message: 'Authentic Registered Pharmacy',
+              data: rd,
+            };
+          }
+        } catch {
+          // Continue to next handlers
+        }
       }
     }
 
@@ -1007,13 +1059,16 @@ export const patientService = {
     try {
       const res = await api.get(`/verify/qr/${encodeURIComponent(clean)}`);
       const d = res.data?.data;
-      if (d?.purpose === 'LICENSED_PHARMACY' || d?.type === 'PHARMACY') {
-        const resolvedId = d?.pharmacy_id || d?.resource_id || clean;
+      if (d?.purpose === 'LICENSED_PHARMACY' || d?.type === 'PHARMACY' || d?.business_name) {
+        const resolvedId = d?.pharmacy_user_id || d?.pharmacy_id || d?.resource_id || clean;
+        const pharmName = d?.business_name || d?.name || d?.pharmacy_name || 'Verified Pharmacy';
         return {
           is_valid: true,
           type: 'PHARMACY',
           purpose: 'LICENSED_PHARMACY',
-          business_name: d?.business_name || 'Verified Pharmacy',
+          pharmacy_name: pharmName,
+          business_name: pharmName,
+          name: pharmName,
           address: d?.address,
           city: d?.city,
           phone: d?.phone || d?.contact_number,
@@ -1044,12 +1099,15 @@ export const patientService = {
         }
         const pd = pharmRes?.data?.data;
         if (pd?.business_name || pd?.pharmacy_id) {
-          const resolvedId = pd.pharmacy_id || clean;
+          const resolvedId = pd.pharmacy_user_id || pd.pharmacy_id || clean;
+          const pharmName = pd.business_name || pd.name || pd.pharmacy_name || 'Verified Pharmacy';
           return {
             is_valid: true,
             type: 'PHARMACY',
             purpose: 'LICENSED_PHARMACY',
-            business_name: pd.business_name,
+            pharmacy_name: pharmName,
+            business_name: pharmName,
+            name: pharmName,
             address: pd.address,
             city: pd.city,
             phone: pd.phone || pd.contact_number,
@@ -1065,7 +1123,31 @@ export const patientService = {
           };
         }
       } catch {
-        // Ignore fallback error
+        // Try resolve-qr endpoint
+        try {
+          const resolveRes = await api.get(`/pharmacy/resolve-qr/${encodeURIComponent(clean)}`);
+          const rd = resolveRes.data?.data;
+          if (rd?.business_name || rd?.pharmacy_id) {
+            const pharmName = rd.business_name || 'Verified Pharmacy';
+            return {
+              is_valid: true,
+              type: 'PHARMACY',
+              purpose: 'LICENSED_PHARMACY',
+              pharmacy_name: pharmName,
+              business_name: pharmName,
+              name: pharmName,
+              address: rd.address,
+              phone: rd.contact_number,
+              resource_id: rd.pharmacy_id || clean,
+              pharmacy_id: rd.pharmacy_id || clean,
+              pharmacy_user_id: rd.pharmacy_id || clean,
+              message: 'Authentic Registered Pharmacy',
+              data: rd,
+            };
+          }
+        } catch {
+          // Fall through
+        }
       }
       throw rxErr;
     }

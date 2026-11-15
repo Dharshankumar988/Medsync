@@ -381,28 +381,33 @@ export function PaymentStyleQRScanner({
                     </View>
 
                     {/* Pharmacy QR Result */}
-                    {scanResult.type === 'PHARMACY' || scanResult.pharmacy_name ? (
+                    {scanResult.type === 'PHARMACY' || scanResult.pharmacy_name || scanResult.business_name ? (
                       <View style={[styles.entityCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                         <View style={styles.entityHeader}>
                           <Store size={22} color={theme.accent} />
                           <View style={{ marginLeft: 10, flex: 1 }}>
-                            <Text style={[styles.entityTitle, { color: theme.text }]}>
-                              {scanResult.pharmacy_name || 'Verified MedSync Pharmacy'}
+                            <Text style={[styles.entityTitle, { color: theme.text, fontSize: 16, fontWeight: '700' }]}>
+                              {scanResult.pharmacy_name || scanResult.business_name || scanResult.name || 'Verified MedSync Pharmacy'}
                             </Text>
-                            <Text style={[styles.entitySub, { color: theme.textMuted }]}>
-                              {scanResult.address || 'Authorized Dispensing Partner'}
+                            <Text style={[styles.entitySub, { color: theme.textMuted, marginTop: 2 }]}>
+                              {[scanResult.address, scanResult.city].filter(Boolean).join(', ') || 'Authorized Dispensing Partner'}
                             </Text>
+                            {scanResult.phone ? (
+                              <Text style={[styles.entitySub, { color: theme.textMuted, marginTop: 2, fontSize: 12 }]}>
+                                Contact: {scanResult.phone}
+                              </Text>
+                            ) : null}
                           </View>
                         </View>
 
                         <TouchableOpacity
-                          style={[styles.actionButtonPrimary, { backgroundColor: theme.primaryButton }]}
+                          style={[styles.actionButtonPrimary, { backgroundColor: theme.primaryButton, marginTop: 12 }]}
                           onPress={() => setOrderModalVisible(true)}
                           activeOpacity={0.88}
                         >
                           <ShoppingBag size={18} color={theme.primaryButtonText} />
                           <Text style={[styles.actionButtonTextPrimary, { color: theme.primaryButtonText }]}>
-                            Order Medicines Here
+                            Order Medicines from {scanResult.pharmacy_name || scanResult.business_name || 'Pharmacy'}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -510,7 +515,8 @@ export function PaymentStyleQRScanner({
         <OrderMedicinesModal
           visible={orderModalVisible}
           onClose={() => setOrderModalVisible(false)}
-          defaultPharmacyId={scanResult?.pharmacy_id}
+          defaultPharmacyId={scanResult?.pharmacy_user_id || scanResult?.pharmacy_id || scanResult?.resource_id}
+          pharmacyData={scanResult}
           onSuccess={() => {
             setOrderModalVisible(false);
             onClose();

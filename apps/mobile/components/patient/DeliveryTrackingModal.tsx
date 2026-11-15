@@ -8,6 +8,7 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import {
   Truck,
@@ -19,8 +20,10 @@ import {
   Store,
   ShieldCheck,
   RefreshCw,
+  XCircle,
 } from 'lucide-react-native';
 import api from '../../lib/api';
+import { patientService } from '../../services/patient.service';
 import { useTheme } from '../../context/ThemeContext';
 
 interface DeliveryTrackingModalProps {
@@ -32,6 +35,7 @@ interface DeliveryTrackingModalProps {
   orderStatus?: string | null;
   pharmacyName?: string | null;
   deliveryAddress?: string | null;
+  onOrderCancelled?: () => void;
 }
 
 export function DeliveryTrackingModal({
@@ -43,15 +47,45 @@ export function DeliveryTrackingModal({
   orderStatus,
   pharmacyName,
   deliveryAddress,
+  onOrderCancelled,
 }: DeliveryTrackingModalProps) {
   const { theme, isDark } = useTheme();
   const [deliveries, setDeliveries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
 
   const effectiveOrderId = orderId || order?.id || null;
   const effectiveTrackingNumber = trackingNumber || order?.tracking_number || null;
   const effectiveAddress = deliveryAddress || order?.delivery_address || null;
   const rawOrderStatus = String(orderStatus || order?.status || '').toUpperCase();
+
+  const handleCancelOrder = () => {
+    if (!effectiveOrderId) return;
+    Alert.alert(
+      'Cancel Order',
+      'Are you sure you want to cancel this order? Any reserved inventory will be restored.',
+      [
+        { text: 'Keep Order', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setCancelling(true);
+              await patientService.cancelOrder(effectiveOrderId);
+              Alert.alert('Order Cancelled', 'Your order has been cancelled.');
+              if (onOrderCancelled) onOrderCancelled();
+              onClose();
+            } catch (err: any) {
+              Alert.alert('Cancel Notice', err?.message || 'Could not cancel order.');
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const fetchActiveDelivery = async () => {
     try {
@@ -366,16 +400,38 @@ export function DeliveryTrackingModal({
             </ScrollView>
           )}
 
-          {/* Bottom Button */}
-          <TouchableOpacity
-            style={[styles.doneBtn, { backgroundColor: theme.primaryButton }]}
-            onPress={onClose}
-            activeOpacity={0.88}
-          >
-            <Text style={[styles.doneBtnText, { color: theme.primaryButtonText }]}>
-              {isDelivered ? 'Done' : 'Close Tracking'}
-            </Text>
-          </TouchableOpacity>
+          {/* Bottom Action Buttons */}
+          <View style={{ gap: 8, marginTop: 12 }}>
+            {!isDelivered && !isCancelled && !isInTransit && effectiveOrderId && (
+              <TouchableOpacity
+                style={[
+                  styles.cancelOrderTrackBtn,
+                  {
+                    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                    borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+                  },
+                ]}
+                onPress={handleCancelOrder}
+                disabled={cancelling}
+                activeOpacity={0.8}
+              >
+                <XCircle size={15} color="#EF4444" style={{ marginRight: 6 }} />
+                <Text style={styles.cancelOrderTrackBtnText}>
+                  {cancelling ? 'Cancelling Order...' : 'Cancel This Order'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.doneBtn, { backgroundColor: theme.primaryButton }]}
+              onPress={onClose}
+              activeOpacity={0.88}
+            >
+              <Text style={[styles.doneBtnText, { color: theme.primaryButtonText }]}>
+                {isDelivered ? 'Done' : 'Close Tracking'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -556,5 +612,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  cancelOrderTrackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  cancelOrderTrackBtnText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

@@ -85,6 +85,7 @@ export function DeliveryLocationPickerModal({
   const { theme, isDark } = useTheme();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [flatDetails, setFlatDetails] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<{
     address: string;
     lat: number;
@@ -169,9 +170,21 @@ export function DeliveryLocationPickerModal({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
+  const handleUseCurrentLocation = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setSelectedLocation({
+      address: 'Current Location • Bengaluru City Center, Karnataka 560001',
+      lat: 12.9716,
+      lng: 77.5946,
+    });
+  };
+
   const handleConfirm = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    onLocationSelected(selectedLocation.address, {
+    const combinedAddress = flatDetails.trim()
+      ? `${flatDetails.trim()}, ${selectedLocation.address}`
+      : selectedLocation.address;
+    onLocationSelected(combinedAddress, {
       lat: selectedLocation.lat,
       lng: selectedLocation.lng,
     });
@@ -256,9 +269,34 @@ export function DeliveryLocationPickerModal({
                 value={searchQuery}
                 onChangeText={handleSearch}
               />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => handleSearch('')} style={{ padding: 4 }}>
+                  <X size={16} color={theme.textMuted} />
+                </TouchableOpacity>
+              )}
               {isSearching && (
                 <ActivityIndicator size="small" color="#3B82F6" style={{ marginLeft: 8 }} />
               )}
+            </View>
+
+            {/* Quick Actions Bar */}
+            <View style={styles.quickLocationRow}>
+              <TouchableOpacity
+                style={[
+                  styles.quickLocBtn,
+                  {
+                    backgroundColor: isDark ? '#18181B' : '#EFF6FF',
+                    borderColor: isDark ? '#27272A' : '#BFDBFE',
+                  },
+                ]}
+                onPress={handleUseCurrentLocation}
+                activeOpacity={0.8}
+              >
+                <Navigation size={13} color="#3B82F6" style={{ marginRight: 6 }} />
+                <Text style={[styles.quickLocBtnText, { color: '#3B82F6' }]}>
+                  Use My Current GPS Pin
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Search Auto-Complete Dropdown */}
@@ -422,6 +460,29 @@ export function DeliveryLocationPickerModal({
               <Text style={[styles.addressCardValue, { color: theme.text }]}>
                 {selectedLocation.address}
               </Text>
+            </View>
+
+            {/* Flat / Door / Landmark Specifics */}
+            <View
+              style={[
+                styles.addressCard,
+                {
+                  backgroundColor: isDark ? '#121215' : '#F8FAFC',
+                  borderColor: isDark ? '#27272A' : '#E2E8F0',
+                  marginTop: 10,
+                },
+              ]}
+            >
+              <Text style={[styles.addressCardLabel, { color: theme.textMuted, marginBottom: 6 }]}>
+                HOUSE / FLAT / FLOOR / LANDMARK (OPTIONAL)
+              </Text>
+              <TextInput
+                style={[styles.flatInput, { color: theme.text }]}
+                placeholder="e.g. Flat 302, Green Glen Layout, Landmark: Opp. Park"
+                placeholderTextColor={theme.inputPlaceholder}
+                value={flatDetails}
+                onChangeText={setFlatDetails}
+              />
             </View>
 
             {/* Quick Preset Delivery Hubs */}
@@ -681,6 +742,28 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
+  },
+  flatInput: {
+    fontSize: 13,
+    paddingVertical: 6,
+    paddingHorizontal: 0,
+    fontWeight: '500',
+  },
+  quickLocationRow: {
+    flexDirection: 'row',
+    marginBottom: 14,
+  },
+  quickLocBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  quickLocBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   presetChipText: {
     fontSize: 12,
