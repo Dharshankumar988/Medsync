@@ -102,7 +102,7 @@ export interface MedicineOrderItem {
   patient_id: string;
   pharmacy_id: string;
   prescription_id?: string | null;
-  status: 'PENDING' | 'ACCEPTED' | 'PACKED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'DISPENSED' | 'CANCELLED';
+  status: 'PENDING' | 'ACCEPTED' | 'PROCESSING' | 'PACKED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'RECEIVED_BY_PATIENT' | 'DISPENSED' | 'CANCELLED';
   delivery_address?: string | null;
   total_amount?: number | null;
   tracking_number?: string | null;

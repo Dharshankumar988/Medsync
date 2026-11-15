@@ -954,7 +954,7 @@ export function AppointmentsAndOrdersOverview({
                   <View style={styles.orderActionsFooter}>
                     {order.status !== 'CANCELLED' &&
                       order.status !== 'DELIVERED' &&
-                      order.status !== 'OUT_FOR_DELIVERY' && (
+                      order.status !== 'RECEIVED_BY_PATIENT' && (
                         <TouchableOpacity
                           style={[
                             styles.cancelOrderBtn,

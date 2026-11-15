@@ -125,7 +125,7 @@ export function DeliveryTrackingModal({
       : activeDelivery?.delivery_status || rawOrderStatus || 'PROCESSING'
   ).toUpperCase();
 
-  const isDelivered = resolvedStatus === 'DELIVERED';
+  const isDelivered = resolvedStatus === 'DELIVERED' || resolvedStatus === 'RECEIVED_BY_PATIENT';
   const isCancelled = resolvedStatus === 'CANCELLED';
   const isInTransit = ['SHIPPED', 'OUT_FOR_DELIVERY', 'DISPATCHED', 'IN_TRANSIT'].includes(
     resolvedStatus
@@ -402,7 +402,7 @@ export function DeliveryTrackingModal({
 
           {/* Bottom Action Buttons */}
           <View style={{ gap: 8, marginTop: 12 }}>
-            {!isDelivered && !isCancelled && !isInTransit && effectiveOrderId && (
+            {!isDelivered && !isCancelled && effectiveOrderId && (
               <TouchableOpacity
                 style={[
                   styles.cancelOrderTrackBtn,

@@ -32,6 +32,9 @@ import {
   RotateCcw,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  FileText,
   ShieldCheck,
   CheckCircle2,
   Award,
@@ -104,8 +107,10 @@ export default function PatientAppointmentsScreen() {
     }
   }, [params?.tab, switchMainTab]);
 
-  // Appointments
+  // Appointments & Consultations History
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
+  const [consultations, setConsultations] = useState<any[]>([]);
+  const [expandedVisitId, setExpandedVisitId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,10 +139,14 @@ export default function PatientAppointmentsScreen() {
   const loadAppointments = useCallback(async () => {
     try {
       setError(null);
-      const data = await patientService.getAppointments();
-      setAppointments(data || []);
+      const [apptData, consultData] = await Promise.all([
+        patientService.getAppointments().catch(() => []),
+        patientService.getConsultationsHistory().catch(() => []),
+      ]);
+      setAppointments(apptData || []);
+      setConsultations(consultData || []);
     } catch (err: any) {
-      console.warn('Failed to load appointments:', err);
+      console.warn('Failed to load appointments & consultation history:', err);
       setError(err.message || 'Could not load clinic consultations.');
     } finally {
       setLoading(false);
@@ -189,6 +198,96 @@ export default function PatientAppointmentsScreen() {
 
     return { upcomingList: upcoming, pastList: past };
   }, [appointments]);
+
+  // Combined rich past visits with clinical consultation details
+  const combinedPastVisits = useMemo(() => {
+    const list: Array<{
+      id: string;
+      appointment_id?: string;
+      consultation_id?: string;
+      doctor_name: string;
+      doctor_specialty: string;
+      clinic_name: string;
+      date: string;
+      time?: string;
+      reason: string;
+      diagnosis?: string;
+      symptoms?: string;
+      treatment_plan?: string;
+      clinical_notes?: string;
+      follow_up_date?: string;
+      follow_up_notes?: string;
+      pdf_url?: string;
+      status: string;
+      rawAppointment?: AppointmentItem;
+      rawConsultation?: any;
+    }> = [];
+
+    const matchedConsultationIds = new Set<string>();
+
+    pastList.forEach((appt) => {
+      const apptDateStr = appt.appointment_date ? appt.appointment_date.split('T')[0] : '';
+      const matched = consultations.find((c) => {
+        if (c.appointment_id && c.appointment_id === appt.id) return true;
+        const consultDate = (c.completed_at || c.created_at || '').split('T')[0];
+        if (c.doctor_id === appt.doctor_id && consultDate === apptDateStr) return true;
+        return false;
+      });
+
+      if (matched) {
+        matchedConsultationIds.add(matched.id);
+      }
+
+      list.push({
+        id: appt.id,
+        appointment_id: appt.id,
+        consultation_id: matched?.id,
+        doctor_name: (matched?.doctor_name || appt.doctor_name || 'Practitioner').replace(/^Dr\.?\s*/i, ''),
+        doctor_specialty: matched?.doctor_specialization || appt.doctor_specialty || 'General Physician',
+        clinic_name: matched?.clinic_or_hospital || appt.hospital_name || 'MedSync Healthcare',
+        date: appt.appointment_date,
+        time: appt.start_time,
+        reason: matched?.symptoms || appt.reason || 'Medical Consultation',
+        diagnosis: matched?.diagnosis,
+        symptoms: matched?.symptoms,
+        treatment_plan: matched?.treatment_plan,
+        clinical_notes: matched?.clinical_notes || matched?.observations,
+        follow_up_date: matched?.follow_up_date,
+        follow_up_notes: matched?.follow_up_notes,
+        pdf_url: matched?.pdf_url,
+        status: appt.status,
+        rawAppointment: appt,
+        rawConsultation: matched,
+      });
+    });
+
+    consultations.forEach((c) => {
+      if (!matchedConsultationIds.has(c.id)) {
+        const consultDate = (c.completed_at || c.created_at || '').split('T')[0];
+        list.push({
+          id: c.id,
+          consultation_id: c.id,
+          doctor_name: (c.doctor_name || 'Practitioner').replace(/^Dr\.?\s*/i, ''),
+          doctor_specialty: c.doctor_specialization || 'Medical Practitioner',
+          clinic_name: c.clinic_or_hospital || 'MedSync Healthcare',
+          date: consultDate || 'Past Consultation',
+          time: c.completed_at ? new Date(c.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
+          reason: c.symptoms || 'Clinical Consultation',
+          diagnosis: c.diagnosis,
+          symptoms: c.symptoms,
+          treatment_plan: c.treatment_plan,
+          clinical_notes: c.clinical_notes || c.observations,
+          follow_up_date: c.follow_up_date,
+          follow_up_notes: c.follow_up_notes,
+          pdf_url: c.pdf_url,
+          status: 'COMPLETED',
+          rawConsultation: c,
+        });
+      }
+    });
+
+    return list;
+  }, [pastList, consultations]);
 
   // Filtered Doctors
   const filteredDoctors = useMemo(() => {
@@ -463,6 +562,164 @@ export default function PatientAppointmentsScreen() {
     );
   };
 
+  // ── Render Rich Card for a Past Visit / Consultation History ──
+  const renderPastVisitCard = (item: typeof combinedPastVisits[0]) => {
+    const isExpanded = expandedVisitId === item.id;
+    const hasClinicalDetails = Boolean(
+      item.diagnosis || item.symptoms || item.treatment_plan || item.clinical_notes || item.follow_up_date
+    );
+
+    return (
+      <Card
+        key={item.id}
+        style={[styles.apptCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+      >
+        <CardContent>
+          <View style={styles.cardHeaderRow}>
+            <View
+              style={[
+                styles.doctorIconBox,
+                {
+                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.15)' : '#F0F9FF',
+                  borderColor: isDark ? 'rgba(56, 189, 248, 0.25)' : '#BAE6FD',
+                },
+              ]}
+            >
+              <Stethoscope size={20} color="#38BDF8" />
+            </View>
+            <View style={styles.headerInfo}>
+              <Text style={[styles.doctorNameTitle, { color: theme.text }]} numberOfLines={1}>
+                Dr. {item.doctor_name}
+              </Text>
+              <Text style={[styles.reasonSubtitle, { color: theme.textMuted }]} numberOfLines={1}>
+                {item.doctor_specialty} • {item.clinic_name}
+              </Text>
+            </View>
+            {renderStatusBadge(item.status)}
+          </View>
+
+          <View style={[styles.timeRow, { borderTopColor: theme.border }]}>
+            <Calendar size={13} color={theme.textMuted} />
+            <Text style={[styles.timeText, { color: theme.textSecondary }]}>
+              {item.date}
+            </Text>
+            {item.time ? (
+              <>
+                <Clock size={13} color={theme.textMuted} style={{ marginLeft: 10 }} />
+                <Text style={[styles.timeText, { color: theme.textSecondary }]}>
+                  {item.time}
+                </Text>
+              </>
+            ) : null}
+          </View>
+
+          {/* Reason / Concern */}
+          <View style={[styles.visitConcernBox, { backgroundColor: isDark ? '#1C1917' : '#F5F5F4' }]}>
+            <Text style={[styles.visitConcernLabel, { color: theme.textMuted }]}>Consultation Reason:</Text>
+            <Text style={[styles.visitConcernText, { color: theme.text }]} numberOfLines={isExpanded ? undefined : 2}>
+              {item.reason}
+            </Text>
+          </View>
+
+          {/* Diagnosis Badge (if recorded) */}
+          {item.diagnosis ? (
+            <View style={[styles.diagnosisBadgeBox, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5', borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#A7F3D0' }]}>
+              <ShieldCheck size={14} color="#10B981" />
+              <Text style={[styles.diagnosisBadgeLabel, { color: '#059669' }]}>Diagnosis: </Text>
+              <Text style={[styles.diagnosisBadgeValue, { color: theme.text }]} numberOfLines={isExpanded ? undefined : 1}>
+                {item.diagnosis}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Expandable Clinical Consultation Details */}
+          {isExpanded && (
+            <View style={[styles.expandedClinicalDetails, { borderColor: theme.border }]}>
+              {item.symptoms ? (
+                <View style={styles.clinicalDetailItem}>
+                  <Text style={[styles.clinicalDetailTitle, { color: theme.textMuted }]}>Reported Symptoms</Text>
+                  <Text style={[styles.clinicalDetailBody, { color: theme.text }]}>{item.symptoms}</Text>
+                </View>
+              ) : null}
+
+              {item.clinical_notes ? (
+                <View style={styles.clinicalDetailItem}>
+                  <Text style={[styles.clinicalDetailTitle, { color: theme.textMuted }]}>Doctor's Clinical Notes</Text>
+                  <Text style={[styles.clinicalDetailBody, { color: theme.text }]}>{item.clinical_notes}</Text>
+                </View>
+              ) : null}
+
+              {item.treatment_plan ? (
+                <View style={styles.clinicalDetailItem}>
+                  <Text style={[styles.clinicalDetailTitle, { color: theme.textMuted }]}>Prescribed Treatment Plan</Text>
+                  <Text style={[styles.clinicalDetailBody, { color: theme.text }]}>{item.treatment_plan}</Text>
+                </View>
+              ) : null}
+
+              {item.follow_up_date ? (
+                <View style={styles.clinicalDetailItem}>
+                  <Text style={[styles.clinicalDetailTitle, { color: '#2563EB' }]}>Recommended Follow-up</Text>
+                  <Text style={[styles.clinicalDetailBody, { color: theme.text }]}>
+                    Date: {item.follow_up_date} {item.follow_up_notes ? `— ${item.follow_up_notes}` : ''}
+                  </Text>
+                </View>
+              ) : null}
+
+              {!hasClinicalDetails && (
+                <Text style={[styles.noClinicalNotesText, { color: theme.textMuted }]}>
+                  No detailed clinical notes were recorded for this clinic visit.
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Action Row */}
+          <View style={styles.cardActionsRow}>
+            {hasClinicalDetails ? (
+              <TouchableOpacity
+                style={[styles.toggleDetailsBtn, { borderColor: theme.border }]}
+                onPress={() => setExpandedVisitId(isExpanded ? null : item.id)}
+                activeOpacity={0.8}
+              >
+                <FileText size={13} color={theme.textMuted} style={{ marginRight: 4 }} />
+                <Text style={[styles.toggleDetailsBtnText, { color: theme.text }]}>
+                  {isExpanded ? 'Hide Details' : 'View Visit Details'}
+                </Text>
+                {isExpanded ? (
+                  <ChevronUp size={13} color={theme.textMuted} style={{ marginLeft: 3 }} />
+                ) : (
+                  <ChevronDown size={13} color={theme.textMuted} style={{ marginLeft: 3 }} />
+                )}
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.bookAgainBtn, { backgroundColor: theme.primaryButton, flex: hasClinicalDetails ? 1 : undefined }]}
+              onPress={() => {
+                if (item.rawAppointment) {
+                  handleBookAgain(item.rawAppointment);
+                } else {
+                  handleStartBookingWithDoctor({
+                    full_name: `Dr. ${item.doctor_name}`,
+                    specialization: item.doctor_specialty,
+                    clinic_name: item.clinic_name,
+                    consultation_fee: 500,
+                  }, `Follow-up: ${item.diagnosis || item.reason}`);
+                }
+              }}
+              activeOpacity={0.85}
+            >
+              <RotateCcw size={14} color={theme.primaryButtonText} style={{ marginRight: 6 }} />
+              <Text style={[styles.bookAgainBtnText, { color: theme.primaryButtonText }]}>
+                Book Again
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <RoleGuard allowedRole="patient">
       <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -484,81 +741,87 @@ export default function PatientAppointmentsScreen() {
           }
         />
 
-        {/* ── Top Level Segmented Tab Controls ── */}
+        {/* ── Top Level Segmented Tab Controls (Horizontal Scrollable) ── */}
         <View
           style={[
-            styles.mainTabsBar,
+            styles.mainTabsScrollWrapper,
             { backgroundColor: theme.background, borderBottomColor: theme.border },
           ]}
         >
-          <TouchableOpacity
-            style={[
-              styles.mainTabBtn,
-              activeTab === 'UPCOMING' && [
-                styles.mainTabBtnActive,
-                { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
-              ],
-            ]}
-            onPress={() => switchMainTab('UPCOMING')}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.mainTabsScrollContent}
           >
-            <Text
+            <TouchableOpacity
               style={[
-                styles.mainTabBtnText,
-                {
-                  color: activeTab === 'UPCOMING' ? (isDark ? '#FAFAFA' : '#09090B') : theme.textMuted,
-                  fontWeight: activeTab === 'UPCOMING' ? '700' : '500',
-                },
+                styles.mainTabBtn,
+                activeTab === 'UPCOMING' && [
+                  styles.mainTabBtnActive,
+                  { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
+                ],
               ]}
+              onPress={() => switchMainTab('UPCOMING')}
             >
-              Upcoming ({upcomingList.length})
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.mainTabBtnText,
+                  {
+                    color: activeTab === 'UPCOMING' ? (isDark ? '#FAFAFA' : '#09090B') : theme.textMuted,
+                    fontWeight: activeTab === 'UPCOMING' ? '700' : '500',
+                  },
+                ]}
+              >
+                Upcoming ({upcomingList.length})
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.mainTabBtn,
-              activeTab === 'PAST' && [
-                styles.mainTabBtnActive,
-                { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
-              ],
-            ]}
-            onPress={() => switchMainTab('PAST')}
-          >
-            <Text
+            <TouchableOpacity
               style={[
-                styles.mainTabBtnText,
-                {
-                  color: activeTab === 'PAST' ? (isDark ? '#FAFAFA' : '#09090B') : theme.textMuted,
-                  fontWeight: activeTab === 'PAST' ? '700' : '500',
-                },
+                styles.mainTabBtn,
+                activeTab === 'PAST' && [
+                  styles.mainTabBtnActive,
+                  { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
+                ],
               ]}
+              onPress={() => switchMainTab('PAST')}
             >
-              Past Visits ({pastList.length})
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.mainTabBtnText,
+                  {
+                    color: activeTab === 'PAST' ? (isDark ? '#FAFAFA' : '#09090B') : theme.textMuted,
+                    fontWeight: activeTab === 'PAST' ? '700' : '500',
+                  },
+                ]}
+              >
+                Past Visits ({combinedPastVisits.length})
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.mainTabBtn,
-              activeTab === 'DISCOVERY' && [
-                styles.mainTabBtnActive,
-                { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
-              ],
-            ]}
-            onPress={() => switchMainTab('DISCOVERY')}
-          >
-            <Text
+            <TouchableOpacity
               style={[
-                styles.mainTabBtnText,
-                {
-                  color: activeTab === 'DISCOVERY' ? (isDark ? '#FAFAFA' : '#09090B') : theme.textMuted,
-                  fontWeight: activeTab === 'DISCOVERY' ? '700' : '500',
-                },
+                styles.mainTabBtn,
+                activeTab === 'DISCOVERY' && [
+                  styles.mainTabBtnActive,
+                  { borderBottomColor: isDark ? '#FAFAFA' : '#09090B' },
+                ],
               ]}
+              onPress={() => switchMainTab('DISCOVERY')}
             >
-              Find Doctors & Map
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.mainTabBtnText,
+                  {
+                    color: activeTab === 'DISCOVERY' ? (isDark ? '#FAFAFA' : '#09090B') : theme.textMuted,
+                    fontWeight: activeTab === 'DISCOVERY' ? '700' : '500',
+                  },
+                ]}
+              >
+                Find Doctors & Hospitals
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
 
         {error && (
@@ -623,13 +886,28 @@ export default function PatientAppointmentsScreen() {
           />
         )}
 
-        {/* ── TAB 2: PAST VISITS WITH "BOOK AGAIN" ── */}
+        {/* ── TAB 2: PAST VISITS & CONSULTATION HISTORY ── */}
         {activeTab === 'PAST' && (
           <FlatList
-            data={pastList}
+            data={combinedPastVisits}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => renderAppointmentCard(item, true)}
+            renderItem={({ item }) => renderPastVisitCard(item)}
             contentContainerStyle={styles.listContent}
+            ListHeaderComponent={
+              combinedPastVisits.length > 0 ? (
+                <View style={[styles.pastVisitsHeaderBanner, { backgroundColor: isDark ? 'rgba(37, 99, 235, 0.1)' : '#EFF6FF', borderColor: isDark ? 'rgba(37, 99, 235, 0.25)' : '#BFDBFE' }]}>
+                  <FileText size={16} color="#2563EB" />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={[styles.pastVisitsBannerTitle, { color: isDark ? '#93C5FD' : '#1E40AF' }]}>
+                      Consultation History & Medical Summaries
+                    </Text>
+                    <Text style={[styles.pastVisitsBannerSubtitle, { color: theme.textMuted }]}>
+                      Review doctor diagnoses, clinical advice, and re-book with 1-tap.
+                    </Text>
+                  </View>
+                </View>
+              ) : null
+            }
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -653,7 +931,7 @@ export default function PatientAppointmentsScreen() {
                     No Past Consultations
                   </Text>
                   <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
-                    Completed visits will appear here with a 1-tap "Book Again" button to rebook the same doctor.
+                    Your completed visits, diagnoses, and medical summaries will appear here with 1-tap re-booking.
                   </Text>
                 </View>
               ) : null
@@ -1244,6 +1522,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  mainTabsScrollWrapper: {
+    borderBottomWidth: 1,
+  },
+  mainTabsScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
   mainTabsBar: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -1251,10 +1537,12 @@ const styles = StyleSheet.create({
   },
   mainTabBtn: {
     paddingVertical: 12,
-    paddingHorizontal: 8,
-    marginRight: 16,
+    paddingHorizontal: 12,
+    marginRight: 10,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   mainTabBtnActive: {
     borderBottomWidth: 2,
@@ -1355,6 +1643,98 @@ const styles = StyleSheet.create({
   },
   cardActionsRow: {
     marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  visitConcernBox: {
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  visitConcernLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  visitConcernText: {
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  diagnosisBadgeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
+    borderWidth: 1,
+    marginTop: 8,
+    gap: 6,
+  },
+  diagnosisBadgeLabel: {
+    fontSize: 11.5,
+    fontWeight: '800',
+  },
+  diagnosisBadgeValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  expandedClinicalDetails: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    gap: 8,
+  },
+  clinicalDetailItem: {
+    gap: 2,
+  },
+  clinicalDetailTitle: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  clinicalDetailBody: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  noClinicalNotesText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  toggleDetailsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+  },
+  toggleDetailsBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  pastVisitsHeaderBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  pastVisitsBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pastVisitsBannerSubtitle: {
+    fontSize: 11.5,
+    marginTop: 2,
+    lineHeight: 16,
   },
   bookAgainBtn: {
     flexDirection: 'row',

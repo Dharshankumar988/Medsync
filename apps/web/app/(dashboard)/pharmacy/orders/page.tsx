@@ -18,7 +18,7 @@ export default function PharmacyOrdersPage() {
   const [orders, setOrders] = useState<PharmacyOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"ALL" | "PENDING" | "DISPENSED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "RECEIVED_BY_PATIENT">("ALL");
+  const [activeTab, setActiveTab] = useState<"ALL" | "PENDING" | "PROCESSING" | "OUT_FOR_DELIVERY" | "DELIVERED" | "RECEIVED_BY_PATIENT">("ALL");
   const [dispensingOrderId, setDispensingOrderId] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
@@ -99,12 +99,28 @@ export default function PharmacyOrdersPage() {
     }
   };
 
-
+  const handleDeliverNow = async (orderId: string) => {
+    try {
+      const res = await api.post(`/api/v1/orders/${orderId}/complete-delivery`);
+      if (res.data) {
+        toast.success("Delivery completed successfully! (Simulation skipped)");
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "DELIVERED" } : o));
+      }
+    } catch (e: any) {
+      toast.error("Failed to complete delivery: " + (e.response?.data?.detail || e.message || ""));
+    }
+  };
 
   const filteredOrders = useMemo(() => {
     let filtered = orders;
     if (activeTab !== "ALL") {
-      filtered = filtered.filter(o => o.status === activeTab);
+      if (activeTab === "PROCESSING") {
+        filtered = filtered.filter(o => 
+          o.status === "PROCESSING" || o.status === "ACCEPTED" || o.status === "PACKED" || o.status === "DISPENSED"
+        );
+      } else {
+        filtered = filtered.filter(o => o.status === activeTab);
+      }
     }
     if (searchQuery) {
       filtered = filtered.filter(o => 
@@ -147,7 +163,7 @@ export default function PharmacyOrdersPage() {
 
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
         <div className="flex bg-muted/50 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
-          {["ALL", "PENDING", "DISPENSED", "OUT_FOR_DELIVERY", "DELIVERED", "RECEIVED_BY_PATIENT"].map(tab => (
+          {["ALL", "PENDING", "PROCESSING", "OUT_FOR_DELIVERY", "DELIVERED", "RECEIVED_BY_PATIENT"].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -155,7 +171,7 @@ export default function PharmacyOrdersPage() {
                 activeTab === tab ? "bg-background shadow-xs text-foreground font-semibold" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {tab === "RECEIVED_BY_PATIENT" ? "Received by Patient" : tab === "DELIVERED" ? "Delivered" : tab.replace(/_/g, ' ')}
+              {tab === "RECEIVED_BY_PATIENT" ? "Received by Patient" : tab === "PROCESSING" ? "Processing / Active" : tab === "DELIVERED" ? "Delivered" : tab.replace(/_/g, ' ')}
             </button>
           ))}
         </div>
@@ -210,6 +226,8 @@ export default function PharmacyOrdersPage() {
                     <Badge className={`text-[10px] font-medium ${
                       order.status === "PENDING" ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" : ""
                     } ${
+                      order.status === "PROCESSING" || order.status === "ACCEPTED" || order.status === "PACKED" ? "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" : ""
+                    } ${
                       order.status === "DISPENSED" ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20" : ""
                     } ${
                       order.status === "OUT_FOR_DELIVERY" ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20" : ""
@@ -217,8 +235,18 @@ export default function PharmacyOrdersPage() {
                       order.status === "DELIVERED" ? "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20" : ""
                     } ${
                       order.status === "RECEIVED_BY_PATIENT" ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/30" : ""
+                    } ${
+                      order.status === "CANCELLED" ? "bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 border-rose-500/30" : ""
                     }`}>
-                      {order.status === "RECEIVED_BY_PATIENT" ? "Received by Patient" : order.status === "DELIVERED" ? "Dispensed & Delivered" : order.status.replace(/_/g, ' ')}
+                      {order.status === "RECEIVED_BY_PATIENT" 
+                        ? "Received by Patient" 
+                        : order.status === "DELIVERED" 
+                        ? "Dispensed & Delivered" 
+                        : order.status === "PROCESSING"
+                        ? "Processing / In-Prep"
+                        : order.status === "ACCEPTED"
+                        ? "Order Accepted"
+                        : order.status.replace(/_/g, ' ')}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between">
@@ -246,40 +274,86 @@ export default function PharmacyOrdersPage() {
 
                   <div className="pt-2">
                     {order.status === "PENDING" && (
-                      <Button 
-                        className="w-full bg-amber-500 hover:bg-amber-600 text-black font-medium" 
-                        onClick={() => {
-                          if (order.prescription_id) {
-                            setDispensingRxId(order.prescription_id);
-                            setDispensingOrder(order.id);
-                                                      } else {
-                            alert("This order has no prescription ID associated with it.");
-                          }
-                        }}
-                      >
-                        Dispense
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs h-9" 
+                          onClick={() => {
+                            if (order.prescription_id) {
+                              setDispensingRxId(order.prescription_id);
+                              setDispensingOrder(order.id);
+                            } else {
+                              handleDispatch(order.id);
+                            }
+                          }}
+                        >
+                          Dispense
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          className="flex-1 border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 font-semibold text-xs h-9" 
+                          onClick={() => handleDeliverNow(order.id)}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1 text-emerald-500" /> Deliver Now
+                        </Button>
+                      </div>
+                    )}
+                    {(order.status === "PROCESSING" || order.status === "ACCEPTED" || order.status === "PACKED") && (
+                      <div className="flex gap-2">
+                        <Button 
+                          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-xs h-9" 
+                          onClick={() => handleDispatch(order.id)}
+                        >
+                          <Truck className="h-3.5 w-3.5 mr-1" /> Dispatch
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          className="flex-1 border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 font-semibold text-xs h-9" 
+                          onClick={() => handleDeliverNow(order.id)}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1 text-emerald-500" /> Deliver Now
+                        </Button>
+                      </div>
                     )}
                     {order.status === "DISPENSED" && (
-                      <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleDispatch(order.id)}>
-                        <Truck className="h-4 w-4 mr-2" /> Dispatch Order
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-xs h-9" onClick={() => handleDispatch(order.id)}>
+                          <Truck className="h-3.5 w-3.5 mr-1" /> Dispatch
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          className="flex-1 border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 font-semibold text-xs h-9" 
+                          onClick={() => handleDeliverNow(order.id)}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1 text-emerald-500" /> Deliver Now
+                        </Button>
+                      </div>
                     )}
                     {order.status === "OUT_FOR_DELIVERY" && (
                       <div className="flex gap-2">
-                        <Button variant="outline" className="w-full border-purple-500/30 text-purple-600 hover:bg-purple-500/10" onClick={() => setDispensingOrderId(order.id)}>
-                          <Truck className="h-4 w-4 mr-2" /> Track Map
+                        <Button variant="outline" className="flex-1 border-purple-500/30 text-purple-600 hover:bg-purple-500/10 text-xs h-9 font-medium" onClick={() => setDispensingOrderId(order.id)}>
+                          <Truck className="h-3.5 w-3.5 mr-1" /> Track Map
+                        </Button>
+                        <Button 
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9" 
+                          onClick={() => handleDeliverNow(order.id)}
+                        >
+                          <CheckCircle className="h-3.5 w-3.5 mr-1" /> Deliver Now
                         </Button>
                       </div>
                     )}
                     {order.status === "DELIVERED" && (
-                      <Button variant="outline" className="w-full border-emerald-500/30 text-emerald-600 bg-emerald-500/5 cursor-default pointer-events-none">
+                      <Button variant="outline" className="w-full border-emerald-500/30 text-emerald-600 bg-emerald-500/5 cursor-default pointer-events-none text-xs h-9">
                         <CheckCircle className="h-4 w-4 mr-2" /> Dispensed & Delivered
                       </Button>
                     )}
                     {order.status === "RECEIVED_BY_PATIENT" && (
-                      <Button variant="outline" className="w-full border-emerald-500/30 text-emerald-600 bg-emerald-500/5 cursor-default pointer-events-none font-medium">
+                      <Button variant="outline" className="w-full border-emerald-500/30 text-emerald-600 bg-emerald-500/5 cursor-default pointer-events-none font-medium text-xs h-9">
                         <CheckCircle className="h-4 w-4 mr-2 text-emerald-500" /> Received by Patient (Walk-in)
+                      </Button>
+                    )}
+                    {order.status === "CANCELLED" && (
+                      <Button variant="outline" className="w-full border-rose-500/30 text-rose-500 bg-rose-500/5 cursor-default pointer-events-none font-medium text-xs h-9">
+                        <AlertCircle className="h-4 w-4 mr-2 text-rose-500" /> Cancelled Order
                       </Button>
                     )}
                   </div>

@@ -457,5 +457,121 @@ async def test_patient_cannot_cancel_delivered_order():
     assert "delivered" in resp.json()["detail"].lower()
 
 
+@pytest.mark.asyncio
+async def test_patient_can_cancel_out_for_delivery_order():
+    """An order out for delivery can be cancelled before it is delivered or received."""
+    patient_id = uuid.uuid4()
+    pharmacy_id = uuid.uuid4()
+    order_id = uuid.uuid4()
+
+    patient_user = User(
+        id=patient_id,
+        email="patient@medsync.io",
+        role=UserRole.PATIENT,
+        status=UserStatus.ACTIVE,
+    )
+    order_obj = MedicineOrder(
+        id=order_id,
+        patient_id=patient_id,
+        pharmacy_id=pharmacy_id,
+        status=OrderStatus.OUT_FOR_DELIVERY,
+        total_amount=399.0,
+    )
+
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = _make_result(scalar=order_obj)
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_current_user] = lambda: patient_user
+
+    with patch("app.services.notification.NotificationService.send_notification", AsyncMock()):
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+                resp = await client.post(f"/api/v1/orders/{order_id}/cancel")
+        finally:
+            app.dependency_overrides.clear()
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["status"] == "CANCELLED"
+    assert order_obj.status == OrderStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_patient_cannot_cancel_received_by_patient_order():
+    """An order already received by patient cannot be cancelled."""
+    patient_id = uuid.uuid4()
+    pharmacy_id = uuid.uuid4()
+    order_id = uuid.uuid4()
+
+    patient_user = User(
+        id=patient_id,
+        email="patient@medsync.io",
+        role=UserRole.PATIENT,
+        status=UserStatus.ACTIVE,
+    )
+    order_obj = MedicineOrder(
+        id=order_id,
+        patient_id=patient_id,
+        pharmacy_id=pharmacy_id,
+        status=OrderStatus.RECEIVED_BY_PATIENT,
+        total_amount=399.0,
+    )
+
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = _make_result(scalar=order_obj)
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_current_user] = lambda: patient_user
+
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+            resp = await client.post(f"/api/v1/orders/{order_id}/cancel")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 400
+    assert "received" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_complete_delivery_on_processing_order():
+    """Skip delivery timer / simulation and immediately mark a PROCESSING order as DELIVERED."""
+    pharmacy_id = uuid.uuid4()
+    patient_id = uuid.uuid4()
+    order_id = uuid.uuid4()
+
+    pharmacy_user = User(
+        id=pharmacy_id,
+        email="pharmacy@medsync.io",
+        role=UserRole.PHARMACY,
+        status=UserStatus.ACTIVE,
+    )
+    order_obj = MedicineOrder(
+        id=order_id,
+        patient_id=patient_id,
+        pharmacy_id=pharmacy_id,
+        status=OrderStatus.PROCESSING,
+        total_amount=399.0,
+    )
+
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = _make_result(scalar=order_obj)
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_current_user] = lambda: pharmacy_user
+
+    with patch("app.services.notification.NotificationService.send_notification", AsyncMock()):
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+                resp = await client.post(f"/api/v1/orders/{order_id}/complete-delivery")
+        finally:
+            app.dependency_overrides.clear()
+
+    assert resp.status_code == 200, resp.text
+    assert order_obj.status == OrderStatus.DELIVERED
+
+
+
 
 

@@ -271,6 +271,15 @@ async def complete_delivery_now(
         tracking.current_status = "DELIVERED"
         tracking.delivery_completed_at = datetime.utcnow()
         tracking.delivery_progress = 100
+    else:
+        tracking = DeliveryTracking(
+            order_id=order_id,
+            tracking_number=f"TRK-BLR-{random.randint(1000, 9999)}",
+            current_status="DELIVERED",
+            delivery_completed_at=datetime.utcnow(),
+            delivery_progress=100
+        )
+        db.add(tracking)
 
     await db.commit()
 
@@ -466,17 +475,13 @@ async def cancel_order(
             )
         )
 
-    # Cannot cancel orders that are out for delivery or delivered
-    if order.status == OrderStatus.DELIVERED:
+    # Cannot cancel orders that are already delivered or received by patient
+    if order.status in [OrderStatus.DELIVERED, OrderStatus.RECEIVED_BY_PATIENT]:
         from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="Cannot cancel an order that has already been delivered.")
+        raise HTTPException(status_code=400, detail="Cannot cancel an order that has already been delivered or received by the patient.")
 
-    if order.status == OrderStatus.OUT_FOR_DELIVERY:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="Cannot cancel an order that is already out for delivery.")
-
-    # If stock was previously deducted (ACCEPTED, PROCESSING, PACKED), restore stock
-    if order.status in [OrderStatus.ACCEPTED, OrderStatus.PROCESSING, OrderStatus.PACKED]:
+    # If stock was previously deducted (ACCEPTED, PROCESSING, PACKED, SHIPPED, OUT_FOR_DELIVERY), restore stock
+    if order.status in [OrderStatus.ACCEPTED, OrderStatus.PROCESSING, OrderStatus.PACKED, OrderStatus.SHIPPED, OrderStatus.OUT_FOR_DELIVERY]:
         items_stmt = select(MedicineOrderItem, MedicineInventory).join(
             MedicineInventory, MedicineOrderItem.inventory_id == MedicineInventory.id
         ).where(MedicineOrderItem.order_id == order.id)

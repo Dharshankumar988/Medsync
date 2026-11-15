@@ -724,7 +724,7 @@ export default function PatientRecordsScreen() {
   const renderOrderItem = ({ item }: { item: MedicineOrderItem }) => {
     const formattedDate = item.created_at ? new Date(item.created_at).toLocaleDateString() : '—';
     const statusUpper = String(item.status || 'PENDING').toUpperCase();
-    const isDelivered = statusUpper === 'DELIVERED';
+    const isDelivered = statusUpper === 'DELIVERED' || statusUpper === 'RECEIVED_BY_PATIENT';
     const isCancelled = statusUpper === 'CANCELLED';
     const isInTransit = ['SHIPPED', 'OUT_FOR_DELIVERY', 'DISPATCHED', 'IN_TRANSIT'].includes(statusUpper);
 
@@ -801,7 +801,7 @@ export default function PatientRecordsScreen() {
 
           {!isCancelled && (
             <View style={[styles.actionsRow, { gap: 8 }]}>
-              {!isDelivered && !isInTransit && (
+              {!isDelivered && (
                 <TouchableOpacity
                   style={[
                     styles.cancelOrderRecordBtn,
