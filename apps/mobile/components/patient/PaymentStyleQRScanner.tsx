@@ -9,12 +9,10 @@ import {
   Platform,
   Dimensions,
   Modal,
-  Share,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import QRCode from 'react-native-qrcode-svg';
 import {
   X,
   Flashlight,
@@ -30,7 +28,6 @@ import {
   ShoppingBag,
   RotateCcw,
   Sparkles,
-  Share2,
   Lock,
 } from 'lucide-react-native';
 import { patientService } from '../../services/patient.service';
@@ -60,7 +57,6 @@ export function PaymentStyleQRScanner({
 }: PaymentStyleQRScannerProps) {
   const { theme, isDark } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
-  const [activeTab, setActiveTab] = useState<'SCAN' | 'MY_QR'>('SCAN');
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -76,7 +72,7 @@ export function PaymentStyleQRScanner({
   const laserAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (visible && activeTab === 'SCAN' && !scanned) {
+    if (visible && !scanned) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(laserAnim, {
@@ -94,7 +90,7 @@ export function PaymentStyleQRScanner({
     } else {
       laserAnim.stopAnimation();
     }
-  }, [visible, activeTab, scanned, laserAnim]);
+  }, [visible, scanned, laserAnim]);
 
   const triggerHaptic = async (type: 'success' | 'error') => {
     try {
@@ -164,25 +160,6 @@ export function PaymentStyleQRScanner({
     setManualCode('');
   };
 
-  const patientQrValue = JSON.stringify({
-    type: 'PATIENT_ID',
-    id: userProfile?.id || '',
-    name: userProfile?.full_name || 'MedSync Patient',
-    blood_group: userProfile?.blood_group || 'O+',
-    timestamp: Date.now(),
-  });
-
-  const handleShareMyQr = async () => {
-    try {
-      await Share.share({
-        message: `MedSync Patient Health Token: ${userProfile?.id || ''}\nName: ${userProfile?.full_name || 'Patient'}`,
-        title: 'MedSync Health ID',
-      });
-    } catch (e) {
-      console.warn('Share error:', e);
-    }
-  };
-
   const handleCopyToken = (text: string) => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -206,51 +183,28 @@ export function PaymentStyleQRScanner({
             <X size={22} color="#FFFFFF" strokeWidth={2.5} />
           </TouchableOpacity>
 
-          {/* Segmented Mode Switcher */}
-          <View style={styles.modeSwitcher}>
-            <TouchableOpacity
-              style={[styles.modeTab, activeTab === 'SCAN' && styles.modeTabActive]}
-              onPress={() => {
-                setActiveTab('SCAN');
-                resetScanner();
-              }}
-            >
-              <Text style={[styles.modeTabText, activeTab === 'SCAN' && styles.modeTabTextActive]}>
-                Scan QR
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeTab, activeTab === 'MY_QR' && styles.modeTabActive]}
-              onPress={() => setActiveTab('MY_QR')}
-            >
-              <Text style={[styles.modeTabText, activeTab === 'MY_QR' && styles.modeTabTextActive]}>
-                My Health QR
-              </Text>
-            </TouchableOpacity>
+          {/* Unified Scan QR Badge */}
+          <View style={styles.headerTitleBadge}>
+            <Text style={styles.headerTitleBadgeText}>Scan QR</Text>
           </View>
 
           {/* Flashlight toggle */}
-          {activeTab === 'SCAN' ? (
-            <TouchableOpacity
-              style={[styles.circleButton, torchEnabled && styles.circleButtonActive]}
-              onPress={() => setTorchEnabled(!torchEnabled)}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              {torchEnabled ? (
-                <Flashlight size={20} color="#2563EB" />
-              ) : (
-                <FlashlightOff size={20} color="#FFFFFF" />
-              )}
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 42 }} />
-          )}
+          <TouchableOpacity
+            style={[styles.circleButton, torchEnabled && styles.circleButtonActive]}
+            onPress={() => setTorchEnabled(!torchEnabled)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            {torchEnabled ? (
+              <Flashlight size={20} color="#2563EB" />
+            ) : (
+              <FlashlightOff size={20} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
         </View>
 
-        {/* ── TAB 1: SCANNER VIEW ── */}
-        {activeTab === 'SCAN' ? (
-          <View style={styles.scannerContainer}>
-            {permission?.granted ? (
+        {/* ── SCANNER VIEW ── */}
+        <View style={styles.scannerContainer}>
+          {permission?.granted ? (
               <View style={StyleSheet.absoluteFillObject}>
                 <CameraView
                   style={StyleSheet.absoluteFillObject}
@@ -387,7 +341,7 @@ export function PaymentStyleQRScanner({
                           <Store size={22} color={theme.accent} />
                           <View style={{ marginLeft: 10, flex: 1 }}>
                             <Text style={[styles.entityTitle, { color: theme.text, fontSize: 16, fontWeight: '700' }]}>
-                              {scanResult.pharmacy_name || scanResult.business_name || scanResult.name || 'Verified MedSync Pharmacy'}
+                              {scanResult.business_name || scanResult.pharmacy_name || scanResult.name || 'Verified MedSync Pharmacy'}
                             </Text>
                             <Text style={[styles.entitySub, { color: theme.textMuted, marginTop: 2 }]}>
                               {[scanResult.address, scanResult.city].filter(Boolean).join(', ') || 'Authorized Dispensing Partner'}
@@ -407,7 +361,7 @@ export function PaymentStyleQRScanner({
                         >
                           <ShoppingBag size={18} color={theme.primaryButtonText} />
                           <Text style={[styles.actionButtonTextPrimary, { color: theme.primaryButtonText }]}>
-                            Order Medicines from {scanResult.pharmacy_name || scanResult.business_name || 'Pharmacy'}
+                            Order Medicines from {scanResult.business_name || scanResult.pharmacy_name || 'Pharmacy'}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -460,56 +414,6 @@ export function PaymentStyleQRScanner({
               </View>
             )}
           </View>
-        ) : (
-          /* ── TAB 2: MY HEALTH QR CODE (PATIENT'S UNIQUE ID) ── */
-          <View style={[styles.myQrContainer, { backgroundColor: theme.background }]}>
-            <View style={[styles.myQrCard, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}>
-              <View style={styles.myQrHeader}>
-                <View style={[styles.patientAvatar, { backgroundColor: theme.primaryButton }]}>
-                  <Text style={[styles.patientInitials, { color: theme.primaryButtonText }]}>
-                    {userProfile?.full_name ? userProfile.full_name.substring(0, 2).toUpperCase() : 'PT'}
-                  </Text>
-                </View>
-                <Text style={[styles.patientName, { color: theme.text }]}>
-                  {userProfile?.full_name || 'MedSync Patient'}
-                </Text>
-                <Text style={[styles.patientSub, { color: theme.textMuted }]}>Verified Health Member</Text>
-
-                <View style={styles.bloodBadge}>
-                  <Text style={styles.bloodBadgeText}>
-                    Blood Group: {userProfile?.blood_group || 'O+'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* QR Code Container (Always white quiet zone for scanner readability) */}
-              <View style={[styles.qrWrapper, { borderColor: theme.border }]}>
-                <QRCode
-                  value={patientQrValue}
-                  size={RETICLE_SIZE * 0.8}
-                  color="#09090B"
-                  backgroundColor="#FFFFFF"
-                />
-              </View>
-
-              <Text style={[styles.qrInstructions, { color: theme.textMuted }]}>
-                Show this QR to doctors or pharmacies to share your health history or verify prescriptions.
-              </Text>
-
-              {/* Action Buttons */}
-              <View style={styles.qrActionRow}>
-                <TouchableOpacity
-                  style={[styles.qrShareButton, { backgroundColor: theme.primaryButton }]}
-                  onPress={handleShareMyQr}
-                  activeOpacity={0.88}
-                >
-                  <Share2 size={18} color={theme.primaryButtonText} />
-                  <Text style={[styles.qrShareText, { color: theme.primaryButtonText }]}>Share Token</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
 
         {/* Order Medicines Modal Triggered from Scanned Pharmacy */}
         <OrderMedicinesModal
@@ -556,30 +460,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderColor: '#2563EB',
   },
-  modeSwitcher: {
-    flexDirection: 'row',
+  headerTitleBadge: {
     backgroundColor: 'rgba(15, 23, 42, 0.8)',
-    borderRadius: 22,
-    padding: 4,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
   },
-  modeTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 18,
-  },
-  modeTabActive: {
-    backgroundColor: '#2563EB',
-  },
-  modeTabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-  modeTabTextActive: {
+  headerTitleBadgeText: {
     color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
   scannerContainer: {
     flex: 1,
@@ -864,105 +757,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#2563EB',
-    marginLeft: 8,
-  },
-  myQrContainer: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  myQrCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    padding: 26,
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 360,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 28,
-    elevation: 8,
-  },
-  myQrHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  patientAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  patientInitials: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  patientName: {
-    fontSize: 19,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  patientSub: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  bloodBadge: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 10,
-    marginTop: 8,
-  },
-  bloodBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#EF4444',
-  },
-  qrWrapper: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
-    marginBottom: 18,
-  },
-  qrInstructions: {
-    fontSize: 12.5,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  qrActionRow: {
-    width: '100%',
-  },
-  qrShareButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2563EB',
-    height: 48,
-    borderRadius: 14,
-    width: '100%',
-  },
-  qrShareText: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: '#FFFFFF',
     marginLeft: 8,
   },
 });

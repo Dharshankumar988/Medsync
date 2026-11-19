@@ -48,9 +48,13 @@ interface OrderMedicinesModalProps {
     pharmacy_user_id?: string;
     resource_id?: string;
     business_name?: string;
+    pharmacy_name?: string;
+    name?: string;
     address?: string;
+    city?: string | null;
     phone?: string;
     contact_number?: string;
+    is_24x7?: boolean;
     data?: any;
   } | null;
   defaultPharmacyId?: string | null;
@@ -112,7 +116,13 @@ export function OrderMedicinesModal({
       setCreatedOrder(null);
       setPharmacyPickerOpen(false);
       setPharmacySearch('');
-      setSelectedPharmacy(null);
+      if (pharmacyData) {
+        setSelectedPharmacy(pharmacyData);
+        setDefaultPharmacy(pharmacyData);
+      } else {
+        setSelectedPharmacy(null);
+        setDefaultPharmacy(null);
+      }
       if (initialPrescriptionId) {
         setSelectedPrescriptionId(initialPrescriptionId);
       }
@@ -120,10 +130,11 @@ export function OrderMedicinesModal({
     } else {
       setSelectedPrescriptionId(null);
       setSelectedPharmacy(null);
+      setDefaultPharmacy(null);
       setPharmacyPickerOpen(false);
       setNotes('');
     }
-  }, [visible, initialPrescriptionId]);
+  }, [visible, initialPrescriptionId, pharmacyData, defaultPharmacyId]);
 
   const loadInitialData = async () => {
     setLoadingPrescriptions(true);
@@ -145,15 +156,68 @@ export function OrderMedicinesModal({
         patientService.getVerifiedPharmacies().catch(() => []),
       ]);
 
-      setPharmacies(pharmaciesList);
+      const targetId =
+        defaultPharmacyId ||
+        pharmacyData?.pharmacy_user_id ||
+        pharmacyData?.pharmacy_id ||
+        pharmacyData?.resource_id;
 
-      if (pharmaciesList.length > 0) {
-        const matchedDefault = defaultPharmacyId
-          ? pharmaciesList.find(
-              (p: any) => p.pharmacy_id === defaultPharmacyId || p.user_id === defaultPharmacyId
-            )
-          : null;
-        setDefaultPharmacy(matchedDefault || pharmaciesList[0]);
+      let matchedDefault = targetId
+        ? pharmaciesList.find(
+            (p: any) =>
+              p.pharmacy_id === targetId ||
+              p.user_id === targetId ||
+              (pharmacyData?.business_name &&
+                String(p.business_name || '').trim().toLowerCase() ===
+                  String(pharmacyData.business_name).trim().toLowerCase())
+          )
+        : null;
+
+      let updatedPharmacies = [...pharmaciesList];
+
+      // If we have scanned pharmacyData that isn't in pharmaciesList, inject it at top
+      if (pharmacyData) {
+        const pharmName =
+          pharmacyData.business_name ||
+          pharmacyData.pharmacy_name ||
+          pharmacyData.name ||
+          'Verified MedSync Pharmacy';
+        const exists = pharmaciesList.some(
+          (p: any) =>
+            p.pharmacy_id === targetId ||
+            p.user_id === targetId ||
+            String(p.business_name || '').trim().toLowerCase() === pharmName.trim().toLowerCase()
+        );
+
+        if (!exists) {
+          const customEntry = {
+            pharmacy_id: targetId || 'scanned-node',
+            user_id: targetId || 'scanned-node',
+            business_name: pharmName,
+            address:
+              [pharmacyData.address, pharmacyData.city].filter(Boolean).join(', ') ||
+              pharmacyData.address ||
+              'Official MedSync Node',
+            city: pharmacyData.city || null,
+            phone: pharmacyData.phone || pharmacyData.contact_number || '',
+            is_24x7: Boolean(pharmacyData.is_24x7),
+            is_verified: true,
+          };
+          updatedPharmacies = [customEntry, ...pharmaciesList];
+          matchedDefault = customEntry;
+        }
+      }
+
+      setPharmacies(updatedPharmacies);
+
+      if (matchedDefault) {
+        setDefaultPharmacy(matchedDefault);
+        setSelectedPharmacy(matchedDefault);
+      } else if (pharmacyData) {
+        setDefaultPharmacy(pharmacyData);
+        setSelectedPharmacy(pharmacyData);
+      } else if (updatedPharmacies.length > 0) {
+        setDefaultPharmacy(updatedPharmacies[0]);
       } else {
         setDefaultPharmacy(null);
       }
@@ -181,14 +245,26 @@ export function OrderMedicinesModal({
   const pharmacyId =
     activePharm?.pharmacy_user_id ||
     activePharm?.pharmacy_id ||
+    activePharm?.user_id ||
     activePharm?.resource_id ||
     activePharm?.data?.pharmacy_id;
   const pharmacyName =
-    activePharm?.business_name || activePharm?.data?.business_name || 'Verified Dispensary';
+    activePharm?.business_name ||
+    activePharm?.pharmacy_name ||
+    activePharm?.name ||
+    activePharm?.data?.business_name ||
+    'Verified Dispensary';
   const pharmacyAddress =
-    activePharm?.address || activePharm?.data?.address || 'Licensed MedSync Center';
+    activePharm?.address ||
+    activePharm?.city ||
+    activePharm?.data?.address ||
+    'Licensed MedSync Center';
   const pharmacyPhone =
-    activePharm?.phone || activePharm?.contact_number || activePharm?.data?.phone || '';
+    activePharm?.phone ||
+    activePharm?.contact_number ||
+    activePharm?.data?.phone ||
+    activePharm?.data?.contact_number ||
+    '';
 
   const selectedPrescription = prescriptions.find((rx) => rx.id === selectedPrescriptionId);
 

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'apps/mobile/**'
+      - 'packages/core/**'
   workflow_dispatch:
 
 jobs:
@@ -13,7 +14,7 @@ jobs:
     name: Publish EAS Over-The-Air Update
     runs-on: ubuntu-latest
     env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN || secrets.EAS_TOKEN }}
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
@@ -32,8 +33,8 @@ jobs:
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
-          packager: npm
-          token: ${{ secrets.EXPO_TOKEN }}
+          packager: pnpm
+          token: ${{ secrets.EXPO_TOKEN || secrets.EAS_TOKEN }}
 
       - name: 📥 Install Dependencies
         run: pnpm install --frozen-lockfile=false
@@ -49,8 +50,8 @@ jobs:
         working-directory: apps/mobile
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "::warning title=Missing EXPO_TOKEN::EXPO_TOKEN secret is not configured in GitHub repository secrets. Skipping EAS Over-The-Air update. To enable automatic OTA updates, generate a token at https://expo.dev/accounts/[your-username]/settings/access-tokens and add it as EXPO_TOKEN in GitHub Repo Settings -> Secrets and variables -> Actions."
-            exit 0
+            echo "::error title=Missing EXPO_TOKEN::Neither EXPO_TOKEN nor EAS_TOKEN secret was found in GitHub repository secrets. Over-the-air updates cannot be published to EAS without an access token. Please create an access token at https://expo.dev/accounts/[your-account]/settings/access-tokens and add it as EXPO_TOKEN in your GitHub repository Settings -> Secrets and variables -> Actions."
+            exit 1
           fi
-          eas update --auto --channel preview --message "Auto OTA update from commit ${{ github.sha }}"
-          eas update --auto --channel production --message "Auto OTA update from commit ${{ github.sha }}"
+          eas update --branch preview --non-interactive --message "Auto OTA update from commit ${{ github.sha }}"
+          eas update --branch production --non-interactive --message "Auto OTA update from commit ${{ github.sha }}"

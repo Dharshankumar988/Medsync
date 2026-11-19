@@ -44,7 +44,6 @@ import { AppointmentsAndOrdersOverview } from '../../../components/patient/Appoi
 import { DeliveryTrackingModal } from '../../../components/patient/DeliveryTrackingModal';
 import { UploadRecordModal } from '../../../components/patient/UploadRecordModal';
 import { OrderMedicinesModal } from '../../../components/patient/OrderMedicinesModal';
-import { PrescriptionQRModal } from '../../../components/patient/PrescriptionQRModal';
 import { AppointmentItem, MedicineOrderItem } from '../../../services/patient.service';
 
 // Web parity: Session storage cache for dismissed profile prompt
@@ -68,7 +67,6 @@ export default function PatientDashboard() {
   const [qrScannerVisible, setQrScannerVisible] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
-  const [passportQrVisible, setPassportQrVisible] = useState(false);
 
   // Notifications
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
@@ -407,24 +405,15 @@ export default function PatientDashboard() {
               </View>
             </View>
 
-            {/* Card Actions: 2 Quick Touch Buttons */}
+            {/* Card Action: Scan QR */}
             <View style={styles.cardActionRow}>
               <TouchableOpacity
-                style={styles.cardPrimaryBtn}
+                style={[styles.cardPrimaryBtn, { flex: 1 }]}
                 onPress={() => setQrScannerVisible(true)}
                 activeOpacity={0.88}
               >
-                <Scan size={16} color="#09090B" strokeWidth={2.5} />
-                <Text style={styles.cardPrimaryBtnText}>Scan Hospital</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.cardSecondaryBtn}
-                onPress={() => setPassportQrVisible(true)}
-                activeOpacity={0.8}
-              >
-                <QrCode size={16} color="#FAFAFA" />
-                <Text style={styles.cardSecondaryBtnText}>My Health QR</Text>
+                <Scan size={18} color="#09090B" strokeWidth={2.5} />
+                <Text style={styles.cardPrimaryBtnText}>Scan QR</Text>
               </TouchableOpacity>
             </View>
             </View>
@@ -753,19 +742,6 @@ export default function PatientDashboard() {
             loadDashboardData();
           }}
           onClose={() => setSelectedOrderForTracking(null)}
-        />
-
-        <PrescriptionQRModal
-          visible={passportQrVisible}
-          onClose={() => setPassportQrVisible(false)}
-          prescription={{
-            id: profile?.id || 'MEDSYNC-PASS',
-            diagnosis: 'MedSync Verified Health Passport',
-            patient_id: profile?.id,
-            doctor_name: 'MedSync Sovereign Protocol',
-            created_at: new Date().toISOString(),
-          medications: [],
-          }}
         />
 
         {/* ── Notifications Inbox Modal ── */}

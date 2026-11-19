@@ -966,12 +966,26 @@ export const patientService = {
       clean = clean.replace(/\/+$/, '').split('/').pop() || clean;
     }
 
+    let parsedJson: any = null;
+    if (clean.startsWith('{') && clean.endsWith('}')) {
+      try {
+        parsedJson = JSON.parse(clean);
+      } catch {}
+    }
+
     const isPharmacy =
       clean.startsWith('PHARM_') ||
       clean.startsWith('PHARM_QR_') ||
       token.includes('/pharmacy') ||
       token.includes('pharmacy') ||
-      clean.includes('/pharmacy');
+      clean.includes('/pharmacy') ||
+      parsedJson?.type === 'PHARMACY' ||
+      parsedJson?.type === 'PHARMACY_ID' ||
+      Boolean(parsedJson?.pharmacy_id);
+
+    if (parsedJson?.pharmacy_id || parsedJson?.pharmacy_user_id) {
+      clean = parsedJson.pharmacy_id || parsedJson.pharmacy_user_id;
+    }
 
     const isBlockchain =
       clean.startsWith('0x') || clean.startsWith('QR-REC-');

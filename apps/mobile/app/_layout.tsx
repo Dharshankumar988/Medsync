@@ -10,6 +10,7 @@ import { RoleProvider } from '../providers/role-provider';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { StartupSplash } from '../components/layout/StartupSplash';
 import { claimOAuthCallbackUrl } from '../services/auth.service';
+import * as Updates from 'expo-updates';
 
 LogBox.ignoreLogs([
   '[EventSource] Unable to identify the line ending character',
@@ -21,6 +22,22 @@ const queryClient = new QueryClient();
 function NavigationStack() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+
+  useEffect(() => {
+    async function checkForOtaUpdates() {
+      if (__DEV__ || !Updates.isEnabled) return;
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch (err) {
+        console.log('OTA update check notice:', err);
+      }
+    }
+    checkForOtaUpdates();
+  }, []);
 
   useEffect(() => {
     const handleUrl = (url: string | null) => {

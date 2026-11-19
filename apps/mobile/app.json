@@ -73,6 +73,9 @@
     },
     "owner": "dharshan.kumar",
     "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 5000,
       "url": "https://u.expo.dev/a9b080e1-e001-417f-859e-0ce29dfb04ce"
     }
   }
