@@ -58,23 +58,58 @@ class AdminAIService:
 
     @staticmethod
     async def _get_db_stats(db: AsyncSession) -> str:
-        total_users = await db.scalar(select(func.count(User.id)))
-        total_patients = await db.scalar(select(func.count(User.id)).where(User.role == UserRole.PATIENT))
-        total_doctors = await db.scalar(select(func.count(User.id)).where(User.role == UserRole.DOCTOR))
-        total_pharmacies = await db.scalar(select(func.count(User.id)).where(User.role == UserRole.PHARMACY))
-        total_appointments = await db.scalar(select(func.count(Appointment.id)))
-        total_prescriptions = await db.scalar(select(func.count(Prescription.id)))
+        def _to_int(val) -> int:
+            try:
+                if isinstance(val, (int, float)):
+                    return int(val)
+                elif isinstance(val, str) and val.isdigit():
+                    return int(val)
+                return 0
+            except Exception:
+                return 0
+
+        try:
+            total_users = _to_int(await db.scalar(select(func.count(User.id))))
+            total_patients = _to_int(await db.scalar(select(func.count(User.id)).where(User.role == UserRole.PATIENT)))
+            total_doctors = _to_int(await db.scalar(select(func.count(User.id)).where(User.role == UserRole.DOCTOR)))
+            total_pharmacies = _to_int(await db.scalar(select(func.count(User.id)).where(User.role == UserRole.PHARMACY)))
+            total_appointments = _to_int(await db.scalar(select(func.count(Appointment.id))))
+            total_prescriptions = _to_int(await db.scalar(select(func.count(Prescription.id))))
+        except Exception:
+            total_users = total_patients = total_doctors = total_pharmacies = total_appointments = total_prescriptions = 0
+        
+        # Additional operational metrics
+        try:
+            from app.models.hospital import Hospital
+            total_hospitals = _to_int(await db.scalar(select(func.count(Hospital.id))))
+        except Exception:
+            total_hospitals = 0
+
+        try:
+            from app.models.pharmacy_system import MedicineOrder
+            total_orders = _to_int(await db.scalar(select(func.count(MedicineOrder.id))))
+        except Exception:
+            total_orders = 0
+
+        try:
+            from app.models.blockchain import BlockchainTransaction
+            total_txs = _to_int(await db.scalar(select(func.count(BlockchainTransaction.transaction_hash))))
+        except Exception:
+            total_txs = 0
         
         stats = {
             "users": {
                 "total": total_users,
                 "patients": total_patients,
                 "doctors": total_doctors,
-                "pharmacies": total_pharmacies
+                "pharmacies": total_pharmacies,
+                "hospitals": total_hospitals
             },
             "operations": {
                 "appointments": total_appointments,
-                "prescriptions": total_prescriptions
+                "prescriptions": total_prescriptions,
+                "orders": total_orders,
+                "blockchain_transactions": total_txs
             }
         }
         return json.dumps(stats, indent=2)
@@ -121,45 +156,122 @@ class AdminAIService:
         
         from app.ai.tools.admin_tools import AdminAITools
         tools = AdminAITools.get_tool_definitions()
-        
-        reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1, tools=tools)
-        
-        if hasattr(reply_content, 'tool_calls') and reply_content.tool_calls:
-            # Handle tool calls
-            tool_call = reply_content.tool_calls[0]
-            function_name = tool_call.function.name
-            import json
+
+        max_tool_iterations = 4
+        iteration = 0
+        final_reply_text = ""
+
+        def _clean_tool_messages_for_fallback(msgs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            """Converts raw tool messages and tool calls into standard user/assistant texts for plain LLM completion."""
+            clean = []
+            for m in msgs:
+                if m.get("role") == "tool":
+                    clean.append({
+                        "role": "user",
+                        "content": f"[Tool Execution Result for {m.get('name', 'action')}]:\n{m.get('content')}"
+                    })
+                elif m.get("role") == "assistant" and m.get("tool_calls"):
+                    clean.append({
+                        "role": "assistant",
+                        "content": m.get("content") or "I queried the database to retrieve the latest operational records."
+                    })
+                else:
+                    clean.append(m)
+            return clean
+
+        while iteration < max_tool_iterations:
+            iteration += 1
             try:
-                kwargs = json.loads(tool_call.function.arguments)
-            except:
-                kwargs = {}
+                response = await client.chat_completion(
+                    messages=messages,
+                    model=model_name,
+                    temperature=0.1,
+                    tools=tools,
+                    tool_choice="auto"
+                )
+            except Exception as tool_err:
+                logger.warning(f"Tool chat completion failed on iteration {iteration}: {tool_err}. Falling back to plain text.")
+                fallback_msgs = _clean_tool_messages_for_fallback(messages)
+                response = await client.chat_completion(
+                    messages=fallback_msgs,
+                    model=model_name,
+                    temperature=0.1
+                )
+                final_reply_text = response if isinstance(response, str) else getattr(response, "content", str(response))
+                break
 
-            tool_result = await AdminAITools.execute_tool(db, admin_id, session.id, function_name, kwargs)
+            # Check if model invoked tool(s)
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                tool_calls_serialized = []
+                tool_results = []
 
-            # Serialize tool_call to a plain dict for the messages list
-            tool_call_dict = {
-                "id": tool_call.id,
-                "type": "function",
-                "function": {
-                    "name": tool_call.function.name,
-                    "arguments": tool_call.function.arguments
-                }
-            }
+                for tool_call in response.tool_calls:
+                    function_name = tool_call.function.name
+                    try:
+                        kwargs = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
+                    except Exception:
+                        kwargs = {}
 
-            # Send the tool result back to the model
-            messages.append({"role": "assistant", "content": None, "tool_calls": [tool_call_dict]})
-            messages.append({"role": "tool", "tool_call_id": tool_call.id, "name": function_name, "content": tool_result})
+                    tool_result = await AdminAITools.execute_tool(
+                        db, admin_id, session.id, function_name, kwargs
+                    )
 
-            # When sending tool result, set tool_choice to "none" to prevent further tool calls
+                    tool_calls_serialized.append({
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments
+                        }
+                    })
+                    tool_results.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": function_name,
+                        "content": tool_result
+                    })
+
+                # Append assistant call and tool outputs to messages
+                messages.append({
+                    "role": "assistant",
+                    "content": getattr(response, "content", None) or None,
+                    "tool_calls": tool_calls_serialized
+                })
+                for tr in tool_results:
+                    messages.append(tr)
+
+                # Continue iteration so model can use tool results to generate answer or next query
+                continue
+            else:
+                # Direct textual reply
+                final_reply_text = response if isinstance(response, str) else (getattr(response, "content", "") or "")
+                break
+        else:
+            # Reached max iterations without a plain text reply, ask for synthesis
+            messages.append({
+                "role": "user",
+                "content": "Please synthesize all the above data into your final executive summary and recommendations now."
+            })
             try:
-                reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1, tools=tools, tool_choice="none")
-            except Exception as tool_follow_up_err:
-                # If the model still tries to call a tool despite tool_choice="none",
-                # fall back to a plain completion without tools
-                logger.warning(f"Follow-up with tool_choice=none failed: {tool_follow_up_err}. Retrying without tools.")
-                reply_content = await client.chat_completion(messages=messages, model=model_name, temperature=0.1)
-        
-        reply_content = AIOrchestrator.filter_output(reply_content, "admin")
+                final_response = await client.chat_completion(
+                    messages=messages,
+                    model=model_name,
+                    temperature=0.1,
+                    tools=tools,
+                    tool_choice="auto"
+                )
+                final_reply_text = final_response if isinstance(final_response, str) else (getattr(final_response, "content", "") or "")
+            except Exception as final_err:
+                logger.warning(f"Final synthesis with tools failed: {final_err}. Falling back to clean messages.")
+                fallback_msgs = _clean_tool_messages_for_fallback(messages)
+                final_response = await client.chat_completion(
+                    messages=fallback_msgs,
+                    model=model_name,
+                    temperature=0.1
+                )
+                final_reply_text = final_response if isinstance(final_response, str) else (getattr(final_response, "content", "") or "")
+
+        reply_content = AIOrchestrator.filter_output(final_reply_text, "admin")
         inference_time = int((time.time() - start_time) * 1000)
         
         await AdminAIService._save_message(db, session.id, AIChatRole.ASSISTANT, reply_content, model_name, inference_time)

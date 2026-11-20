@@ -74,8 +74,16 @@ class AIOrchestrator:
     def classify_admin_intent(message: str) -> str:
         """Classify admin queries into ANALYTICS, RAG, or COMBINED."""
         msg_lower = message.lower()
-        analytics_keywords = ["count", "how many", "total", "stats", "statistics", "analytics", "dashboard", "metric", "activity", "trend", "kpi", "growth"]
-        rag_keywords = ["policy", "procedure", "document", "guideline", "rule", "protocol", "manual", "say", "according to"]
+        analytics_keywords = [
+            "count", "how many", "total", "stats", "statistics", "analytics",
+            "dashboard", "metric", "activity", "trend", "kpi", "growth",
+            "churn", "onboard", "volume", "refill", "refills", "uptime",
+            "latency", "health", "scorecard", "fraud", "anomaly", "suspicious",
+            "spike", "audit", "throughput", "error rate", "resource",
+            "blockchain", "gas", "tx", "prescription", "order", "hospital",
+            "doctor", "patient", "user", "query", "select", "find", "who is", "search"
+        ]
+        rag_keywords = ["policy", "procedure", "document", "guideline", "rule", "protocol", "manual", "say", "according to", "sop"]
         
         has_analytics = any(kw in msg_lower for kw in analytics_keywords)
         has_rag = any(kw in msg_lower for kw in rag_keywords)
@@ -87,7 +95,7 @@ class AIOrchestrator:
         elif has_rag:
             return "RAG"
         else:
-            return "RAG" # Default to RAG for general queries
+            return "COMBINED"  # Default to COMBINED so live platform stats are always available
 
     @staticmethod
     def filter_output(response: str, role: str) -> str:

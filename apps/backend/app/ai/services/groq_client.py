@@ -146,7 +146,9 @@ class GroqClient:
                 params["response_format"] = {"type": "json_object"}
             if tools:
                 params["tools"] = tools
-                if tool_choice:
+                # In Groq API, setting tool_choice='none' while passing tools causes 400 'tool_use_failed'
+                # when open-source models emit tool tokens. Default to 'auto' for safety.
+                if tool_choice and tool_choice != "none":
                     params["tool_choice"] = tool_choice
                 else:
                     params["tool_choice"] = "auto"

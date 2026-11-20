@@ -113,6 +113,40 @@ DB_CONTEXT_QUERIES = {
             JOIN users u ON d.user_id = u.id
         """
     },
+    "hospital_stats": {
+        "title": "Hospital & Facility Overview",
+        "source": "MedSync Database",
+        "query": """
+            SELECT
+                COUNT(*) as total_facilities,
+                COUNT(CASE WHEN is_verified = true THEN 1 END) as verified_facilities,
+                COUNT(CASE WHEN type = 'clinic' THEN 1 END) as clinics,
+                COUNT(CASE WHEN type = 'hospital' THEN 1 END) as hospitals
+            FROM hospitals
+        """
+    },
+    "blockchain_stats": {
+        "title": "Blockchain Network Activity",
+        "source": "MedSync Database",
+        "query": """
+            SELECT
+                COUNT(*) as total_transactions,
+                COUNT(CASE WHEN status = 'CONFIRMED' THEN 1 END) as confirmed,
+                COUNT(CASE WHEN status = 'FAILED' THEN 1 END) as failed
+            FROM blockchain_transactions
+        """
+    },
+    "order_stats": {
+        "title": "Pharmacy & Medicine Orders",
+        "source": "MedSync Database",
+        "query": """
+            SELECT
+                COUNT(*) as total_orders,
+                COUNT(CASE WHEN status = 'DELIVERED' THEN 1 END) as delivered,
+                COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending
+            FROM medicine_orders
+        """
+    },
 }
 
 
