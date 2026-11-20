@@ -2,6 +2,12 @@
 
 Run MedSync easily on Windows without cloning the entire repository.
 
+### ⚡ 1-Click Installation (Fresh Systems)
+Run in PowerShell:
+```powershell
+curl.exe -L --fail --retry 3 -o "$env:TEMP\install-medsync.ps1" "https://raw.githubusercontent.com/dharshankumar988/Medsync/main/install-medsync.ps1"; powershell.exe -ExecutionPolicy Bypass -File "$env:TEMP\install-medsync.ps1"
+```
+
 ---
 
 ## ⚡ Quick Command Cheat Sheet (Windows PowerShell)
@@ -11,6 +17,7 @@ Run MedSync easily on Windows without cloning the entire repository.
 | **Start MedSync (Interactive + Ngrok)** | `.\start-medsync.bat` *(or `powershell -ExecutionPolicy Bypass -File .\start-medsync.ps1`)* |
 | **Stop MedSync & Clean Docker** | Press **`Ctrl+C`** in runner window *(or run `.\stop-medsync.bat`)* |
 | **Check Health & Status** | `.\medsync-status.bat` *(or `powershell -ExecutionPolicy Bypass -File .\medsync-status.ps1`)* |
+| **Show Command Help in CLI** | `.\commands.bat` *(or `powershell -File .\start-medsync.ps1 -Help`)* |
 | **Stream Live Backend Logs** | `docker logs -f medsync-backend` |
 | **Force Remove Container** | `docker rm -f medsync-backend` |
 | **Start Tunnel Only** | `.\start-ngrok.bat` *(or `powershell -ExecutionPolicy Bypass -File .\start-ngrok.ps1`)* |

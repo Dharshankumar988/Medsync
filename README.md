@@ -82,11 +82,15 @@ Inside your installed `portable_runner` directory:
 
 | Action | Windows Command | Linux / macOS Command |
 |---|---|---|
-| **Start (Desktop)** | `.\start-medsync.bat` | `./start-medsync.sh` |
+| **Start (Desktop + Ngrok)** | `.\start-medsync.bat` | `./start-medsync.sh` |
 | **Start (Headless/Remote)** | `powershell -File .\start-medsync.ps1 -Remote -Headless` | `./start-medsync.sh -r` |
 | **Check Live Status** | `.\medsync-status.bat` | `./medsync-status.sh` |
+| **Show Command Guide** | `.\commands.bat` | `./start-medsync.sh -h` |
 | **Update Container** | `.\update-medsync.bat` | `./update-medsync.sh` |
-| **Stop Runner** | `.\stop-medsync.bat` | `./stop-medsync.sh` |
+| **Stop Runner** | Press **`Ctrl+C`** or `.\stop-medsync.bat` | `./stop-medsync.sh` |
+
+> [!TIP]
+> **Zero Configuration:** The portable runner comes with an interactive loading bar, pre-bundled latest Ngrok (`v3.39`), and automatic Docker container cleanup on exit.
 
 ---
 
