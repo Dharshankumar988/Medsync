@@ -94,26 +94,37 @@ try {
     exit 1
 }
 
-# 4. Start Tunnel
+# 4. Stop any existing ngrok process first to prevent port/domain session conflicts
+Get-Process -Name "ngrok" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 400
+
+# 5. Build ngrok arguments
 $ngrokArgs = @("http")
 if ($Url) {
-    $ngrokArgs += "--url=$Url"
-    Write-Host "Routing traffic to local port $TargetPort using static URL: $Url ..." -ForegroundColor Cyan
+    # Strip any http://, https://, or trailing slash from domain
+    $cleanUrl = ($Url -replace "^https?://", "").TrimEnd("/")
+    $ngrokArgs += "--url=$cleanUrl"
+    Write-Host "Routing traffic to local port $TargetPort using static domain: $cleanUrl ..." -ForegroundColor Cyan
 } else {
     Write-Host "Routing traffic to local port $TargetPort using dynamically generated URL ..." -ForegroundColor Cyan
 }
 $ngrokArgs += "$TargetPort"
 
-$process = Start-Process -FilePath $NgrokPath -ArgumentList $ngrokArgs -PassThru -WindowStyle Normal
+# Log output to diagnose if ngrok crashes
+$ngrokLog = Join-Path $ScriptPath "ngrok.log"
+$ngrokArgs += "--log=$ngrokLog"
+
+# Start process minimized to prevent jarring flashing popups
+$process = Start-Process -FilePath $NgrokPath -ArgumentList $ngrokArgs -PassThru -WindowStyle Minimized
 
 $PidFile = Join-Path $ScriptPath ".runner_pids.txt"
 if ($process -and $process.Id) {
     $process.Id | Out-File -FilePath $PidFile -Append -Encoding utf8
 }
 
-# 4.5 Wait for local server to be ready to avoid 502 Bad Gateway
-Write-Host "Waiting for local server on port $TargetPort to become healthy..."
-$MaxRetries = 30
+# 6. Verify local server readiness
+Write-Host "Verifying local server responsiveness on port $TargetPort..."
+$MaxRetries = 15
 $RetryCount = 0
 $IsHealthy = $false
 
@@ -129,31 +140,37 @@ while ($RetryCount -lt $MaxRetries) {
             break
         }
     } catch {
-        # Ignore errors and retry
+        # Retry
     }
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 1
     $RetryCount++
 }
 
-if (-not $IsHealthy) {
-    Write-Host "WARNING: Local server on port $TargetPort did not become healthy in time. Ngrok tunnel may show 502 errors." -ForegroundColor Yellow
+# 7. Query active tunnel URL
+Write-Host "Waiting for ngrok to initialize..."
+Start-Sleep -Seconds 2
+
+# Check if ngrok died immediately
+if ($process -and $process.HasExited) {
+    Write-Host "ERROR: ngrok process terminated unexpectedly (ExitCode $($process.ExitCode))." -ForegroundColor Red
+    if (Test-Path $ngrokLog) {
+        Write-Host "Ngrok log output:" -ForegroundColor Yellow
+        Get-Content $ngrokLog -Tail 10 | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+    }
+    exit 1
 }
 
-# 5. Query active URL
-Write-Host "Waiting for ngrok to initialize..."
-Start-Sleep -Seconds 3
-
 $ActiveUrl = ""
-try {
-    $response = Invoke-WebRequest -Uri "http://127.0.0.1:4040/api/tunnels" -UseBasicParsing -ErrorAction Stop
-    $data = $response.Content | ConvertFrom-Json
-    if ($data.tunnels.Count -gt 0) {
-        $ActiveUrl = $data.tunnels[0].public_url
-    }
-} catch {
-    # If API fails, fallback to user provided url if exists
-    if ($Url) {
-        $ActiveUrl = $Url
+for ($attempt = 0; $attempt -lt 5; $attempt++) {
+    try {
+        $response = Invoke-WebRequest -Uri "http://127.0.0.1:4040/api/tunnels" -UseBasicParsing -ErrorAction Stop
+        $data = $response.Content | ConvertFrom-Json
+        if ($data.tunnels.Count -gt 0) {
+            $ActiveUrl = $data.tunnels[0].public_url
+            break
+        }
+    } catch {
+        Start-Sleep -Seconds 1
     }
 }
 
@@ -163,5 +180,9 @@ if ($ActiveUrl) {
     Write-Host $ActiveUrl -ForegroundColor Cyan
     Write-Host "====================`n" -ForegroundColor Green
 } else {
-    Write-Host "WARNING: Could not retrieve active tunnel URL. Tunnel may not be running correctly." -ForegroundColor Yellow
+    Write-Host "WARNING: Could not connect to ngrok tunnel API on 127.0.0.1:4040." -ForegroundColor Yellow
+    if (Test-Path $ngrokLog) {
+        Write-Host "Recent ngrok log entries:" -ForegroundColor Yellow
+        Get-Content $ngrokLog -Tail 10 | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+    }
 }

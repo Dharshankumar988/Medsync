@@ -23,9 +23,55 @@ if (-not (Test-Path $ContainersFile)) { New-Item $ContainersFile -ItemType File 
 if (-not (Test-Path $PidsFile)) { New-Item $PidsFile -ItemType File -Force | Out-Null }
 
 # Get version
-$VERSION = "1.0.7"
+$VERSION = "1.0.8"
 if (Test-Path "VERSION") {
     $VERSION = (Get-Content "VERSION" -Raw).Trim()
+}
+
+$Script:KeepRunning = $false
+
+function Stop-MedSyncServices {
+    param([string]$Reason = "Shutdown")
+    if ($Script:KeepRunning) { return }
+
+    Write-Host "`nStopping MedSync services ($Reason)..." -ForegroundColor Yellow
+
+    # Stop tracked PIDs (ngrok)
+    if (Test-Path $PidsFile) {
+        $pids = Get-Content $PidsFile -ErrorAction SilentlyContinue | Where-Object { $_ -match "\S" } | Select-Object -Unique
+        foreach ($p in $pids) {
+            try {
+                $process = Get-Process -Id $p -ErrorAction SilentlyContinue
+                if ($process) {
+                    Write-Host "Stopping process PID $p..." -ForegroundColor Gray
+                    Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
+                }
+            } catch {}
+        }
+        Remove-Item -Path $PidsFile -Force -ErrorAction SilentlyContinue
+    }
+
+    # Stop any running ngrok
+    Get-Process -Name "ngrok" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+    # Stop tracked containers
+    if (Test-Path $ContainersFile) {
+        $containers = Get-Content $ContainersFile -ErrorAction SilentlyContinue | Where-Object { $_ -match "\S" } | Select-Object -Unique
+        foreach ($c in $containers) {
+            Write-Host "Stopping and removing container $c..." -ForegroundColor Gray
+            docker rm -f $c 2>&1 | Out-Null
+        }
+        Remove-Item -Path $ContainersFile -Force -ErrorAction SilentlyContinue
+    }
+
+    # Explicit fallback for backend container
+    $existing = docker ps -a -q -f "name=^/${BACKEND_CONTAINER}$" 2>$null
+    if ($existing) {
+        Write-Host "Stopping and removing container $BACKEND_CONTAINER..." -ForegroundColor Gray
+        docker rm -f $BACKEND_CONTAINER 2>&1 | Out-Null
+    }
+
+    Write-Host "MedSync services stopped cleanly. Containers removed." -ForegroundColor Green
 }
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -79,7 +125,7 @@ $BACKEND_PORT = if ($Port) { [int]$Port } elseif ($env:PORT) { [int]$env:PORT } 
 
 
 # ==========================================
-# FUNCTION: Start-Backend (Option A)
+# FUNCTION: Start-Backend
 # ==========================================
 function Start-Backend {
     param ([string]$EnvOverride = "")
@@ -160,9 +206,42 @@ function Start-Backend {
     Invoke-Expression $runCmd | Out-Null
     $BACKEND_CONTAINER | Out-File -FilePath $ContainersFile -Append -Encoding utf8
 
-    Write-Host "Waiting for backend to become healthy (HTTP 200)..."
+    Write-Host "`nWaiting for backend to become healthy (HTTP 200)..." -ForegroundColor Cyan
     $healthy = $false
-    for ($i = 0; $i -lt 150; $i++) {
+    $maxIterations = 150
+    $barWidth = 26
+    $elapsedSec = 0
+
+    for ($i = 0; $i -lt $maxIterations; $i++) {
+        $elapsedSec = ($i + 1) * 2
+
+        $statusText = if ($elapsedSec -lt 12) {
+            "Starting container runtime..."
+        } elseif ($elapsedSec -lt 26) {
+            "Running database migrations..."
+        } elseif ($elapsedSec -lt 40) {
+            "Verifying schema & database..."
+        } else {
+            "Warming up API & Uvicorn..."
+        }
+
+        # Progress bar percentage (advances smoothly toward ~95% until server returns 200 OK)
+        $pct = [math]::Min(95, [int](($elapsedSec / 45) * 88))
+        if ($elapsedSec -gt 45) {
+            $pct = [math]::Min(98, 88 + [int]((($elapsedSec - 45) / 255) * 10))
+        }
+
+        $filled = [math]::Floor(($pct / 100) * $barWidth)
+        $empty = [math]::Max(0, $barWidth - $filled)
+        $bar = ("#" * [int]$filled) + ("-" * [int]$empty)
+
+        $progressLine = "`r  [$bar] {0,3}% | {1,-32} ({2}s)" -f $pct, $statusText, $elapsedSec
+        Write-Host -NoNewline $progressLine -ForegroundColor Cyan
+
+        try {
+            Write-Progress -Activity "Starting MedSync Backend" -Status "$statusText ($elapsedSec s)" -PercentComplete $pct
+        } catch {}
+
         Start-Sleep -Seconds 2
         try {
             $response = Invoke-WebRequest -Uri "http://127.0.0.1:${BACKEND_PORT}/health" -UseBasicParsing -ErrorAction SilentlyContinue
@@ -171,44 +250,58 @@ function Start-Backend {
                 break
             }
         } catch {}
-        if (($i + 1) % 15 -eq 0) {
-            Write-Host "Still waiting for backend initialization / model loading ($($i+1)/150)..." -ForegroundColor Yellow
-        }
     }
-    
-    if (-not $healthy) {
-        Write-Host "ERROR: Backend failed health check." -ForegroundColor Red
+
+    try { Write-Progress -Activity "Starting MedSync Backend" -Completed } catch {}
+
+    if ($healthy) {
+        $fullBar = "#" * $barWidth
+        $completeLine = "`r  [$fullBar] 100% | Backend ready and responsive!      ({0}s)`n" -f $elapsedSec
+        Write-Host -NoNewline $completeLine -ForegroundColor Green
+        Write-Host "Backend: HEALTHY (Port $BACKEND_PORT)" -ForegroundColor Green
+    } else {
+        Write-Host "`n"
+        Write-Host "ERROR: Backend failed health check after $elapsedSec seconds." -ForegroundColor Red
         docker logs --tail 30 $BACKEND_CONTAINER
         exit 1
     }
-    Write-Host "Backend: HEALTHY (Port $BACKEND_PORT)" -ForegroundColor Green
+}
+
+
+# ==========================================
+# EXECUTION (Wrapped for Ctrl+C Auto-Cleanup)
+# ==========================================
+try {
+    Start-Backend
+
+    if (-not $NoNgrok -and -not $Remote -and (Test-Path ".\start-ngrok.ps1")) {
+        .\start-ngrok.ps1 -Mode Backend
+    }
+
+    Write-Host "`n========================================================" -ForegroundColor Magenta
+    Write-Host "          MEDSYNC FULL BACKEND READY                   " -ForegroundColor Magenta
+    Write-Host "========================================================" -ForegroundColor Magenta
+    Write-Host "Local / Server Endpoint: http://127.0.0.1:$BACKEND_PORT"
 
     if ($FollowLogs) {
-        Write-Host "`nStreaming backend logs (Ctrl+C to exit log stream)..." -ForegroundColor Cyan
+        Write-Host "`nStreaming backend logs (Ctrl+C to stop services)..." -ForegroundColor Cyan
         docker logs -f $BACKEND_CONTAINER
+        exit 0
+    }
+
+    if ($Daemon) {
+        Write-Host "`nService is running in background (Daemon mode). Exiting starter process." -ForegroundColor Green
+        $Script:KeepRunning = $true
+        exit 0
+    }
+
+    Write-Host "`nPress Ctrl+C to stop services or run .\stop-medsync.ps1 in another terminal." -ForegroundColor Yellow
+    while ($true) {
+        Start-Sleep -Seconds 1
     }
 }
-
-
-# ==========================================
-# EXECUTION
-# ==========================================
-
-Start-Backend
-
-if (-not $NoNgrok -and -not $Remote -and (Test-Path ".\start-ngrok.ps1")) {
-    .\start-ngrok.ps1 -Mode Backend
+finally {
+    if (-not $Script:KeepRunning) {
+        Stop-MedSyncServices -Reason "Interrupted / Ctrl+C"
+    }
 }
-
-Write-Host "`n========================================================" -ForegroundColor Magenta
-Write-Host "          MEDSYNC FULL BACKEND READY                   " -ForegroundColor Magenta
-Write-Host "========================================================" -ForegroundColor Magenta
-Write-Host "Local / Server Endpoint: http://127.0.0.1:$BACKEND_PORT"
-
-if ($Daemon) {
-    Write-Host "`nService is running in background (Daemon mode). Exiting starter process." -ForegroundColor Green
-    exit 0
-}
-
-Write-Host "`nPress Ctrl+C to stop services or run .\stop-medsync.ps1 in another terminal." -ForegroundColor Yellow
-while ($true) { Start-Sleep -Seconds 3600 }

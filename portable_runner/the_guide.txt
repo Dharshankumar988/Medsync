@@ -2,6 +2,20 @@
 
 Run MedSync on Windows without cloning the entire repository.
 
+---
+
+## ⚡ Quick Command Reference
+
+- Start MedSync: `.\start-medsync.bat` (or `powershell -ExecutionPolicy Bypass -File .\start-medsync.ps1`)
+- Stop MedSync: Press `Ctrl+C` in the runner window, or run `.\stop-medsync.bat`
+- Check Status: `.\medsync-status.bat`
+- Stream Logs: `docker logs -f medsync-backend`
+- Force Kill Container: `docker rm -f medsync-backend`
+- Start Tunnel Only: `.\start-ngrok.bat`
+- Edit Secrets: `notepad .env`
+
+---
+
 You only need:
 1. Windows
 2. Docker Desktop
