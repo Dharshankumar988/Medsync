@@ -181,6 +181,25 @@ Write-Host ""
 
 $launchNow = Read-Host "Would you like to start MedSync Portable Runner now? [Y/N] (Default: Y)"
 if ($launchNow -notmatch "^[nN]") {
+    # Verify Docker daemon is responsive before launching
+    Write-Host "`nVerifying Docker engine readiness..." -ForegroundColor Cyan
+    $dockerReady = $false
+    for ($d = 0; $d -lt 30; $d++) {
+        try {
+            $null = docker info 2>&1
+            $dockerReady = $true
+            break
+        } catch {
+            Write-Host "Waiting for Docker daemon to initialize ($($d+1)/30)..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 2
+        }
+    }
+    if (-not $dockerReady) {
+        Write-Host "WARNING: Docker daemon is not running. Please start Docker Desktop manually." -ForegroundColor Red
+        Write-Host "After starting Docker Desktop, run: .\start-medsync.bat" -ForegroundColor Yellow
+        exit 1
+    }
+
     Write-Host "`nSelect Runner Mode:" -ForegroundColor Cyan
     Write-Host "  1. Desktop Runner (Interactive with live tunnel status) [Default]"
     Write-Host "  2. Remote / Headless Server Mode (-Remote -Headless)"

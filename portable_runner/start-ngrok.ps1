@@ -9,40 +9,81 @@ Set-Location -LiteralPath $ScriptPath
 
 Write-Host "Starting Ngrok Tunnel for $Mode..." -ForegroundColor Cyan
 
-# 1. Check if ngrok is available
+# 1. Check if ngrok is available (Prioritize local folder first)
 $NgrokPath = ""
-if (Get-Command "ngrok" -ErrorAction SilentlyContinue) {
+$LocalNgrokPath = Join-Path $ScriptPath "ngrok.exe"
+
+if (Test-Path -LiteralPath $LocalNgrokPath) {
+    $NgrokPath = $LocalNgrokPath
+} elseif (Get-Command "ngrok" -ErrorAction SilentlyContinue) {
     $NgrokPath = (Get-Command "ngrok").Source
     if (-not $NgrokPath) { $NgrokPath = "ngrok" }
 } else {
-    $LocalNgrokPath = Join-Path $ScriptPath "ngrok.exe"
-    if (Test-Path -LiteralPath $LocalNgrokPath) {
-        $NgrokPath = $LocalNgrokPath
-    } else {
-        $CommonLocations = @(
-            "$env:LOCALAPPDATA\Microsoft\WindowsApps\ngrok.exe",
-            "$env:ProgramFiles\ngrok\ngrok.exe",
-            "${env:ProgramFiles(x86)}\ngrok\ngrok.exe",
-            "$env:LOCALAPPDATA\ngrok\ngrok.exe",
-            "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ngrok.exe",
-            "$env:ProgramData\chocolatey\bin\ngrok.exe",
-            "$env:USERPROFILE\scoop\shims\ngrok.exe",
-            "$env:USERPROFILE\Downloads\ngrok.exe"
-        )
-        
-        foreach ($loc in $CommonLocations) {
-            if (Test-Path -LiteralPath $loc) {
-                $NgrokPath = $loc
-                break
-            }
-        }
-
-        if (-not $NgrokPath) {
-            Write-Host "ngrok not found. Please install ngrok or place ngrok.exe in the portable_runner folder." -ForegroundColor Red
-            exit 1
+    $CommonLocations = @(
+        "$env:LOCALAPPDATA\Microsoft\WindowsApps\ngrok.exe",
+        "$env:ProgramFiles\ngrok\ngrok.exe",
+        "${env:ProgramFiles(x86)}\ngrok\ngrok.exe",
+        "$env:LOCALAPPDATA\ngrok\ngrok.exe",
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ngrok.exe",
+        "$env:ProgramData\chocolatey\bin\ngrok.exe",
+        "$env:USERPROFILE\scoop\shims\ngrok.exe",
+        "$env:USERPROFILE\Downloads\ngrok.exe"
+    )
+    
+    foreach ($loc in $CommonLocations) {
+        if (Test-Path -LiteralPath $loc) {
+            $NgrokPath = $loc
+            break
         }
     }
 }
+
+# Auto-download ngrok if not found on this system
+if (-not $NgrokPath -or -not (Test-Path -LiteralPath $NgrokPath)) {
+    Write-Host "ngrok binary not found. Automatically downloading latest ngrok v3 for Windows..." -ForegroundColor Cyan
+    try {
+        $tempNgrokZip = Join-Path $env:TEMP "ngrok-latest.zip"
+        curl.exe -L -o "$tempNgrokZip" "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip"
+        if (Test-Path $tempNgrokZip) {
+            Expand-Archive -Path $tempNgrokZip -DestinationPath $ScriptPath -Force
+            Remove-Item -Path $tempNgrokZip -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath $LocalNgrokPath) {
+            $NgrokPath = $LocalNgrokPath
+            Write-Host "ngrok v3 downloaded and installed into portable runner successfully." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "Notice: Failed to auto-download ngrok." -ForegroundColor Yellow
+    }
+}
+
+if (-not $NgrokPath) {
+    Write-Host "ERROR: ngrok not found. Please install ngrok or place ngrok.exe in the portable_runner folder." -ForegroundColor Red
+    exit 1
+}
+
+# Version check: ensure minimum version >= 3.30.0 for free tier compatibility
+try {
+    $verString = (& $NgrokPath version 2>&1 | Out-String).Trim()
+    if ($verString -match "version\s+(\d+)\.(\d+)") {
+        $maj = [int]$matches[1]
+        $min = [int]$matches[2]
+        if ($maj -lt 3 -or ($maj -eq 3 -and $min -lt 30)) {
+            Write-Host "WARNING: Found outdated $verString (Minimum required is 3.30.0)." -ForegroundColor Yellow
+            Write-Host "Upgrading to latest ngrok in $LocalNgrokPath..." -ForegroundColor Cyan
+            $tempNgrokZip = Join-Path $env:TEMP "ngrok-latest.zip"
+            curl.exe -L -o "$tempNgrokZip" "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip"
+            if (Test-Path $tempNgrokZip) {
+                Expand-Archive -Path $tempNgrokZip -DestinationPath $ScriptPath -Force
+                Remove-Item -Path $tempNgrokZip -Force -ErrorAction SilentlyContinue
+                $NgrokPath = $LocalNgrokPath
+                $verString = (& $NgrokPath version 2>&1 | Out-String).Trim()
+                Write-Host "ngrok upgraded to $verString." -ForegroundColor Green
+            }
+        }
+    }
+    Write-Host "Using: $verString ($NgrokPath)" -ForegroundColor Gray
+} catch {}
 
 # 2. Check for .env variables based on Mode
 $EnvPath = Join-Path $ScriptPath ".env"
@@ -144,6 +185,11 @@ while ($RetryCount -lt $MaxRetries) {
     }
     Start-Sleep -Seconds 1
     $RetryCount++
+}
+
+if (-not $IsHealthy) {
+    Write-Host "NOTE: Local backend on port $TargetPort is not responding." -ForegroundColor Yellow
+    Write-Host "      If you want to start the Docker backend AND tunnel together, run: .\start-medsync.bat" -ForegroundColor Yellow
 }
 
 # 7. Query active tunnel URL
