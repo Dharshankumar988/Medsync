@@ -16,7 +16,7 @@ param (
 if ($Help) {
     Write-Host ""
     Write-Host "========================================================================" -ForegroundColor Cyan
-    Write-Host "               MEDSYNC PORTABLE RUNNER — COMMAND GUIDE                  " -ForegroundColor Cyan
+    Write-Host "               MEDSYNC PORTABLE RUNNER - COMMAND GUIDE                  " -ForegroundColor Cyan
     Write-Host "========================================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  .\start-medsync.bat           Start Backend & Ngrok Tunnel (Interactive)" -ForegroundColor Green
