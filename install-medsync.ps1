@@ -169,6 +169,15 @@ Write-Host "Installation directory: $installPath"
 Write-Host "Portable runner:       $portableRunnerPath"
 Write-Host "Configuration file:    $envPath"
 Write-Host ""
+Write-Host "------------------------------------------------------------------------" -ForegroundColor DarkCyan
+Write-Host " Command Cheat Sheet (run inside portable_runner):" -ForegroundColor White
+Write-Host "   .\start-medsync.bat           Start MedSync Backend + Tunnel" -ForegroundColor Green
+Write-Host "   .\stop-medsync.bat            Stop all services & clean Docker" -ForegroundColor Yellow
+Write-Host "   .\medsync-status.bat          Check health & tunnel status" -ForegroundColor White
+Write-Host "   .\commands.bat                Show all available commands" -ForegroundColor White
+Write-Host "   notepad .env                  Edit configuration & API keys" -ForegroundColor White
+Write-Host "------------------------------------------------------------------------" -ForegroundColor DarkCyan
+Write-Host ""
 
 $launchNow = Read-Host "Would you like to start MedSync Portable Runner now? [Y/N] (Default: Y)"
 if ($launchNow -notmatch "^[nN]") {

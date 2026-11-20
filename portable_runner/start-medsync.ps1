@@ -9,8 +9,35 @@ param (
     [switch]$FollowLogs,
     [switch]$Daemon,
     [string]$Image = "",
-    [switch]$Update
+    [switch]$Update,
+    [switch]$Help
 )
+
+if ($Help) {
+    Write-Host ""
+    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host "               MEDSYNC PORTABLE RUNNER — COMMAND GUIDE                  " -ForegroundColor Cyan
+    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  .\start-medsync.bat           Start Backend & Ngrok Tunnel (Interactive)" -ForegroundColor Green
+    Write-Host "  .\stop-medsync.bat            Stop all services & clean Docker container" -ForegroundColor Yellow
+    Write-Host "  .\medsync-status.bat          Check backend health & active ngrok URL" -ForegroundColor White
+    Write-Host "  .\start-ngrok.bat             Start / Restart Ngrok tunnel only" -ForegroundColor White
+    Write-Host "  .\update-medsync.bat          Update runner scripts & pull latest image" -ForegroundColor White
+    Write-Host "  notepad .env                  Edit configuration & API keys" -ForegroundColor White
+    Write-Host "  docker logs -f medsync-backend Stream live backend logs" -ForegroundColor Gray
+    Write-Host "  docker rm -f medsync-backend   Force remove leftover container" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Flags for start-medsync.ps1:" -ForegroundColor White
+    Write-Host "  -FollowLogs                   Stream live logs directly in current window" -ForegroundColor Gray
+    Write-Host "  -Daemon                       Run backend in background without waiting" -ForegroundColor Gray
+    Write-Host "  -Port 8080                    Run backend on custom port" -ForegroundColor Gray
+    Write-Host "  -NoNgrok                      Skip starting the ngrok tunnel" -ForegroundColor Gray
+    Write-Host "  -Remote                       Run in remote/headless mode" -ForegroundColor Gray
+    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host ""
+    exit 0
+}
 
 $ErrorActionPreference = "Stop"
 $ScriptPath = $PSScriptRoot
@@ -281,7 +308,15 @@ try {
     Write-Host "`n========================================================" -ForegroundColor Magenta
     Write-Host "          MEDSYNC FULL BACKEND READY                   " -ForegroundColor Magenta
     Write-Host "========================================================" -ForegroundColor Magenta
-    Write-Host "Local / Server Endpoint: http://127.0.0.1:$BACKEND_PORT"
+    Write-Host "Local Server Endpoint:  http://127.0.0.1:$BACKEND_PORT" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Quick Commands (run in another terminal):" -ForegroundColor White
+    Write-Host "  .\stop-medsync.bat           Stop backend & clean Docker container" -ForegroundColor Gray
+    Write-Host "  .\medsync-status.bat         Check backend health & active ngrok URL" -ForegroundColor Gray
+    Write-Host "  .\start-ngrok.bat            Start / restart ngrok tunnel only" -ForegroundColor Gray
+    Write-Host "  docker logs -f $BACKEND_CONTAINER Stream live backend logs" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Tip: Press Ctrl+C in this window anytime to cleanly stop services." -ForegroundColor Yellow
 
     if ($FollowLogs) {
         Write-Host "`nStreaming backend logs (Ctrl+C to stop services)..." -ForegroundColor Cyan
@@ -295,7 +330,6 @@ try {
         exit 0
     }
 
-    Write-Host "`nPress Ctrl+C to stop services or run .\stop-medsync.ps1 in another terminal." -ForegroundColor Yellow
     while ($true) {
         Start-Sleep -Seconds 1
     }
