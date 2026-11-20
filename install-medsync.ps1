@@ -81,23 +81,21 @@ if ($fileInfo.Length -eq 0) {
 Write-Host "Extracting archive..."
 $portableRunnerPath = Join-Path $installPath "portable_runner"
 try {
-    if (-not (Test-Path $portableRunnerPath)) {
-        New-Item -ItemType Directory -Path $portableRunnerPath -Force | Out-Null
+    # Extract to installPath since the zip root already contains 'portable_runner/'
+    Expand-Archive -Path $zipPath -DestinationPath $installPath -Force
+    
+    # If a nested portable_runner folder exists from previous installs, overwrite parent
+    $nested = Join-Path $portableRunnerPath "portable_runner"
+    if (Test-Path $nested) {
+        Get-ChildItem -Path $nested | Copy-Item -Destination $portableRunnerPath -Recurse -Force
+        Remove-Item $nested -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Expand-Archive -Path $zipPath -DestinationPath $portableRunnerPath -Force
 } catch {
     Write-Host "ERROR: Failed to extract ZIP." -ForegroundColor Red
     exit 1
 }
 
 # 4. Verify extraction
-if (-not (Test-Path (Join-Path $portableRunnerPath "start-medsync.ps1"))) {
-    $nested = Join-Path $portableRunnerPath "portable_runner"
-    if (Test-Path (Join-Path $nested "start-medsync.ps1")) {
-        Get-ChildItem -Path $nested | Move-Item -Destination $portableRunnerPath -Force
-        Remove-Item $nested -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
 if (-not (Test-Path (Join-Path $portableRunnerPath "start-medsync.ps1"))) {
     Write-Host "ERROR: start-medsync.ps1 was not found in the downloaded archive." -ForegroundColor Red
     exit 1
