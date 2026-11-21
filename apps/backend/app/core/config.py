@@ -57,15 +57,33 @@ class Settings(BaseSettings):
         if not self.SUPABASE_ANON_KEY:
             self.SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or self.SUPABASE_KEY or ""
         default_ai_token = "ms_ai_4c9d769acd23f75fb396b9e09bec77a82218824c83cbad53"
-        if not self.MEDSYNC_AI_TOKEN:
-            self.MEDSYNC_AI_TOKEN = (
-                os.getenv("MEDSYNC_AI_TOKEN")
-                or os.getenv("AI_SERVICE_TOKEN")
-                or self.AI_SERVICE_TOKEN
-                or default_ai_token
-            )
-        if not self.AI_SERVICE_TOKEN:
-            self.AI_SERVICE_TOKEN = self.MEDSYNC_AI_TOKEN or default_ai_token
+        
+        def is_valid_ai_token(tok: str) -> bool:
+            if not tok:
+                return False
+            clean = str(tok).strip().strip('"').strip("'")
+            # Exclude empty strings, placeholders, and user Hugging Face account tokens (hf_...)
+            if not clean or clean.startswith("your_") or clean.startswith("hf_"):
+                return False
+            return True
+
+        ai_token_candidates = [
+            self.MEDSYNC_AI_TOKEN,
+            self.AI_SERVICE_TOKEN,
+            os.getenv("MEDSYNC_AI_TOKEN"),
+            os.getenv("AI_SERVICE_TOKEN"),
+        ]
+        resolved_ai_token = None
+        for cand in ai_token_candidates:
+            if is_valid_ai_token(cand):
+                resolved_ai_token = str(cand).strip().strip('"').strip("'")
+                break
+
+        if not resolved_ai_token:
+            resolved_ai_token = default_ai_token
+
+        self.MEDSYNC_AI_TOKEN = resolved_ai_token
+        self.AI_SERVICE_TOKEN = resolved_ai_token
         return self
 
     model_config = SettingsConfigDict(

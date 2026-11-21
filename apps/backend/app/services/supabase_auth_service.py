@@ -172,19 +172,26 @@ class SupabaseAuthService:
             return False
 
         full_name = None
-        if user.role.value == "DOCTOR":
+        user_role_str = (user.role.value if hasattr(user.role, "value") else str(user.role)).upper()
+        if user_role_str == "DOCTOR":
             from app.models.doctor import Doctor
             doc_res = await db.execute(select(Doctor).where(Doctor.user_id == user.id))
             doc = doc_res.scalar_one_or_none()
             if doc:
                 full_name = doc.full_name
+        elif user_role_str == "PHARMACY":
+            from app.models.pharmacy import Pharmacy
+            phm_res = await db.execute(select(Pharmacy).where(Pharmacy.user_id == user.id))
+            phm = phm_res.scalar_one_or_none()
+            if phm:
+                full_name = phm.business_name
 
         return await cls.sync_or_create_user(
             db=db,
             user_id=user.id,
             email=clean_email,
             password=password,
-            role=user.role.value,
+            role=user_role_str,
             full_name=full_name,
         )
 

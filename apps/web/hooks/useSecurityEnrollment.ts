@@ -112,7 +112,10 @@ export function useSecurityEnrollment(userId?: string, role?: string) {
           setStatus('COMPLETED', activeUserId);
         } else if (resolvedHasPin === false) {
           setStatus('NOT_STARTED', activeUserId);
-          openEnrollmentModal(undefined, true);
+          const store = useSecurityStore.getState();
+          if (!store.dismissedForSession) {
+            openEnrollmentModal(undefined, true);
+          }
         }
       } catch (err) {
         console.error('Error fetching security status:', err);

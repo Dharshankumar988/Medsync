@@ -201,6 +201,6 @@ MedSync deploys 6 core registries on Polygon Amoy for decentralized verification
 
 ## 📄 License & Attribution
 
-© 2026 Dharshankumar988. All rights reserved.
+© 2026 Team Medsync. All rights reserved.
 
 - Commercial redistribution or unauthorized copying requires express written consent from the copyright holder.

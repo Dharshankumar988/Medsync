@@ -244,9 +244,13 @@ async def _get_or_create_verification_request_for_user(
     )
     v_req = existing_res.scalars().first()
     if v_req:
+        if not user.is_verified and v_req.status != VerificationStatus.PENDING:
+            v_req.status = VerificationStatus.PENDING
+            await db.flush()
         return v_req
 
-    role_type = RoleType.DOCTOR if user.role == UserRole.DOCTOR else RoleType.PHARMACY
+    user_role_str = (user.role.value if hasattr(user.role, "value") else str(user.role)).upper()
+    role_type = RoleType.DOCTOR if user_role_str == "DOCTOR" else RoleType.PHARMACY
     v_req = VerificationRequest(
         user_id=user.id,
         role_type=role_type,
@@ -286,6 +290,8 @@ async def get_pending_verifications(
     rows = result.all()
 
     for req, user, doctor, pharmacy in rows:
+        if user.id in seen_user_ids:
+            continue
         seen_user_ids.add(user.id)
         data.append(
             await _build_registration_verification_item(
@@ -493,7 +499,7 @@ async def approve_verification(
             data=AdminActionResponseData(success=True, id=str(location.id))
         )
 
-    # 3. Fallback: approve an unverified Doctor or Pharmacy user reconciled without a VerificationRequest row
+    # 3. Fallback: approve an unverified Doctor or Pharmacy user reconciled without a VerificationRequest row or by entity ID
     user_stmt = select(User).where(
         User.id == request_id,
         User.role.in_([UserRole.DOCTOR, UserRole.PHARMACY]),
@@ -501,6 +507,17 @@ async def approve_verification(
     )
     user_res = await db.execute(user_stmt)
     target_user = user_res.scalar_one_or_none()
+
+    if not target_user:
+        # Fallback: check if request_id matches a Pharmacy record
+        phm_stmt = select(User).join(Pharmacy, User.id == Pharmacy.user_id).where(Pharmacy.id == request_id, User.deleted_at.is_(None))
+        target_user = (await db.execute(phm_stmt)).scalar_one_or_none()
+
+    if not target_user:
+        # Fallback: check if request_id matches a Doctor record
+        doc_stmt = select(User).join(Doctor, User.id == Doctor.user_id).where(Doctor.id == request_id, User.deleted_at.is_(None))
+        target_user = (await db.execute(doc_stmt)).scalar_one_or_none()
+
     if target_user:
         ensured_req = await _get_or_create_verification_request_for_user(db, target_user)
         req = await VerificationService.approve_request(db, ensured_req.id, current_admin.id)
@@ -555,7 +572,7 @@ async def reject_verification(
             data=AdminActionResponseData(success=True, id=str(location.id))
         )
 
-    # 3. Fallback: reject an unverified Doctor or Pharmacy user reconciled without a VerificationRequest row
+    # 3. Fallback: reject an unverified Doctor or Pharmacy user reconciled without a VerificationRequest row or by entity ID
     user_stmt = select(User).where(
         User.id == request_id,
         User.role.in_([UserRole.DOCTOR, UserRole.PHARMACY]),
@@ -563,6 +580,17 @@ async def reject_verification(
     )
     user_res = await db.execute(user_stmt)
     target_user = user_res.scalar_one_or_none()
+
+    if not target_user:
+        # Fallback: check if request_id matches a Pharmacy record
+        phm_stmt = select(User).join(Pharmacy, User.id == Pharmacy.user_id).where(Pharmacy.id == request_id, User.deleted_at.is_(None))
+        target_user = (await db.execute(phm_stmt)).scalar_one_or_none()
+
+    if not target_user:
+        # Fallback: check if request_id matches a Doctor record
+        doc_stmt = select(User).join(Doctor, User.id == Doctor.user_id).where(Doctor.id == request_id, User.deleted_at.is_(None))
+        target_user = (await db.execute(doc_stmt)).scalar_one_or_none()
+
     if target_user:
         ensured_req = await _get_or_create_verification_request_for_user(db, target_user)
         req = await VerificationService.reject_request(db, ensured_req.id, current_admin.id, "Rejected by admin")

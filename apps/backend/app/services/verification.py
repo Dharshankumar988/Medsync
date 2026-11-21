@@ -22,8 +22,35 @@ class VerificationService:
         if not req:
             raise NotFoundException("Verification request not found")
         
+        user_stmt = select(User).where(User.id == req.user_id)
+        user_result = await db.execute(user_stmt)
+        user = user_result.scalar_one_or_none()
+
         if req.status == VerificationStatus.APPROVED:
-            raise BadRequestException("Request is already approved")
+            # Idempotently ensure user and related pharmacy/doctor are activated and verified
+            if user:
+                user.status = UserStatus.ACTIVE
+                user.is_verified = True
+                user_role_str = (user.role.value if hasattr(user.role, "value") else str(user.role)).upper()
+                if user_role_str == "PHARMACY":
+                    from app.models.pharmacy import Pharmacy
+                    from app.api.v1.endpoints.pharmacy import _generate_qr_identifier
+                    phm_stmt = select(Pharmacy).where(Pharmacy.user_id == user.id)
+                    phm_res = await db.execute(phm_stmt)
+                    pharmacy = phm_res.scalar_one_or_none()
+                    if pharmacy:
+                        if not pharmacy.qr_identifier:
+                            pharmacy.qr_identifier = _generate_qr_identifier(user.id)
+                        pharmacy.qr_status = "ACTIVE"
+                elif user_role_str == "DOCTOR":
+                    from app.models.doctor import Doctor
+                    doc_stmt = select(Doctor).where(Doctor.user_id == user.id)
+                    doc_res = await db.execute(doc_stmt)
+                    doctor = doc_res.scalar_one_or_none()
+                    if doctor:
+                        doctor.doctor_status = "ACTIVE"
+                await db.commit()
+            return req
             
         now_utc = datetime.utcnow()
         reviewer_id = await VerificationService._resolve_reviewer_id(db, admin_id)
@@ -34,15 +61,13 @@ class VerificationService:
         req.approval_date = now_utc
         
         # Update user status to active
-        user_stmt = select(User).where(User.id == req.user_id)
-        user_result = await db.execute(user_stmt)
-        user = user_result.scalar_one_or_none()
-        
         if user:
             user.status = UserStatus.ACTIVE
             user.is_verified = True
             
-            if user.role.value == "DOCTOR":
+            user_role_str = (user.role.value if hasattr(user.role, "value") else str(user.role)).upper()
+
+            if user_role_str == "DOCTOR":
                 from app.models.doctor import Doctor
                 from app.models.hospital import Hospital
                 from app.models.doctor_location import DoctorLocation, LocationVerificationStatus
@@ -93,7 +118,7 @@ class VerificationService:
                         loc.verified_at = now_utc
 
                     _hospitals_cache.clear()
-            elif user.role.value == "PHARMACY":
+            elif user_role_str == "PHARMACY":
                 from app.models.pharmacy import Pharmacy
                 from app.api.v1.endpoints.pharmacy import _generate_qr_identifier
                 phm_stmt = select(Pharmacy).where(Pharmacy.user_id == user.id)
@@ -119,6 +144,18 @@ class VerificationService:
                 )
             except Exception as auth_sync_err:
                 print(f"Warning: Failed to sync approved user with Supabase Auth: {auth_sync_err}")
+
+            # Mark other pending verification requests for this user as approved to prevent stale duplicates
+            other_v_stmt = select(VerificationRequest).where(
+                VerificationRequest.user_id == user.id,
+                VerificationRequest.id != req.id,
+                VerificationRequest.status == VerificationStatus.PENDING
+            )
+            other_res = await db.execute(other_v_stmt)
+            for other_req in other_res.scalars().all():
+                other_req.status = VerificationStatus.APPROVED
+                other_req.reviewer_id = reviewer_id
+                other_req.approval_date = now_utc
             
         await db.commit()
         await db.refresh(req)
@@ -180,7 +217,7 @@ class VerificationService:
             raise NotFoundException("Verification request not found")
             
         if req.status == VerificationStatus.REJECTED:
-            raise BadRequestException("Request is already rejected")
+            return req
             
         now_utc = datetime.utcnow()
         reviewer_id = await VerificationService._resolve_reviewer_id(db, admin_id)
@@ -192,7 +229,8 @@ class VerificationService:
         user_stmt = select(User).where(User.id == req.user_id)
         user_result = await db.execute(user_stmt)
         user = user_result.scalar_one_or_none()
-        if user and user.role.value == "DOCTOR":
+        user_role_str = (user.role.value if hasattr(user.role, "value") else str(user.role)).upper() if user else ""
+        if user and user_role_str == "DOCTOR":
             from app.models.doctor import Doctor
             doc_stmt = select(Doctor).where(Doctor.user_id == user.id)
             doc_result = await db.execute(doc_stmt)
@@ -202,6 +240,26 @@ class VerificationService:
                 doctor.approval_notes = reason
                 doctor.approval_date = now_utc
                 doctor.approved_by = admin_id
+        elif user and user_role_str == "PHARMACY":
+            from app.models.pharmacy import Pharmacy
+            phm_stmt = select(Pharmacy).where(Pharmacy.user_id == user.id)
+            phm_res = await db.execute(phm_stmt)
+            pharmacy = phm_res.scalar_one_or_none()
+            if pharmacy:
+                pharmacy.qr_status = "REJECTED"
+
+        if user:
+            other_v_stmt = select(VerificationRequest).where(
+                VerificationRequest.user_id == user.id,
+                VerificationRequest.id != req.id,
+                VerificationRequest.status == VerificationStatus.PENDING
+            )
+            other_res = await db.execute(other_v_stmt)
+            for other_req in other_res.scalars().all():
+                other_req.status = VerificationStatus.REJECTED
+                other_req.reviewer_id = reviewer_id
+                other_req.review_date = now_utc
+                other_req.rejection_reason = reason
         
         await db.commit()
         await db.refresh(req)

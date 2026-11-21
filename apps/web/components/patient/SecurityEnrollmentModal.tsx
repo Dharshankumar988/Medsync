@@ -64,8 +64,21 @@ export default function SecurityEnrollmentModal() {
             ).toLowerCase()
           );
           const provider = String(user.app_metadata?.provider || '').toLowerCase();
+          const providers = Array.isArray(user.app_metadata?.providers)
+            ? user.app_metadata.providers.map((p: any) => String(p).toLowerCase())
+            : [];
+          const identities = Array.isArray(user.identities)
+            ? user.identities.map((id: any) => String(id.provider).toLowerCase())
+            : [];
+          const isGoogle =
+            provider === 'google' ||
+            providers.includes('google') ||
+            identities.includes('google') ||
+            Boolean(user.user_metadata?.avatar_url && user.user_metadata?.iss?.includes('google')) ||
+            (Boolean(user.email && user.email.toLowerCase().endsWith('@gmail.com')) && !user.user_metadata?.has_password);
+
           const hasPassword = Boolean(user.user_metadata?.has_password);
-          setIsOAuthWithoutPassword(provider === 'google' && !hasPassword);
+          setIsOAuthWithoutPassword(isGoogle && !hasPassword);
         }
       } catch {
         // Ignore
@@ -100,16 +113,15 @@ export default function SecurityEnrollmentModal() {
   const isBlocked = isMandatory && status !== 'COMPLETED';
 
   useEffect(() => {
-    if (!isEnrollmentModalOpen || !isBlocked) return;
+    if (!isEnrollmentModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
+        closeEnrollmentModal();
       }
     };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isEnrollmentModalOpen, isBlocked]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEnrollmentModalOpen, closeEnrollmentModal]);
 
   if (!isEnrollmentModalOpen || !PIN_ENABLED_ROLES.has(normalizedRole)) {
     return null;
@@ -117,12 +129,8 @@ export default function SecurityEnrollmentModal() {
 
   const handlePinSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!password.trim()) {
-      setPinError(
-        isOAuthWithoutPassword
-          ? 'Please set an account password to protect your PIN.'
-          : 'Please enter your account password to verify your identity.'
-      );
+    if (!isOAuthWithoutPassword && !password.trim()) {
+      setPinError('Please enter your account password to verify your identity.');
       return;
     }
     if (pin.length !== 6 || !/^\d+$/.test(pin)) {
@@ -138,26 +146,11 @@ export default function SecurityEnrollmentModal() {
     setIsSubmitting(true);
 
     try {
-      // Only set Supabase password if this is a passwordless Google OAuth account
-      if (isOAuthWithoutPassword) {
-        try {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          if (user) {
-            await supabase.auth.updateUser({
-              password: password.trim(),
-              data: { has_password: true },
-            });
-          }
-        } catch (authErr) {
-          console.warn('Supabase auth password sync during PIN enrollment:', authErr);
-        }
-      }
-
       const formData = new FormData();
       formData.append('pin', pin);
-      formData.append('password', password.trim());
+      if (password.trim()) {
+        formData.append('password', password.trim());
+      }
 
       await api.post('/api/v1/security/enroll-pin', formData);
 
@@ -194,6 +187,7 @@ export default function SecurityEnrollmentModal() {
       isMandatory: false,
       status: 'UNKNOWN',
       checkedUserId: null,
+      dismissedForSession: false,
       onSuccessCallback: null,
     });
     router.replace('/login');
@@ -203,7 +197,7 @@ export default function SecurityEnrollmentModal() {
     pin.length === 6 &&
     confirmPin.length === 6 &&
     pin === confirmPin &&
-    password.trim().length > 0;
+    (isOAuthWithoutPassword || password.trim().length > 0);
 
   const copy = ROLE_COPY[normalizedRole] || ROLE_COPY.patient;
 
@@ -225,16 +219,15 @@ export default function SecurityEnrollmentModal() {
           transition={{ type: 'spring', stiffness: 280, damping: 24 }}
           className="bg-card w-full max-w-md p-6 sm:p-7 rounded-2xl shadow-2xl relative border border-border/70"
         >
-          {!isBlocked && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-4 top-4 rounded-full"
-              onClick={closeEnrollmentModal}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-4 top-4 rounded-full text-muted-foreground hover:text-foreground"
+            onClick={closeEnrollmentModal}
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </Button>
 
           {enrollmentSuccess ? (
             <motion.div
@@ -270,36 +263,39 @@ export default function SecurityEnrollmentModal() {
                 )}
               </div>
 
-              {/* Account Password */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {isOAuthWithoutPassword ? 'Create Account Password' : 'Account Password'}
-                </label>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (pinError) setPinError('');
-                    }}
-                    className="h-11 rounded-xl pr-10"
-                    placeholder={
-                      isOAuthWithoutPassword
-                        ? 'Create a password for your MedSync account'
-                        : 'Enter your account password to verify'
-                    }
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+              {/* Account Password or Google OAuth Notice */}
+              {isOAuthWithoutPassword ? (
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs text-left">
+                  <ShieldCheck className="w-5 h-5 shrink-0 text-cyan-400" />
+                  <span>Signed in with Google. No account password required — create your 6-digit Authorization PIN below.</span>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Account Password
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (pinError) setPinError('');
+                      }}
+                      className="h-11 rounded-xl pr-10"
+                      placeholder="Enter your account password to verify"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* New PIN */}
               <div className="space-y-1.5">
@@ -317,6 +313,7 @@ export default function SecurityEnrollmentModal() {
                   }}
                   className="text-center tracking-[0.5em] text-2xl font-mono h-12 rounded-xl"
                   placeholder="••••••"
+                  autoFocus={isOAuthWithoutPassword}
                 />
               </div>
 
@@ -369,18 +366,24 @@ export default function SecurityEnrollmentModal() {
                 {isSubmitting ? 'Setting Up Security PIN...' : 'Save Authorization PIN & Continue'}
               </Button>
 
-              {isBlocked && (
-                <div className="pt-1 text-center">
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Sign out & switch account
-                  </button>
-                </div>
-              )}
+              <div className="pt-1 flex items-center justify-center gap-4 text-center">
+                <button
+                  type="button"
+                  onClick={closeEnrollmentModal}
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Set Up Later
+                </button>
+                <span className="text-muted-foreground/30">•</span>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign out & switch account
+                </button>
+              </div>
             </form>
           )}
         </motion.div>

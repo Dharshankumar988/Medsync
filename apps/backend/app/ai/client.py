@@ -13,18 +13,24 @@ class AIMicroserviceClient:
         self.timeout = settings.AI_TIMEOUT
 
     def _get_headers(self) -> Dict[str, str]:
-        token = (
-            getattr(settings, "MEDSYNC_AI_TOKEN", "")
-            or getattr(settings, "AI_SERVICE_TOKEN", "")
-            or os.getenv("MEDSYNC_AI_TOKEN")
-            or os.getenv("AI_SERVICE_TOKEN")
-            or "ms_ai_4c9d769acd23f75fb396b9e09bec77a82218824c83cbad53"
-        )
-        headers = {}
-        if token:
-            clean_token = str(token).strip('"').strip("'").strip()
-            headers["Authorization"] = f"Bearer {clean_token}"
-        return headers
+        default_ai_token = "ms_ai_4c9d769acd23f75fb396b9e09bec77a82218824c83cbad53"
+        candidates = [
+            getattr(settings, "AI_SERVICE_TOKEN", ""),
+            getattr(settings, "MEDSYNC_AI_TOKEN", ""),
+            os.getenv("AI_SERVICE_TOKEN"),
+            os.getenv("MEDSYNC_AI_TOKEN"),
+        ]
+        token = None
+        for cand in candidates:
+            if cand:
+                clean = str(cand).strip('"').strip("'").strip()
+                if clean and not clean.startswith("your_") and not clean.startswith("hf_"):
+                    token = clean
+                    break
+        if not token:
+            token = default_ai_token
+
+        return {"Authorization": f"Bearer {token}"}
 
     @property
     def headers(self) -> Dict[str, str]:

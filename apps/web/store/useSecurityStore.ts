@@ -6,6 +6,7 @@ interface SecurityState {
   isMandatory: boolean;
   status: string;
   checkedUserId: string | null;
+  dismissedForSession: boolean;
   onSuccessCallback: (() => void) | null;
   openEnrollmentModal: (onSuccess?: () => void, mandatory?: boolean) => void;
   closeEnrollmentModal: () => void;
@@ -21,6 +22,7 @@ export const useSecurityStore = create<SecurityState>()(
       isMandatory: false,
       status: 'UNKNOWN',
       checkedUserId: null,
+      dismissedForSession: false,
       onSuccessCallback: null,
       openEnrollmentModal: (onSuccess, mandatory = false) =>
         set({
@@ -29,12 +31,10 @@ export const useSecurityStore = create<SecurityState>()(
           onSuccessCallback: onSuccess || null,
         }),
       closeEnrollmentModal: () => {
-        if (get().isMandatory && get().status !== 'COMPLETED') {
-          return;
-        }
         set({
           isEnrollmentModalOpen: false,
           isMandatory: false,
+          dismissedForSession: true,
           onSuccessCallback: null,
         });
       },
@@ -43,6 +43,7 @@ export const useSecurityStore = create<SecurityState>()(
           status: 'COMPLETED',
           isEnrollmentModalOpen: false,
           isMandatory: false,
+          dismissedForSession: false,
           onSuccessCallback: null,
         }),
       setStatus: (status: string, userId?: string | null) =>
@@ -55,6 +56,7 @@ export const useSecurityStore = create<SecurityState>()(
           set({
             checkedUserId: userId,
             status: 'UNKNOWN',
+            dismissedForSession: false,
             isEnrollmentModalOpen: false,
             isMandatory: false,
             onSuccessCallback: null,

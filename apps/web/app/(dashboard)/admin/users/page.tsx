@@ -215,16 +215,16 @@ export default function AdminUsers() {
   const handleApprove = async (id: string) => {
     setActionLoading(id);
     // Instant optimistic UI update
-    setVerifications((prev) => prev.filter((r) => r.request_id !== id && r.id !== id));
+    setVerifications((prev) => prev.filter((r) => r.request_id !== id && r.id !== id && r.user_id !== id));
     try {
       await api.post(`/api/v1/admin/verifications/${id}/approve`);
       toast.success("Application approved and verified successfully!");
-      fetchData();
+      await fetchData();
       setSelectedVerification(null);
     } catch (err: any) {
       console.error("Failed to approve", err);
       toast.error(err.response?.data?.detail || "Failed to approve verification");
-      fetchData();
+      await fetchData();
     } finally {
       setActionLoading(null);
     }
@@ -234,16 +234,16 @@ export default function AdminUsers() {
     if (!confirm("Are you sure you want to reject this verification request?")) return;
     setActionLoading(id);
     // Instant optimistic UI update
-    setVerifications((prev) => prev.filter((r) => r.request_id !== id && r.id !== id));
+    setVerifications((prev) => prev.filter((r) => r.request_id !== id && r.id !== id && r.user_id !== id));
     try {
       await api.post(`/api/v1/admin/verifications/${id}/reject`);
       toast.success("Verification request rejected");
-      fetchData();
+      await fetchData();
       setSelectedVerification(null);
     } catch (err: any) {
       console.error("Failed to reject", err);
       toast.error(err.response?.data?.detail || "Failed to reject verification");
-      fetchData();
+      await fetchData();
     } finally {
       setActionLoading(null);
     }

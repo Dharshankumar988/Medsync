@@ -94,8 +94,21 @@ export const MandatoryPinSetupModal: React.FC<MandatoryPinSetupModalProps> = ({
       .then(({ data: { user } }) => {
         if (user) {
           const provider = String(user.app_metadata?.provider || '').toLowerCase();
+          const providers = Array.isArray(user.app_metadata?.providers)
+            ? user.app_metadata.providers.map((p: any) => String(p).toLowerCase())
+            : [];
+          const identities = Array.isArray(user.identities)
+            ? user.identities.map((id: any) => String(id.provider).toLowerCase())
+            : [];
+          const isGoogle =
+            provider === 'google' ||
+            providers.includes('google') ||
+            identities.includes('google') ||
+            Boolean(user.user_metadata?.avatar_url && user.user_metadata?.iss?.includes('google')) ||
+            (Boolean(user.email && user.email.toLowerCase().endsWith('@gmail.com')) && !user.user_metadata?.has_password);
+
           const hasPassword = Boolean(user.user_metadata?.has_password);
-          setIsOAuthWithoutPassword(provider === 'google' && !hasPassword);
+          setIsOAuthWithoutPassword(isGoogle && !hasPassword);
         }
       })
       .catch(() => { });
