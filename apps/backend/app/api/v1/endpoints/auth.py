@@ -457,13 +457,17 @@ async def _ensure_pending_verification_request(db: AsyncSession, user: User, rol
     """Create a pending VerificationRequest if an unverified Doctor/Pharmacy lacks one."""
     if user.is_verified or user.status == UserStatus.SUSPENDED:
         return
-    if role not in (UserRole.DOCTOR, UserRole.PHARMACY):
+    role_str = (role.value if hasattr(role, "value") else str(role)).upper()
+    if role_str not in ("DOCTOR", "PHARMACY"):
         return
     existing_vr = await db.execute(
-        select(VerificationRequest).where(VerificationRequest.user_id == user.id)
+        select(VerificationRequest)
+        .where(VerificationRequest.user_id == user.id)
+        .order_by(VerificationRequest.created_at.desc())
     )
-    if existing_vr.scalars().first() is None:
-        role_type = RoleType.DOCTOR if role == UserRole.DOCTOR else RoleType.PHARMACY
+    v_req = existing_vr.scalars().first()
+    if v_req is None:
+        role_type = RoleType.DOCTOR if role_str == "DOCTOR" else RoleType.PHARMACY
         db.add(
             VerificationRequest(
                 user_id=user.id,
@@ -471,6 +475,8 @@ async def _ensure_pending_verification_request(db: AsyncSession, user: User, rol
                 status=VerificationStatus.PENDING,
             )
         )
+    elif v_req.status != VerificationStatus.PENDING and not user.is_verified:
+        v_req.status = VerificationStatus.PENDING
 
 
 @router.post("/sync", response_model=APIResponse[SyncUserResponseData])

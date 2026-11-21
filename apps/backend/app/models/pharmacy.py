@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base_class import Base
 from app.models.mixins import UUIDMixin, TimestampMixin
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy import JSON, Boolean, String
+from sqlalchemy import JSON, Boolean, String, Text
 
 class Pharmacy(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "pharmacies"
@@ -32,7 +32,7 @@ class Pharmacy(Base, UUIDMixin, TimestampMixin):
     branch_information: Mapped[str] = mapped_column(String, nullable=True)
     business_registration_number: Mapped[str] = mapped_column(String(255), nullable=True)
     description: Mapped[str] = mapped_column(String, nullable=True)
-    qr_identifier: Mapped[str] = mapped_column(String(255), unique=True, nullable=True)
+    qr_identifier: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
     qr_status: Mapped[str] = mapped_column(String(50), default='ACTIVE', nullable=True)
     # Blockchain Audit Fields
     blockchain_status: Mapped[str | None] = mapped_column(String(50), default="PENDING", index=True)

@@ -112,6 +112,22 @@ async def lifespan(app: FastAPI):
                     END IF;
                 END $$;
             """))
+            try:
+                await session.execute(text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.columns 
+                            WHERE table_name = 'pharmacies' 
+                            AND column_name = 'qr_identifier' 
+                            AND character_maximum_length IS NOT NULL
+                        ) THEN
+                            ALTER TABLE pharmacies ALTER COLUMN qr_identifier TYPE TEXT;
+                        END IF;
+                    END $$;
+                """))
+            except Exception as qr_col_err:
+                logger.debug(f"Pharmacy qr_identifier column migration notice: {qr_col_err}")
             await session.commit()
             logger.info("Database schema verified: security_pin_hash ensured and default demo pins set.")
     except Exception as e:

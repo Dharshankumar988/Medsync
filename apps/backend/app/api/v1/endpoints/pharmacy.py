@@ -26,9 +26,22 @@ router = APIRouter()
 require_pharmacy = RoleChecker([UserRole.PHARMACY])
 
 def _generate_qr_identifier(pharmacy_id: uuid.UUID) -> str:
-    """Generate a persistent, JWT-signed QR identifier for a pharmacy."""
-    from app.services.qr_pdf_service import QRPdfService
-    return QRPdfService.generate_dynamic_token(pharmacy_id, pharmacy_id, "PHARMACY_IDENTIFIER", expires_in_minutes=525600)
+    """
+    Generate a persistent, JWT-signed QR identifier for a pharmacy.
+    Maintains compact claims (<= 255 chars) for full compatibility with both VARCHAR(255) and TEXT columns.
+    """
+    from datetime import datetime, timezone, timedelta
+    from jose import jwt
+    from app.core.config import settings
+
+    expire = datetime.now(timezone.utc) + timedelta(minutes=525600)
+    to_encode = {
+        "exp": expire,
+        "sub": str(pharmacy_id),
+        "purpose": "PHARMACY_IDENTIFIER",
+        "type": "dynamic_qr"
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
 @router.get("/my-qr")
 async def get_my_qr(

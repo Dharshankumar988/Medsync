@@ -111,16 +111,22 @@ async def _build_registration_verification_item(
     db: AsyncSession,
 ) -> PendingVerificationItem:
     """Build a typed PendingVerificationItem for a Doctor or Pharmacy registration."""
+    user_role_str = (user.role.value if hasattr(user.role, "value") else str(user.role)).upper()
     profile_data = None
-    if user.role == UserRole.DOCTOR and doctor:
+
+    if user_role_str == "DOCTOR":
+        if not doctor:
+            doc_stmt = select(Doctor).where(Doctor.user_id == user.id)
+            doctor = (await db.execute(doc_stmt)).scalar_one_or_none()
+
         gst_no = None
-        clean_lic = doctor.license_number or ""
+        clean_lic = doctor.license_number or "" if doctor else ""
         if " | GST: " in clean_lic:
             parts = clean_lic.split(" | GST: ")
             clean_lic = parts[0].strip()
             gst_no = parts[1].strip()
 
-        practice_type = "CLINIC" if doctor.clinic_name else "HOSPITAL"
+        practice_type = "CLINIC" if doctor and doctor.clinic_name else "HOSPITAL"
         applied_hospital_info = None
         clinic_info = None
 
@@ -130,7 +136,7 @@ async def _build_registration_verification_item(
         clinic_hosp_res = await db.execute(clinic_hosp_stmt)
         clinic_hosp = clinic_hosp_res.scalar_one_or_none()
 
-        if doctor.hospital_id:
+        if doctor and doctor.hospital_id:
             hosp_stmt = select(Hospital).where(Hospital.id == doctor.hospital_id)
             hosp_res = await db.execute(hosp_stmt)
             linked_hosp = hosp_res.scalar_one_or_none()
@@ -158,7 +164,7 @@ async def _build_registration_verification_item(
                         "type": linked_hosp.type or "hospital"
                     }
 
-        if not clinic_info and (doctor.clinic_name or clinic_hosp):
+        if not clinic_info and doctor and (doctor.clinic_name or clinic_hosp):
             practice_type = "CLINIC"
             clinic_info = {
                 "name": doctor.clinic_name or (clinic_hosp.name if clinic_hosp else "Private Clinic"),
@@ -174,28 +180,32 @@ async def _build_registration_verification_item(
             }
 
         profile_data = PendingVerificationProfile(
-            full_name=doctor.full_name,
-            specialization=doctor.specialization,
-            experience_years=doctor.experience_years,
-            qualifications=doctor.qualifications,
-            license_number=clean_lic,
+            full_name=doctor.full_name if doctor else (user.email.split("@")[0].title()),
+            specialization=doctor.specialization if doctor else None,
+            experience_years=doctor.experience_years if doctor else 1,
+            qualifications=doctor.qualifications if doctor else None,
+            license_number=clean_lic or "Pending",
             gst_number=gst_no,
-            medical_council_reg_number=doctor.medical_council_reg_number,
+            medical_council_reg_number=doctor.medical_council_reg_number if doctor else None,
             practice_type=practice_type,
             clinic_info=clinic_info,
             applied_hospital_info=applied_hospital_info,
-            hospital_name=doctor.hospital_name or (applied_hospital_info["name"] if applied_hospital_info else None),
-            hospital_address=doctor.hospital_address or (applied_hospital_info["address"] if applied_hospital_info else None),
-            clinic_name=doctor.clinic_name or (clinic_info["name"] if clinic_info else None),
-            clinic_address=doctor.clinic_address or (clinic_info["address"] if clinic_info else None),
-            city=doctor.city or (clinic_info["city"] if clinic_info else None),
-            state=doctor.state or (clinic_info["state"] if clinic_info else None),
-            consultation_fee=doctor.consultation_fee,
-            clinic_phone=doctor.clinic_phone,
+            hospital_name=doctor.hospital_name or (applied_hospital_info["name"] if applied_hospital_info else None) if doctor else None,
+            hospital_address=doctor.hospital_address or (applied_hospital_info["address"] if applied_hospital_info else None) if doctor else None,
+            clinic_name=doctor.clinic_name or (clinic_info["name"] if clinic_info else None) if doctor else None,
+            clinic_address=doctor.clinic_address or (clinic_info["address"] if clinic_info else None) if doctor else None,
+            city=doctor.city or (clinic_info["city"] if clinic_info else None) if doctor else None,
+            state=doctor.state or (clinic_info["state"] if clinic_info else None) if doctor else None,
+            consultation_fee=doctor.consultation_fee if doctor else None,
+            clinic_phone=doctor.clinic_phone if doctor else None,
         )
-    elif user.role == UserRole.PHARMACY and pharmacy:
+    elif user_role_str == "PHARMACY":
+        if not pharmacy:
+            phm_stmt = select(Pharmacy).where(Pharmacy.user_id == user.id)
+            pharmacy = (await db.execute(phm_stmt)).scalar_one_or_none()
+
         affiliated_info = None
-        if pharmacy.hospital_id:
+        if pharmacy and pharmacy.hospital_id:
             hosp_stmt = select(Hospital).where(Hospital.id == pharmacy.hospital_id)
             hosp_res = await db.execute(hosp_stmt)
             aff_hosp = hosp_res.scalar_one_or_none()
@@ -209,15 +219,15 @@ async def _build_registration_verification_item(
                 }
 
         profile_data = PendingVerificationProfile(
-            business_name=pharmacy.business_name,
-            license_number=pharmacy.license_number,
-            gst_number=pharmacy.gst_number,
-            contact_number=pharmacy.contact_number or pharmacy.phone_number,
-            address=pharmacy.address,
-            city=pharmacy.city,
-            state=pharmacy.state,
-            country=pharmacy.country,
-            clinic_name=pharmacy.clinic_name or (affiliated_info["name"] if affiliated_info and affiliated_info["type"] == "clinic" else None),
+            business_name=pharmacy.business_name if pharmacy else (user.email.split("@")[0].title() + " Pharmacy"),
+            license_number=pharmacy.license_number if pharmacy else "Pending",
+            gst_number=pharmacy.gst_number if pharmacy else None,
+            contact_number=(pharmacy.contact_number or pharmacy.phone_number) if pharmacy else None,
+            address=pharmacy.address if pharmacy else None,
+            city=pharmacy.city if pharmacy else None,
+            state=pharmacy.state if pharmacy else None,
+            country=pharmacy.country if pharmacy else None,
+            clinic_name=pharmacy.clinic_name or (affiliated_info["name"] if affiliated_info and affiliated_info["type"] == "clinic" else None) if pharmacy else None,
             hospital_name=affiliated_info["name"] if affiliated_info else None,
         )
 
@@ -225,7 +235,7 @@ async def _build_registration_verification_item(
         request_id=request_id,
         user_id=str(user.id),
         email=user.email,
-        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        role=user_role_str,
         verification_type="REGISTRATION",
         profile=profile_data,
         created_at=created_at.isoformat() if created_at else ""
@@ -275,17 +285,19 @@ async def get_pending_verifications(
     seen_user_ids: set[uuid.UUID] = set()
 
     # 1. Fetch pending professional signup verification requests (Doctor & Pharmacy)
-    stmt = select(VerificationRequest, User, Doctor, Pharmacy).join(
-        User, VerificationRequest.user_id == User.id
-    ).outerjoin(
-        Doctor, User.id == Doctor.user_id
-    ).outerjoin(
-        Pharmacy, User.id == Pharmacy.user_id
-    ).where(
-        VerificationRequest.status == VerificationStatus.PENDING,
-        User.deleted_at.is_(None),
-    ).offset(skip).limit(limit)
-    
+    stmt = (
+        select(VerificationRequest, User, Doctor, Pharmacy)
+        .join(User, VerificationRequest.user_id == User.id)
+        .outerjoin(Doctor, User.id == Doctor.user_id)
+        .outerjoin(Pharmacy, User.id == Pharmacy.user_id)
+        .where(
+            VerificationRequest.status == VerificationStatus.PENDING,
+            User.deleted_at.is_(None),
+        )
+        .order_by(VerificationRequest.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     rows = result.all()
 
@@ -299,16 +311,14 @@ async def get_pending_verifications(
             )
         )
 
-    # 1b. Reconcile unverified Doctor & Pharmacy accounts that lack any VerificationRequest row
+    # 1b. Reconcile unverified Doctor & Pharmacy accounts (ensuring newly registered pharmacies/doctors always show up)
     orphan_stmt = (
         select(User, Doctor, Pharmacy)
-        .outerjoin(VerificationRequest, User.id == VerificationRequest.user_id)
         .outerjoin(Doctor, User.id == Doctor.user_id)
         .outerjoin(Pharmacy, User.id == Pharmacy.user_id)
         .where(
-            VerificationRequest.id.is_(None),
             User.role.in_([UserRole.DOCTOR, UserRole.PHARMACY]),
-            User.is_verified == False,
+            (User.is_verified == False) | (User.status == UserStatus.PENDING),
             User.status != UserStatus.SUSPENDED,
             User.deleted_at.is_(None),
         )
@@ -1104,6 +1114,15 @@ async def get_all_pharmacies(
             created_at=pharmacy.created_at.isoformat() if pharmacy.created_at else None
         ))
     return APIResponse(message="Pharmacies retrieved", data=data)
+
+@router.post("/pharmacies/{pharmacy_id}/verify", response_model=APIResponse[AdminActionResponseData])
+@router.post("/pharmacies/{pharmacy_id}/approve", response_model=APIResponse[AdminActionResponseData])
+async def approve_pharmacy_admin(
+    pharmacy_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: AuthenticatedPrincipal = Depends(require_admin),
+):
+    return await approve_verification(request_id=pharmacy_id, db=db, current_admin=current_admin)
 
 @router.post("/pharmacies", response_model=APIResponse[AdminPharmacyCreateResponse])
 async def create_pharmacy_admin(

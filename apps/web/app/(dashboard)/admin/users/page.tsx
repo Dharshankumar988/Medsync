@@ -278,14 +278,24 @@ export default function AdminUsers() {
     }
   };
 
-  const handleAuthorizeFacility = async (id: string, name: string) => {
+  const handleAuthorizeFacility = async (id: string, name: string, isPharmacy?: boolean, userId?: string) => {
+    const targetKey = id || userId || name;
+    setActionLoading(targetKey);
     try {
-      await api.post(`/api/v1/hospitals/${id}/verify`);
-      toast.success(`${name} verified successfully!`);
-      fetchData();
-    } catch (err) {
+      if (isPharmacy) {
+        await api.post(`/api/v1/admin/verifications/${userId || id}/approve`);
+        toast.success(`Pharmacy ${name} verified and authorized successfully!`);
+      } else {
+        await api.post(`/api/v1/hospitals/${id}/verify`);
+        toast.success(`${name} verified successfully!`);
+      }
+      await fetchData();
+    } catch (err: any) {
       console.error("Failed to authorize facility", err);
-      toast.error("Failed to authorize facility");
+      toast.error(err.response?.data?.detail || "Failed to authorize facility");
+      await fetchData();
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -1717,14 +1727,15 @@ export default function AdminUsers() {
                                 >
                                   <Info className="w-3.5 h-3.5" />
                                 </Button>
-                                {!f.is_verified && !isPharm && (
+                                {!f.is_verified && (
                                   <Button 
                                     size="sm" 
                                     variant="outline" 
-                                    onClick={() => handleAuthorizeFacility(f.id, f.name)}
-                                    className="h-7 text-[11px] text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
+                                    disabled={actionLoading === f.id || actionLoading === f.user_id}
+                                    onClick={() => handleAuthorizeFacility(f.id, f.name, isPharm, f.user_id)}
+                                    className="h-7 text-[11px] text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 gap-1 font-medium"
                                   >
-                                    Authorize
+                                    <CheckCircle className="w-3 h-3" /> Authorize
                                   </Button>
                                 )}
                                 {!isPharm && (
@@ -2332,7 +2343,25 @@ export default function AdminUsers() {
               </div>
 
               {/* Footer */}
-              <div className="p-4 border-t border-border/60 flex justify-end bg-muted/20">
+              <div className="p-4 border-t border-border/60 flex items-center justify-between bg-muted/20">
+                {!selectedFacility.is_verified ? (
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                    disabled={actionLoading === selectedFacility.id || actionLoading === selectedFacility.user_id}
+                    onClick={async () => {
+                      await handleAuthorizeFacility(
+                        selectedFacility.id,
+                        selectedFacility.name,
+                        selectedFacility.category === "PHARMACY",
+                        selectedFacility.user_id
+                      );
+                      setSelectedFacility(null);
+                    }}
+                  >
+                    <CheckCircle className="w-4 h-4" /> Authorize & Verify
+                  </Button>
+                ) : <div />}
                 <Button variant="outline" size="sm" onClick={() => setSelectedFacility(null)}>
                   Close
                 </Button>

@@ -467,6 +467,25 @@ def test_pharmacy_network_item_coordinates_and_qr():
     assert dumped["qr_identifier"] == "PHARM_QR_1"
 
 
+def test_pharmacy_qr_identifier_fits_varchar255_and_resolves():
+    """Verify generated pharmacy QR identifier is <= 255 chars and decodes properly."""
+    import uuid
+    from app.api.v1.endpoints.pharmacy import _generate_qr_identifier, _extract_pharmacy_lookup_conditions
+    from app.models.pharmacy import Pharmacy
+    from sqlalchemy import Text
+
+    # Model column should be Text to prevent Postgres truncation
+    assert isinstance(Pharmacy.qr_identifier.property.columns[0].type, Text)
+
+    pharm_user_id = uuid.uuid4()
+    qr_token = _generate_qr_identifier(pharm_user_id)
+    assert isinstance(qr_token, str)
+    assert len(qr_token) <= 255, f"Token length {len(qr_token)} exceeds VARCHAR(255) limit!"
+
+    conditions = _extract_pharmacy_lookup_conditions(qr_token)
+    assert len(conditions) > 0
+
+
 def test_authenticated_principal_role_matching():
     """Verify RoleChecker and role comparisons succeed with both lowercase and uppercase."""
     import uuid

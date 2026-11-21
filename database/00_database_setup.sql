@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS pharmacies (
     is_24x7 BOOLEAN DEFAULT FALSE,
     blockchain_status VARCHAR(50) DEFAULT 'PENDING',
     blockchain_tx_hash VARCHAR(66),
-    qr_identifier VARCHAR(255) UNIQUE,
+    qr_identifier TEXT UNIQUE,
     qr_status VARCHAR(50) DEFAULT 'ACTIVE',
     security_pin_hash VARCHAR(255),
     verification_id VARCHAR(100),
